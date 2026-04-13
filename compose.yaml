@@ -1,0 +1,16 @@
+services:
+  db:
+    image: postgres:16
+    container_name: sagep-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: sagep
+      POSTGRES_PASSWORD: sagep123
+      POSTGRES_DB: sagep
+    ports:
+      - "5432:5432"
+    volumes:
+      - sagep_pg_data:/var/lib/postgresql/data
+
+volumes:
+  sagep_pg_data:
