@@ -104,6 +104,7 @@ model Task {
 model Ata {
   id             String             @id @default(cuid())
   ataCode        Int                @unique @default(autoincrement())
+  items          AtaItem[]
   number         String
   type           AtaType
   vendorName     String
@@ -120,6 +121,7 @@ model Ata {
 model AtaCoverageGroup {
   id          String                @id @default(cuid())
   ataId       String
+  items       AtaItem[]
   code        String
   name        String
   description String?
@@ -139,4 +141,23 @@ model AtaCoverageLocality {
   createdAt       DateTime          @default(now())
 
   @@unique([coverageGroupId, cityName, stateUf])
+}
+
+model AtaItem {
+  id              String            @id @default(cuid())
+  ataItemCode     Int               @unique @default(autoincrement())
+  ataId           String
+  coverageGroupId String
+  referenceCode   String
+  description     String
+  unit            String
+  unitPrice       Decimal           @db.Decimal(14, 2)
+  notes           String?
+  isActive        Boolean           @default(true)
+  ata             Ata               @relation(fields: [ataId], references: [id], onDelete: Cascade)
+  coverageGroup   AtaCoverageGroup  @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+
+  @@unique([ataId, coverageGroupId, referenceCode])
 }
