@@ -19,6 +19,7 @@ projectsRoutes.delete("/:id/members/:memberId", (req, res) =>
   projectMembersController.removeMember(req, res)
 );
 
+projectsRoutes.patch("/:id/flow", (req, res) => controller.updateFlow(req, res));
 projectsRoutes.get("/:id", (req, res) => controller.findById(req, res));
 projectsRoutes.patch("/:id", (req, res) => controller.update(req, res));
 projectsRoutes.delete("/:id", (req, res) => controller.remove(req, res));

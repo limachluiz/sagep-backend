@@ -48,6 +48,19 @@ enum EstimateStatus {
   CANCELADA
 }
 
+enum ProjectStage {
+  ESTIMATIVA_PRECO
+  AGUARDANDO_NOTA_CREDITO
+  DIEX_REQUISITORIO
+  AGUARDANDO_NOTA_EMPENHO
+  OS_LIBERADA
+  SERVICO_EM_EXECUCAO
+  ANALISANDO_AS_BUILT
+  ATESTAR_NF
+  SERVICO_CONCLUIDO
+  CANCELADO
+}
+
 model User {
   id            String          @id @default(cuid())
   userCode      Int             @unique @default(autoincrement())
@@ -64,20 +77,33 @@ model User {
 }
 
 model Project {
-  id          String          @id @default(cuid())
-  projectCode Int             @unique @default(autoincrement())
-  title       String
-  description String?
-  status      ProjectStatus   @default(PLANEJAMENTO)
-  estimates     Estimate[]
-  ownerId     String
-  owner       User            @relation("ProjectOwner", fields: [ownerId], references: [id])
-  members     ProjectMember[]
-  tasks       Task[]
-  startDate   DateTime?
-  endDate     DateTime?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                       String          @id @default(cuid())
+  projectCode              Int             @unique @default(autoincrement())
+  title                    String
+  description              String?
+  status                   ProjectStatus   @default(PLANEJAMENTO)
+  stage                    ProjectStage    @default(ESTIMATIVA_PRECO)
+  ownerId                  String
+  owner                    User            @relation("ProjectOwner", fields: [ownerId], references: [id])
+  members                  ProjectMember[]
+  tasks                    Task[]
+  estimates                Estimate[]
+  startDate                DateTime?
+  endDate                  DateTime?
+  creditNoteNumber         String?
+  creditNoteReceivedAt     DateTime?
+  diexNumber               String?
+  diexIssuedAt             DateTime?
+  commitmentNoteNumber     String?
+  commitmentNoteReceivedAt DateTime?
+  serviceOrderNumber       String?
+  serviceOrderIssuedAt     DateTime?
+  executionStartedAt       DateTime?
+  asBuiltReceivedAt        DateTime?
+  invoiceAttestedAt        DateTime?
+  serviceCompletedAt       DateTime?
+  createdAt                DateTime        @default(now())
+  updatedAt                DateTime        @updatedAt
 }
 
 model ProjectMember {

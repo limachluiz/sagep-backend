@@ -8,6 +8,18 @@ type CurrentUser = {
   role: string;
 };
 
+type ProjectStageValue =
+  | "ESTIMATIVA_PRECO"
+  | "AGUARDANDO_NOTA_CREDITO"
+  | "DIEX_REQUISITORIO"
+  | "AGUARDANDO_NOTA_EMPENHO"
+  | "OS_LIBERADA"
+  | "SERVICO_EM_EXECUCAO"
+  | "ANALISANDO_AS_BUILT"
+  | "ATESTAR_NF"
+  | "SERVICO_CONCLUIDO"
+  | "CANCELADO";
+
 type CreateProjectInput = {
   title: string;
   description?: string;
@@ -24,9 +36,26 @@ type UpdateProjectInput = {
   endDate?: Date;
 };
 
+type UpdateProjectFlowInput = {
+  stage: ProjectStageValue;
+  creditNoteNumber?: string;
+  creditNoteReceivedAt?: Date;
+  diexNumber?: string;
+  diexIssuedAt?: Date;
+  commitmentNoteNumber?: string;
+  commitmentNoteReceivedAt?: Date;
+  serviceOrderNumber?: string;
+  serviceOrderIssuedAt?: Date;
+  executionStartedAt?: Date;
+  asBuiltReceivedAt?: Date;
+  invoiceAttestedAt?: Date;
+  serviceCompletedAt?: Date;
+};
+
 type ListProjectsFilters = {
   code?: number;
   status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
+  stage?: ProjectStageValue;
   search?: string;
 };
 
@@ -44,6 +73,7 @@ const projectInclude = {
     select: {
       members: true,
       tasks: true,
+      estimates: true,
     },
   },
 } satisfies Prisma.ProjectInclude;
@@ -53,6 +83,142 @@ export class ProjectsService {
     return role === "ADMIN" || role === "GESTOR";
   }
 
+  private getMacroStatusFromStage(
+    stage: ProjectStageValue
+  ): "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO" {
+    if (stage === "SERVICO_CONCLUIDO") {
+      return "CONCLUIDO";
+    }
+
+    if (stage === "CANCELADO") {
+      return "CANCELADO";
+    }
+
+    if (
+      stage === "OS_LIBERADA" ||
+      stage === "SERVICO_EM_EXECUCAO" ||
+      stage === "ANALISANDO_AS_BUILT" ||
+      stage === "ATESTAR_NF"
+    ) {
+      return "EM_ANDAMENTO";
+    }
+
+    return "PLANEJAMENTO";
+  }
+
+  private isStageAtOrBeyond(stage: ProjectStageValue, checkpoint: ProjectStageValue) {
+    const order: ProjectStageValue[] = [
+      "ESTIMATIVA_PRECO",
+      "AGUARDANDO_NOTA_CREDITO",
+      "DIEX_REQUISITORIO",
+      "AGUARDANDO_NOTA_EMPENHO",
+      "OS_LIBERADA",
+      "SERVICO_EM_EXECUCAO",
+      "ANALISANDO_AS_BUILT",
+      "ATESTAR_NF",
+      "SERVICO_CONCLUIDO",
+      "CANCELADO",
+    ];
+
+    return order.indexOf(stage) >= order.indexOf(checkpoint);
+  }
+
+  private validateStageRequirements(
+    stage: ProjectStageValue,
+    snapshot: {
+      creditNoteNumber?: string | null;
+      creditNoteReceivedAt?: Date | null;
+      diexNumber?: string | null;
+      diexIssuedAt?: Date | null;
+      commitmentNoteNumber?: string | null;
+      commitmentNoteReceivedAt?: Date | null;
+      serviceOrderNumber?: string | null;
+      serviceOrderIssuedAt?: Date | null;
+      executionStartedAt?: Date | null;
+      asBuiltReceivedAt?: Date | null;
+      invoiceAttestedAt?: Date | null;
+      serviceCompletedAt?: Date | null;
+    },
+    finalizedEstimateCount: number
+  ) {
+    if (
+      stage !== "ESTIMATIVA_PRECO" &&
+      stage !== "CANCELADO" &&
+      finalizedEstimateCount === 0
+    ) {
+      throw new AppError(
+        "Para avançar o fluxo, o projeto precisa ter pelo menos uma estimativa finalizada",
+        409
+      );
+    }
+
+    if (this.isStageAtOrBeyond(stage, "DIEX_REQUISITORIO")) {
+      if (!snapshot.creditNoteNumber && !snapshot.creditNoteReceivedAt) {
+        throw new AppError(
+          "Para avançar até DIEx Requisitório, informe o número ou a data de recebimento da Nota de Crédito",
+          409
+        );
+      }
+
+      if (!snapshot.diexNumber && !snapshot.diexIssuedAt) {
+        throw new AppError(
+          "Para avançar até DIEx Requisitório, informe o número ou a data do DIEx",
+          409
+        );
+      }
+    }
+
+    if (this.isStageAtOrBeyond(stage, "OS_LIBERADA")) {
+      if (!snapshot.commitmentNoteNumber && !snapshot.commitmentNoteReceivedAt) {
+        throw new AppError(
+          "Para liberar a OS, informe o número ou a data da Nota/Empenho",
+          409
+        );
+      }
+
+      if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
+        throw new AppError(
+          "Para liberar a OS, informe o número ou a data da Ordem de Serviço",
+          409
+        );
+      }
+    }
+
+    if (this.isStageAtOrBeyond(stage, "SERVICO_EM_EXECUCAO")) {
+      if (!snapshot.executionStartedAt) {
+        throw new AppError(
+          "Para colocar o serviço em execução, informe a data de início da execução",
+          409
+        );
+      }
+    }
+
+    if (this.isStageAtOrBeyond(stage, "ANALISANDO_AS_BUILT")) {
+      if (!snapshot.asBuiltReceivedAt) {
+        throw new AppError(
+          "Para entrar na etapa de análise do As-Built, informe a data de recebimento do As-Built",
+          409
+        );
+      }
+    }
+
+    if (stage === "SERVICO_CONCLUIDO") {
+      if (!snapshot.invoiceAttestedAt) {
+        throw new AppError(
+          "Para concluir o serviço, informe a data de atesto da NF",
+          409
+        );
+      }
+
+      if (!snapshot.serviceCompletedAt) {
+        throw new AppError(
+          "Para concluir o serviço, informe a data de conclusão do serviço",
+          409
+        );
+      }
+    }
+  }
+
   private async getProjectAccessData(projectId: string) {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -60,6 +226,7 @@ export class ProjectsService {
         id: true,
         projectCode: true,
         ownerId: true,
+        stage: true,
         members: {
           select: {
             userId: true,
@@ -69,6 +236,7 @@ export class ProjectsService {
           select: {
             members: true,
             tasks: true,
+            estimates: true,
           },
         },
       },
@@ -88,6 +256,7 @@ export class ProjectsService {
         id: true,
         projectCode: true,
         ownerId: true,
+        stage: true,
         members: {
           select: {
             userId: true,
@@ -97,6 +266,7 @@ export class ProjectsService {
           select: {
             members: true,
             tasks: true,
+            estimates: true,
           },
         },
       },
@@ -159,6 +329,7 @@ export class ProjectsService {
         title: data.title,
         description: data.description,
         status: data.status ?? "PLANEJAMENTO",
+        stage: "ESTIMATIVA_PRECO",
         startDate: data.startDate,
         endDate: data.endDate,
         ownerId: user.id,
@@ -190,6 +361,12 @@ export class ProjectsService {
     if (filters.status) {
       andConditions.push({
         status: filters.status,
+      });
+    }
+
+    if (filters.stage) {
+      andConditions.push({
+        stage: filters.stage,
       });
     }
 
@@ -259,6 +436,7 @@ export class ProjectsService {
         tasks: {
           select: {
             id: true,
+            taskCode: true,
             title: true,
             status: true,
             priority: true,
@@ -276,10 +454,25 @@ export class ProjectsService {
             createdAt: "desc",
           },
         },
+        estimates: {
+          select: {
+            id: true,
+            estimateCode: true,
+            status: true,
+            destinationCityName: true,
+            destinationStateUf: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
         _count: {
           select: {
             members: true,
             tasks: true,
+            estimates: true,
           },
         },
       },
@@ -325,6 +518,7 @@ export class ProjectsService {
         tasks: {
           select: {
             id: true,
+            taskCode: true,
             title: true,
             status: true,
             priority: true,
@@ -342,10 +536,25 @@ export class ProjectsService {
             createdAt: "desc",
           },
         },
+        estimates: {
+          select: {
+            id: true,
+            estimateCode: true,
+            status: true,
+            destinationCityName: true,
+            destinationStateUf: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
         _count: {
           select: {
             members: true,
             tasks: true,
+            estimates: true,
           },
         },
       },
@@ -376,12 +585,117 @@ export class ProjectsService {
     return project;
   }
 
+  async updateFlow(projectId: string, data: UpdateProjectFlowInput, user: CurrentUser) {
+    await this.ensureCanManage(projectId, user);
+
+    const currentProject = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    if (!currentProject) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
+
+    const finalizedEstimateCount = await prisma.estimate.count({
+      where: {
+        projectId,
+        status: "FINALIZADA",
+      },
+    });
+
+    const nextSnapshot = {
+      creditNoteNumber: data.creditNoteNumber ?? currentProject.creditNoteNumber,
+      creditNoteReceivedAt: data.creditNoteReceivedAt ?? currentProject.creditNoteReceivedAt,
+      diexNumber: data.diexNumber ?? currentProject.diexNumber,
+      diexIssuedAt: data.diexIssuedAt ?? currentProject.diexIssuedAt,
+      commitmentNoteNumber:
+        data.commitmentNoteNumber ?? currentProject.commitmentNoteNumber,
+      commitmentNoteReceivedAt:
+        data.commitmentNoteReceivedAt ?? currentProject.commitmentNoteReceivedAt,
+      serviceOrderNumber: data.serviceOrderNumber ?? currentProject.serviceOrderNumber,
+      serviceOrderIssuedAt:
+        data.serviceOrderIssuedAt ?? currentProject.serviceOrderIssuedAt,
+      executionStartedAt: data.executionStartedAt ?? currentProject.executionStartedAt,
+      asBuiltReceivedAt: data.asBuiltReceivedAt ?? currentProject.asBuiltReceivedAt,
+      invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
+      serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
+    };
+
+    this.validateStageRequirements(data.stage, nextSnapshot, finalizedEstimateCount);
+
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        stage: data.stage,
+        status: this.getMacroStatusFromStage(data.stage),
+        ...(data.creditNoteNumber !== undefined && {
+          creditNoteNumber: data.creditNoteNumber,
+        }),
+        ...(data.creditNoteReceivedAt !== undefined && {
+          creditNoteReceivedAt: data.creditNoteReceivedAt,
+        }),
+        ...(data.diexNumber !== undefined && {
+          diexNumber: data.diexNumber,
+        }),
+        ...(data.diexIssuedAt !== undefined && {
+          diexIssuedAt: data.diexIssuedAt,
+        }),
+        ...(data.commitmentNoteNumber !== undefined && {
+          commitmentNoteNumber: data.commitmentNoteNumber,
+        }),
+        ...(data.commitmentNoteReceivedAt !== undefined && {
+          commitmentNoteReceivedAt: data.commitmentNoteReceivedAt,
+        }),
+        ...(data.serviceOrderNumber !== undefined && {
+          serviceOrderNumber: data.serviceOrderNumber,
+        }),
+        ...(data.serviceOrderIssuedAt !== undefined && {
+          serviceOrderIssuedAt: data.serviceOrderIssuedAt,
+        }),
+        ...(data.executionStartedAt !== undefined && {
+          executionStartedAt: data.executionStartedAt,
+        }),
+        ...(data.asBuiltReceivedAt !== undefined && {
+          asBuiltReceivedAt: data.asBuiltReceivedAt,
+        }),
+        ...(data.invoiceAttestedAt !== undefined && {
+          invoiceAttestedAt: data.invoiceAttestedAt,
+        }),
+        ...(data.serviceCompletedAt !== undefined && {
+          serviceCompletedAt: data.serviceCompletedAt,
+        }),
+      },
+      include: projectInclude,
+    });
+
+    return project;
+  }
+
   async remove(projectId: string, user: CurrentUser) {
     const project = await this.ensureCanManage(projectId, user);
 
-    if (project._count.members > 0 || project._count.tasks > 0) {
+    if (
+      project._count.members > 0 ||
+      project._count.tasks > 0 ||
+      project._count.estimates > 0
+    ) {
       throw new AppError(
-        "Não é possível excluir um projeto que já possui membros ou tarefas vinculadas",
+        "Não é possível excluir um projeto que já possui membros, tarefas ou estimativas vinculadas",
         409
       );
     }

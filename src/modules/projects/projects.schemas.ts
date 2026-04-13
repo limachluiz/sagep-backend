@@ -8,6 +8,19 @@ const projectStatusEnum = z.enum([
   "CANCELADO",
 ]);
 
+const projectStageEnum = z.enum([
+  "ESTIMATIVA_PRECO",
+  "AGUARDANDO_NOTA_CREDITO",
+  "DIEX_REQUISITORIO",
+  "AGUARDANDO_NOTA_EMPENHO",
+  "OS_LIBERADA",
+  "SERVICO_EM_EXECUCAO",
+  "ANALISANDO_AS_BUILT",
+  "ATESTAR_NF",
+  "SERVICO_CONCLUIDO",
+  "CANCELADO",
+]);
+
 const optionalDate = z.preprocess((value) => {
   if (value === "" || value === null || value === undefined) {
     return undefined;
@@ -75,9 +88,26 @@ export const updateProjectSchema = z
     }
   );
 
+export const updateProjectFlowSchema = z.object({
+  stage: projectStageEnum,
+  creditNoteNumber: optionalString,
+  creditNoteReceivedAt: optionalDate,
+  diexNumber: optionalString,
+  diexIssuedAt: optionalDate,
+  commitmentNoteNumber: optionalString,
+  commitmentNoteReceivedAt: optionalDate,
+  serviceOrderNumber: optionalString,
+  serviceOrderIssuedAt: optionalDate,
+  executionStartedAt: optionalDate,
+  asBuiltReceivedAt: optionalDate,
+  invoiceAttestedAt: optionalDate,
+  serviceCompletedAt: optionalDate,
+});
+
 export const listProjectsQuerySchema = z.object({
   code: z.coerce.number().int().positive().optional(),
   status: projectStatusEnum.optional(),
+  stage: projectStageEnum.optional(),
   search: z.string().trim().optional(),
 });
 
