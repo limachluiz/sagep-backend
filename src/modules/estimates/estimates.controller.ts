@@ -1,0 +1,58 @@
+import { Request, Response } from "express";
+import {
+  createEstimateSchema,
+  estimateCodeParamSchema,
+  estimateIdParamSchema,
+  listEstimatesQuerySchema,
+  updateEstimateSchema,
+  updateEstimateStatusSchema,
+} from "./estimates.schemas.js";
+import { EstimatesService } from "./estimates.service.js";
+
+const estimatesService = new EstimatesService();
+
+export class EstimatesController {
+  async create(req: Request, res: Response) {
+    const data = createEstimateSchema.parse(req.body);
+    const estimate = await estimatesService.create(data, req.user!);
+    return res.status(201).json(estimate);
+  }
+
+  async list(req: Request, res: Response) {
+    const filters = listEstimatesQuerySchema.parse(req.query);
+    const estimates = await estimatesService.list(filters, req.user!);
+    return res.status(200).json(estimates);
+  }
+
+  async findById(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+    const estimate = await estimatesService.findById(id, req.user!);
+    return res.status(200).json(estimate);
+  }
+
+  async findByCode(req: Request, res: Response) {
+    const { code } = estimateCodeParamSchema.parse(req.params);
+    const estimate = await estimatesService.findByCode(code, req.user!);
+    return res.status(200).json(estimate);
+  }
+
+  async update(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+    const data = updateEstimateSchema.parse(req.body);
+    const estimate = await estimatesService.update(id, data, req.user!);
+    return res.status(200).json(estimate);
+  }
+
+  async updateStatus(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+    const data = updateEstimateStatusSchema.parse(req.body);
+    const estimate = await estimatesService.updateStatus(id, data, req.user!);
+    return res.status(200).json(estimate);
+  }
+
+  async remove(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+    const result = await estimatesService.remove(id, req.user!);
+    return res.status(200).json(result);
+  }
+}
