@@ -23,8 +23,7 @@ export class DashboardService {
 
   private sortMoneyRows(rows: DashboardMoneyRow[]) {
     return rows.sort((a, b) => {
-      const diff =
-        new Prisma.Decimal(b.totalAmount).minus(a.totalAmount).toNumber();
+      const diff = new Prisma.Decimal(b.totalAmount).minus(a.totalAmount).toNumber();
 
       if (diff !== 0) {
         return diff;
@@ -43,13 +42,18 @@ export class DashboardService {
       totalEstimates,
       totalAtas,
       totalAtaItems,
+      totalOpenProjects,
+      totalCompletedProjects,
+      totalCanceledProjects,
       projectsByStageRaw,
       projectsByStatusRaw,
       tasksByStatusRaw,
       estimatesByStatusRaw,
       estimateAmountAggregates,
-      recentProjects,
-      recentEstimates,
+      recentProjectsRaw,
+      recentOpenProjectsRaw,
+      recentCompletedProjectsRaw,
+      recentEstimatesRaw,
       estimateRows,
     ] = await Promise.all([
       prisma.user.count(),
@@ -59,6 +63,26 @@ export class DashboardService {
       prisma.estimate.count(),
       prisma.ata.count(),
       prisma.ataItem.count(),
+
+      prisma.project.count({
+        where: {
+          status: {
+            notIn: ["CONCLUIDO", "CANCELADO"],
+          },
+        },
+      }),
+
+      prisma.project.count({
+        where: {
+          status: "CONCLUIDO",
+        },
+      }),
+
+      prisma.project.count({
+        where: {
+          status: "CANCELADO",
+        },
+      }),
 
       prisma.project.groupBy({
         by: ["stage"],
@@ -92,11 +116,48 @@ export class DashboardService {
         _sum: {
           totalAmount: true,
         },
-        where: {},
       }),
 
       prisma.project.findMany({
         take: 5,
+        orderBy: {
+          updatedAt: "desc",
+        },
+        select: {
+          id: true,
+          projectCode: true,
+          title: true,
+          status: true,
+          stage: true,
+          updatedAt: true,
+        },
+      }),
+
+      prisma.project.findMany({
+        take: 5,
+        where: {
+          status: {
+            notIn: ["CONCLUIDO", "CANCELADO"],
+          },
+        },
+        orderBy: {
+          updatedAt: "desc",
+        },
+        select: {
+          id: true,
+          projectCode: true,
+          title: true,
+          status: true,
+          stage: true,
+          updatedAt: true,
+        },
+      }),
+
+      prisma.project.findMany({
+        take: 5,
+        where: {
+          status: "CONCLUIDO",
+        },
         orderBy: {
           updatedAt: "desc",
         },
@@ -188,35 +249,12 @@ export class DashboardService {
       }))
     );
 
-    const moneyByEstimateStatusMap = new Map<
-      string,
-      { count: number; total: Prisma.Decimal }
-    >();
-
-    const moneyByAtaTypeMap = new Map<
-      string,
-      { count: number; total: Prisma.Decimal }
-    >();
-
-    const moneyByStateUfMap = new Map<
-      string,
-      { count: number; total: Prisma.Decimal }
-    >();
-
-    const moneyByCityMap = new Map<
-      string,
-      { count: number; total: Prisma.Decimal }
-    >();
-
-    const moneyByOmMap = new Map<
-      string,
-      { count: number; total: Prisma.Decimal }
-    >();
-
-    const moneyByProjectStageMap = new Map<
-      string,
-      { count: number; total: Prisma.Decimal }
-    >();
+    const moneyByEstimateStatusMap = new Map<string, { count: number; total: Prisma.Decimal }>();
+    const moneyByAtaTypeMap = new Map<string, { count: number; total: Prisma.Decimal }>();
+    const moneyByStateUfMap = new Map<string, { count: number; total: Prisma.Decimal }>();
+    const moneyByCityMap = new Map<string, { count: number; total: Prisma.Decimal }>();
+    const moneyByOmMap = new Map<string, { count: number; total: Prisma.Decimal }>();
+    const moneyByProjectStageMap = new Map<string, { count: number; total: Prisma.Decimal }>();
 
     for (const row of estimateRows) {
       const amount = new Prisma.Decimal(row.totalAmount ?? 0);
@@ -323,6 +361,11 @@ export class DashboardService {
       };
     });
 
+    const recentEstimates = recentEstimatesRaw.map((estimate) => ({
+      ...estimate,
+      totalAmount: this.toMoneyString(estimate.totalAmount),
+    }));
+
     return {
       generatedAt: new Date().toISOString(),
 
@@ -355,8 +398,22 @@ export class DashboardService {
         estimatesByStatus,
       },
 
+      openProjects: {
+        total: totalOpenProjects,
+        recent: recentOpenProjectsRaw,
+      },
+
+      completedProjects: {
+        total: totalCompletedProjects,
+        recent: recentCompletedProjectsRaw,
+      },
+
+      canceledProjects: {
+        total: totalCanceledProjects,
+      },
+
       recent: {
-        projects: recentProjects,
+        projects: recentProjectsRaw,
         estimates: recentEstimates,
       },
     };
