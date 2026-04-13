@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { atasRoutes } from "./modules/atas/atas.routes.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
 import { projectsRoutes } from "./modules/projects/projects.routes.js";
@@ -12,3 +13,4 @@ routes.use("/auth", authRoutes);
 routes.use("/users", usersRoutes);
 routes.use("/projects", projectsRoutes);
 routes.use("/tasks", tasksRoutes);
+routes.use("/atas", atasRoutes);

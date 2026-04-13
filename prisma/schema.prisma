@@ -30,6 +30,18 @@ enum TaskStatus {
   CANCELADA
 }
 
+enum AtaType {
+  CFTV
+  FIBRA_OPTICA
+}
+
+enum FederativeUnit {
+  AM
+  RO
+  RR
+  AC
+}
+
 model User {
   id            String          @id @default(cuid())
   userCode      Int             @unique @default(autoincrement())
@@ -87,4 +99,44 @@ model Task {
   assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id])
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
+}
+
+model Ata {
+  id             String             @id @default(cuid())
+  ataCode        Int                @unique @default(autoincrement())
+  number         String
+  type           AtaType
+  vendorName     String
+  managingAgency String?
+  validFrom      DateTime?
+  validUntil     DateTime?
+  notes          String?
+  isActive       Boolean            @default(true)
+  coverageGroups AtaCoverageGroup[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+}
+
+model AtaCoverageGroup {
+  id          String                @id @default(cuid())
+  ataId       String
+  code        String
+  name        String
+  description String?
+  ata         Ata                   @relation(fields: [ataId], references: [id], onDelete: Cascade)
+  localities  AtaCoverageLocality[]
+  createdAt   DateTime              @default(now())
+
+  @@unique([ataId, code])
+}
+
+model AtaCoverageLocality {
+  id              String            @id @default(cuid())
+  coverageGroupId String
+  cityName        String
+  stateUf         FederativeUnit
+  coverageGroup   AtaCoverageGroup  @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
+  createdAt       DateTime          @default(now())
+
+  @@unique([coverageGroupId, cityName, stateUf])
 }
