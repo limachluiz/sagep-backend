@@ -8,6 +8,7 @@ import { healthRoutes } from "./modules/health/health.routes.js";
 import { projectsRoutes } from "./modules/projects/projects.routes.js";
 import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
+import { militaryOrganizationsRoutes } from "./modules/military-organizations/military-organizations.routes.js";
 
 export const routes = Router();
 
@@ -20,3 +21,4 @@ routes.use("/atas", atasRoutes);
 routes.use("/ata-items", ataItemsRoutes);
 routes.use("/estimates", estimatesRoutes);
 routes.use("/dashboard", dashboardRoutes);
+routes.use("/military-organizations", militaryOrganizationsRoutes);

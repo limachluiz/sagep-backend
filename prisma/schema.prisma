@@ -237,3 +237,15 @@ model EstimateItem {
 
   @@unique([estimateId, ataItemId])
 }
+
+model MilitaryOrganization {
+  id        String   @id @default(cuid())
+  omCode    Int      @unique @default(autoincrement())
+  sigla     String   @unique
+  name      String
+  cityName  String
+  stateUf   FederativeUnit
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
