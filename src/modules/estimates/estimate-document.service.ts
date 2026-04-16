@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
@@ -9,9 +12,27 @@ type CurrentUser = {
   role: string;
 };
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "../../..");
+
 export class EstimateDocumentService {
   private isPrivileged(role: string) {
     return role === "ADMIN" || role === "GESTOR";
+  }
+
+  private async fileToDataUrl(relativePath: string) {
+    const absolutePath = path.resolve(projectRoot, relativePath);
+    const fileBuffer = await fs.readFile(absolutePath);
+    const base64 = fileBuffer.toString("base64");
+    return `data:image/png;base64,${base64}`;
+  }
+
+  private async getLogos() {
+    return {
+      citex: await this.fileToDataUrl("src/assets/logos/citex-logo.png"),
+      cta: await this.fileToDataUrl("src/assets/logos/cta-logo.png"),
+    };
   }
 
   private async ensureCanViewEstimate(estimateId: string, user: CurrentUser) {
@@ -67,6 +88,7 @@ export class EstimateDocumentService {
           select: {
             projectCode: true,
             title: true,
+            description: true,
             stage: true,
           },
         },
@@ -83,6 +105,15 @@ export class EstimateDocumentService {
             code: true,
             name: true,
             description: true,
+          },
+        },
+        om: {
+          select: {
+            omCode: true,
+            sigla: true,
+            name: true,
+            cityName: true,
+            stateUf: true,
           },
         },
         items: {
@@ -111,9 +142,14 @@ export class EstimateDocumentService {
   }
 
   async generateEstimateHtml(estimateId: string, user: CurrentUser) {
-    const data = await this.getEstimateDocumentData(estimateId, user);
+    const [data, logos] = await Promise.all([
+      this.getEstimateDocumentData(estimateId, user),
+      this.getLogos(),
+    ]);
+
     return renderEstimateDocumentHtml({
       ...data,
+      logos,
       createdAt: data.createdAt.toISOString(),
       totalAmount: data.totalAmount.toString(),
       items: data.items.map((item) => ({
@@ -138,12 +174,13 @@ export class EstimateDocumentService {
 
       const pdf = await page.pdf({
         format: "A4",
+        landscape: true,
         printBackground: true,
         margin: {
-          top: "12mm",
-          right: "10mm",
-          bottom: "12mm",
-          left: "10mm",
+          top: "8mm",
+          right: "8mm",
+          bottom: "8mm",
+          left: "8mm",
         },
       });
 

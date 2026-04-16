@@ -2,14 +2,12 @@ type EstimateDocumentInput = {
   estimateCode: number;
   createdAt: string;
   status: string;
-  omName?: string | null;
-  destinationCityName: string;
-  destinationStateUf: string;
-  notes?: string | null;
   totalAmount: string;
+  notes?: string | null;
   project: {
     projectCode: number;
     title: string;
+    description?: string | null;
     stage: string;
   };
   ata: {
@@ -23,6 +21,16 @@ type EstimateDocumentInput = {
     name: string;
     description?: string | null;
   };
+  om?: {
+    omCode: number;
+    sigla: string;
+    name: string;
+    cityName: string;
+    stateUf: string;
+  } | null;
+  omName?: string | null;
+  destinationCityName: string;
+  destinationStateUf: string;
   items: Array<{
     estimateItemCode: number;
     referenceCode: string;
@@ -33,25 +41,18 @@ type EstimateDocumentInput = {
     subtotal: string;
     notes?: string | null;
   }>;
+  logos: {
+    citex: string;
+    cta: string;
+  };
 };
 
-function formatCurrency(value: string | number) {
-  const amount =
-    typeof value === "number" ? value : Number.parseFloat(String(value).replace(",", "."));
-
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(Number.isNaN(amount) ? 0 : amount);
-}
-
-function formatDate(value: string | Date) {
-  const date = value instanceof Date ? value : new Date(value);
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    timeZone: "America/Manaus",
-  }).format(date);
-}
+const DOCUMENT_DEFAULTS = {
+  uasg: "160016",
+  pregao: "04/2025",
+  empenhoImediato: "SIM",
+  grupo: "3",
+};
 
 function escapeHtml(value: string | null | undefined) {
   return String(value ?? "")
@@ -62,20 +63,78 @@ function escapeHtml(value: string | null | undefined) {
     .replaceAll("'", "&#039;");
 }
 
+function formatMoney(value: string | number) {
+  const amount =
+    typeof value === "number" ? value : Number.parseFloat(String(value).replace(",", "."));
+
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Number.isNaN(amount) ? 0 : amount);
+}
+
+function formatQuantity(value: string | number) {
+  const amount =
+    typeof value === "number" ? value : Number.parseFloat(String(value).replace(",", "."));
+
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(Number.isNaN(amount) ? 0 : amount);
+}
+
+function getProjectTypeLabel(ataType: string) {
+  return ataType === "CFTV" ? "Projeto CFTV" : "Projeto Fibra Óptica";
+}
+
+function getProjectMacroDescription(ataType: string) {
+  return ataType === "CFTV"
+    ? "Projeto de Circuito Fechado de Televisão"
+    : "Projeto de Fibra Óptica";
+}
+
 export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
+  const omDisplay = data.om?.sigla || data.omName || "-";
+  const headerTitle = `${getProjectTypeLabel(data.ata.type)}: ${omDisplay}`;
+  const macroDescription = getProjectMacroDescription(data.ata.type);
+
   const rows = data.items
     .map((item, index) => {
-      return `
-        <tr>
-          <td class="center">${index + 1}</td>
-          <td class="center">${escapeHtml(item.referenceCode)}</td>
-          <td>${escapeHtml(item.description)}</td>
-          <td class="center">${escapeHtml(item.unit)}</td>
-          <td class="right">${formatCurrency(0).replace("R$ 0,00", "")}${escapeHtml(item.quantity)}</td>
-          <td class="right">${formatCurrency(item.unitPrice)}</td>
-          <td class="right">${formatCurrency(item.subtotal)}</td>
-        </tr>
+      const itemCells = `
+        <td class="item-description">${escapeHtml(item.description)}</td>
+        <td class="qty">${formatQuantity(item.quantity)}</td>
+        <td class="money">R$ ${formatMoney(item.unitPrice)}</td>
+        <td class="money">R$ ${formatMoney(item.subtotal)}</td>
+        <td class="item-code">${escapeHtml(item.referenceCode)}</td>
       `;
+
+      if (index === 0) {
+        return `
+          <tr>
+            <td class="project-description" rowspan="${data.items.length}">
+              ${escapeHtml(macroDescription)}
+            </td>
+            <td class="om" rowspan="${data.items.length}">
+              ${escapeHtml(omDisplay)}
+            </td>
+            <td class="group" rowspan="${data.items.length}">
+              ${escapeHtml(DOCUMENT_DEFAULTS.grupo)}
+            </td>
+            <td class="empenho" rowspan="${data.items.length}">
+              ${escapeHtml(DOCUMENT_DEFAULTS.empenhoImediato)}
+            </td>
+            ${itemCells}
+            <td class="uasg" rowspan="${data.items.length}">
+              ${escapeHtml(DOCUMENT_DEFAULTS.uasg)}
+            </td>
+            <td class="pregao" rowspan="${data.items.length}">
+              ${escapeHtml(DOCUMENT_DEFAULTS.pregao)}
+            </td>
+          </tr>
+        `;
+      }
+
+      return `<tr>${itemCells}</tr>`;
     })
     .join("");
 
@@ -87,8 +146,8 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
   <title>Estimativa de Preço ${data.estimateCode}</title>
   <style>
     @page {
-      size: A4;
-      margin: 18mm 14mm 16mm 14mm;
+      size: A4 landscape;
+      margin: 8mm;
     }
 
     * {
@@ -96,240 +155,203 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
     }
 
     body {
-      font-family: Arial, Helvetica, sans-serif;
-      color: #111827;
-      font-size: 12px;
-      line-height: 1.35;
       margin: 0;
-      padding: 0;
+      font-family: Arial, Helvetica, sans-serif;
+      color: #000;
+      font-size: 10px;
+      background: #fff;
+    }
+
+    .page {
+      width: 100%;
     }
 
     .header {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-bottom: 0;
+      border: 1px solid #7a7a7a;
+    }
+
+    .header td {
+      border: none;
+      background: #e9e9e9;
+      height: 78px;
+      vertical-align: middle;
+      padding: 0;
+    }
+
+    .header .logo-cell {
+      width: 105px;
       text-align: center;
-      border-bottom: 2px solid #111827;
-      padding-bottom: 10px;
-      margin-bottom: 14px;
     }
 
-    .header .org {
-      font-size: 11px;
+    .header .title-cell {
+      text-align: center;
       font-weight: 700;
-      text-transform: uppercase;
-      letter-spacing: 0.4px;
-    }
-
-    .header .title {
       font-size: 18px;
-      font-weight: 700;
-      margin-top: 10px;
-      text-transform: uppercase;
     }
 
-    .header .subtitle {
-      margin-top: 4px;
-      font-size: 12px;
-    }
-
-    .meta-grid {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 14px;
-    }
-
-    .meta-grid td {
-      border: 1px solid #d1d5db;
-      padding: 7px 8px;
-      vertical-align: top;
-    }
-
-    .meta-label {
+    .logo {
       display: block;
+      margin: 6px auto;
+      max-height: 64px;
+      max-width: 88px;
+      object-fit: contain;
+    }
+
+    table.main {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-top: 0;
+    }
+
+    table.main th,
+    table.main td {
+      border: 1px solid #7a7a7a;
+      padding: 4px 5px;
       font-size: 10px;
-      color: #4b5563;
-      text-transform: uppercase;
-      margin-bottom: 2px;
     }
 
-    .section-title {
-      font-size: 13px;
+    table.main thead th {
+      background: #efefef;
+      text-align: center;
       font-weight: 700;
-      text-transform: uppercase;
-      margin: 12px 0 8px;
-      padding: 6px 8px;
-      background: #f3f4f6;
-      border-left: 4px solid #111827;
+      height: 42px;
     }
 
-    table.items {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 6px;
+    td.project-description,
+    td.om,
+    td.group,
+    td.empenho,
+    td.uasg,
+    td.pregao {
+      text-align: center;
+      vertical-align: middle;
     }
 
-    table.items th,
-    table.items td {
-      border: 1px solid #9ca3af;
-      padding: 6px 7px;
-    }
-
-    table.items th {
-      background: #e5e7eb;
+    td.project-description {
       font-size: 11px;
-      text-transform: uppercase;
     }
 
-    .right {
-      text-align: right;
+    td.item-description {
+      vertical-align: top;
+      text-align: left;
+      line-height: 1.15;
     }
 
-    .center {
+    td.qty,
+    td.money,
+    td.item-code {
+      vertical-align: middle;
+    }
+
+    td.qty,
+    td.money {
+      text-align: center;
+      white-space: nowrap;
+    }
+
+    td.item-code {
       text-align: center;
     }
 
-    .summary {
-      margin-top: 12px;
+    .w-proj   { width: 13%; }
+    .w-om     { width: 14%; }
+    .w-grupo  { width: 6%; }
+    .w-emp    { width: 9%; }
+    .w-desc   { width: 29%; }
+    .w-qnt    { width: 8%; }
+    .w-vu     { width: 9%; }
+    .w-vt     { width: 10%; }
+    .w-uasg   { width: 6%; }
+    .w-pregao { width: 7%; }
+    .w-item   { width: 6%; }
+
+    .total-row td {
+      height: 30px;
+      font-weight: 700;
+      font-size: 11px;
+      background: #fff;
+    }
+
+    .total-label {
+      text-align: center;
+      letter-spacing: 0.3px;
+    }
+
+    .project-footer {
       width: 100%;
       border-collapse: collapse;
+      margin-top: 0;
+      table-layout: fixed;
     }
 
-    .summary td {
-      border: 1px solid #9ca3af;
-      padding: 8px;
-      font-weight: 700;
-    }
-
-    .summary .label {
-      background: #f3f4f6;
-      width: 75%;
-      text-transform: uppercase;
-    }
-
-    .notes {
-      margin-top: 12px;
-      border: 1px solid #d1d5db;
-      padding: 10px;
-      min-height: 70px;
-      white-space: pre-wrap;
-    }
-
-    .footer {
-      margin-top: 28px;
-      display: flex;
-      justify-content: space-between;
-      gap: 24px;
-    }
-
-    .signature-box {
-      flex: 1;
-      text-align: center;
-      padding-top: 36px;
-    }
-
-    .signature-line {
-      border-top: 1px solid #111827;
-      padding-top: 6px;
-      font-size: 11px;
+    .project-footer td {
+      border: 1px solid #bdbdbd;
+      padding: 4px 6px;
+      font-size: 10px;
+      height: 22px;
     }
 
     .muted {
-      color: #4b5563;
-      font-size: 10px;
+      color: #333;
     }
   </style>
 </head>
 <body>
-  <div class="header">
-    <div class="org">MINISTÉRIO DA DEFESA</div>
-    <div class="org">EXÉRCITO BRASILEIRO</div>
-    <div class="org">4º CENTRO DE TELEMÁTICA DE ÁREA</div>
-    <div class="title">Estimativa de Preço</div>
-    <div class="subtitle">Documento gerado pelo SAGEP</div>
-  </div>
-
-  <table class="meta-grid">
-    <tr>
-      <td colspan="2">
-        <span class="meta-label">Projeto</span>
-        PRJ-${String(data.project.projectCode).padStart(4, "0")} - ${escapeHtml(data.project.title)}
-      </td>
-      <td>
-        <span class="meta-label">Estimativa</span>
-        EST-${String(data.estimateCode).padStart(4, "0")}
-      </td>
-      <td>
-        <span class="meta-label">Data</span>
-        ${formatDate(data.createdAt)}
-      </td>
-    </tr>
-    <tr>
-      <td>
-        <span class="meta-label">OM</span>
-        ${escapeHtml(data.omName || "-")}
-      </td>
-      <td>
-        <span class="meta-label">Cidade/UF</span>
-        ${escapeHtml(data.destinationCityName)}/${escapeHtml(data.destinationStateUf)}
-      </td>
-      <td>
-        <span class="meta-label">Grupo</span>
-        ${escapeHtml(data.coverageGroup.code)} - ${escapeHtml(data.coverageGroup.name)}
-      </td>
-      <td>
-        <span class="meta-label">Status</span>
-        ${escapeHtml(data.status)}
-      </td>
-    </tr>
-    <tr>
-      <td colspan="2">
-        <span class="meta-label">Ata</span>
-        ATA ${escapeHtml(data.ata.number)} - ${escapeHtml(data.ata.type)}
-      </td>
-      <td colspan="2">
-        <span class="meta-label">Fornecedor</span>
-        ${escapeHtml(data.ata.vendorName)}
-      </td>
-    </tr>
-  </table>
-
-  <div class="section-title">1 - Itens da Estimativa</div>
-
-  <table class="items">
-    <thead>
+  <div class="page">
+    <table class="header">
       <tr>
-        <th style="width: 6%">#</th>
-        <th style="width: 8%">Item</th>
-        <th>Descrição</th>
-        <th style="width: 8%">Und</th>
-        <th style="width: 10%">Qtd</th>
-        <th style="width: 14%">Valor Unit.</th>
-        <th style="width: 14%">Valor Total</th>
+        <td class="logo-cell">
+          <img class="logo" src="${data.logos.citex}" alt="CITEx">
+        </td>
+        <td class="title-cell">
+          ${escapeHtml(headerTitle)}
+        </td>
+        <td class="logo-cell">
+          <img class="logo" src="${data.logos.cta}" alt="4º CTA">
+        </td>
       </tr>
-    </thead>
-    <tbody>
-      ${rows}
-    </tbody>
-  </table>
+    </table>
 
-  <table class="summary">
-    <tr>
-      <td class="label">Total Geral da Estimativa</td>
-      <td class="right">${formatCurrency(data.totalAmount)}</td>
-    </tr>
-  </table>
+    <table class="main">
+      <thead>
+        <tr>
+          <th class="w-proj">DESCRIÇÃO</th>
+          <th class="w-om">OM</th>
+          <th class="w-grupo">GRUPO</th>
+          <th class="w-emp">EMPENHO<br>IMEDIATO?</th>
+          <th class="w-desc">DESCRIÇÃO</th>
+          <th class="w-qnt">QNT</th>
+          <th class="w-vu">VALOR UNIT<br>(R$)</th>
+          <th class="w-vt">VALOR TOTAL<br>(R$)</th>
+          <th class="w-uasg">UASG</th>
+          <th class="w-pregao">PREGÃO</th>
+          <th class="w-item">ITEM</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+        <tr class="total-row">
+          <td colspan="6"></td>
+          <td class="total-label">TOTAL</td>
+          <td class="money">R$ ${formatMoney(data.totalAmount)}</td>
+          <td colspan="3"></td>
+        </tr>
+      </tbody>
+    </table>
 
-  <div class="section-title">2 - Observações</div>
-  <div class="notes">${escapeHtml(data.notes || "Sem observações.")}</div>
-
-  <div class="footer">
-    <div class="signature-box">
-      <div class="signature-line">Elaborado via SAGEP</div>
-      <div class="muted">Estimativa automática</div>
-    </div>
-
-    <div class="signature-box">
-      <div class="signature-line">Seção de Projetos - Divisão Técnica</div>
-      <div class="muted">4º CTA</div>
-    </div>
+    <table class="project-footer">
+      <tr>
+        <td><strong>Projeto:</strong> ${escapeHtml(headerTitle)}</td>
+      </tr>
+      <tr>
+        <td class="muted">${escapeHtml(data.project.description || data.project.title)}</td>
+      </tr>
+    </table>
   </div>
 </body>
 </html>
