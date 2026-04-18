@@ -199,23 +199,25 @@ model AtaItem {
 }
 
 model Estimate {
-  id                  String            @id @default(cuid())
-  estimateCode        Int               @unique @default(autoincrement())
+  id                  String                 @id @default(cuid())
+  estimateCode        Int                    @unique @default(autoincrement())
   projectId           String
   ataId               String
   coverageGroupId     String
-  status              EstimateStatus    @default(RASCUNHO)
+  omId                String?
+  status              EstimateStatus         @default(RASCUNHO)
   omName              String?
   destinationCityName String
   destinationStateUf  FederativeUnit
   notes               String?
-  totalAmount         Decimal           @db.Decimal(14, 2)
-  project             Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  ata                 Ata               @relation(fields: [ataId], references: [id], onDelete: Restrict)
-  coverageGroup       AtaCoverageGroup  @relation(fields: [coverageGroupId], references: [id], onDelete: Restrict)
+  totalAmount         Decimal                @db.Decimal(14, 2)
+  project             Project                @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ata                 Ata                    @relation(fields: [ataId], references: [id], onDelete: Restrict)
+  coverageGroup       AtaCoverageGroup       @relation(fields: [coverageGroupId], references: [id], onDelete: Restrict)
+  om                  MilitaryOrganization?  @relation(fields: [omId], references: [id], onDelete: Restrict)
   items               EstimateItem[]
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
 }
 
 model EstimateItem {
@@ -236,4 +238,17 @@ model EstimateItem {
   updatedAt        DateTime  @updatedAt
 
   @@unique([estimateId, ataItemId])
+}
+
+model MilitaryOrganization {
+  id        String   @id @default(cuid())
+  omCode    Int      @unique @default(autoincrement())
+  sigla     String   @unique
+  name      String
+  cityName  String
+  stateUf   FederativeUnit
+  estimates Estimate[]
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

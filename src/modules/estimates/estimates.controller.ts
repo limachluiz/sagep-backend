@@ -1,3 +1,4 @@
+import { EstimateDocumentService } from "./estimate-document.service.js";
 import { Request, Response } from "express";
 import {
   createEstimateSchema,
@@ -10,6 +11,7 @@ import {
 import { EstimatesService } from "./estimates.service.js";
 
 const estimatesService = new EstimatesService();
+const estimateDocumentService = new EstimateDocumentService();
 
 export class EstimatesController {
   async create(req: Request, res: Response) {
@@ -54,5 +56,27 @@ export class EstimatesController {
     const { id } = estimateIdParamSchema.parse(req.params);
     const result = await estimatesService.remove(id, req.user!);
     return res.status(200).json(result);
+  }
+
+  async documentHtml(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+
+    const html = await estimateDocumentService.generateEstimateHtml(id, req.user!);
+
+    return res.status(200).contentType("text/html; charset=utf-8").send(html);
+  }
+
+  async documentPdf(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+
+    const pdf = await estimateDocumentService.generateEstimatePdf(id, req.user!);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="estimativa-${id}.pdf"`
+    );
+
+    return res.status(200).send(pdf);
   }
 }

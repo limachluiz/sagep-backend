@@ -9,11 +9,6 @@ const optionalString = z.preprocess((value) => {
   return value;
 }, z.string().trim().optional());
 
-const optionalPositiveNumber = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) return undefined;
-  return value;
-}, z.coerce.number().positive().optional());
-
 const estimateLineInputSchema = z
   .object({
     ataItemId: z.string().min(1).optional(),
@@ -37,9 +32,8 @@ export const createEstimateSchema = z.object({
   ataCode: z.coerce.number().int().positive().optional(),
   coverageGroupId: z.string().min(1).optional(),
   coverageGroupCode: z.string().trim().min(2).optional(),
-  omName: optionalString,
-  destinationCityName: z.string().trim().min(2, "Cidade de destino inválida"),
-  destinationStateUf: ufEnum,
+  omId: z.string().min(1).optional(),
+  omCode: z.coerce.number().int().positive().optional(),
   notes: optionalString,
   items: z.array(estimateLineInputSchema).min(1, "Informe ao menos um item"),
 })
@@ -66,18 +60,30 @@ export const createEstimateSchema = z.object({
   .refine((data) => !(data.coverageGroupId && data.coverageGroupCode), {
     message: "Informe coverageGroupId ou coverageGroupCode, não ambos",
     path: ["coverageGroupId"],
+  })
+  .refine((data) => data.omId || data.omCode, {
+    message: "Informe omId ou omCode",
+    path: ["omId"],
+  })
+  .refine((data) => !(data.omId && data.omCode), {
+    message: "Informe omId ou omCode, não ambos",
+    path: ["omId"],
   });
 
 export const updateEstimateSchema = z.object({
-  omName: optionalString,
-  destinationCityName: z.string().trim().min(2).optional(),
-  destinationStateUf: ufEnum.optional(),
+  omId: z.string().min(1).optional(),
+  omCode: z.coerce.number().int().positive().optional(),
   notes: optionalString,
   status: estimateStatusEnum.optional(),
   items: z.array(estimateLineInputSchema).min(1, "Informe ao menos um item").optional(),
-}).refine((data) => Object.keys(data).length > 0, {
-  message: "Informe pelo menos um campo para atualizar",
-});
+})
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Informe pelo menos um campo para atualizar",
+  })
+  .refine((data) => !(data.omId && data.omCode), {
+    message: "Informe omId ou omCode, não ambos",
+    path: ["omId"],
+  });
 
 export const updateEstimateStatusSchema = z.object({
   status: estimateStatusEnum,
@@ -87,6 +93,7 @@ export const listEstimatesQuerySchema = z.object({
   code: z.coerce.number().int().positive().optional(),
   projectCode: z.coerce.number().int().positive().optional(),
   ataCode: z.coerce.number().int().positive().optional(),
+  omCode: z.coerce.number().int().positive().optional(),
   status: estimateStatusEnum.optional(),
   cityName: z.string().trim().optional(),
   stateUf: ufEnum.optional(),

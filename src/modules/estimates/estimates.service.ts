@@ -22,17 +22,15 @@ type CreateEstimateInput = {
   ataCode?: number;
   coverageGroupId?: string;
   coverageGroupCode?: string;
-  omName?: string;
-  destinationCityName: string;
-  destinationStateUf: "AM" | "RO" | "RR" | "AC";
+  omId?: string;
+  omCode?: number;
   notes?: string;
   items: EstimateLineInput[];
 };
 
 type UpdateEstimateInput = {
-  omName?: string;
-  destinationCityName?: string;
-  destinationStateUf?: "AM" | "RO" | "RR" | "AC";
+  omId?: string;
+  omCode?: number;
   notes?: string;
   status?: "RASCUNHO" | "FINALIZADA" | "CANCELADA";
   items?: EstimateLineInput[];
@@ -46,6 +44,7 @@ type ListEstimatesFilters = {
   code?: number;
   projectCode?: number;
   ataCode?: number;
+  omCode?: number;
   status?: "RASCUNHO" | "FINALIZADA" | "CANCELADA";
   cityName?: string;
   stateUf?: "AM" | "RO" | "RR" | "AC";
@@ -86,6 +85,17 @@ const estimateInclude = {
         },
         orderBy: [{ stateUf: "asc" }, { cityName: "asc" }],
       },
+    },
+  },
+  om: {
+    select: {
+      id: true,
+      omCode: true,
+      sigla: true,
+      name: true,
+      cityName: true,
+      stateUf: true,
+      isActive: true,
     },
   },
   items: {
@@ -287,6 +297,56 @@ export class EstimatesService {
     throw new AppError("Grupo de cobertura não informado", 400);
   }
 
+  private async resolveOm(omId?: string, omCode?: number) {
+    if (omId) {
+      const om = await prisma.militaryOrganization.findUnique({
+        where: { id: omId },
+        select: {
+          id: true,
+          omCode: true,
+          sigla: true,
+          name: true,
+          cityName: true,
+          stateUf: true,
+          isActive: true,
+        },
+      });
+
+      if (!om) {
+        throw new AppError("OM não encontrada", 404);
+      }
+
+      if (omCode && om.omCode !== omCode) {
+        throw new AppError("omId e omCode não correspondem à mesma OM", 400);
+      }
+
+      return om;
+    }
+
+    if (omCode) {
+      const om = await prisma.militaryOrganization.findUnique({
+        where: { omCode },
+        select: {
+          id: true,
+          omCode: true,
+          sigla: true,
+          name: true,
+          cityName: true,
+          stateUf: true,
+          isActive: true,
+        },
+      });
+
+      if (!om) {
+        throw new AppError("OM não encontrada", 404);
+      }
+
+      return om;
+    }
+
+    throw new AppError("OM não informada", 400);
+  }
+
   private canManageProject(
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
@@ -399,6 +459,29 @@ export class EstimatesService {
     return new Prisma.Decimal(value).toDecimalPlaces(2);
   }
 
+  private ensureDestinationBelongsToCoverageGroup(
+    coverageGroup: {
+      localities: { cityName: string; stateUf: "AM" | "RO" | "RR" | "AC" }[];
+    },
+    cityName: string,
+    stateUf: "AM" | "RO" | "RR" | "AC"
+  ) {
+    const normalizedCity = cityName.trim().toLowerCase();
+
+    const match = coverageGroup.localities.some(
+      (locality) =>
+        locality.cityName.trim().toLowerCase() === normalizedCity &&
+        locality.stateUf === stateUf
+    );
+
+    if (!match) {
+      throw new AppError(
+        "A OM selecionada precisa pertencer às localidades do grupo de cobertura selecionado",
+        409
+      );
+    }
+  }
+
   private async resolveEstimateItems(
     ataId: string,
     coverageGroupId: string,
@@ -494,29 +577,6 @@ export class EstimatesService {
     return resolvedItems;
   }
 
-  private ensureDestinationBelongsToCoverageGroup(
-    coverageGroup: {
-      localities: { cityName: string; stateUf: "AM" | "RO" | "RR" | "AC" }[];
-    },
-    cityName: string,
-    stateUf: "AM" | "RO" | "RR" | "AC"
-  ) {
-    const normalizedCity = cityName.trim().toLowerCase();
-
-    const match = coverageGroup.localities.some(
-      (locality) =>
-        locality.cityName.trim().toLowerCase() === normalizedCity &&
-        locality.stateUf === stateUf
-    );
-
-    if (!match) {
-      throw new AppError(
-        "A cidade/UF de destino precisa pertencer às localidades do grupo de cobertura selecionado",
-        409
-      );
-    }
-  }
-
   async create(data: CreateEstimateInput, user: CurrentUser) {
     const project = await this.resolveProject(data.projectId, data.projectCode);
 
@@ -536,10 +596,16 @@ export class EstimatesService {
       data.coverageGroupCode
     );
 
+    const om = await this.resolveOm(data.omId, data.omCode);
+
+    if (!om.isActive) {
+      throw new AppError("Não é possível usar uma OM inativa na estimativa", 409);
+    }
+
     this.ensureDestinationBelongsToCoverageGroup(
       coverageGroup,
-      data.destinationCityName,
-      data.destinationStateUf
+      om.cityName,
+      om.stateUf
     );
 
     const resolvedItems = await this.resolveEstimateItems(
@@ -558,9 +624,10 @@ export class EstimatesService {
         projectId: project.id,
         ataId: ata.id,
         coverageGroupId: coverageGroup.id,
-        omName: data.omName?.trim(),
-        destinationCityName: data.destinationCityName.trim(),
-        destinationStateUf: data.destinationStateUf,
+        omId: om.id,
+        omName: om.sigla,
+        destinationCityName: om.cityName,
+        destinationStateUf: om.stateUf,
         notes: data.notes?.trim(),
         totalAmount,
         items: {
@@ -614,6 +681,14 @@ export class EstimatesService {
       });
     }
 
+    if (filters.omCode) {
+      andConditions.push({
+        om: {
+          omCode: filters.omCode,
+        },
+      });
+    }
+
     if (filters.status) {
       andConditions.push({ status: filters.status });
     }
@@ -659,6 +734,22 @@ export class EstimatesService {
           {
             ata: {
               number: {
+                contains: filters.search,
+                mode: "insensitive",
+              },
+            },
+          },
+          {
+            om: {
+              sigla: {
+                contains: filters.search,
+                mode: "insensitive",
+              },
+            },
+          },
+          {
+            om: {
+              name: {
                 contains: filters.search,
                 mode: "insensitive",
               },
@@ -717,7 +808,7 @@ export class EstimatesService {
   }
 
   async update(estimateId: string, data: UpdateEstimateInput, user: CurrentUser) {
-    const accessData = await this.ensureCanManage(estimateId, user);
+    await this.ensureCanManage(estimateId, user);
 
     const currentEstimate = await prisma.estimate.findUnique({
       where: { id: estimateId },
@@ -725,6 +816,9 @@ export class EstimatesService {
         id: true,
         ataId: true,
         coverageGroupId: true,
+        omId: true,
+        destinationCityName: true,
+        destinationStateUf: true,
         coverageGroup: {
           select: {
             localities: {
@@ -742,14 +836,29 @@ export class EstimatesService {
       throw new AppError("Estimativa não encontrada", 404);
     }
 
-    const destinationCityName = data.destinationCityName ?? undefined;
-    const destinationStateUf = data.destinationStateUf ?? undefined;
+    let resolvedOm:
+      | {
+          id: string;
+          omCode: number;
+          sigla: string;
+          name: string;
+          cityName: string;
+          stateUf: "AM" | "RO" | "RR" | "AC";
+          isActive: boolean;
+        }
+      | undefined;
 
-    if (destinationCityName || destinationStateUf) {
+    if (data.omId || data.omCode) {
+      resolvedOm = await this.resolveOm(data.omId, data.omCode);
+
+      if (!resolvedOm.isActive) {
+        throw new AppError("Não é possível usar uma OM inativa na estimativa", 409);
+      }
+
       this.ensureDestinationBelongsToCoverageGroup(
         currentEstimate.coverageGroup,
-        destinationCityName ?? currentEstimate.coverageGroup.localities[0]?.cityName ?? "",
-        destinationStateUf ?? currentEstimate.coverageGroup.localities[0]?.stateUf ?? "AM"
+        resolvedOm.cityName,
+        resolvedOm.stateUf
       );
     }
 
@@ -774,24 +883,6 @@ export class EstimatesService {
       );
     }
 
-    const current = await prisma.estimate.findUnique({
-      where: { id: estimateId },
-      select: {
-        destinationCityName: true,
-        destinationStateUf: true,
-      },
-    });
-
-    if (!current) {
-      throw new AppError("Estimativa não encontrada", 404);
-    }
-
-    this.ensureDestinationBelongsToCoverageGroup(
-      currentEstimate.coverageGroup,
-      data.destinationCityName ?? current.destinationCityName,
-      data.destinationStateUf ?? current.destinationStateUf
-    );
-
     const totalAmount =
       resolvedItems?.reduce(
         (acc, item) => acc.add(item.subtotal),
@@ -801,12 +892,11 @@ export class EstimatesService {
     const estimate = await prisma.estimate.update({
       where: { id: estimateId },
       data: {
-        ...(data.omName !== undefined && { omName: data.omName?.trim() }),
-        ...(data.destinationCityName !== undefined && {
-          destinationCityName: data.destinationCityName.trim(),
-        }),
-        ...(data.destinationStateUf !== undefined && {
-          destinationStateUf: data.destinationStateUf,
+        ...(resolvedOm !== undefined && {
+          omId: resolvedOm.id,
+          omName: resolvedOm.sigla,
+          destinationCityName: resolvedOm.cityName,
+          destinationStateUf: resolvedOm.stateUf,
         }),
         ...(data.notes !== undefined && { notes: data.notes?.trim() }),
         ...(data.status !== undefined && { status: data.status }),
