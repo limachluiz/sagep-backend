@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalBoolean } from "../../shared/zod-helpers.js";
 
 const taskStatusEnum = z.enum([
   "PENDENTE",
@@ -73,7 +74,7 @@ export const updateTaskSchema = z
     priority: z.coerce.number().int().min(1).max(5).optional(),
     assigneeId: optionalTaskAssigneeId,
     assigneeUserCode: optionalTaskAssigneeUserCode,
-    clearAssignee: z.coerce.boolean().optional(),
+    clearAssignee: optionalBoolean,
     dueDate: optionalDate,
   })
   .refine((data) => Object.keys(data).length > 0, {

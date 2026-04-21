@@ -1,11 +1,7 @@
 import { z } from "zod";
+import { optionalBoolean } from "../../shared/zod-helpers.js";
 
 const ufEnum = z.enum(["AM", "RO", "RR", "AC"]);
-
-const optionalBoolean = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) return undefined;
-  return value;
-}, z.coerce.boolean().optional());
 
 const optionalString = z.preprocess((value) => {
   if (value === null || value === undefined) return undefined;

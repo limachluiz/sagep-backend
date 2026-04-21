@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalBoolean } from "../../shared/zod-helpers.js";
 
 const optionalString = z.preprocess((value) => {
   if (value === null || value === undefined) return undefined;
@@ -25,6 +26,9 @@ export const createServiceOrderSchema = z.object({
   requesterRank: z.string().trim().min(2, "Posto/graduação é obrigatório"),
   requesterRole: optionalString,
   issuingOrganization: optionalString,
+  isEmergency: optionalBoolean,
+  plannedStartDate: optionalDate,
+  plannedEndDate: optionalDate,
   notes: optionalString,
 })
   .refine((data) => data.projectId || data.projectCode, {
@@ -46,6 +50,15 @@ export const createServiceOrderSchema = z.object({
   .refine((data) => !(data.diexId && data.diexCode), {
     message: "Informe diexId ou diexCode, não ambos",
     path: ["diexId"],
+  })
+  .refine((data) => {
+    if (data.plannedStartDate && data.plannedEndDate) {
+      return data.plannedEndDate >= data.plannedStartDate;
+    }
+    return true;
+  }, {
+    message: "A data prevista de entrega não pode ser menor que a data prevista de início",
+    path: ["plannedEndDate"],
   });
 
 export const updateServiceOrderSchema = z.object({
@@ -56,9 +69,20 @@ export const updateServiceOrderSchema = z.object({
   requesterRank: z.string().trim().min(2).optional(),
   requesterRole: optionalString,
   issuingOrganization: optionalString,
+  isEmergency: optionalBoolean,
+  plannedStartDate: optionalDate,
+  plannedEndDate: optionalDate,
   notes: optionalString,
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Informe pelo menos um campo para atualizar",
+}).refine((data) => {
+  if (data.plannedStartDate && data.plannedEndDate) {
+    return data.plannedEndDate >= data.plannedStartDate;
+  }
+  return true;
+}, {
+  message: "A data prevista de entrega não pode ser menor que a data prevista de início",
+  path: ["plannedEndDate"],
 });
 
 export const listServiceOrdersQuerySchema = z.object({
@@ -66,6 +90,7 @@ export const listServiceOrdersQuerySchema = z.object({
   projectCode: z.coerce.number().int().positive().optional(),
   estimateCode: z.coerce.number().int().positive().optional(),
   diexCode: z.coerce.number().int().positive().optional(),
+  emergency: optionalBoolean,
   search: z.string().trim().optional(),
 });
 

@@ -34,6 +34,9 @@ type CreateServiceOrderInput = {
   requesterRank: string;
   requesterRole?: string;
   issuingOrganization?: string;
+  isEmergency?: boolean;
+  plannedStartDate?: Date;
+  plannedEndDate?: Date;
   notes?: string;
 };
 
@@ -45,6 +48,9 @@ type UpdateServiceOrderInput = {
   requesterRank?: string;
   requesterRole?: string;
   issuingOrganization?: string;
+  isEmergency?: boolean;
+  plannedStartDate?: Date;
+  plannedEndDate?: Date;
   notes?: string;
 };
 
@@ -53,6 +59,7 @@ type ListServiceOrderFilters = {
   projectCode?: number;
   estimateCode?: number;
   diexCode?: number;
+  emergency?: boolean;
   search?: string;
 };
 
@@ -146,6 +153,10 @@ export class ServiceOrdersService {
     "CANCELADO",
   ];
 
+  private isStageBefore(current: ProjectStageValue, target: ProjectStageValue) {
+    return this.stageOrder.indexOf(current) < this.stageOrder.indexOf(target);
+  }
+
   private assertProjectStageAllowsServiceOrderCreation(stage: ProjectStageValue) {
     const allowedStages: ProjectStageValue[] = [
       "AGUARDANDO_NOTA_EMPENHO",
@@ -158,10 +169,6 @@ export class ServiceOrdersService {
         409
       );
     }
-  }
-
-  private isStageBefore(current: ProjectStageValue, target: ProjectStageValue) {
-    return this.stageOrder.indexOf(current) < this.stageOrder.indexOf(target);
   }
 
   private canManageProject(
@@ -182,6 +189,15 @@ export class ServiceOrdersService {
     if (this.isPrivileged(user.role)) return true;
     if (project.ownerId === user.id) return true;
     return project.members.some((member) => member.userId === user.id);
+  }
+
+  private assertScheduleDates(startDate?: Date, endDate?: Date) {
+    if (startDate && endDate && endDate < startDate) {
+      throw new AppError(
+        "A data prevista de entrega não pode ser menor que a data prevista de início",
+        409
+      );
+    }
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -436,7 +452,7 @@ export class ServiceOrdersService {
   }
 
   private async ensureCanView(serviceOrderId: string, user: CurrentUser) {
-    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId);
+    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId,);
     if (!this.canViewProject(serviceOrder.project, user)) {
       throw new AppError("Você não tem acesso a esta OS", 403);
     }
@@ -452,12 +468,15 @@ export class ServiceOrdersService {
   }
 
   async create(data: CreateServiceOrderInput, user: CurrentUser) {
+    this.assertScheduleDates(data.plannedStartDate, data.plannedEndDate);
+
     const project = await this.resolveProject(data.projectId, data.projectCode);
-    this.assertProjectStageAllowsServiceOrderCreation(project.stage);
 
     if (!this.canManageProject(project, user)) {
       throw new AppError("Você não tem permissão para criar OS neste projeto", 403);
     }
+
+    this.assertProjectStageAllowsServiceOrderCreation(project.stage);
 
     const estimate = await this.resolveEstimate(data.estimateId, data.estimateCode);
 
@@ -496,7 +515,7 @@ export class ServiceOrdersService {
       data: {
         projectId: project.id,
         estimateId: estimate.id,
-        diexRequestId: diex?.id,
+        diexRequestId: diex.id,
         serviceOrderNumber: data.serviceOrderNumber.trim(),
         issuedAt: data.issuedAt,
         contractorName: estimate.ata.vendorName,
@@ -506,6 +525,9 @@ export class ServiceOrdersService {
         requesterRank: data.requesterRank.trim(),
         requesterRole: data.requesterRole?.trim() || "Fiscal do Contrato",
         issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
+        isEmergency: data.isEmergency ?? false,
+        plannedStartDate: data.plannedStartDate,
+        plannedEndDate: data.plannedEndDate,
         notes: data.notes?.trim(),
         totalAmount: estimate.totalAmount,
         items: {
@@ -566,6 +588,9 @@ export class ServiceOrdersService {
     if (filters.diexCode) {
       andConditions.push({ diexRequest: { diexCode: filters.diexCode } });
     }
+    if (filters.emergency !== undefined) {
+      andConditions.push({ isEmergency: filters.emergency });
+    }
 
     if (filters.search) {
       andConditions.push({
@@ -618,6 +643,23 @@ export class ServiceOrdersService {
   async update(serviceOrderId: string, data: UpdateServiceOrderInput, user: CurrentUser) {
     await this.ensureCanManage(serviceOrderId, user);
 
+    const current = await prisma.serviceOrder.findUnique({
+      where: { id: serviceOrderId },
+      select: {
+        plannedStartDate: true,
+        plannedEndDate: true,
+      },
+    });
+
+    if (!current) {
+      throw new AppError("OS não encontrada", 404);
+    }
+
+    const nextStart = data.plannedStartDate ?? current.plannedStartDate ?? undefined;
+    const nextEnd = data.plannedEndDate ?? current.plannedEndDate ?? undefined;
+
+    this.assertScheduleDates(nextStart, nextEnd);
+
     const serviceOrder = await prisma.serviceOrder.update({
       where: { id: serviceOrderId },
       data: {
@@ -639,6 +681,15 @@ export class ServiceOrdersService {
         }),
         ...(data.issuingOrganization !== undefined && {
           issuingOrganization: data.issuingOrganization?.trim(),
+        }),
+        ...(data.isEmergency !== undefined && {
+          isEmergency: data.isEmergency,
+        }),
+        ...(data.plannedStartDate !== undefined && {
+          plannedStartDate: data.plannedStartDate,
+        }),
+        ...(data.plannedEndDate !== undefined && {
+          plannedEndDate: data.plannedEndDate,
         }),
         ...(data.notes !== undefined && { notes: data.notes?.trim() }),
       },

@@ -322,6 +322,9 @@ model ServiceOrder {
   requesterRank        String
   requesterRole        String             @default("Fiscal do Contrato")
   issuingOrganization  String             @default("4º CTA")
+  isEmergency          Boolean           @default(false)
+  plannedStartDate     DateTime?
+  plannedEndDate       DateTime?
   notes                String?
   totalAmount          Decimal            @db.Decimal(14, 2)
   project              Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)

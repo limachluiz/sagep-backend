@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalBoolean } from "../../shared/zod-helpers.js";
 
 const ataTypeEnum = z.enum(["CFTV", "FIBRA_OPTICA"]);
 const ufEnum = z.enum(["AM", "RO", "RR", "AC"]);
@@ -13,11 +14,6 @@ const optionalDate = z.preprocess((value) => {
   if (value === "" || value === null || value === undefined) return undefined;
   return value;
 }, z.coerce.date().optional());
-
-const optionalBoolean = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) return undefined;
-  return value;
-}, z.coerce.boolean().optional());
 
 const localitySchema = z.object({
   cityName: z.string().trim().min(2, "Cidade inválida"),
