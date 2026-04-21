@@ -1,15 +1,5 @@
 import { z } from "zod";
-
-const optionalString = z.preprocess((value) => {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === "string" && value.trim() === "") return undefined;
-  return value;
-}, z.string().trim().optional());
-
-const optionalDate = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) return undefined;
-  return value;
-}, z.coerce.date().optional());
+import { optionalDate, optionalString} from "../../shared/zod-helpers.js";
 
 export const createDiexSchema = z.object({
   projectId: z.string().min(1).optional(),

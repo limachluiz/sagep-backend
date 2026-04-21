@@ -23,3 +23,23 @@ export const optionalBoolean = z.preprocess((value) => {
 
   return value;
 }, z.boolean().optional());
+
+export const optionalString = z.preprocess((value) => {
+  if (value === null || value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "string" && value.trim() === "") {
+    return undefined;
+  }
+
+  return value;
+}, z.string().trim().optional());
+
+export const optionalDate = z.preprocess((value) => {
+  if (value === "" || value === null || value === undefined) {
+    return undefined;
+  }
+
+  return value;
+}, z.coerce.date().optional());

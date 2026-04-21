@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { optionalBoolean } from "../../shared/zod-helpers.js";
+import { optionalBoolean, optionalDate, optionalString } from "../../shared/zod-helpers.js";
 
 const taskStatusEnum = z.enum([
   "PENDENTE",
@@ -8,26 +8,6 @@ const taskStatusEnum = z.enum([
   "CONCLUIDA",
   "CANCELADA",
 ]);
-
-const optionalDate = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) {
-    return undefined;
-  }
-
-  return value;
-}, z.coerce.date().optional());
-
-const optionalString = z.preprocess((value) => {
-  if (value === null || value === undefined) {
-    return undefined;
-  }
-
-  if (typeof value === "string" && value.trim() === "") {
-    return undefined;
-  }
-
-  return value;
-}, z.string().trim().optional());
 
 const optionalTaskAssigneeId = z.preprocess((value) => {
   if (value === "" || value === null || value === undefined) {
