@@ -1,17 +1,7 @@
 import { z } from "zod";
+import { optionalBoolean, optionalString } from "../../shared/zod-helpers.js";
 
 const ufEnum = z.enum(["AM", "RO", "RR", "AC"]);
-
-const optionalBoolean = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) return undefined;
-  return value;
-}, z.coerce.boolean().optional());
-
-const optionalString = z.preprocess((value) => {
-  if (value === null || value === undefined) return undefined;
-  if (typeof value === "string" && value.trim() === "") return undefined;
-  return value;
-}, z.string().trim().optional());
 
 export const createMilitaryOrganizationSchema = z.object({
   sigla: z.string().trim().min(2, "Sigla inválida"),

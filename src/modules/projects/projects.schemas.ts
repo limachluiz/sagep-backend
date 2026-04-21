@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { optionalDate, optionalString } from "../../shared/zod-helpers.js";
 
 const projectStatusEnum = z.enum([
   "PLANEJAMENTO",
@@ -20,26 +21,6 @@ const projectStageEnum = z.enum([
   "SERVICO_CONCLUIDO",
   "CANCELADO",
 ]);
-
-const optionalDate = z.preprocess((value) => {
-  if (value === "" || value === null || value === undefined) {
-    return undefined;
-  }
-
-  return value;
-}, z.coerce.date().optional());
-
-const optionalString = z.preprocess((value) => {
-  if (value === null || value === undefined) {
-    return undefined;
-  }
-
-  if (typeof value === "string" && value.trim() === "") {
-    return undefined;
-  }
-
-  return value;
-}, z.string().trim().optional());
 
 export const createProjectSchema = z
   .object({
@@ -117,4 +98,9 @@ export const projectIdParamSchema = z.object({
 
 export const projectCodeParamSchema = z.object({
   code: z.coerce.number().int().positive("Código do projeto inválido"),
+});
+
+export const issueServiceOrderSchema = z.object({
+  serviceOrderNumber: optionalString,
+  serviceOrderIssuedAt: optionalDate,
 });

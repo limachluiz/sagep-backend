@@ -8,7 +8,9 @@ import { healthRoutes } from "./modules/health/health.routes.js";
 import { projectsRoutes } from "./modules/projects/projects.routes.js";
 import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
+import { diexRoutes } from "./modules/diex/diex.routes.js";
 import { militaryOrganizationsRoutes } from "./modules/military-organizations/military-organizations.routes.js";
+import { serviceOrdersRoutes } from "./modules/service-orders/service-orders.routes.js";
 
 export const routes = Router();
 
@@ -21,4 +23,6 @@ routes.use("/atas", atasRoutes);
 routes.use("/ata-items", ataItemsRoutes);
 routes.use("/estimates", estimatesRoutes);
 routes.use("/dashboard", dashboardRoutes);
+routes.use("/diex", diexRoutes);
 routes.use("/military-organizations", militaryOrganizationsRoutes);
+routes.use("/service-orders", serviceOrdersRoutes);

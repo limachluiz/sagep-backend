@@ -68,10 +68,13 @@ model User {
   email         String          @unique
   passwordHash  String
   role          UserRole        @default(CONSULTA)
+  rank          String?
+  cpf           String?
   active        Boolean         @default(true)
   ownedProjects Project[]       @relation("ProjectOwner")
   memberships   ProjectMember[]
   assignedTasks Task[]          @relation("TaskAssignee")
+  refreshTokens RefreshToken[]
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 }
@@ -86,8 +89,10 @@ model Project {
   ownerId                  String
   owner                    User            @relation("ProjectOwner", fields: [ownerId], references: [id])
   members                  ProjectMember[]
+  diexRequests             DiexRequest[]
   tasks                    Task[]
   estimates                Estimate[]
+  serviceOrders            ServiceOrder[]
   startDate                DateTime?
   endDate                  DateTime?
   creditNoteNumber         String?
@@ -168,87 +173,239 @@ model AtaCoverageGroup {
 }
 
 model AtaCoverageLocality {
-  id              String            @id @default(cuid())
+  id              String           @id @default(cuid())
   coverageGroupId String
   cityName        String
   stateUf         FederativeUnit
-  coverageGroup   AtaCoverageGroup  @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
-  createdAt       DateTime          @default(now())
+  coverageGroup   AtaCoverageGroup @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
 
   @@unique([coverageGroupId, cityName, stateUf])
 }
 
 model AtaItem {
-  id              String            @id @default(cuid())
-  ataItemCode     Int               @unique @default(autoincrement())
+  id              String           @id @default(cuid())
+  ataItemCode     Int              @unique @default(autoincrement())
   ataId           String
   coverageGroupId String
   referenceCode   String
   description     String
   unit            String
-  estimateItems  EstimateItem[]
-  unitPrice       Decimal           @db.Decimal(14, 2)
+  estimateItems   EstimateItem[]
+  unitPrice       Decimal          @db.Decimal(14, 2)
   notes           String?
-  isActive        Boolean           @default(true)
-  ata             Ata               @relation(fields: [ataId], references: [id], onDelete: Cascade)
-  coverageGroup   AtaCoverageGroup  @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
+  isActive        Boolean          @default(true)
+  ata             Ata              @relation(fields: [ataId], references: [id], onDelete: Cascade)
+  coverageGroup   AtaCoverageGroup @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
 
   @@unique([ataId, coverageGroupId, referenceCode])
 }
 
 model Estimate {
-  id                  String                 @id @default(cuid())
-  estimateCode        Int                    @unique @default(autoincrement())
+  id                  String                @id @default(cuid())
+  estimateCode        Int                   @unique @default(autoincrement())
   projectId           String
   ataId               String
   coverageGroupId     String
   omId                String?
-  status              EstimateStatus         @default(RASCUNHO)
+  status              EstimateStatus        @default(RASCUNHO)
   omName              String?
   destinationCityName String
   destinationStateUf  FederativeUnit
   notes               String?
-  totalAmount         Decimal                @db.Decimal(14, 2)
-  project             Project                @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  ata                 Ata                    @relation(fields: [ataId], references: [id], onDelete: Restrict)
-  coverageGroup       AtaCoverageGroup       @relation(fields: [coverageGroupId], references: [id], onDelete: Restrict)
-  om                  MilitaryOrganization?  @relation(fields: [omId], references: [id], onDelete: Restrict)
+  totalAmount         Decimal               @db.Decimal(14, 2)
+  project             Project               @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  ata                 Ata                   @relation(fields: [ataId], references: [id], onDelete: Restrict)
+  coverageGroup       AtaCoverageGroup      @relation(fields: [coverageGroupId], references: [id], onDelete: Restrict)
+  om                  MilitaryOrganization? @relation(fields: [omId], references: [id], onDelete: Restrict)
   items               EstimateItem[]
-  createdAt           DateTime               @default(now())
-  updatedAt           DateTime               @updatedAt
+  diexRequests        DiexRequest[]
+  serviceOrders       ServiceOrder[]
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 }
 
 model EstimateItem {
-  id               String    @id @default(cuid())
-  estimateItemCode Int       @unique @default(autoincrement())
-  estimateId       String
-  ataItemId        String
-  referenceCode    String
-  description      String
-  unit             String
-  quantity         Decimal   @db.Decimal(14, 2)
-  unitPrice        Decimal   @db.Decimal(14, 2)
-  subtotal         Decimal   @db.Decimal(14, 2)
-  notes            String?
-  estimate         Estimate  @relation(fields: [estimateId], references: [id], onDelete: Cascade)
-  ataItem          AtaItem   @relation(fields: [ataItemId], references: [id], onDelete: Restrict)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  id                String             @id @default(cuid())
+  estimateItemCode  Int                @unique @default(autoincrement())
+  estimateId        String
+  ataItemId         String
+  referenceCode     String
+  description       String
+  unit              String
+  quantity          Decimal            @db.Decimal(14, 2)
+  unitPrice         Decimal            @db.Decimal(14, 2)
+  subtotal          Decimal            @db.Decimal(14, 2)
+  notes             String?
+  diexItems         DiexRequestItem[]
+  serviceOrderItems ServiceOrderItem[]
+  estimate          Estimate           @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  ataItem           AtaItem            @relation(fields: [ataItemId], references: [id], onDelete: Restrict)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@unique([estimateId, ataItemId])
 }
 
 model MilitaryOrganization {
-  id        String   @id @default(cuid())
-  omCode    Int      @unique @default(autoincrement())
-  sigla     String   @unique
+  id        String         @id @default(cuid())
+  omCode    Int            @unique @default(autoincrement())
+  sigla     String         @unique
   name      String
   cityName  String
   stateUf   FederativeUnit
   estimates Estimate[]
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  isActive  Boolean        @default(true)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model DiexRequest {
+  id                  String            @id @default(cuid())
+  diexCode            Int               @unique @default(autoincrement())
+  projectId           String
+  estimateId          String
+  diexNumber          String?
+  issuedAt            DateTime?
+  issuingOrganization String            @default("4º CTA")
+  commandName         String            @default("COMANDO MILITAR DA AMAZÔNIA")
+  pregaoNumber        String            @default("04/2025")
+  uasg                String            @default("160016")
+  supplierName        String
+  supplierCnpj        String
+  requesterName       String
+  requesterRank       String
+  requesterCpf        String?
+  requesterRole       String            @default("Requisitante")
+  notes               String?
+  totalAmount         Decimal           @db.Decimal(14, 2)
+  project             Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  estimate            Estimate          @relation(fields: [estimateId], references: [id], onDelete: Restrict)
+  items               DiexRequestItem[]
+  serviceOrders       ServiceOrder[]
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([estimateId])
+}
+
+model DiexRequestItem {
+  id                String       @id @default(cuid())
+  diexItemCode      Int          @unique @default(autoincrement())
+  diexRequestId     String
+  estimateItemId    String
+  itemCode          String
+  description       String
+  supplyUnit        String
+  quantityRequested Decimal      @db.Decimal(14, 2)
+  unitPrice         Decimal      @db.Decimal(14, 2)
+  totalPrice        Decimal      @db.Decimal(14, 2)
+  notes             String?
+  diexRequest       DiexRequest  @relation(fields: [diexRequestId], references: [id], onDelete: Cascade)
+  estimateItem      EstimateItem @relation(fields: [estimateItemId], references: [id], onDelete: Restrict)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([diexRequestId, estimateItemId])
+}
+
+model ServiceOrder {
+  id                           String                          @id @default(cuid())
+  serviceOrderCode             Int                             @unique @default(autoincrement())
+  projectId                    String
+  estimateId                   String
+  diexRequestId                String?
+  serviceOrderNumber           String
+  issuedAt                     DateTime
+  contractorName               String
+  contractorCnpj               String
+  commitmentNoteNumber         String
+  requesterName                String
+  requesterRank                String
+  requesterRole                String                          @default("Fiscal do Contrato")
+  issuingOrganization          String                          @default("4º CTA")
+  isEmergency                  Boolean                         @default(false)
+  plannedStartDate             DateTime?
+  plannedEndDate               DateTime?
+  notes                        String?
+  totalAmount                  Decimal                         @db.Decimal(14, 2)
+  project                      Project                         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  estimate                     Estimate                        @relation(fields: [estimateId], references: [id], onDelete: Restrict)
+  diexRequest                  DiexRequest?                    @relation(fields: [diexRequestId], references: [id], onDelete: Restrict)
+  items                        ServiceOrderItem[]
+  createdAt                    DateTime                        @default(now())
+  updatedAt                    DateTime                        @updatedAt
+  requestingArea               String                          @default("Seção de Projetos - Divisão Técnica 4º CTA")
+  projectDisplayName           String?
+  projectAcronym               String?
+  contractNumber               String?
+  executionLocation            String?
+  executionHours               String?
+  contactName                  String?
+  contactPhone                 String?
+  contactExtension             String?
+  contractTotalTerm            String?
+  originProcess                String?                         @default("Pregão nº 90004/2025-CMA")
+  requesterCpf                 String?
+  contractorRepresentativeName String?
+  contractorRepresentativeRole String?                         @default("Responsável pela Contratada")
+  scheduleItems                ServiceOrderScheduleItem[]
+  deliveredDocuments           ServiceOrderDeliveredDocument[]
+
+  @@unique([estimateId])
+}
+
+model ServiceOrderItem {
+  id                   String       @id @default(cuid())
+  serviceOrderItemCode Int          @unique @default(autoincrement())
+  serviceOrderId       String
+  estimateItemId       String
+  itemCode             String
+  description          String
+  supplyUnit           String
+  quantityOrdered      Decimal      @db.Decimal(14, 2)
+  unitPrice            Decimal      @db.Decimal(14, 2)
+  totalPrice           Decimal      @db.Decimal(14, 2)
+  notes                String?
+  serviceOrder         ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  estimateItem         EstimateItem @relation(fields: [estimateItemId], references: [id], onDelete: Restrict)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@unique([serviceOrderId, estimateItemId])
+}
+
+model ServiceOrderScheduleItem {
+  id             String       @id @default(cuid())
+  serviceOrderId String
+  orderIndex     Int
+  taskStep       String
+  scheduleText   String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+}
+
+model ServiceOrderDeliveredDocument {
+  id             String       @id @default(cuid())
+  serviceOrderId String
+  description    String
+  isChecked      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  userId     String
+  tokenHash  String   @unique
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

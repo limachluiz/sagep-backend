@@ -13,10 +13,14 @@ type CreateUserByAdminInput = {
   email: string;
   password: string;
   role: "PROJETISTA" | "GESTOR" | "CONSULTA";
+  rank?: string;
+  cpf?: string;
 };
 
 type UpdateUserRoleInput = {
   role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
+  rank?: string;
+  cpf?: string;
 };
 
 export class UsersService {
@@ -37,6 +41,8 @@ export class UsersService {
         email: data.email,
         passwordHash,
         role: data.role,
+        rank: data.rank?.trim(),
+        cpf: data.cpf?.trim(),
       },
       select: {
         id: true,

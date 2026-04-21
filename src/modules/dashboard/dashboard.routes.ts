@@ -6,6 +6,6 @@ import { DashboardController } from "./dashboard.controller.js";
 export const dashboardRoutes = Router();
 const controller = new DashboardController();
 
-dashboardRoutes.use(authMiddleware, requireRole("ADMIN", "GESTOR"));
+dashboardRoutes.use(authMiddleware, requireRole("ADMIN", "GESTOR", "CONSULTA", "PROJETISTA"));
 
-dashboardRoutes.get("/overview", (req, res) => controller.overview(req, res));
+dashboardRoutes.get("/", (req, res) => controller.overview(req, res));

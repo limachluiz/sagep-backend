@@ -1,8 +1,13 @@
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { prisma } from "../../config/prisma.js";
-import { env } from "../../config/env.js";
 import { AppError } from "../../shared/app-error.js";
+import {
+  generateAccessToken,
+  generateRefreshToken,
+  getRefreshTokenExpirationDate,
+  hashToken,
+  verifyRefreshToken,
+} from "../../shared/auth-tokens.js";
 
 type RegisterInput = {
   name: string;
@@ -67,28 +72,131 @@ export class AuthService {
       throw new AppError("Usuário inativo", 403);
     }
 
-    const token = jwt.sign(
+    const accessToken = generateAccessToken(
       {
         email: user.email,
         role: user.role,
       },
-      env.JWT_SECRET,
-      {
-        subject: user.id,
-        expiresIn: "1d",
-      }
+      user.id
     );
 
+    const refreshToken = generateRefreshToken(
+      {
+        email: user.email,
+        role: user.role,
+      },
+      user.id
+    );
+
+    await prisma.refreshToken.create({
+      data: {
+        userId: user.id,
+        tokenHash: hashToken(refreshToken),
+        expiresAt: getRefreshTokenExpirationDate(),
+      },
+    });
+
     return {
-      token,
+      accessToken,
+      refreshToken,
       user: {
         id: user.id,
         userCode: user.userCode,
         name: user.name,
         email: user.email,
         role: user.role,
+        rank: user.rank,
+        cpf: user.cpf,
+        active: user.active,
+        createdAt: user.createdAt,
       },
     };
+  }
+
+  async refresh(refreshToken: string) {
+    verifyRefreshToken(refreshToken);
+
+    const tokenHash = hashToken(refreshToken);
+
+    const storedToken = await prisma.refreshToken.findUnique({
+      where: { tokenHash },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!storedToken) {
+      throw new AppError("Refresh token inválido", 401);
+    }
+
+    if (storedToken.revokedAt) {
+      throw new AppError("Refresh token revogado", 401);
+    }
+
+    if (storedToken.expiresAt < new Date()) {
+      throw new AppError("Refresh token expirado", 401);
+    }
+
+    if (!storedToken.user.active) {
+      throw new AppError("Usuário inativo", 401);
+    }
+
+    await prisma.refreshToken.update({
+      where: { id: storedToken.id },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    const newAccessToken = generateAccessToken(
+      {
+        email: storedToken.user.email,
+        role: storedToken.user.role,
+      },
+      storedToken.user.id
+    );
+
+    const newRefreshToken = generateRefreshToken(
+      {
+        email: storedToken.user.email,
+        role: storedToken.user.role,
+      },
+      storedToken.user.id
+    );
+
+    await prisma.refreshToken.create({
+      data: {
+        userId: storedToken.user.id,
+        tokenHash: hashToken(newRefreshToken),
+        expiresAt: getRefreshTokenExpirationDate(),
+      },
+    });
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
+  }
+
+  async logout(refreshToken: string) {
+    const tokenHash = hashToken(refreshToken);
+
+    const storedToken = await prisma.refreshToken.findUnique({
+      where: { tokenHash },
+    });
+
+    if (!storedToken) {
+      return { message: "Logout realizado com sucesso" };
+    }
+
+    await prisma.refreshToken.update({
+      where: { id: storedToken.id },
+      data: {
+        revokedAt: new Date(),
+      },
+    });
+
+    return { message: "Logout realizado com sucesso" };
   }
 
   async me(userId: string) {
@@ -100,6 +208,8 @@ export class AuthService {
         name: true,
         email: true,
         role: true,
+        rank: true,
+        cpf: true,
         active: true,
         createdAt: true,
       },
