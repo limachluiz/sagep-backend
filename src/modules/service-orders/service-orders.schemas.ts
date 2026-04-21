@@ -1,5 +1,20 @@
 import { z } from "zod";
-import { optionalBoolean, optionalDate, optionalString } from "../../shared/zod-helpers.js";
+import {
+  optionalBoolean,
+  optionalDate,
+  optionalString,
+} from "../../shared/zod-helpers.js";
+
+const scheduleItemSchema = z.object({
+  orderIndex: z.coerce.number().int().positive("Ordem inválida"),
+  taskStep: z.string().trim().min(2, "Tarefa/etapa inválida"),
+  scheduleText: z.string().trim().min(2, "Texto de cronograma inválido"),
+});
+
+const deliveredDocumentSchema = z.object({
+  description: z.string().trim().min(2, "Descrição do documento inválida"),
+  isChecked: optionalBoolean,
+});
 
 export const createServiceOrderSchema = z.object({
   projectId: z.string().min(1).optional(),
@@ -18,6 +33,22 @@ export const createServiceOrderSchema = z.object({
   isEmergency: optionalBoolean,
   plannedStartDate: optionalDate,
   plannedEndDate: optionalDate,
+  requestingArea: optionalString,
+  projectDisplayName: optionalString,
+  projectAcronym: optionalString,
+  contractNumber: optionalString,
+  executionLocation: optionalString,
+  executionHours: optionalString,
+  contactName: optionalString,
+  contactPhone: optionalString,
+  contactExtension: optionalString,
+  contractTotalTerm: optionalString,
+  originProcess: optionalString,
+  requesterCpf: optionalString,
+  contractorRepresentativeName: optionalString,
+  contractorRepresentativeRole: optionalString,
+  scheduleItems: z.array(scheduleItemSchema).optional(),
+  deliveredDocuments: z.array(deliveredDocumentSchema).optional(),
   notes: optionalString,
 })
   .refine((data) => data.projectId || data.projectCode, {
@@ -61,6 +92,22 @@ export const updateServiceOrderSchema = z.object({
   isEmergency: optionalBoolean,
   plannedStartDate: optionalDate,
   plannedEndDate: optionalDate,
+  requestingArea: optionalString,
+  projectDisplayName: optionalString,
+  projectAcronym: optionalString,
+  contractNumber: optionalString,
+  executionLocation: optionalString,
+  executionHours: optionalString,
+  contactName: optionalString,
+  contactPhone: optionalString,
+  contactExtension: optionalString,
+  contractTotalTerm: optionalString,
+  originProcess: optionalString,
+  requesterCpf: optionalString,
+  contractorRepresentativeName: optionalString,
+  contractorRepresentativeRole: optionalString,
+  scheduleItems: z.array(scheduleItemSchema).optional(),
+  deliveredDocuments: z.array(deliveredDocumentSchema).optional(),
   notes: optionalString,
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Informe pelo menos um campo para atualizar",

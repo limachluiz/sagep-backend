@@ -308,31 +308,47 @@ model DiexRequestItem {
 }
 
 model ServiceOrder {
-  id                   String             @id @default(cuid())
-  serviceOrderCode     Int                @unique @default(autoincrement())
-  projectId            String
-  estimateId           String
-  diexRequestId        String?
-  serviceOrderNumber   String
-  issuedAt             DateTime
-  contractorName       String
-  contractorCnpj       String
-  commitmentNoteNumber String
-  requesterName        String
-  requesterRank        String
-  requesterRole        String             @default("Fiscal do Contrato")
-  issuingOrganization  String             @default("4º CTA")
-  isEmergency          Boolean           @default(false)
-  plannedStartDate     DateTime?
-  plannedEndDate       DateTime?
-  notes                String?
-  totalAmount          Decimal            @db.Decimal(14, 2)
-  project              Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  estimate             Estimate           @relation(fields: [estimateId], references: [id], onDelete: Restrict)
-  diexRequest          DiexRequest?       @relation(fields: [diexRequestId], references: [id], onDelete: Restrict)
-  items                ServiceOrderItem[]
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  id                           String                          @id @default(cuid())
+  serviceOrderCode             Int                             @unique @default(autoincrement())
+  projectId                    String
+  estimateId                   String
+  diexRequestId                String?
+  serviceOrderNumber           String
+  issuedAt                     DateTime
+  contractorName               String
+  contractorCnpj               String
+  commitmentNoteNumber         String
+  requesterName                String
+  requesterRank                String
+  requesterRole                String                          @default("Fiscal do Contrato")
+  issuingOrganization          String                          @default("4º CTA")
+  isEmergency                  Boolean                         @default(false)
+  plannedStartDate             DateTime?
+  plannedEndDate               DateTime?
+  notes                        String?
+  totalAmount                  Decimal                         @db.Decimal(14, 2)
+  project                      Project                         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  estimate                     Estimate                        @relation(fields: [estimateId], references: [id], onDelete: Restrict)
+  diexRequest                  DiexRequest?                    @relation(fields: [diexRequestId], references: [id], onDelete: Restrict)
+  items                        ServiceOrderItem[]
+  createdAt                    DateTime                        @default(now())
+  updatedAt                    DateTime                        @updatedAt
+  requestingArea               String                          @default("Seção de Projetos - Divisão Técnica 4º CTA")
+  projectDisplayName           String?
+  projectAcronym               String?
+  contractNumber               String?
+  executionLocation            String?
+  executionHours               String?
+  contactName                  String?
+  contactPhone                 String?
+  contactExtension             String?
+  contractTotalTerm            String?
+  originProcess                String?                         @default("Pregão nº 90004/2025-CMA")
+  requesterCpf                 String?
+  contractorRepresentativeName String?
+  contractorRepresentativeRole String?                         @default("Responsável pela Contratada")
+  scheduleItems                ServiceOrderScheduleItem[]
+  deliveredDocuments           ServiceOrderDeliveredDocument[]
 
   @@unique([estimateId])
 }
@@ -355,4 +371,25 @@ model ServiceOrderItem {
   updatedAt            DateTime     @updatedAt
 
   @@unique([serviceOrderId, estimateItemId])
+}
+
+model ServiceOrderScheduleItem {
+  id             String       @id @default(cuid())
+  serviceOrderId String
+  orderIndex     Int
+  taskStep       String
+  scheduleText   String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+}
+
+model ServiceOrderDeliveredDocument {
+  id             String       @id @default(cuid())
+  serviceOrderId String
+  description    String
+  isChecked      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  serviceOrder   ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
 }

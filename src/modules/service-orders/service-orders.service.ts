@@ -20,6 +20,17 @@ type ProjectStageValue =
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
+type ScheduleItemInput = {
+  orderIndex: number;
+  taskStep: string;
+  scheduleText: string;
+};
+
+type DeliveredDocumentInput = {
+  description: string;
+  isChecked?: boolean;
+};
+
 type CreateServiceOrderInput = {
   projectId?: string;
   projectCode?: number;
@@ -37,6 +48,22 @@ type CreateServiceOrderInput = {
   isEmergency?: boolean;
   plannedStartDate?: Date;
   plannedEndDate?: Date;
+  requestingArea?: string;
+  projectDisplayName?: string;
+  projectAcronym?: string;
+  contractNumber?: string;
+  executionLocation?: string;
+  executionHours?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactExtension?: string;
+  contractTotalTerm?: string;
+  originProcess?: string;
+  requesterCpf?: string;
+  contractorRepresentativeName?: string;
+  contractorRepresentativeRole?: string;
+  scheduleItems?: ScheduleItemInput[];
+  deliveredDocuments?: DeliveredDocumentInput[];
   notes?: string;
 };
 
@@ -51,6 +78,22 @@ type UpdateServiceOrderInput = {
   isEmergency?: boolean;
   plannedStartDate?: Date;
   plannedEndDate?: Date;
+  requestingArea?: string;
+  projectDisplayName?: string;
+  projectAcronym?: string;
+  contractNumber?: string;
+  executionLocation?: string;
+  executionHours?: string;
+  contactName?: string;
+  contactPhone?: string;
+  contactExtension?: string;
+  contractTotalTerm?: string;
+  originProcess?: string;
+  requesterCpf?: string;
+  contractorRepresentativeName?: string;
+  contractorRepresentativeRole?: string;
+  scheduleItems?: ScheduleItemInput[];
+  deliveredDocuments?: DeliveredDocumentInput[];
   notes?: string;
 };
 
@@ -131,6 +174,27 @@ const serviceOrderInclude = {
     },
     orderBy: {
       serviceOrderItemCode: "asc",
+    },
+  },
+  scheduleItems: {
+    select: {
+      id: true,
+      orderIndex: true,
+      taskStep: true,
+      scheduleText: true,
+    },
+    orderBy: {
+      orderIndex: "asc",
+    },
+  },
+  deliveredDocuments: {
+    select: {
+      id: true,
+      description: true,
+      isChecked: true,
+    },
+    orderBy: {
+      createdAt: "asc",
     },
   },
 } satisfies Prisma.ServiceOrderInclude;
@@ -217,9 +281,14 @@ export class ServiceOrdersService {
       });
 
       if (!project) throw new AppError("Projeto não encontrado", 404);
+
       if (projectCode && project.projectCode !== projectCode) {
-        throw new AppError("projectId e projectCode não correspondem ao mesmo projeto", 400);
+        throw new AppError(
+          "projectId e projectCode não correspondem ao mesmo projeto",
+          400
+        );
       }
+
       return project;
     }
 
@@ -255,6 +324,9 @@ export class ServiceOrdersService {
           projectId: true,
           status: true,
           totalAmount: true,
+          omName: true,
+          destinationCityName: true,
+          destinationStateUf: true,
           items: {
             select: {
               id: true,
@@ -278,9 +350,14 @@ export class ServiceOrdersService {
       });
 
       if (!estimate) throw new AppError("Estimativa não encontrada", 404);
+
       if (estimateCode && estimate.estimateCode !== estimateCode) {
-        throw new AppError("estimateId e estimateCode não correspondem à mesma estimativa", 400);
+        throw new AppError(
+          "estimateId e estimateCode não correspondem à mesma estimativa",
+          400
+        );
       }
+
       return estimate;
     }
 
@@ -293,6 +370,9 @@ export class ServiceOrdersService {
           projectId: true,
           status: true,
           totalAmount: true,
+          omName: true,
+          destinationCityName: true,
+          destinationStateUf: true,
           items: {
             select: {
               id: true,
@@ -452,18 +532,22 @@ export class ServiceOrdersService {
   }
 
   private async ensureCanView(serviceOrderId: string, user: CurrentUser) {
-    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId,);
+    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId);
+
     if (!this.canViewProject(serviceOrder.project, user)) {
       throw new AppError("Você não tem acesso a esta OS", 403);
     }
+
     return serviceOrder;
   }
 
   private async ensureCanManage(serviceOrderId: string, user: CurrentUser) {
     const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId);
+
     if (!this.canManageProject(serviceOrder.project, user)) {
       throw new AppError("Você não tem permissão para gerenciar esta OS", 403);
     }
+
     return serviceOrder;
   }
 
@@ -528,6 +612,25 @@ export class ServiceOrdersService {
         isEmergency: data.isEmergency ?? false,
         plannedStartDate: data.plannedStartDate,
         plannedEndDate: data.plannedEndDate,
+        requestingArea:
+          data.requestingArea?.trim() || "Seção de Projetos - Divisão Técnica 4º CTA",
+        projectDisplayName: data.projectDisplayName?.trim() || project.title,
+        projectAcronym: data.projectAcronym?.trim(),
+        contractNumber: data.contractNumber?.trim(),
+        executionLocation:
+          data.executionLocation?.trim() ||
+          `${estimate.destinationCityName}/${estimate.destinationStateUf} - 4º CTA`,
+        executionHours: data.executionHours?.trim(),
+        contactName: data.contactName?.trim(),
+        contactPhone: data.contactPhone?.trim(),
+        contactExtension: data.contactExtension?.trim(),
+        contractTotalTerm: data.contractTotalTerm?.trim(),
+        originProcess: data.originProcess?.trim() || "Pregão nº 90004/2025-CMA",
+        requesterCpf: data.requesterCpf?.trim(),
+        contractorRepresentativeName: data.contractorRepresentativeName?.trim(),
+        contractorRepresentativeRole:
+          data.contractorRepresentativeRole?.trim() ||
+          "Responsável pela Contratada",
         notes: data.notes?.trim(),
         totalAmount: estimate.totalAmount,
         items: {
@@ -540,6 +643,19 @@ export class ServiceOrdersService {
             unitPrice: item.unitPrice,
             totalPrice: item.subtotal,
             notes: item.notes,
+          })),
+        },
+        scheduleItems: {
+          create: (data.scheduleItems ?? []).map((item) => ({
+            orderIndex: item.orderIndex,
+            taskStep: item.taskStep.trim(),
+            scheduleText: item.scheduleText.trim(),
+          })),
+        },
+        deliveredDocuments: {
+          create: (data.deliveredDocuments ?? []).map((doc) => ({
+            description: doc.description.trim(),
+            isChecked: doc.isChecked ?? false,
           })),
         },
       },
@@ -578,16 +694,22 @@ export class ServiceOrdersService {
       });
     }
 
-    if (filters.code) andConditions.push({ serviceOrderCode: filters.code });
+    if (filters.code) {
+      andConditions.push({ serviceOrderCode: filters.code });
+    }
+
     if (filters.projectCode) {
       andConditions.push({ project: { projectCode: filters.projectCode } });
     }
+
     if (filters.estimateCode) {
       andConditions.push({ estimate: { estimateCode: filters.estimateCode } });
     }
+
     if (filters.diexCode) {
       andConditions.push({ diexRequest: { diexCode: filters.diexCode } });
     }
+
     if (filters.emergency !== undefined) {
       andConditions.push({ isEmergency: filters.emergency });
     }
@@ -599,6 +721,7 @@ export class ServiceOrdersService {
           { contractorName: { contains: filters.search, mode: "insensitive" } },
           { contractorCnpj: { contains: filters.search, mode: "insensitive" } },
           { requesterName: { contains: filters.search, mode: "insensitive" } },
+          { projectDisplayName: { contains: filters.search, mode: "insensitive" } },
         ],
       });
     }
@@ -691,7 +814,72 @@ export class ServiceOrdersService {
         ...(data.plannedEndDate !== undefined && {
           plannedEndDate: data.plannedEndDate,
         }),
-        ...(data.notes !== undefined && { notes: data.notes?.trim() }),
+        ...(data.requestingArea !== undefined && {
+          requestingArea: data.requestingArea?.trim(),
+        }),
+        ...(data.projectDisplayName !== undefined && {
+          projectDisplayName: data.projectDisplayName?.trim(),
+        }),
+        ...(data.projectAcronym !== undefined && {
+          projectAcronym: data.projectAcronym?.trim(),
+        }),
+        ...(data.contractNumber !== undefined && {
+          contractNumber: data.contractNumber?.trim(),
+        }),
+        ...(data.executionLocation !== undefined && {
+          executionLocation: data.executionLocation?.trim(),
+        }),
+        ...(data.executionHours !== undefined && {
+          executionHours: data.executionHours?.trim(),
+        }),
+        ...(data.contactName !== undefined && {
+          contactName: data.contactName?.trim(),
+        }),
+        ...(data.contactPhone !== undefined && {
+          contactPhone: data.contactPhone?.trim(),
+        }),
+        ...(data.contactExtension !== undefined && {
+          contactExtension: data.contactExtension?.trim(),
+        }),
+        ...(data.contractTotalTerm !== undefined && {
+          contractTotalTerm: data.contractTotalTerm?.trim(),
+        }),
+        ...(data.originProcess !== undefined && {
+          originProcess: data.originProcess?.trim(),
+        }),
+        ...(data.requesterCpf !== undefined && {
+          requesterCpf: data.requesterCpf?.trim(),
+        }),
+        ...(data.contractorRepresentativeName !== undefined && {
+          contractorRepresentativeName:
+            data.contractorRepresentativeName?.trim(),
+        }),
+        ...(data.contractorRepresentativeRole !== undefined && {
+          contractorRepresentativeRole:
+            data.contractorRepresentativeRole?.trim(),
+        }),
+        ...(data.notes !== undefined && {
+          notes: data.notes?.trim(),
+        }),
+        ...(data.scheduleItems !== undefined && {
+          scheduleItems: {
+            deleteMany: {},
+            create: data.scheduleItems.map((item) => ({
+              orderIndex: item.orderIndex,
+              taskStep: item.taskStep.trim(),
+              scheduleText: item.scheduleText.trim(),
+            })),
+          },
+        }),
+        ...(data.deliveredDocuments !== undefined && {
+          deliveredDocuments: {
+            deleteMany: {},
+            create: data.deliveredDocuments.map((doc) => ({
+              description: doc.description.trim(),
+              isChecked: doc.isChecked ?? false,
+            })),
+          },
+        }),
       },
       include: serviceOrderInclude,
     });
