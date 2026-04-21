@@ -100,6 +100,8 @@ export class AuthService {
         name: true,
         email: true,
         role: true,
+        rank: true,
+        cpf: true,
         active: true,
         createdAt: true,
       },

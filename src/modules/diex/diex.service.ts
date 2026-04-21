@@ -6,6 +6,9 @@ type CurrentUser = {
   id: string;
   email: string;
   role: string;
+  name?: string;
+  rank?: string | null;
+  cpf?: string | null;
 };
 
 type ProjectStageValue =
@@ -30,6 +33,7 @@ type CreateDiexInput = {
   supplierCnpj: string;
   requesterName: string;
   requesterRank: string;
+  requesterCpf?: string;
   requesterRole?: string;
   issuingOrganization?: string;
   commandName?: string;
@@ -45,6 +49,7 @@ type UpdateDiexInput = {
   requesterName?: string;
   requesterRank?: string;
   requesterRole?: string;
+  requesterCpf?: string;
   issuingOrganization?: string;
   commandName?: string;
   pregaoNumber?: string;
@@ -415,6 +420,43 @@ export class DiexService {
     return diex;
   }
 
+  private resolveRequesterData(
+  payload: {
+    requesterName?: string;
+    requesterRank?: string;
+    requesterCpf?: string;
+  },
+  user: CurrentUser
+) {
+  const requesterName = payload.requesterName?.trim() || user.name?.trim();
+  const requesterRank = payload.requesterRank?.trim() || user.rank?.trim();
+  const requesterCpf = payload.requesterCpf?.trim() || user.cpf?.trim();
+
+  if (!requesterName) {
+    throw new AppError("Nome do requisitante não informado", 409);
+  }
+
+  if (!requesterRank) {
+    throw new AppError(
+      "Posto/patente do requisitante não informado nem no payload nem no usuário logado",
+      409
+    );
+  }
+
+  if (!requesterCpf) {
+    throw new AppError(
+      "CPF do requisitante não informado nem no payload nem no usuário logado",
+      409
+    );
+  }
+
+  return {
+    requesterName,
+    requesterRank,
+    requesterCpf,
+  };
+}
+
   async create(data: CreateDiexInput, user: CurrentUser) {
     const project = await this.resolveProject(data.projectId, data.projectCode);
     this.assertProjectStageAllowsDiexCreation(project.stage);
@@ -440,6 +482,15 @@ export class DiexService {
       );
     }
 
+    const requester = this.resolveRequesterData(
+      {
+        requesterName: data.requesterName,
+        requesterRank: data.requesterRank,
+        requesterCpf: data.requesterCpf,
+      },
+      user
+    );
+
     const alreadyExists = await prisma.diexRequest.findUnique({
       where: { estimateId: estimate.id },
       select: { id: true },
@@ -461,8 +512,9 @@ export class DiexService {
         uasg: data.uasg?.trim() || "160016",
         supplierName: estimate.ata.vendorName,
         supplierCnpj: data.supplierCnpj.trim(),
-        requesterName: data.requesterName.trim(),
-        requesterRank: data.requesterRank.trim(),
+        requesterName: requester.requesterName,
+        requesterRank: requester.requesterRank,
+        requesterCpf: requester.requesterCpf,
         requesterRole: data.requesterRole?.trim() || "Requisitante",
         notes: data.notes?.trim(),
         totalAmount: estimate.totalAmount,

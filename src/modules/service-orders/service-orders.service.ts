@@ -619,8 +619,9 @@ export class ServiceOrdersService {
         contractNumber: data.contractNumber?.trim(),
         executionLocation:
           data.executionLocation?.trim() ||
-          `${estimate.destinationCityName}/${estimate.destinationStateUf} - 4º CTA`,
-        executionHours: data.executionHours?.trim(),
+          `${estimate.destinationCityName}/${estimate.destinationStateUf}`,
+        executionHours:
+          data.executionHours?.trim() || "08:00h às 16:30h, iniciando a contar da O.S de acordo com o TR.",
         contactName: data.contactName?.trim(),
         contactPhone: data.contactPhone?.trim(),
         contactExtension: data.contactExtension?.trim(),

@@ -10,6 +10,10 @@ serviceOrdersRoutes.use(authMiddleware);
 serviceOrdersRoutes.post("/", (req, res) => controller.create(req, res));
 serviceOrdersRoutes.get("/", (req, res) => controller.list(req, res));
 serviceOrdersRoutes.get("/code/:code", (req, res) => controller.findByCode(req, res));
+
+serviceOrdersRoutes.get("/:id/document/html", (req, res) => controller.documentHtml(req, res));
+serviceOrdersRoutes.get("/:id/document/pdf", (req, res) => controller.documentPdf(req, res));
+
 serviceOrdersRoutes.get("/:id", (req, res) => controller.findById(req, res));
 serviceOrdersRoutes.patch("/:id", (req, res) => controller.update(req, res));
 serviceOrdersRoutes.delete("/:id", (req, res) => controller.remove(req, res));
