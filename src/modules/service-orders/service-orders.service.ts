@@ -4,8 +4,11 @@ import { AppError } from "../../shared/app-error.js";
 
 type CurrentUser = {
   id: string;
+  name: string;
   email: string;
   role: string;
+  rank?: string | null;
+  cpf?: string | null;
 };
 
 type ProjectStageValue =
@@ -262,6 +265,43 @@ export class ServiceOrdersService {
         409
       );
     }
+  }
+
+  private resolveRequesterData(
+    payload: {
+      requesterName?: string;
+      requesterRank?: string;
+      requesterCpf?: string;
+    },
+    user: CurrentUser
+  ) {
+    const requesterName = payload.requesterName?.trim() || user.name?.trim();
+    const requesterRank = payload.requesterRank?.trim() || user.rank?.trim();
+    const requesterCpf = payload.requesterCpf?.trim() || user.cpf?.trim();
+
+    if (!requesterName) {
+      throw new AppError("Nome do requisitante não informado", 409);
+    }
+
+    if (!requesterRank) {
+      throw new AppError(
+        "Posto/patente do requisitante não informado nem no payload nem no usuário logado",
+        409
+      );
+    }
+
+    if (!requesterCpf) {
+      throw new AppError(
+        "CPF do requisitante não informado nem no payload nem no usuário logado",
+        409
+      );
+    }
+
+    return {
+      requesterName,
+      requesterRank,
+      requesterCpf,
+    };
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -595,6 +635,15 @@ export class ServiceOrdersService {
       data.diexCode
     );
 
+    const requester = this.resolveRequesterData(
+      {
+        requesterName: data.requesterName,
+        requesterRank: data.requesterRank,
+        requesterCpf: data.requesterCpf,
+      },
+      user
+    );
+
     const serviceOrder = await prisma.serviceOrder.create({
       data: {
         projectId: project.id,
@@ -605,8 +654,9 @@ export class ServiceOrdersService {
         contractorName: estimate.ata.vendorName,
         contractorCnpj: data.contractorCnpj.trim(),
         commitmentNoteNumber: project.commitmentNoteNumber || "",
-        requesterName: data.requesterName.trim(),
-        requesterRank: data.requesterRank.trim(),
+        requesterName: requester.requesterName,
+        requesterRank: requester.requesterRank,
+        requesterCpf: requester.requesterCpf,
         requesterRole: data.requesterRole?.trim() || "Fiscal do Contrato",
         issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
         isEmergency: data.isEmergency ?? false,
@@ -627,7 +677,6 @@ export class ServiceOrdersService {
         contactExtension: data.contactExtension?.trim(),
         contractTotalTerm: data.contractTotalTerm?.trim(),
         originProcess: data.originProcess?.trim() || "Pregão nº 90004/2025-CMA",
-        requesterCpf: data.requesterCpf?.trim(),
         contractorRepresentativeName: data.contractorRepresentativeName?.trim(),
         contractorRepresentativeRole:
           data.contractorRepresentativeRole?.trim() ||
