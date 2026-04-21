@@ -118,3 +118,8 @@ export const projectIdParamSchema = z.object({
 export const projectCodeParamSchema = z.object({
   code: z.coerce.number().int().positive("Código do projeto inválido"),
 });
+
+export const issueServiceOrderSchema = z.object({
+  serviceOrderNumber: optionalString,
+  serviceOrderIssuedAt: optionalDate,
+});

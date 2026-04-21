@@ -79,6 +79,63 @@ const projectInclude = {
 } satisfies Prisma.ProjectInclude;
 
 export class ProjectsService {
+  private getAllowedNextStages(
+  currentStage: ProjectStageValue
+): ProjectStageValue[] {
+  switch (currentStage) {
+    case "ESTIMATIVA_PRECO":
+      return ["AGUARDANDO_NOTA_CREDITO", "CANCELADO"];
+
+    case "AGUARDANDO_NOTA_CREDITO":
+      return ["DIEX_REQUISITORIO", "CANCELADO"];
+
+    case "DIEX_REQUISITORIO":
+      return ["AGUARDANDO_NOTA_EMPENHO", "CANCELADO"];
+
+    case "AGUARDANDO_NOTA_EMPENHO":
+      return ["OS_LIBERADA", "CANCELADO"];
+
+    case "OS_LIBERADA":
+      return ["SERVICO_EM_EXECUCAO", "CANCELADO"];
+
+    case "SERVICO_EM_EXECUCAO":
+      return ["ANALISANDO_AS_BUILT", "CANCELADO"];
+
+    case "ANALISANDO_AS_BUILT":
+      return ["ATESTAR_NF", "CANCELADO"];
+
+    case "ATESTAR_NF":
+      return ["SERVICO_CONCLUIDO", "CANCELADO"];
+
+    case "SERVICO_CONCLUIDO":
+      return [];
+
+    case "CANCELADO":
+      return [];
+
+    default:
+      return [];
+  }
+  }
+
+  private assertStageTransition(
+    currentStage: ProjectStageValue,
+    nextStage: ProjectStageValue
+  ) {
+    if (currentStage === nextStage) {
+      return;
+    }
+
+    const allowedNextStages = this.getAllowedNextStages(currentStage);
+
+    if (!allowedNextStages.includes(nextStage)) {
+      throw new AppError(
+        `Transição inválida: o projeto está em ${currentStage} e só pode avançar para ${allowedNextStages.join(", ") || "nenhuma etapa"}`,
+        409
+      );
+    }
+  }
+
   private isPrivileged(role: string) {
     return role === "ADMIN" || role === "GESTOR";
   }
@@ -592,6 +649,7 @@ export class ProjectsService {
       where: { id: projectId },
       select: {
         id: true,
+        stage: true,
         creditNoteNumber: true,
         creditNoteReceivedAt: true,
         diexNumber: true,
@@ -636,6 +694,7 @@ export class ProjectsService {
       serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
     };
 
+    this.assertStageTransition(currentProject.stage, data.stage);
     this.validateStageRequirements(data.stage, nextSnapshot, finalizedEstimateCount);
 
     const project = await prisma.project.update({

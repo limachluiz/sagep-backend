@@ -1,0 +1,78 @@
+import { z } from "zod";
+
+const optionalString = z.preprocess((value) => {
+  if (value === null || value === undefined) return undefined;
+  if (typeof value === "string" && value.trim() === "") return undefined;
+  return value;
+}, z.string().trim().optional());
+
+const optionalDate = z.preprocess((value) => {
+  if (value === "" || value === null || value === undefined) return undefined;
+  return value;
+}, z.coerce.date().optional());
+
+export const createServiceOrderSchema = z.object({
+  projectId: z.string().min(1).optional(),
+  projectCode: z.coerce.number().int().positive().optional(),
+  estimateId: z.string().min(1).optional(),
+  estimateCode: z.coerce.number().int().positive().optional(),
+  diexId: z.string().min(1).optional(),
+  diexCode: z.coerce.number().int().positive().optional(),
+  serviceOrderNumber: z.string().trim().min(3, "Número da OS é obrigatório"),
+  issuedAt: z.coerce.date(),
+  contractorCnpj: z.string().trim().min(14, "CNPJ da empresa é obrigatório"),
+  requesterName: z.string().trim().min(3, "Nome do responsável é obrigatório"),
+  requesterRank: z.string().trim().min(2, "Posto/graduação é obrigatório"),
+  requesterRole: optionalString,
+  issuingOrganization: optionalString,
+  notes: optionalString,
+})
+  .refine((data) => data.projectId || data.projectCode, {
+    message: "Informe projectId ou projectCode",
+    path: ["projectId"],
+  })
+  .refine((data) => !(data.projectId && data.projectCode), {
+    message: "Informe projectId ou projectCode, não ambos",
+    path: ["projectId"],
+  })
+  .refine((data) => data.estimateId || data.estimateCode, {
+    message: "Informe estimateId ou estimateCode",
+    path: ["estimateId"],
+  })
+  .refine((data) => !(data.estimateId && data.estimateCode), {
+    message: "Informe estimateId ou estimateCode, não ambos",
+    path: ["estimateId"],
+  })
+  .refine((data) => !(data.diexId && data.diexCode), {
+    message: "Informe diexId ou diexCode, não ambos",
+    path: ["diexId"],
+  });
+
+export const updateServiceOrderSchema = z.object({
+  serviceOrderNumber: z.string().trim().min(3).optional(),
+  issuedAt: optionalDate,
+  contractorCnpj: z.string().trim().min(14).optional(),
+  requesterName: z.string().trim().min(3).optional(),
+  requesterRank: z.string().trim().min(2).optional(),
+  requesterRole: optionalString,
+  issuingOrganization: optionalString,
+  notes: optionalString,
+}).refine((data) => Object.keys(data).length > 0, {
+  message: "Informe pelo menos um campo para atualizar",
+});
+
+export const listServiceOrdersQuerySchema = z.object({
+  code: z.coerce.number().int().positive().optional(),
+  projectCode: z.coerce.number().int().positive().optional(),
+  estimateCode: z.coerce.number().int().positive().optional(),
+  diexCode: z.coerce.number().int().positive().optional(),
+  search: z.string().trim().optional(),
+});
+
+export const serviceOrderIdParamSchema = z.object({
+  id: z.string().min(1, "Id da OS é obrigatório"),
+});
+
+export const serviceOrderCodeParamSchema = z.object({
+  code: z.coerce.number().int().positive("Código da OS inválido"),
+});

@@ -141,6 +141,20 @@ export class DiexService {
     "CANCELADO",
   ];
 
+  private assertProjectStageAllowsDiexCreation(stage: ProjectStageValue) {
+    const allowedStages: ProjectStageValue[] = [
+      "AGUARDANDO_NOTA_CREDITO",
+      "DIEX_REQUISITORIO",
+    ];
+
+    if (!allowedStages.includes(stage)) {
+      throw new AppError(
+        "O DIEx só pode ser criado quando o projeto estiver em AGUARDANDO_NOTA_CREDITO ou DIEX_REQUISITORIO",
+        409
+      );
+    }
+  }
+
   private isStageBefore(current: ProjectStageValue, target: ProjectStageValue) {
     return this.stageOrder.indexOf(current) < this.stageOrder.indexOf(target);
   }
@@ -403,6 +417,7 @@ export class DiexService {
 
   async create(data: CreateDiexInput, user: CurrentUser) {
     const project = await this.resolveProject(data.projectId, data.projectCode);
+    this.assertProjectStageAllowsDiexCreation(project.stage);
 
     if (!this.canManageProject(project, user)) {
       throw new AppError("Você não tem permissão para criar DIEx neste projeto", 403);
@@ -468,12 +483,12 @@ export class DiexService {
     });
 
     const projectUpdateData: Prisma.ProjectUpdateInput = {
-      stage: this.isStageBefore(project.stage, "DIEX_REQUISITORIO")
-        ? "DIEX_REQUISITORIO"
-        : project.stage,
-      status: this.isStageBefore(project.stage, "DIEX_REQUISITORIO")
-        ? "PLANEJAMENTO"
-        : undefined,
+      ...(project.stage === "AGUARDANDO_NOTA_CREDITO"
+        ? {
+            stage: "DIEX_REQUISITORIO",
+            status: "PLANEJAMENTO",
+          }
+        : {}),
       ...(diex.diexNumber !== null && diex.diexNumber !== undefined
         ? { diexNumber: diex.diexNumber }
         : {}),

@@ -89,6 +89,7 @@ model Project {
   diexRequests             DiexRequest[]
   tasks                    Task[]
   estimates                Estimate[]
+  serviceOrders            ServiceOrder[]
   startDate                DateTime?
   endDate                  DateTime?
   creditNoteNumber         String?
@@ -218,27 +219,29 @@ model Estimate {
   om                  MilitaryOrganization? @relation(fields: [omId], references: [id], onDelete: Restrict)
   items               EstimateItem[]
   diexRequests        DiexRequest[]
+  serviceOrders       ServiceOrder[]
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 }
 
 model EstimateItem {
-  id               String            @id @default(cuid())
-  estimateItemCode Int               @unique @default(autoincrement())
-  estimateId       String
-  ataItemId        String
-  referenceCode    String
-  description      String
-  unit             String
-  quantity         Decimal           @db.Decimal(14, 2)
-  unitPrice        Decimal           @db.Decimal(14, 2)
-  subtotal         Decimal           @db.Decimal(14, 2)
-  notes            String?
-  diexItems        DiexRequestItem[]
-  estimate         Estimate          @relation(fields: [estimateId], references: [id], onDelete: Cascade)
-  ataItem          AtaItem           @relation(fields: [ataItemId], references: [id], onDelete: Restrict)
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  id                String             @id @default(cuid())
+  estimateItemCode  Int                @unique @default(autoincrement())
+  estimateId        String
+  ataItemId         String
+  referenceCode     String
+  description       String
+  unit              String
+  quantity          Decimal            @db.Decimal(14, 2)
+  unitPrice         Decimal            @db.Decimal(14, 2)
+  subtotal          Decimal            @db.Decimal(14, 2)
+  notes             String?
+  diexItems         DiexRequestItem[]
+  serviceOrderItems ServiceOrderItem[]
+  estimate          Estimate           @relation(fields: [estimateId], references: [id], onDelete: Cascade)
+  ataItem           AtaItem            @relation(fields: [ataItemId], references: [id], onDelete: Restrict)
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
 
   @@unique([estimateId, ataItemId])
 }
@@ -277,6 +280,7 @@ model DiexRequest {
   project             Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
   estimate            Estimate          @relation(fields: [estimateId], references: [id], onDelete: Restrict)
   items               DiexRequestItem[]
+  serviceOrders       ServiceOrder[]
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
 
@@ -301,4 +305,51 @@ model DiexRequestItem {
   updatedAt         DateTime     @updatedAt
 
   @@unique([diexRequestId, estimateItemId])
+}
+
+model ServiceOrder {
+  id                   String             @id @default(cuid())
+  serviceOrderCode     Int                @unique @default(autoincrement())
+  projectId            String
+  estimateId           String
+  diexRequestId        String?
+  serviceOrderNumber   String
+  issuedAt             DateTime
+  contractorName       String
+  contractorCnpj       String
+  commitmentNoteNumber String
+  requesterName        String
+  requesterRank        String
+  requesterRole        String             @default("Fiscal do Contrato")
+  issuingOrganization  String             @default("4º CTA")
+  notes                String?
+  totalAmount          Decimal            @db.Decimal(14, 2)
+  project              Project            @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  estimate             Estimate           @relation(fields: [estimateId], references: [id], onDelete: Restrict)
+  diexRequest          DiexRequest?       @relation(fields: [diexRequestId], references: [id], onDelete: Restrict)
+  items                ServiceOrderItem[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@unique([estimateId])
+}
+
+model ServiceOrderItem {
+  id                   String       @id @default(cuid())
+  serviceOrderItemCode Int          @unique @default(autoincrement())
+  serviceOrderId       String
+  estimateItemId       String
+  itemCode             String
+  description          String
+  supplyUnit           String
+  quantityOrdered      Decimal      @db.Decimal(14, 2)
+  unitPrice            Decimal      @db.Decimal(14, 2)
+  totalPrice           Decimal      @db.Decimal(14, 2)
+  notes                String?
+  serviceOrder         ServiceOrder @relation(fields: [serviceOrderId], references: [id], onDelete: Cascade)
+  estimateItem         EstimateItem @relation(fields: [estimateItemId], references: [id], onDelete: Restrict)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+
+  @@unique([serviceOrderId, estimateItemId])
 }

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { serviceOrdersRoutes } from "../service-orders/service-orders.routes.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { ProjectMembersController } from "../project-members/project-members.controller.js";
 import { ProjectsController } from "./projects.controller.js";
@@ -20,6 +21,7 @@ projectsRoutes.delete("/:id/members/:memberId", (req, res) =>
 );
 
 projectsRoutes.patch("/:id/flow", (req, res) => controller.updateFlow(req, res));
+projectsRoutes.use("/:id/service-order", serviceOrdersRoutes);
 projectsRoutes.get("/:id", (req, res) => controller.findById(req, res));
 projectsRoutes.patch("/:id", (req, res) => controller.update(req, res));
 projectsRoutes.delete("/:id", (req, res) => controller.remove(req, res));
