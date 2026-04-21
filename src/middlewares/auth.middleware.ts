@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
-import jwt from "jsonwebtoken";
 import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
+import { verifyAccessToken } from "../shared/auth-tokens.js";
 
 type JwtPayload = {
   sub: string;
@@ -27,7 +27,7 @@ export async function authMiddleware(
   }
 
   try {
-    const decoded = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
+    const decoded = verifyAccessToken(token);
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.sub },
