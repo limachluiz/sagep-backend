@@ -32,9 +32,15 @@ npm install
 ### 2. Variáveis de ambiente
 Crie um arquivo .env com base neste exemplo:
 PORT=3000
+NODE_ENV=development
+
 DATABASE_URL="postgresql://sagep:sagep123@localhost:5432/sagep?schema=public"
-JWT_SECRET="sua-chave-secreta"
-NODE_ENV="development"
+
+JWT_ACCESS_SECRET="Senha forte aqui"
+JWT_REFRESH_SECRET="Senha forte aqui"
+
+JWT_ACCESS_EXPIRES_IN="15m"
+JWT_REFRESH_EXPIRES_IN="7d"
 
 ### 3. Subir o banco com Docker
 ```bash
@@ -45,9 +51,28 @@ docker compose up -d
 npx prisma migrate dev
 npx prisma generate
 
-### 5. Iniciar o servidor
+### 5. Rodar o seed
+```bash
+npm run seed
+
+### 6. Iniciar o servidor
 ```bash
 npm run dev
+
+### 7. Testar a API no navegador ou no Insonia
+http://localhost:3000/api/health
+GET http://localhost:3000/api/health
+
+### 8. Testar Login para receber o token
+POST http://localhost:3000/api/auth/login
+Content-Type: application/json
+
+``` JSON
+
+{
+  "email": "admin@sagep.com",
+  "password": "123456"
+}
 
 ### O SAGEP foi pensado para atender o fluxo real da Divisão Técnica - Seção de Projetos:
 
