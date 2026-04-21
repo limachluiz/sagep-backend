@@ -1,4 +1,5 @@
 import "dotenv/config";
+import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient } from "../src/generated/prisma/client.js";
 
@@ -7,6 +8,15 @@ const adapter = new PrismaPg({
 });
 
 const prisma = new PrismaClient({ adapter });
+
+const adminUser = {
+  name: "Luiz Henrique Chagas de Lima",
+  email: "admin@sagep.com",
+  password: "123456",
+  role: "ADMIN" as const,
+  rank: "2º Ten",
+  cpf: "96208023220",
+};
 
 const oms = [
   { sigla: "16ª Ba Log", name: "16ª BASE LOGISTICA", cityName: "Tefé", stateUf: "AM" },
@@ -76,6 +86,28 @@ const oms = [
 ] as const;
 
 async function main() {
+  const passwordHash = await bcrypt.hash(adminUser.password, 10);
+
+  await prisma.user.upsert({
+    where: { email: adminUser.email },
+    update: {
+      name: adminUser.name,
+      role: adminUser.role,
+      active: true,
+      rank: adminUser.rank,
+      cpf: adminUser.cpf,
+    },
+    create: {
+      name: adminUser.name,
+      email: adminUser.email,
+      passwordHash,
+      role: adminUser.role,
+      active: true,
+      rank: adminUser.rank,
+      cpf: adminUser.cpf,
+    },
+  });
+
   for (const om of oms) {
     await prisma.militaryOrganization.upsert({
       where: { sigla: om.sigla },
@@ -95,12 +127,12 @@ async function main() {
     });
   }
 
-  console.log(`✅ Seed concluído: ${oms.length} OMs processadas.`);
+  console.log("✅ Seed concluído: admin + OMs processadas.");
 }
 
 main()
   .catch((error) => {
-    console.error("❌ Erro no seed de OMs:", error);
+    console.error("❌ Erro no seed:", error);
     process.exit(1);
   })
   .finally(async () => {
