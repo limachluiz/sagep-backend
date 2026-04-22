@@ -67,4 +67,15 @@ export class ProjectsController {
     const result = await projectsService.getTimeline(projectId, req.user!);
     return res.json(result);
   }
+
+  async nextAction(req: Request, res: Response) {
+    const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    if (!projectId) {
+      throw new AppError("ID do projeto é obrigatório", 400);
+    }
+
+    const result = await projectsService.getNextAction(projectId, req.user!);
+    return res.json(result);
+  }
 }

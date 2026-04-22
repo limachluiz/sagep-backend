@@ -33,8 +33,8 @@ type CreateDiexInput = {
   diexNumber?: string;
   issuedAt?: Date;
   supplierCnpj: string;
-  requesterName: string;
-  requesterRank: string;
+  requesterName?: string;
+  requesterRank?: string;
   requesterCpf?: string;
   requesterRole?: string;
   issuingOrganization?: string;

@@ -46,8 +46,8 @@ type CreateServiceOrderInput = {
   serviceOrderNumber: string;
   issuedAt: Date;
   contractorCnpj: string;
-  requesterName: string;
-  requesterRank: string;
+  requesterName?: string;
+  requesterRank?: string;
   requesterRole?: string;
   issuingOrganization?: string;
   isEmergency?: boolean;
