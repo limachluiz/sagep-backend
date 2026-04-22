@@ -1,6 +1,8 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { auditService } from "../audit/audit.service.js";
+import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
   id: string;
@@ -457,8 +459,115 @@ export class DiexService {
   };
 }
 
+  private getAuditActor(user: CurrentUser) {
+    return {
+      id: user.id,
+      name: user.name ?? user.email,
+    };
+  }
+
+  private buildDiexAuditSnapshot(diex: {
+    id: string;
+    diexCode?: number | null;
+    projectId?: string | null;
+    estimateId?: string | null;
+    diexNumber?: string | null;
+    issuedAt?: Date | null;
+    issuingOrganization?: string | null;
+    commandName?: string | null;
+    pregaoNumber?: string | null;
+    uasg?: string | null;
+    supplierName?: string | null;
+    supplierCnpj?: string | null;
+    requesterName?: string | null;
+    requesterRank?: string | null;
+    requesterCpf?: string | null;
+    requesterRole?: string | null;
+    notes?: string | null;
+    totalAmount?: { toString(): string } | string | number | null;
+  }) {
+    return {
+      id: diex.id,
+      diexCode: diex.diexCode ?? null,
+      projectId: diex.projectId ?? null,
+      estimateId: diex.estimateId ?? null,
+      diexNumber: diex.diexNumber ?? null,
+      issuedAt: diex.issuedAt ?? null,
+      issuingOrganization: diex.issuingOrganization ?? null,
+      commandName: diex.commandName ?? null,
+      pregaoNumber: diex.pregaoNumber ?? null,
+      uasg: diex.uasg ?? null,
+      supplierName: diex.supplierName ?? null,
+      supplierCnpj: diex.supplierCnpj ?? null,
+      requesterName: diex.requesterName ?? null,
+      requesterRank: diex.requesterRank ?? null,
+      requesterCpf: diex.requesterCpf ?? null,
+      requesterRole: diex.requesterRole ?? null,
+      notes: diex.notes ?? null,
+      totalAmount:
+        diex.totalAmount && typeof diex.totalAmount === "object" && "toString" in diex.totalAmount
+          ? diex.totalAmount.toString()
+          : diex.totalAmount ?? null,
+    };
+  }
+
+  private buildProjectAuditSnapshot(project: {
+    id: string;
+    projectCode?: number | null;
+    stage?: ProjectStageValue | null;
+    status?: string | null;
+    diexNumber?: string | null;
+    diexIssuedAt?: Date | null;
+  }) {
+    return {
+      id: project.id,
+      projectCode: project.projectCode ?? null,
+      stage: project.stage ?? null,
+      status: project.status ?? null,
+      diexNumber: project.diexNumber ?? null,
+      diexIssuedAt: project.diexIssuedAt ?? null,
+    };
+  }
+
+  private buildWorkflowSnapshot(project: {
+    id: string;
+    projectCode?: number | null;
+    stage: ProjectStageValue;
+    creditNoteNumber?: string | null;
+    creditNoteReceivedAt?: Date | null;
+    diexNumber?: string | null;
+    diexIssuedAt?: Date | null;
+    commitmentNoteNumber?: string | null;
+    commitmentNoteReceivedAt?: Date | null;
+    serviceOrderNumber?: string | null;
+    serviceOrderIssuedAt?: Date | null;
+    executionStartedAt?: Date | null;
+    asBuiltReceivedAt?: Date | null;
+    invoiceAttestedAt?: Date | null;
+    serviceCompletedAt?: Date | null;
+  }) {
+    return {
+      id: project.id,
+      projectCode: project.projectCode ?? undefined,
+      stage: project.stage,
+      creditNoteNumber: project.creditNoteNumber ?? null,
+      creditNoteReceivedAt: project.creditNoteReceivedAt ?? null,
+      diexNumber: project.diexNumber ?? null,
+      diexIssuedAt: project.diexIssuedAt ?? null,
+      commitmentNoteNumber: project.commitmentNoteNumber ?? null,
+      commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
+      serviceOrderNumber: project.serviceOrderNumber ?? null,
+      serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+      executionStartedAt: project.executionStartedAt ?? null,
+      asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
+      invoiceAttestedAt: project.invoiceAttestedAt ?? null,
+      serviceCompletedAt: project.serviceCompletedAt ?? null,
+    };
+  }
+
   async create(data: CreateDiexInput, user: CurrentUser) {
     const project = await this.resolveProject(data.projectId, data.projectCode);
+
     this.assertProjectStageAllowsDiexCreation(project.stage);
 
     if (!this.canManageProject(project, user)) {
@@ -478,7 +587,7 @@ export class DiexService {
     if (!project.creditNoteNumber && !project.creditNoteReceivedAt) {
       throw new AppError(
         "Para gerar o DIEx, o projeto precisa ter Nota de Crédito informada",
-        409
+        409,
       );
     }
 
@@ -488,15 +597,15 @@ export class DiexService {
         requesterRank: data.requesterRank,
         requesterCpf: data.requesterCpf,
       },
-      user
+      user,
     );
 
-    const alreadyExists = await prisma.diexRequest.findUnique({
+    const existingDiex = await prisma.diexRequest.findFirst({
       where: { estimateId: estimate.id },
       select: { id: true },
     });
 
-    if (alreadyExists) {
+    if (existingDiex) {
       throw new AppError("Já existe um DIEx vinculado a esta estimativa", 409);
     }
 
@@ -549,9 +658,80 @@ export class DiexService {
         : {}),
     };
 
-    await prisma.project.update({
+    const updatedProject = await prisma.project.update({
       where: { id: project.id },
       data: projectUpdateData,
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "DIEX_REQUEST",
+      entityId: diex.id,
+      action: "CREATE",
+      actor: this.getAuditActor(user),
+      summary: `DIEx ${diex.diexNumber ?? `#${diex.diexCode}`} criado para o projeto PRJ-${project.projectCode}`,
+      after: this.buildDiexAuditSnapshot({
+        id: diex.id,
+        diexCode: diex.diexCode,
+        projectId: diex.projectId,
+        estimateId: diex.estimateId,
+        diexNumber: diex.diexNumber,
+        issuedAt: diex.issuedAt,
+        issuingOrganization: diex.issuingOrganization,
+        commandName: diex.commandName,
+        pregaoNumber: diex.pregaoNumber,
+        uasg: diex.uasg,
+        supplierName: diex.supplierName,
+        supplierCnpj: diex.supplierCnpj,
+        requesterName: diex.requesterName,
+        requesterRank: diex.requesterRank,
+        requesterCpf: diex.requesterCpf,
+        requesterRole: diex.requesterRole,
+        notes: diex.notes,
+        totalAmount: diex.totalAmount,
+      }),
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: project.id,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${project.projectCode} atualizado após criação do DIEx`,
+      before: this.buildProjectAuditSnapshot({
+        id: project.id,
+        projectCode: project.projectCode,
+        stage: project.stage,
+        status: "PLANEJAMENTO",
+        diexNumber: null,
+        diexIssuedAt: null,
+      }),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "diex.create",
+        previousStage: project.stage,
+        newStage: updatedProject.stage,
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
+      },
     });
 
     return prisma.diexRequest.findUniqueOrThrow({
@@ -672,6 +852,54 @@ export class DiexService {
   async update(diexId: string, data: UpdateDiexInput, user: CurrentUser) {
     await this.ensureCanManage(diexId, user);
 
+    const before = await prisma.diexRequest.findUnique({
+      where: { id: diexId },
+      select: {
+        id: true,
+        diexCode: true,
+        projectId: true,
+        estimateId: true,
+        diexNumber: true,
+        issuedAt: true,
+        issuingOrganization: true,
+        commandName: true,
+        pregaoNumber: true,
+        uasg: true,
+        supplierName: true,
+        supplierCnpj: true,
+        requesterName: true,
+        requesterRank: true,
+        requesterCpf: true,
+        requesterRole: true,
+        notes: true,
+        totalAmount: true,
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            stage: true,
+            status: true,
+            diexNumber: true,
+            diexIssuedAt: true,
+            creditNoteNumber: true,
+            creditNoteReceivedAt: true,
+            commitmentNoteNumber: true,
+            commitmentNoteReceivedAt: true,
+            serviceOrderNumber: true,
+            serviceOrderIssuedAt: true,
+            executionStartedAt: true,
+            asBuiltReceivedAt: true,
+            invoiceAttestedAt: true,
+            serviceCompletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!before) {
+      throw new AppError("DIEx não encontrado", 404);
+    }
+
     const diex = await prisma.diexRequest.update({
       where: { id: diexId },
       data: {
@@ -681,6 +909,7 @@ export class DiexService {
         ...(data.requesterName !== undefined && { requesterName: data.requesterName.trim() }),
         ...(data.requesterRank !== undefined && { requesterRank: data.requesterRank.trim() }),
         ...(data.requesterRole !== undefined && { requesterRole: data.requesterRole?.trim() }),
+        ...(data.requesterCpf !== undefined && { requesterCpf: data.requesterCpf.trim() }),
         ...(data.issuingOrganization !== undefined && {
           issuingOrganization: data.issuingOrganization?.trim(),
         }),
@@ -692,7 +921,7 @@ export class DiexService {
       include: diexInclude,
     });
 
-    await prisma.project.update({
+    const updatedProject = await prisma.project.update({
       where: { id: diex.project.id },
       data: {
         ...(diex.diexNumber !== null && diex.diexNumber !== undefined
@@ -701,6 +930,69 @@ export class DiexService {
         ...(diex.issuedAt !== null && diex.issuedAt !== undefined
           ? { diexIssuedAt: diex.issuedAt }
           : {}),
+      },
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "DIEX_REQUEST",
+      entityId: diex.id,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `DIEx ${diex.diexNumber ?? `#${diex.diexCode}`} atualizado`,
+      before: this.buildDiexAuditSnapshot(before),
+      after: this.buildDiexAuditSnapshot({
+        id: diex.id,
+        diexCode: diex.diexCode,
+        projectId: diex.projectId,
+        estimateId: diex.estimateId,
+        diexNumber: diex.diexNumber,
+        issuedAt: diex.issuedAt,
+        issuingOrganization: diex.issuingOrganization,
+        commandName: diex.commandName,
+        pregaoNumber: diex.pregaoNumber,
+        uasg: diex.uasg,
+        supplierName: diex.supplierName,
+        supplierCnpj: diex.supplierCnpj,
+        requesterName: diex.requesterName,
+        requesterRank: diex.requesterRank,
+        requesterCpf: diex.requesterCpf,
+        requesterRole: diex.requesterRole,
+        notes: diex.notes,
+        totalAmount: diex.totalAmount,
+      }),
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: diex.project.id,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${updatedProject.projectCode} sincronizado após atualização do DIEx`,
+      before: this.buildProjectAuditSnapshot(before.project),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "diex.update",
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
       },
     });
 
@@ -718,28 +1010,109 @@ export class DiexService {
     }
 
     const diex = await prisma.diexRequest.findUnique({
-      where: { id: diexId },
-      select: {
-        id: true,
-        projectId: true,
-      },
-    });
+        where: { id: diexId },
+        select: {
+          id: true,
+          diexCode: true,
+          projectId: true,
+          estimateId: true,
+          diexNumber: true,
+          issuedAt: true,
+          issuingOrganization: true,
+          commandName: true,
+          pregaoNumber: true,
+          uasg: true,
+          supplierName: true,
+          supplierCnpj: true,
+          requesterName: true,
+          requesterRank: true,
+          requesterCpf: true,
+          requesterRole: true,
+          notes: true,
+          totalAmount: true,
+          project: {
+            select: {
+              id: true,
+              projectCode: true,
+              stage: true,
+              status: true,
+              diexNumber: true,
+              diexIssuedAt: true,
+              creditNoteNumber: true,
+              creditNoteReceivedAt: true,
+              commitmentNoteNumber: true,
+              commitmentNoteReceivedAt: true,
+              serviceOrderNumber: true,
+              serviceOrderIssuedAt: true,
+              executionStartedAt: true,
+              asBuiltReceivedAt: true,
+              invoiceAttestedAt: true,
+              serviceCompletedAt: true,
+            },
+          },
+        },
+      });
 
     if (!diex) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
-    await prisma.diexRequest.delete({
-      where: { id: diexId },
-    });
+    await auditService.log({
+        entityType: "DIEX_REQUEST",
+        entityId: diex.id,
+        action: "DELETE",
+        actor: this.getAuditActor(user),
+        summary: `DIEx ${diex.diexNumber ?? `#${diex.diexCode}`} excluído`,
+        before: this.buildDiexAuditSnapshot(diex),
+      });
 
-    await prisma.project.update({
+      await prisma.diexRequest.delete({
+        where: { id: diexId },
+      });
+    
+      const updatedProject = await prisma.project.update({
       where: { id: diex.projectId },
       data: {
         diexNumber: null,
         diexIssuedAt: null,
         stage: "AGUARDANDO_NOTA_CREDITO",
         status: "PLANEJAMENTO",
+      },
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: diex.projectId,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${updatedProject.projectCode} retornou após exclusão do DIEx`,
+      before: this.buildProjectAuditSnapshot(diex.project),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "diex.remove",
+        previousStage: diex.project.stage,
+        newStage: updatedProject.stage,
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
       },
     });
 

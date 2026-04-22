@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { auditService } from "../audit/audit.service.js";
 import {
   generateAccessToken,
   generateRefreshToken,
@@ -77,7 +78,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
       },
-      user.id
+      user.id,
     );
 
     const refreshToken = generateRefreshToken(
@@ -85,7 +86,7 @@ export class AuthService {
         email: user.email,
         role: user.role,
       },
-      user.id
+      user.id,
     );
 
     await prisma.refreshToken.create({
@@ -93,6 +94,21 @@ export class AuthService {
         userId: user.id,
         tokenHash: hashToken(refreshToken),
         expiresAt: getRefreshTokenExpirationDate(),
+      },
+    });
+
+    await auditService.log({
+      entityType: "AUTH",
+      entityId: user.id,
+      action: "LOGIN",
+      actor: {
+        id: user.id,
+        name: user.name,
+      },
+      summary: `Login realizado por ${user.email}`,
+      metadata: {
+        email: user.email,
+        role: user.role,
       },
     });
 
@@ -143,9 +159,7 @@ export class AuthService {
 
     await prisma.refreshToken.update({
       where: { id: storedToken.id },
-      data: {
-        revokedAt: new Date(),
-      },
+      data: { revokedAt: new Date() },
     });
 
     const newAccessToken = generateAccessToken(
@@ -153,7 +167,7 @@ export class AuthService {
         email: storedToken.user.email,
         role: storedToken.user.role,
       },
-      storedToken.user.id
+      storedToken.user.id,
     );
 
     const newRefreshToken = generateRefreshToken(
@@ -161,7 +175,7 @@ export class AuthService {
         email: storedToken.user.email,
         role: storedToken.user.role,
       },
-      storedToken.user.id
+      storedToken.user.id,
     );
 
     await prisma.refreshToken.create({
@@ -169,6 +183,21 @@ export class AuthService {
         userId: storedToken.user.id,
         tokenHash: hashToken(newRefreshToken),
         expiresAt: getRefreshTokenExpirationDate(),
+      },
+    });
+
+    await auditService.log({
+      entityType: "AUTH",
+      entityId: storedToken.user.id,
+      action: "TOKEN_REFRESH",
+      actor: {
+        id: storedToken.user.id,
+        name: storedToken.user.name,
+      },
+      summary: `Refresh token renovado para ${storedToken.user.email}`,
+      metadata: {
+        email: storedToken.user.email,
+        oldRefreshTokenId: storedToken.id,
       },
     });
 
@@ -191,9 +220,23 @@ export class AuthService {
 
     await prisma.refreshToken.update({
       where: { id: storedToken.id },
-      data: {
-        revokedAt: new Date(),
+      data: { revokedAt: new Date() },
+    });
+
+    const actor = await prisma.user.findUnique({
+      where: { id: storedToken.userId },
+      select: { id: true, name: true, email: true },
+    });
+
+    await auditService.log({
+      entityType: "AUTH",
+      entityId: storedToken.userId,
+      action: "LOGOUT",
+      actor: {
+        id: actor?.id,
+        name: actor?.name,
       },
+      summary: `Logout realizado${actor?.email ? ` por ${actor.email}` : ""}`,
     });
 
     return { message: "Logout realizado com sucesso" };

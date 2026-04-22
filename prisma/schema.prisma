@@ -61,6 +61,31 @@ enum ProjectStage {
   CANCELADO
 }
 
+enum AuditEntityType {
+  PROJECT
+  ESTIMATE
+  DIEX_REQUEST
+  SERVICE_ORDER
+  TASK
+  USER
+  AUTH
+}
+
+enum AuditActionType {
+  CREATE
+  UPDATE
+  DELETE
+  ARCHIVE
+  STATUS_CHANGE
+  STAGE_CHANGE
+  ISSUE
+  FINALIZE
+  CANCEL
+  LOGIN
+  LOGOUT
+  TOKEN_REFRESH
+}
+
 model User {
   id            String          @id @default(cuid())
   userCode      Int             @unique @default(autoincrement())
@@ -73,6 +98,7 @@ model User {
   active        Boolean         @default(true)
   ownedProjects Project[]       @relation("ProjectOwner")
   memberships   ProjectMember[]
+  auditLogs AuditLog[]
   assignedTasks Task[]          @relation("TaskAssignee")
   refreshTokens RefreshToken[]
   createdAt     DateTime        @default(now())
@@ -408,4 +434,23 @@ model RefreshToken {
   updatedAt DateTime  @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id          String          @id @default(cuid())
+  entityType  AuditEntityType
+  entityId    String
+  action      AuditActionType
+  actorUserId String?
+  actorName   String?
+  summary     String
+  beforeJson  Json?
+  afterJson   Json?
+  metadata    Json?
+  createdAt   DateTime        @default(now())
+
+  actorUser   User? @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([entityType, entityId, createdAt])
+  @@index([actorUserId, createdAt])
 }

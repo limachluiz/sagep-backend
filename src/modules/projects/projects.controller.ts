@@ -8,6 +8,7 @@ import {
   updateProjectSchema,
 } from "./projects.schemas.js";
 import { ProjectsService } from "./projects.service.js";
+import { AppError } from "../../shared/app-error.js";
 
 const projectsService = new ProjectsService();
 
@@ -54,5 +55,16 @@ export class ProjectsController {
     const { id } = projectIdParamSchema.parse(req.params);
     const result = await projectsService.remove(id, req.user!);
     return res.status(200).json(result);
+  }
+
+  async timeline(req: Request, res: Response) {
+    const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    if (!projectId) {
+      throw new AppError("ID do projeto é obrigatório", 400);
+    }
+
+    const result = await projectsService.getTimeline(projectId, req.user!);
+    return res.json(result);
   }
 }
