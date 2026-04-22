@@ -1,4 +1,7 @@
 import { prisma } from "../../config/prisma.js";
+import type { DashboardOverviewQuery } from "./dashboard.schemas.js";
+
+type DashboardPeriodType = "month" | "quarter" | "semester" | "year";
 
 type ProjectStage =
   | "ESTIMATIVA_PRECO"
@@ -11,6 +14,16 @@ type ProjectStage =
   | "ATESTAR_NF"
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
+
+type DashboardProjectView = {
+  id: string;
+  projectCode: number;
+  title: string;
+  stage: ProjectStage;
+  status: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 type AmountBreakdownItem = {
   label: string;
@@ -25,6 +38,48 @@ type CountBreakdownItem = {
   percentage: number;
 };
 
+type FilterContext =
+  | {
+      mode: "all";
+      label: string;
+      periodType: null;
+      referenceDate: null;
+      startDate: null;
+      endDate: null;
+      asOfDate: null;
+    }
+  | {
+      mode: "interval";
+      label: string;
+      periodType: DashboardPeriodType | null;
+      referenceDate: Date | null;
+      startDate: Date;
+      endDate: Date;
+      asOfDate: null;
+    }
+  | {
+      mode: "as_of";
+      label: string;
+      periodType: null;
+      referenceDate: null;
+      startDate: null;
+      endDate: null;
+      asOfDate: Date;
+    };
+
+const STAGE_ORDER: ProjectStage[] = [
+  "ESTIMATIVA_PRECO",
+  "AGUARDANDO_NOTA_CREDITO",
+  "DIEX_REQUISITORIO",
+  "AGUARDANDO_NOTA_EMPENHO",
+  "OS_LIBERADA",
+  "SERVICO_EM_EXECUCAO",
+  "ANALISANDO_AS_BUILT",
+  "ATESTAR_NF",
+  "SERVICO_CONCLUIDO",
+  "CANCELADO",
+];
+
 function toNumber(value: unknown) {
   return Number(value ?? 0);
 }
@@ -38,6 +93,158 @@ function formatPercentage(value: number, total: number) {
   return Number(((value / total) * 100).toFixed(2));
 }
 
+function startOfDay(date: Date) {
+  const result = new Date(date);
+  result.setHours(0, 0, 0, 0);
+  return result;
+}
+
+function endOfDay(date: Date) {
+  const result = new Date(date);
+  result.setHours(23, 59, 59, 999);
+  return result;
+}
+
+function serializeDate(date: Date | null) {
+  return date ? date.toISOString() : null;
+}
+
+function formatDateLabel(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getPeriodRange(periodType: DashboardPeriodType, referenceDate: Date) {
+  const year = referenceDate.getFullYear();
+  const month = referenceDate.getMonth();
+
+  if (periodType === "month") {
+    const startDate = startOfDay(new Date(year, month, 1));
+    const endDate = endOfDay(new Date(year, month + 1, 0));
+
+    return {
+      startDate,
+      endDate,
+      label: `Mês de referência: ${formatDateLabel(referenceDate)}`,
+    };
+  }
+
+  if (periodType === "quarter") {
+    const quarterStartMonth = Math.floor(month / 3) * 3;
+    const startDate = startOfDay(new Date(year, quarterStartMonth, 1));
+    const endDate = endOfDay(new Date(year, quarterStartMonth + 3, 0));
+
+    return {
+      startDate,
+      endDate,
+      label: `Trimestre de referência: ${formatDateLabel(referenceDate)}`,
+    };
+  }
+
+  if (periodType === "semester") {
+    const semesterStartMonth = month < 6 ? 0 : 6;
+    const startDate = startOfDay(new Date(year, semesterStartMonth, 1));
+    const endDate = endOfDay(new Date(year, semesterStartMonth + 6, 0));
+
+    return {
+      startDate,
+      endDate,
+      label: `Semestre de referência: ${formatDateLabel(referenceDate)}`,
+    };
+  }
+
+  const startDate = startOfDay(new Date(year, 0, 1));
+  const endDate = endOfDay(new Date(year, 11, 31));
+
+  return {
+    startDate,
+    endDate,
+    label: `Ano de referência: ${formatDateLabel(referenceDate)}`,
+  };
+}
+
+function buildFilterContext(filters: DashboardOverviewQuery): FilterContext {
+  if (filters.startDate && filters.endDate) {
+    return {
+      mode: "interval",
+      label: `Intervalo manual: ${formatDateLabel(filters.startDate)} até ${formatDateLabel(filters.endDate)}`,
+      periodType: null,
+      referenceDate: null,
+      startDate: startOfDay(filters.startDate),
+      endDate: endOfDay(filters.endDate),
+      asOfDate: null,
+    };
+  }
+
+  if (filters.periodType) {
+    const referenceDate = filters.referenceDate ?? new Date();
+    const range = getPeriodRange(filters.periodType, referenceDate);
+
+    return {
+      mode: "interval",
+      label: range.label,
+      periodType: filters.periodType,
+      referenceDate,
+      startDate: range.startDate,
+      endDate: range.endDate,
+      asOfDate: null,
+    };
+  }
+
+  if (filters.asOfDate) {
+    return {
+      mode: "as_of",
+      label: `Posição acumulada até ${formatDateLabel(filters.asOfDate)}`,
+      periodType: null,
+      referenceDate: null,
+      startDate: null,
+      endDate: null,
+      asOfDate: endOfDay(filters.asOfDate),
+    };
+  }
+
+  return {
+    mode: "all",
+    label: "Visão geral acumulada",
+    periodType: null,
+    referenceDate: null,
+    startDate: null,
+    endDate: null,
+    asOfDate: null,
+  };
+}
+
+function isDateInScope(date: Date | null | undefined, filterContext: FilterContext) {
+  if (!date) return false;
+
+  if (filterContext.mode === "all") {
+    return true;
+  }
+
+  if (filterContext.mode === "interval") {
+    return date >= filterContext.startDate && date <= filterContext.endDate;
+  }
+
+  return date <= filterContext.asOfDate;
+}
+
+function filterByScope<T>(
+  items: T[],
+  getDate: (item: T) => Date | null | undefined,
+  filterContext: FilterContext
+) {
+  if (filterContext.mode === "all") {
+    return items;
+  }
+
+  return items.filter((item) => isDateInScope(getDate(item), filterContext));
+}
+
+function sortByUpdatedAtDesc<T extends { updatedAt: Date }>(items: T[]) {
+  return [...items].sort(
+    (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+  );
+}
+
 function aggregateAmounts<T>(
   items: T[],
   getLabel: (item: T) => string,
@@ -48,10 +255,11 @@ function aggregateAmounts<T>(
   for (const item of items) {
     const label = getLabel(item);
     const amount = getAmount(item);
-
     const current = map.get(label) ?? { count: 0, total: 0 };
+
     current.count += 1;
     current.total += amount;
+
     map.set(label, current);
   }
 
@@ -67,8 +275,10 @@ function aggregateAmounts<T>(
     .sort((a, b) => {
       const amountDiff = toNumber(b.totalAmount) - toNumber(a.totalAmount);
       if (amountDiff !== 0) return amountDiff;
+
       const countDiff = b.count - a.count;
       if (countDiff !== 0) return countDiff;
+
       return a.label.localeCompare(b.label);
     });
 }
@@ -99,10 +309,7 @@ function aggregateCounts<T>(
     });
 }
 
-function mapAttentionReason(
-  stage: ProjectStage,
-  hasDraftDiex: boolean
-) {
+function mapAttentionReason(stage: ProjectStage, hasDraftDiex: boolean) {
   if (stage === "ESTIMATIVA_PRECO") {
     return "Estimativa em elaboração";
   }
@@ -144,15 +351,98 @@ function mapAttentionReason(
   return "Projeto cancelado";
 }
 
+function mapStatusFromStage(stage: ProjectStage) {
+  if (stage === "SERVICO_CONCLUIDO") return "CONCLUIDO";
+  if (stage === "CANCELADO") return "CANCELADO";
+
+  if (
+    stage === "OS_LIBERADA" ||
+    stage === "SERVICO_EM_EXECUCAO" ||
+    stage === "ANALISANDO_AS_BUILT" ||
+    stage === "ATESTAR_NF"
+  ) {
+    return "EM_ANDAMENTO";
+  }
+
+  return "PLANEJAMENTO";
+}
+
+function getProjectSnapshotAsOf(
+  project: {
+    id: string;
+    projectCode: number;
+    title: string;
+    stage: ProjectStage;
+    status: string;
+    createdAt: Date;
+    updatedAt: Date;
+    creditNoteReceivedAt: Date | null;
+    diexIssuedAt: Date | null;
+    commitmentNoteReceivedAt: Date | null;
+    serviceOrderIssuedAt: Date | null;
+    executionStartedAt: Date | null;
+    asBuiltReceivedAt: Date | null;
+    invoiceAttestedAt: Date | null;
+    serviceCompletedAt: Date | null;
+    estimates: Array<{ createdAt: Date }>;
+    diexRequests: Array<{ createdAt: Date }>;
+  },
+  asOfDate: Date
+): DashboardProjectView | null {
+  if (project.createdAt > asOfDate) {
+    return null;
+  }
+
+  let snapshotStage: ProjectStage = "ESTIMATIVA_PRECO";
+
+  if (
+    (project.stage === "CANCELADO" || project.status === "CANCELADO") &&
+    project.updatedAt <= asOfDate
+  ) {
+    snapshotStage = "CANCELADO";
+  } else if (project.serviceCompletedAt && project.serviceCompletedAt <= asOfDate) {
+    snapshotStage = "SERVICO_CONCLUIDO";
+  } else if (project.invoiceAttestedAt && project.invoiceAttestedAt <= asOfDate) {
+    snapshotStage = "ATESTAR_NF";
+  } else if (project.asBuiltReceivedAt && project.asBuiltReceivedAt <= asOfDate) {
+    snapshotStage = "ANALISANDO_AS_BUILT";
+  } else if (project.executionStartedAt && project.executionStartedAt <= asOfDate) {
+    snapshotStage = "SERVICO_EM_EXECUCAO";
+  } else if (project.serviceOrderIssuedAt && project.serviceOrderIssuedAt <= asOfDate) {
+    snapshotStage = "OS_LIBERADA";
+  } else if (
+    project.commitmentNoteReceivedAt &&
+    project.commitmentNoteReceivedAt <= asOfDate
+  ) {
+    snapshotStage = "AGUARDANDO_NOTA_EMPENHO";
+  } else if (project.diexRequests.some((diex) => diex.createdAt <= asOfDate)) {
+    snapshotStage = "DIEX_REQUISITORIO";
+  } else if (project.estimates.some((estimate) => estimate.createdAt <= asOfDate)) {
+    snapshotStage = "AGUARDANDO_NOTA_CREDITO";
+  }
+
+  return {
+    id: project.id,
+    projectCode: project.projectCode,
+    title: project.title,
+    stage: snapshotStage,
+    status: mapStatusFromStage(snapshotStage),
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+  };
+}
+
 export class DashboardService {
-  async overview() {
+  async overview(filters: DashboardOverviewQuery = {}) {
+    const filterContext = buildFilterContext(filters);
+
     const [
       usersTotal,
       usersActive,
       usersInactive,
       atasTotal,
       ataItemsTotal,
-      projects,
+      rawProjects,
       tasks,
       estimates,
       diexRequests,
@@ -170,7 +460,26 @@ export class DashboardService {
           title: true,
           status: true,
           stage: true,
+          createdAt: true,
           updatedAt: true,
+          creditNoteReceivedAt: true,
+          diexIssuedAt: true,
+          commitmentNoteReceivedAt: true,
+          serviceOrderIssuedAt: true,
+          executionStartedAt: true,
+          asBuiltReceivedAt: true,
+          invoiceAttestedAt: true,
+          serviceCompletedAt: true,
+          estimates: {
+            select: {
+              createdAt: true,
+            },
+          },
+          diexRequests: {
+            select: {
+              createdAt: true,
+            },
+          },
         },
         orderBy: {
           updatedAt: "desc",
@@ -180,6 +489,7 @@ export class DashboardService {
         select: {
           id: true,
           status: true,
+          createdAt: true,
         },
       }),
       prisma.estimate.findMany({
@@ -192,6 +502,7 @@ export class DashboardService {
           omName: true,
           destinationCityName: true,
           destinationStateUf: true,
+          createdAt: true,
           updatedAt: true,
           project: {
             select: {
@@ -222,6 +533,7 @@ export class DashboardService {
           diexNumber: true,
           issuedAt: true,
           totalAmount: true,
+          createdAt: true,
           updatedAt: true,
           project: {
             select: {
@@ -244,7 +556,9 @@ export class DashboardService {
           isEmergency: true,
           plannedStartDate: true,
           plannedEndDate: true,
+          issuedAt: true,
           totalAmount: true,
+          createdAt: true,
           updatedAt: true,
           project: {
             select: {
@@ -260,24 +574,58 @@ export class DashboardService {
       }),
     ]);
 
-    const totalEstimatedAmountNumber = estimates.reduce(
-      (sum, estimate) => sum + toNumber(estimate.totalAmount),
-      0
+    const scopedProjects: DashboardProjectView[] =
+      filterContext.mode === "as_of"
+        ? rawProjects
+            .map((project) =>
+              getProjectSnapshotAsOf(project, filterContext.asOfDate)
+            )
+            .filter((project): project is DashboardProjectView => Boolean(project))
+        : filterByScope(rawProjects, (project) => project.createdAt, filterContext).map(
+            (project) => ({
+              id: project.id,
+              projectCode: project.projectCode,
+              title: project.title,
+              stage: project.stage,
+              status: project.status,
+              createdAt: project.createdAt,
+              updatedAt: project.updatedAt,
+            })
+          );
+
+    const scopedTasks = filterByScope(tasks, (task) => task.createdAt, filterContext);
+    const scopedEstimates = filterByScope(
+      estimates,
+      (estimate) => estimate.createdAt,
+      filterContext
+    );
+    const scopedDiex = filterByScope(
+      diexRequests,
+      (diex) => diex.createdAt,
+      filterContext
+    );
+    const scopedServiceOrders = filterByScope(
+      serviceOrders,
+      (serviceOrder) => serviceOrder.createdAt,
+      filterContext
     );
 
-    const totalWithDiexNumber = diexRequests.reduce(
-      (sum, diex) => sum + toNumber(diex.totalAmount),
-      0
-    );
+    const formalizedDiex =
+      filterContext.mode === "all"
+        ? diexRequests.filter((diex) => Boolean(diex.diexNumber) && Boolean(diex.issuedAt))
+        : diexRequests.filter(
+            (diex) =>
+              Boolean(diex.diexNumber) &&
+              Boolean(diex.issuedAt) &&
+              isDateInScope(diex.issuedAt, filterContext)
+          );
 
-    const totalWithServiceOrderNumber = serviceOrders.reduce(
-      (sum, serviceOrder) => sum + toNumber(serviceOrder.totalAmount),
-      0
-    );
+    const draftDiex = scopedDiex.filter((diex) => !diex.diexNumber || !diex.issuedAt);
+    const draftDiexProjectIds = new Set(draftDiex.map((diex) => diex.projectId));
 
     const projectAmountMap = new Map<string, number>();
 
-    for (const estimate of estimates) {
+    for (const estimate of scopedEstimates) {
       const current = projectAmountMap.get(estimate.projectId) ?? 0;
       projectAmountMap.set(
         estimate.projectId,
@@ -285,17 +633,32 @@ export class DashboardService {
       );
     }
 
-    const openProjects = projects.filter(
+    const totalEstimatedAmountNumber = scopedEstimates.reduce(
+      (sum, estimate) => sum + toNumber(estimate.totalAmount),
+      0
+    );
+
+    const totalWithDiexNumber = scopedDiex.reduce(
+      (sum, diex) => sum + toNumber(diex.totalAmount),
+      0
+    );
+
+    const totalWithServiceOrderNumber = scopedServiceOrders.reduce(
+      (sum, serviceOrder) => sum + toNumber(serviceOrder.totalAmount),
+      0
+    );
+
+    const openProjects = scopedProjects.filter(
       (project) =>
         project.status !== "CONCLUIDO" && project.stage !== "CANCELADO"
     );
 
-    const completedProjects = projects.filter(
+    const completedProjects = scopedProjects.filter(
       (project) =>
         project.status === "CONCLUIDO" || project.stage === "SERVICO_CONCLUIDO"
     );
 
-    const canceledProjects = projects.filter(
+    const canceledProjects = scopedProjects.filter(
       (project) => project.stage === "CANCELADO" || project.status === "CANCELADO"
     );
 
@@ -304,88 +667,59 @@ export class DashboardService {
       0
     );
 
-    const diexFormalized = diexRequests.filter(
-      (diex) => Boolean(diex.diexNumber) && Boolean(diex.issuedAt)
+    const projectsByStage = STAGE_ORDER.map((stage) => {
+      const matchingProjects = scopedProjects.filter((project) => project.stage === stage);
+      const totalAmount = matchingProjects.reduce(
+        (sum, project) => sum + (projectAmountMap.get(project.id) ?? 0),
+        0
+      );
+
+      return {
+        stage,
+        count: matchingProjects.length,
+        percentage: formatPercentage(matchingProjects.length, scopedProjects.length),
+        totalEstimatedAmount: formatAmount(totalAmount),
+      };
+    }).filter((item) => item.count > 0);
+
+    const projectsByStatus = aggregateCounts(scopedProjects, (project) => project.status);
+    const tasksByStatus = aggregateCounts(scopedTasks, (task) => task.status);
+    const estimatesByStatus = aggregateCounts(
+      scopedEstimates,
+      (estimate) => estimate.status
     );
-
-    const diexDrafts = diexRequests.filter(
-      (diex) => !diex.diexNumber || !diex.issuedAt
-    );
-
-    const draftDiexProjectIds = new Set(diexDrafts.map((diex) => diex.projectId));
-
-    const projectsByStage = projects
-      .reduce<
-        Array<{
-          stage: string;
-          count: number;
-          percentage: number;
-          totalEstimatedAmount: string;
-        }>
-      >((acc, project, _, source) => {
-        const existing = acc.find((item) => item.stage === project.stage);
-
-        if (existing) {
-          existing.count += 1;
-          existing.totalEstimatedAmount = formatAmount(
-            toNumber(existing.totalEstimatedAmount) +
-              (projectAmountMap.get(project.id) ?? 0)
-          );
-          existing.percentage = formatPercentage(existing.count, source.length);
-          return acc;
-        }
-
-        acc.push({
-          stage: project.stage,
-          count: 1,
-          percentage: formatPercentage(1, source.length),
-          totalEstimatedAmount: formatAmount(projectAmountMap.get(project.id) ?? 0),
-        });
-
-        return acc;
-      }, [])
-      .sort((a, b) => {
-        const countDiff = b.count - a.count;
-        if (countDiff !== 0) return countDiff;
-        return a.stage.localeCompare(b.stage);
-      });
-
-    const projectsByStatus = aggregateCounts(projects, (project) => project.status);
-    const tasksByStatus = aggregateCounts(tasks, (task) => task.status);
-    const estimatesByStatus = aggregateCounts(estimates, (estimate) => estimate.status);
 
     const byEstimateStatus = aggregateAmounts(
-      estimates,
+      scopedEstimates,
       (estimate) => estimate.status,
       (estimate) => toNumber(estimate.totalAmount)
     );
 
     const byAtaType = aggregateAmounts(
-      estimates,
+      scopedEstimates,
       (estimate) => estimate.ata.type,
       (estimate) => toNumber(estimate.totalAmount)
     );
 
     const byStateUf = aggregateAmounts(
-      estimates,
+      scopedEstimates,
       (estimate) => estimate.destinationStateUf,
       (estimate) => toNumber(estimate.totalAmount)
     );
 
     const byCity = aggregateAmounts(
-      estimates,
-      (estimate) =>
-        `${estimate.destinationCityName}/${estimate.destinationStateUf}`,
+      scopedEstimates,
+      (estimate) => `${estimate.destinationCityName}/${estimate.destinationStateUf}`,
       (estimate) => toNumber(estimate.totalAmount)
     );
 
     const byOm = aggregateAmounts(
-      estimates,
+      scopedEstimates,
       (estimate) => estimate.omName || "OM não informada",
       (estimate) => toNumber(estimate.totalAmount)
     );
 
-    const attention = openProjects
+    const attention = sortByUpdatedAtDesc(openProjects)
       .map((project) => ({
         id: project.id,
         projectCode: project.projectCode,
@@ -395,28 +729,34 @@ export class DashboardService {
         updatedAt: project.updatedAt,
         totalEstimatedAmount: formatAmount(projectAmountMap.get(project.id) ?? 0),
         reason: mapAttentionReason(
-          project.stage as ProjectStage,
+          project.stage,
           draftDiexProjectIds.has(project.id)
         ),
       }))
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      )
       .slice(0, 10);
 
     return {
       generatedAt: new Date().toISOString(),
 
+      filter: {
+        mode: filterContext.mode,
+        label: filterContext.label,
+        periodType: filterContext.periodType,
+        referenceDate: serializeDate(filterContext.referenceDate),
+        startDate: serializeDate(filterContext.startDate),
+        endDate: serializeDate(filterContext.endDate),
+        asOfDate: serializeDate(filterContext.asOfDate),
+      },
+
       summary: {
         projectsOpen: openProjects.length,
         projectsCompleted: completedProjects.length,
         projectsCanceled: canceledProjects.length,
-        estimatesFinalized: estimates.filter(
+        estimatesFinalized: scopedEstimates.filter(
           (estimate) => estimate.status === "FINALIZADA"
         ).length,
-        diexIssued: diexFormalized.length,
-        serviceOrdersIssued: serviceOrders.length,
+        diexIssued: formalizedDiex.length,
+        serviceOrdersIssued: scopedServiceOrders.length,
         totalEstimatedAmount: formatAmount(totalEstimatedAmountNumber),
         projectsNeedingAttention: attention.length,
       },
@@ -427,46 +767,48 @@ export class DashboardService {
           active: usersActive,
           inactive: usersInactive,
         },
-        projects: projects.length,
-        tasks: tasks.length,
-        estimates: estimates.length,
+        projects: scopedProjects.length,
+        tasks: scopedTasks.length,
+        estimates: scopedEstimates.length,
+        diex: scopedDiex.length,
+        serviceOrders: scopedServiceOrders.length,
         atas: atasTotal,
         ataItems: ataItemsTotal,
       },
 
       documents: {
         diex: {
-          total: diexRequests.length,
-          withNumber: diexFormalized.length,
-          draft: diexDrafts.length,
+          total: scopedDiex.length,
+          withNumber: formalizedDiex.length,
+          draft: draftDiex.length,
         },
         serviceOrders: {
-          total: serviceOrders.length,
-          emergency: serviceOrders.filter((item) => item.isEmergency).length,
-          scheduled: serviceOrders.filter(
+          total: scopedServiceOrders.length,
+          emergency: scopedServiceOrders.filter((item) => item.isEmergency).length,
+          scheduled: scopedServiceOrders.filter(
             (item) => item.plannedStartDate && item.plannedEndDate
           ).length,
         },
       },
 
       pendingActions: {
-        awaitingCreditNote: projects.filter(
+        awaitingCreditNote: scopedProjects.filter(
           (project) => project.stage === "AGUARDANDO_NOTA_CREDITO"
         ).length,
-        awaitingDiexFormalization: diexDrafts.length,
-        awaitingCommitmentNote: projects.filter(
+        awaitingDiexFormalization: draftDiex.length,
+        awaitingCommitmentNote: scopedProjects.filter(
           (project) => project.stage === "DIEX_REQUISITORIO"
         ).length,
-        awaitingServiceOrder: projects.filter(
+        awaitingServiceOrder: scopedProjects.filter(
           (project) => project.stage === "AGUARDANDO_NOTA_EMPENHO"
         ).length,
-        awaitingExecutionStart: projects.filter(
+        awaitingExecutionStart: scopedProjects.filter(
           (project) => project.stage === "OS_LIBERADA"
         ).length,
-        awaitingAsBuiltAnalysis: projects.filter(
+        awaitingAsBuiltAnalysis: scopedProjects.filter(
           (project) => project.stage === "ANALISANDO_AS_BUILT"
         ).length,
-        awaitingInvoiceAttestation: projects.filter(
+        awaitingInvoiceAttestation: scopedProjects.filter(
           (project) => project.stage === "ATESTAR_NF"
         ).length,
       },
@@ -497,7 +839,7 @@ export class DashboardService {
 
       openProjects: {
         total: openProjects.length,
-        recent: openProjects.slice(0, 5).map((project) => ({
+        recent: sortByUpdatedAtDesc(openProjects).slice(0, 5).map((project) => ({
           id: project.id,
           projectCode: project.projectCode,
           title: project.title,
@@ -509,7 +851,7 @@ export class DashboardService {
 
       completedProjects: {
         total: completedProjects.length,
-        recent: completedProjects.slice(0, 5).map((project) => ({
+        recent: sortByUpdatedAtDesc(completedProjects).slice(0, 5).map((project) => ({
           id: project.id,
           projectCode: project.projectCode,
           title: project.title,
@@ -521,7 +863,7 @@ export class DashboardService {
 
       canceledProjects: {
         total: canceledProjects.length,
-        recent: canceledProjects.slice(0, 5).map((project) => ({
+        recent: sortByUpdatedAtDesc(canceledProjects).slice(0, 5).map((project) => ({
           id: project.id,
           projectCode: project.projectCode,
           title: project.title,
@@ -532,7 +874,7 @@ export class DashboardService {
       },
 
       recent: {
-        projects: projects.slice(0, 5).map((project) => ({
+        projects: sortByUpdatedAtDesc(scopedProjects).slice(0, 5).map((project) => ({
           id: project.id,
           projectCode: project.projectCode,
           title: project.title,
@@ -540,7 +882,7 @@ export class DashboardService {
           stage: project.stage,
           updatedAt: project.updatedAt,
         })),
-        estimates: estimates.slice(0, 5).map((estimate) => ({
+        estimates: sortByUpdatedAtDesc(scopedEstimates).slice(0, 5).map((estimate) => ({
           id: estimate.id,
           estimateCode: estimate.estimateCode,
           status: estimate.status,
@@ -560,7 +902,7 @@ export class DashboardService {
             type: estimate.ata.type,
           },
         })),
-        diex: diexRequests.slice(0, 5).map((diex) => ({
+        diex: sortByUpdatedAtDesc(scopedDiex).slice(0, 5).map((diex) => ({
           id: diex.id,
           diexCode: diex.diexCode,
           diexNumber: diex.diexNumber,
@@ -574,21 +916,23 @@ export class DashboardService {
             stage: diex.project.stage,
           },
         })),
-        serviceOrders: serviceOrders.slice(0, 5).map((serviceOrder) => ({
-          id: serviceOrder.id,
-          serviceOrderCode: serviceOrder.serviceOrderCode,
-          serviceOrderNumber: serviceOrder.serviceOrderNumber,
-          isEmergency: serviceOrder.isEmergency,
-          plannedStartDate: serviceOrder.plannedStartDate,
-          plannedEndDate: serviceOrder.plannedEndDate,
-          totalAmount: formatAmount(toNumber(serviceOrder.totalAmount)),
-          updatedAt: serviceOrder.updatedAt,
-          project: {
-            projectCode: serviceOrder.project.projectCode,
-            title: serviceOrder.project.title,
-            stage: serviceOrder.project.stage,
-          },
-        })),
+        serviceOrders: sortByUpdatedAtDesc(scopedServiceOrders)
+          .slice(0, 5)
+          .map((serviceOrder) => ({
+            id: serviceOrder.id,
+            serviceOrderCode: serviceOrder.serviceOrderCode,
+            serviceOrderNumber: serviceOrder.serviceOrderNumber,
+            isEmergency: serviceOrder.isEmergency,
+            plannedStartDate: serviceOrder.plannedStartDate,
+            plannedEndDate: serviceOrder.plannedEndDate,
+            totalAmount: formatAmount(toNumber(serviceOrder.totalAmount)),
+            updatedAt: serviceOrder.updatedAt,
+            project: {
+              projectCode: serviceOrder.project.projectCode,
+              title: serviceOrder.project.title,
+              stage: serviceOrder.project.stage,
+            },
+          })),
       },
     };
   }
