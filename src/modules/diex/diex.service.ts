@@ -135,37 +135,6 @@ export class DiexService {
     return role === "ADMIN" || role === "GESTOR";
   }
 
-  private stageOrder: ProjectStageValue[] = [
-    "ESTIMATIVA_PRECO",
-    "AGUARDANDO_NOTA_CREDITO",
-    "DIEX_REQUISITORIO",
-    "AGUARDANDO_NOTA_EMPENHO",
-    "OS_LIBERADA",
-    "SERVICO_EM_EXECUCAO",
-    "ANALISANDO_AS_BUILT",
-    "ATESTAR_NF",
-    "SERVICO_CONCLUIDO",
-    "CANCELADO",
-  ];
-
-  private assertProjectStageAllowsDiexCreation(stage: ProjectStageValue) {
-    const allowedStages: ProjectStageValue[] = [
-      "AGUARDANDO_NOTA_CREDITO",
-      "DIEX_REQUISITORIO",
-    ];
-
-    if (!allowedStages.includes(stage)) {
-      throw new AppError(
-        "O DIEx só pode ser criado quando o projeto estiver em AGUARDANDO_NOTA_CREDITO ou DIEX_REQUISITORIO",
-        409
-      );
-    }
-  }
-
-  private isStageBefore(current: ProjectStageValue, target: ProjectStageValue) {
-    return this.stageOrder.indexOf(current) < this.stageOrder.indexOf(target);
-  }
-
   private async resolveProject(projectId?: string, projectCode?: number) {
     if (projectId) {
       const project = await prisma.project.findUnique({
@@ -568,7 +537,7 @@ export class DiexService {
   async create(data: CreateDiexInput, user: CurrentUser) {
     const project = await this.resolveProject(data.projectId, data.projectCode);
 
-    this.assertProjectStageAllowsDiexCreation(project.stage);
+    workflowService.assertCanCreateDiex(this.buildWorkflowSnapshot(project));
 
     if (!this.canManageProject(project, user)) {
       throw new AppError("Você não tem permissão para criar DIEx neste projeto", 403);
@@ -643,20 +612,14 @@ export class DiexService {
       include: diexInclude,
     });
 
-    const projectUpdateData: Prisma.ProjectUpdateInput = {
-      ...(project.stage === "AGUARDANDO_NOTA_CREDITO"
-        ? {
-            stage: "DIEX_REQUISITORIO",
-            status: "PLANEJAMENTO",
-          }
-        : {}),
-      ...(diex.diexNumber !== null && diex.diexNumber !== undefined
-        ? { diexNumber: diex.diexNumber }
-        : {}),
-      ...(diex.issuedAt !== null && diex.issuedAt !== undefined
-        ? { diexIssuedAt: diex.issuedAt }
-        : {}),
-    };
+    const projectUpdateData: Prisma.ProjectUpdateInput =
+      workflowService.getProjectPatchAfterDiexCreated(
+        this.buildWorkflowSnapshot({
+          ...project,
+          diexNumber: diex.diexNumber,
+          diexIssuedAt: diex.issuedAt,
+        }),
+      );
 
     const updatedProject = await prisma.project.update({
       where: { id: project.id },
@@ -1002,7 +965,7 @@ export class DiexService {
   async remove(diexId: string, user: CurrentUser) {
     const accessData = await this.ensureCanManage(diexId, user);
 
-    if (!this.isStageBefore(accessData.project.stage, "AGUARDANDO_NOTA_EMPENHO")) {
+    if (!workflowService.isStageBefore(accessData.project.stage, "AGUARDANDO_NOTA_EMPENHO")) {
       throw new AppError(
         "Não é possível excluir o DIEx quando o projeto já avançou além da etapa de DIEx",
         409
@@ -1072,12 +1035,7 @@ export class DiexService {
     
       const updatedProject = await prisma.project.update({
       where: { id: diex.projectId },
-      data: {
-        diexNumber: null,
-        diexIssuedAt: null,
-        stage: "AGUARDANDO_NOTA_CREDITO",
-        status: "PLANEJAMENTO",
-      },
+      data: workflowService.getProjectPatchAfterDiexRemoved(),
       select: {
         id: true,
         projectCode: true,

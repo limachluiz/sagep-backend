@@ -209,37 +209,6 @@ export class ServiceOrdersService {
     return role === "ADMIN" || role === "GESTOR";
   }
 
-  private stageOrder: ProjectStageValue[] = [
-    "ESTIMATIVA_PRECO",
-    "AGUARDANDO_NOTA_CREDITO",
-    "DIEX_REQUISITORIO",
-    "AGUARDANDO_NOTA_EMPENHO",
-    "OS_LIBERADA",
-    "SERVICO_EM_EXECUCAO",
-    "ANALISANDO_AS_BUILT",
-    "ATESTAR_NF",
-    "SERVICO_CONCLUIDO",
-    "CANCELADO",
-  ];
-
-  private isStageBefore(current: ProjectStageValue, target: ProjectStageValue) {
-    return this.stageOrder.indexOf(current) < this.stageOrder.indexOf(target);
-  }
-
-  private assertProjectStageAllowsServiceOrderCreation(stage: ProjectStageValue) {
-    const allowedStages: ProjectStageValue[] = [
-      "AGUARDANDO_NOTA_EMPENHO",
-      "OS_LIBERADA",
-    ];
-
-    if (!allowedStages.includes(stage)) {
-      throw new AppError(
-        "A Ordem de Serviço só pode ser criada quando o projeto estiver em AGUARDANDO_NOTA_EMPENHO ou OS_LIBERADA",
-        409
-      );
-    }
-  }
-
   private canManageProject(
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
@@ -740,7 +709,7 @@ private buildWorkflowSnapshot(project: {
       throw new AppError("Você não tem permissão para criar OS neste projeto", 403);
     }
 
-    this.assertProjectStageAllowsServiceOrderCreation(project.stage);
+    workflowService.assertCanCreateServiceOrder(this.buildWorkflowSnapshot(project));
 
     const estimate = await this.resolveEstimate(data.estimateId, data.estimateCode);
 
@@ -750,13 +719,6 @@ private buildWorkflowSnapshot(project: {
 
     if (estimate.status !== "FINALIZADA") {
       throw new AppError("Só é possível gerar OS a partir de uma estimativa finalizada", 409);
-    }
-
-    if (!project.commitmentNoteNumber && !project.commitmentNoteReceivedAt) {
-      throw new AppError(
-        "Para gerar a OS, o projeto precisa ter Nota/Empenho informada",
-        409,
-      );
     }
 
     const alreadyExists = await prisma.serviceOrder.findUnique({
@@ -858,16 +820,13 @@ private buildWorkflowSnapshot(project: {
 
     const updatedProject = await prisma.project.update({
       where: { id: project.id },
-      data: {
-        ...(project.stage === "AGUARDANDO_NOTA_EMPENHO"
-          ? {
-              stage: "OS_LIBERADA",
-              status: "EM_ANDAMENTO",
-            }
-          : {}),
-        serviceOrderNumber: serviceOrder.serviceOrderNumber,
-        serviceOrderIssuedAt: serviceOrder.issuedAt,
-      },
+      data: workflowService.getProjectPatchAfterServiceOrderCreated(
+        this.buildWorkflowSnapshot({
+          ...project,
+          serviceOrderNumber: serviceOrder.serviceOrderNumber,
+          serviceOrderIssuedAt: serviceOrder.issuedAt,
+        }),
+      ),
       select: {
         id: true,
         projectCode: true,
@@ -1302,7 +1261,7 @@ private buildWorkflowSnapshot(project: {
   async remove(serviceOrderId: string, user: CurrentUser) {
     const accessData = await this.ensureCanManage(serviceOrderId, user);
 
-    if (!this.isStageBefore(accessData.project.stage, "SERVICO_EM_EXECUCAO")) {
+    if (!workflowService.isStageBefore(accessData.project.stage, "SERVICO_EM_EXECUCAO")) {
       throw new AppError(
         "Não é possível excluir a OS quando o projeto já entrou em execução",
         409,
@@ -1387,12 +1346,7 @@ private buildWorkflowSnapshot(project: {
 
     const updatedProject = await prisma.project.update({
       where: { id: serviceOrder.projectId },
-      data: {
-        serviceOrderNumber: null,
-        serviceOrderIssuedAt: null,
-        stage: "AGUARDANDO_NOTA_EMPENHO",
-        status: "PLANEJAMENTO",
-      },
+      data: workflowService.getProjectPatchAfterServiceOrderRemoved(),
       select: {
         id: true,
         projectCode: true,

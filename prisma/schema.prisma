@@ -48,6 +48,12 @@ enum EstimateStatus {
   CANCELADA
 }
 
+enum DocumentStatus {
+  EMITIDO
+  ARQUIVADO
+  CANCELADO
+}
+
 enum ProjectStage {
   ESTIMATIVA_PRECO
   AGUARDANDO_NOTA_CREDITO
@@ -133,6 +139,8 @@ model Project {
   asBuiltReceivedAt        DateTime?
   invoiceAttestedAt        DateTime?
   serviceCompletedAt       DateTime?
+  archivedAt               DateTime?
+  deletedAt                DateTime?
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
 }
@@ -306,6 +314,9 @@ model DiexRequest {
   requesterCpf        String?
   requesterRole       String            @default("Requisitante")
   notes               String?
+  documentStatus      DocumentStatus    @default(EMITIDO)
+  archivedAt          DateTime?
+  deletedAt           DateTime?
   totalAmount         Decimal           @db.Decimal(14, 2)
   project             Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
   estimate            Estimate          @relation(fields: [estimateId], references: [id], onDelete: Restrict)
@@ -377,6 +388,9 @@ model ServiceOrder {
   requesterCpf                 String?
   contractorRepresentativeName String?
   contractorRepresentativeRole String?                         @default("Responsável pela Contratada")
+  documentStatus               DocumentStatus                  @default(EMITIDO)
+  archivedAt                   DateTime?
+  deletedAt                    DateTime?
   scheduleItems                ServiceOrderScheduleItem[]
   deliveredDocuments           ServiceOrderDeliveredDocument[]
 

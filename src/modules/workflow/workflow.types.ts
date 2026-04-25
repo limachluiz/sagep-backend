@@ -46,3 +46,10 @@ export type WorkflowProjectSnapshot = {
   invoiceAttestedAt?: Date | null;
   serviceCompletedAt?: Date | null;
 };
+
+export type ProjectStatusValue =
+  | "PLANEJAMENTO"
+  | "EM_ANDAMENTO"
+  | "PAUSADO"
+  | "CONCLUIDO"
+  | "CANCELADO";

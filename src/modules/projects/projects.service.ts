@@ -84,201 +84,8 @@ const projectInclude = {
 } satisfies Prisma.ProjectInclude;
 
 export class ProjectsService {
-  private getAllowedNextStages(
-  currentStage: ProjectStageValue
-): ProjectStageValue[] {
-  switch (currentStage) {
-    case "ESTIMATIVA_PRECO":
-      return ["AGUARDANDO_NOTA_CREDITO", "CANCELADO"];
-
-    case "AGUARDANDO_NOTA_CREDITO":
-      return ["DIEX_REQUISITORIO", "CANCELADO"];
-
-    case "DIEX_REQUISITORIO":
-      return ["AGUARDANDO_NOTA_EMPENHO", "CANCELADO"];
-
-    case "AGUARDANDO_NOTA_EMPENHO":
-      return ["OS_LIBERADA", "CANCELADO"];
-
-    case "OS_LIBERADA":
-      return ["SERVICO_EM_EXECUCAO", "CANCELADO"];
-
-    case "SERVICO_EM_EXECUCAO":
-      return ["ANALISANDO_AS_BUILT", "CANCELADO"];
-
-    case "ANALISANDO_AS_BUILT":
-      return ["ATESTAR_NF", "CANCELADO"];
-
-    case "ATESTAR_NF":
-      return ["SERVICO_CONCLUIDO", "CANCELADO"];
-
-    case "SERVICO_CONCLUIDO":
-      return [];
-
-    case "CANCELADO":
-      return [];
-
-    default:
-      return [];
-  }
-  }
-
-  private assertStageTransition(
-    currentStage: ProjectStageValue,
-    nextStage: ProjectStageValue
-  ) {
-    if (currentStage === nextStage) {
-      return;
-    }
-
-    const allowedNextStages = this.getAllowedNextStages(currentStage);
-
-    if (!allowedNextStages.includes(nextStage)) {
-      throw new AppError(
-        `Transição inválida: o projeto está em ${currentStage} e só pode avançar para ${allowedNextStages.join(", ") || "nenhuma etapa"}`,
-        409
-      );
-    }
-  }
-
   private isPrivileged(role: string) {
     return role === "ADMIN" || role === "GESTOR";
-  }
-
-  private getMacroStatusFromStage(
-    stage: ProjectStageValue
-  ): "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO" {
-    if (stage === "SERVICO_CONCLUIDO") {
-      return "CONCLUIDO";
-    }
-
-    if (stage === "CANCELADO") {
-      return "CANCELADO";
-    }
-
-    if (
-      stage === "OS_LIBERADA" ||
-      stage === "SERVICO_EM_EXECUCAO" ||
-      stage === "ANALISANDO_AS_BUILT" ||
-      stage === "ATESTAR_NF"
-    ) {
-      return "EM_ANDAMENTO";
-    }
-
-    return "PLANEJAMENTO";
-  }
-
-  private isStageAtOrBeyond(stage: ProjectStageValue, checkpoint: ProjectStageValue) {
-    const order: ProjectStageValue[] = [
-      "ESTIMATIVA_PRECO",
-      "AGUARDANDO_NOTA_CREDITO",
-      "DIEX_REQUISITORIO",
-      "AGUARDANDO_NOTA_EMPENHO",
-      "OS_LIBERADA",
-      "SERVICO_EM_EXECUCAO",
-      "ANALISANDO_AS_BUILT",
-      "ATESTAR_NF",
-      "SERVICO_CONCLUIDO",
-      "CANCELADO",
-    ];
-
-    return order.indexOf(stage) >= order.indexOf(checkpoint);
-  }
-
-  private validateStageRequirements(
-    stage: ProjectStageValue,
-    snapshot: {
-      creditNoteNumber?: string | null;
-      creditNoteReceivedAt?: Date | null;
-      diexNumber?: string | null;
-      diexIssuedAt?: Date | null;
-      commitmentNoteNumber?: string | null;
-      commitmentNoteReceivedAt?: Date | null;
-      serviceOrderNumber?: string | null;
-      serviceOrderIssuedAt?: Date | null;
-      executionStartedAt?: Date | null;
-      asBuiltReceivedAt?: Date | null;
-      invoiceAttestedAt?: Date | null;
-      serviceCompletedAt?: Date | null;
-    },
-    finalizedEstimateCount: number
-  ) {
-    if (
-      stage !== "ESTIMATIVA_PRECO" &&
-      stage !== "CANCELADO" &&
-      finalizedEstimateCount === 0
-    ) {
-      throw new AppError(
-        "Para avançar o fluxo, o projeto precisa ter pelo menos uma estimativa finalizada",
-        409
-      );
-    }
-
-    if (this.isStageAtOrBeyond(stage, "DIEX_REQUISITORIO")) {
-      if (!snapshot.creditNoteNumber && !snapshot.creditNoteReceivedAt) {
-        throw new AppError(
-          "Para avançar até DIEx Requisitório, informe o número ou a data de recebimento da Nota de Crédito",
-          409
-        );
-      }
-
-      if (!snapshot.diexNumber && !snapshot.diexIssuedAt) {
-        throw new AppError(
-          "Para avançar até DIEx Requisitório, informe o número ou a data do DIEx",
-          409
-        );
-      }
-    }
-
-    if (this.isStageAtOrBeyond(stage, "OS_LIBERADA")) {
-      if (!snapshot.commitmentNoteNumber && !snapshot.commitmentNoteReceivedAt) {
-        throw new AppError(
-          "Para liberar a OS, informe o número ou a data da Nota/Empenho",
-          409
-        );
-      }
-
-      if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
-        throw new AppError(
-          "Para liberar a OS, informe o número ou a data da Ordem de Serviço",
-          409
-        );
-      }
-    }
-
-    if (this.isStageAtOrBeyond(stage, "SERVICO_EM_EXECUCAO")) {
-      if (!snapshot.executionStartedAt) {
-        throw new AppError(
-          "Para colocar o serviço em execução, informe a data de início da execução",
-          409
-        );
-      }
-    }
-
-    if (this.isStageAtOrBeyond(stage, "ANALISANDO_AS_BUILT")) {
-      if (!snapshot.asBuiltReceivedAt) {
-        throw new AppError(
-          "Para entrar na etapa de análise do As-Built, informe a data de recebimento do As-Built",
-          409
-        );
-      }
-    }
-
-    if (stage === "SERVICO_CONCLUIDO") {
-      if (!snapshot.invoiceAttestedAt) {
-        throw new AppError(
-          "Para concluir o serviço, informe a data de atesto da NF",
-          409
-        );
-      }
-
-      if (!snapshot.serviceCompletedAt) {
-        throw new AppError(
-          "Para concluir o serviço, informe a data de conclusão do serviço",
-          409
-        );
-      }
-    }
   }
 
   private async getProjectAccessData(projectId: string) {
@@ -879,14 +686,23 @@ export class ProjectsService {
       serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
     };
 
-    this.assertStageTransition(currentProject.stage, data.stage);
-    this.validateStageRequirements(data.stage, nextSnapshot, finalizedEstimateCount);
+    workflowService.assertStageTransition(currentProject.stage, data.stage);
+    workflowService.validateStageRequirements(
+      data.stage,
+      this.buildWorkflowSnapshot({
+        id: currentProject.id,
+        projectCode: currentProject.projectCode,
+        stage: data.stage,
+        ...nextSnapshot,
+      }),
+      finalizedEstimateCount,
+    );
 
     const project = await prisma.project.update({
       where: { id: projectId },
       data: {
         stage: data.stage,
-        status: this.getMacroStatusFromStage(data.stage),
+        status: workflowService.getMacroStatusFromStage(data.stage),
         ...(data.creditNoteNumber !== undefined && {
           creditNoteNumber: data.creditNoteNumber,
         }),

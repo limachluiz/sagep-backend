@@ -1,5 +1,6 @@
 import { AppError } from "../../shared/app-error.js";
 import {
+  type ProjectStatusValue,
   type ProjectStageValue,
   type WorkflowAction,
   type WorkflowProjectSnapshot,
@@ -19,8 +20,50 @@ const stageTransitions: Record<ProjectStageValue, ProjectStageValue[]> = {
 };
 
 export class WorkflowService {
+  private stageOrder: ProjectStageValue[] = [
+    "ESTIMATIVA_PRECO",
+    "AGUARDANDO_NOTA_CREDITO",
+    "DIEX_REQUISITORIO",
+    "AGUARDANDO_NOTA_EMPENHO",
+    "OS_LIBERADA",
+    "SERVICO_EM_EXECUCAO",
+    "ANALISANDO_AS_BUILT",
+    "ATESTAR_NF",
+    "SERVICO_CONCLUIDO",
+    "CANCELADO",
+  ];
+
   getAllowedNextStages(stage: ProjectStageValue) {
     return stageTransitions[stage] ?? [];
+  }
+
+  getMacroStatusFromStage(stage: ProjectStageValue): ProjectStatusValue {
+    if (stage === "SERVICO_CONCLUIDO") {
+      return "CONCLUIDO";
+    }
+
+    if (stage === "CANCELADO") {
+      return "CANCELADO";
+    }
+
+    if (
+      stage === "OS_LIBERADA" ||
+      stage === "SERVICO_EM_EXECUCAO" ||
+      stage === "ANALISANDO_AS_BUILT" ||
+      stage === "ATESTAR_NF"
+    ) {
+      return "EM_ANDAMENTO";
+    }
+
+    return "PLANEJAMENTO";
+  }
+
+  isStageBefore(current: ProjectStageValue, target: ProjectStageValue) {
+    return this.stageOrder.indexOf(current) < this.stageOrder.indexOf(target);
+  }
+
+  isStageAtOrBeyond(stage: ProjectStageValue, checkpoint: ProjectStageValue) {
+    return this.stageOrder.indexOf(stage) >= this.stageOrder.indexOf(checkpoint);
   }
 
   assertStageTransition(currentStage: ProjectStageValue, nextStage: ProjectStageValue) {
@@ -54,6 +97,15 @@ export class WorkflowService {
     }
   }
 
+  assertCanRemoveDiex(project: WorkflowProjectSnapshot) {
+    if (!this.isStageBefore(project.stage, "AGUARDANDO_NOTA_EMPENHO")) {
+      throw new AppError(
+        "NÃ£o Ã© possÃ­vel excluir o DIEx quando o projeto jÃ¡ avanÃ§ou alÃ©m da etapa de DIEx",
+        409,
+      );
+    }
+  }
+
   assertCanCreateServiceOrder(project: WorkflowProjectSnapshot) {
     if (project.stage !== "AGUARDANDO_NOTA_EMPENHO" && project.stage !== "OS_LIBERADA") {
       throw new AppError(
@@ -68,6 +120,146 @@ export class WorkflowService {
         409,
       );
     }
+  }
+
+  assertCanRemoveServiceOrder(project: WorkflowProjectSnapshot) {
+    if (!this.isStageBefore(project.stage, "SERVICO_EM_EXECUCAO")) {
+      throw new AppError(
+        "NÃ£o Ã© possÃ­vel excluir a OS quando o projeto jÃ¡ entrou em execuÃ§Ã£o",
+        409,
+      );
+    }
+  }
+
+  validateStageRequirements(
+    stage: ProjectStageValue,
+    snapshot: WorkflowProjectSnapshot,
+    finalizedEstimateCount: number,
+  ) {
+    if (
+      stage !== "ESTIMATIVA_PRECO" &&
+      stage !== "CANCELADO" &&
+      finalizedEstimateCount === 0
+    ) {
+      throw new AppError(
+        "Para avanÃ§ar o fluxo, o projeto precisa ter pelo menos uma estimativa finalizada",
+        409,
+      );
+    }
+
+    if (this.isStageAtOrBeyond(stage, "DIEX_REQUISITORIO")) {
+      if (!snapshot.creditNoteNumber && !snapshot.creditNoteReceivedAt) {
+        throw new AppError(
+          "Para avanÃ§ar atÃ© DIEx RequisitÃ³rio, informe o nÃºmero ou a data de recebimento da Nota de CrÃ©dito",
+          409,
+        );
+      }
+
+      if (!snapshot.diexNumber && !snapshot.diexIssuedAt) {
+        throw new AppError(
+          "Para avanÃ§ar atÃ© DIEx RequisitÃ³rio, informe o nÃºmero ou a data do DIEx",
+          409,
+        );
+      }
+    }
+
+    if (this.isStageAtOrBeyond(stage, "OS_LIBERADA")) {
+      if (!snapshot.commitmentNoteNumber && !snapshot.commitmentNoteReceivedAt) {
+        throw new AppError(
+          "Para liberar a OS, informe o nÃºmero ou a data da Nota/Empenho",
+          409,
+        );
+      }
+
+      if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
+        throw new AppError(
+          "Para liberar a OS, informe o nÃºmero ou a data da Ordem de ServiÃ§o",
+          409,
+        );
+      }
+    }
+
+    if (this.isStageAtOrBeyond(stage, "SERVICO_EM_EXECUCAO")) {
+      if (!snapshot.executionStartedAt) {
+        throw new AppError(
+          "Para colocar o serviÃ§o em execuÃ§Ã£o, informe a data de inÃ­cio da execuÃ§Ã£o",
+          409,
+        );
+      }
+    }
+
+    if (this.isStageAtOrBeyond(stage, "ANALISANDO_AS_BUILT")) {
+      if (!snapshot.asBuiltReceivedAt) {
+        throw new AppError(
+          "Para entrar na etapa de anÃ¡lise do As-Built, informe a data de recebimento do As-Built",
+          409,
+        );
+      }
+    }
+
+    if (stage === "SERVICO_CONCLUIDO") {
+      if (!snapshot.invoiceAttestedAt) {
+        throw new AppError(
+          "Para concluir o serviÃ§o, informe a data de atesto da NF",
+          409,
+        );
+      }
+
+      if (!snapshot.serviceCompletedAt) {
+        throw new AppError(
+          "Para concluir o serviÃ§o, informe a data de conclusÃ£o do serviÃ§o",
+          409,
+        );
+      }
+    }
+  }
+
+  getProjectPatchAfterDiexCreated(project: WorkflowProjectSnapshot) {
+    return {
+      ...(project.stage === "AGUARDANDO_NOTA_CREDITO"
+        ? {
+            stage: "DIEX_REQUISITORIO" as const,
+            status: this.getMacroStatusFromStage("DIEX_REQUISITORIO"),
+          }
+        : {}),
+      ...(project.diexNumber ? { diexNumber: project.diexNumber } : {}),
+      ...(project.diexIssuedAt ? { diexIssuedAt: project.diexIssuedAt } : {}),
+    };
+  }
+
+  getProjectPatchAfterDiexRemoved() {
+    return {
+      diexNumber: null,
+      diexIssuedAt: null,
+      stage: "AGUARDANDO_NOTA_CREDITO" as const,
+      status: this.getMacroStatusFromStage("AGUARDANDO_NOTA_CREDITO"),
+    };
+  }
+
+  getProjectPatchAfterServiceOrderCreated(project: WorkflowProjectSnapshot) {
+    return {
+      ...(project.stage === "AGUARDANDO_NOTA_EMPENHO"
+        ? {
+            stage: "OS_LIBERADA" as const,
+            status: this.getMacroStatusFromStage("OS_LIBERADA"),
+          }
+        : {}),
+      ...(project.serviceOrderNumber
+        ? { serviceOrderNumber: project.serviceOrderNumber }
+        : {}),
+      ...(project.serviceOrderIssuedAt
+        ? { serviceOrderIssuedAt: project.serviceOrderIssuedAt }
+        : {}),
+    };
+  }
+
+  getProjectPatchAfterServiceOrderRemoved() {
+    return {
+      serviceOrderNumber: null,
+      serviceOrderIssuedAt: null,
+      stage: "AGUARDANDO_NOTA_EMPENHO" as const,
+      status: this.getMacroStatusFromStage("AGUARDANDO_NOTA_EMPENHO"),
+    };
   }
 
   getNextAction(project: WorkflowProjectSnapshot): WorkflowAction {
