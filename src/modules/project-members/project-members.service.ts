@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 
 type CurrentUser = {
   id: string;
@@ -15,7 +16,7 @@ type AddProjectMemberInput = {
 
 export class ProjectMembersService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "projects.view_all");
   }
 
   private async getProjectAccessData(projectId: string) {
@@ -62,7 +63,14 @@ export class ProjectMembersService {
   private async ensureCanManage(projectId: string, user: CurrentUser) {
     const project = await this.getProjectAccessData(projectId);
 
-    if (this.isPrivileged(user.role) || project.ownerId === user.id) {
+    if (permissionsService.hasPermission(user, "projects.edit_all")) {
+      return project;
+    }
+
+    if (
+      permissionsService.hasPermission(user, "projects.edit_own") &&
+      project.ownerId === user.id
+    ) {
       return project;
     }
 

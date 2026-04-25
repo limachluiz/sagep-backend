@@ -215,7 +215,12 @@ export class ServiceOrdersService {
     user: CurrentUser
   ) {
     if (permissionsService.hasPermission(user, "projects.edit_all")) return true;
-    if (project.ownerId === user.id) return true;
+    if (
+      permissionsService.hasPermission(user, "projects.edit_own") &&
+      project.ownerId === user.id
+    ) {
+      return true;
+    }
 
     const isMember = project.members.some((member) => member.userId === user.id);
     return isMember && user.role !== "CONSULTA";

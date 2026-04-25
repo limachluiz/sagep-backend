@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 
 type CurrentUser = {
   id: string;
@@ -215,11 +216,14 @@ export class TasksService {
   }
 
   private canManageProject(project: { ownerId: string; members: { userId: string }[] }, user: CurrentUser) {
-    if (this.isPrivileged(user.role)) {
+    if (permissionsService.hasPermission(user, "projects.edit_all")) {
       return true;
     }
 
-    if (project.ownerId === user.id) {
+    if (
+      permissionsService.hasPermission(user, "projects.edit_own") &&
+      project.ownerId === user.id
+    ) {
       return true;
     }
 
@@ -346,11 +350,14 @@ export class TasksService {
   private async ensureCanManage(taskId: string, user: CurrentUser) {
     const task = await this.getTaskAccessData(taskId);
 
-    if (this.isPrivileged(user.role)) {
+    if (permissionsService.hasPermission(user, "projects.edit_all")) {
       return task;
     }
 
-    if (task.project.ownerId === user.id) {
+    if (
+      permissionsService.hasPermission(user, "projects.edit_own") &&
+      task.project.ownerId === user.id
+    ) {
       return task;
     }
 
@@ -589,11 +596,13 @@ export class TasksService {
   async updateStatus(taskId: string, data: UpdateTaskStatusInput, user: CurrentUser) {
     const taskAccess = await this.getTaskAccessData(taskId);
 
-    const canManage = this.isPrivileged(user.role)
-      || taskAccess.project.ownerId === user.id
-      || taskAccess.project.members.some((member) => member.userId === user.id && user.role !== "CONSULTA");
+    const canManage =
+      permissionsService.hasPermission(user, "projects.edit_all") ||
+      (permissionsService.hasPermission(user, "projects.edit_own") &&
+        taskAccess.project.ownerId === user.id) ||
+      taskAccess.project.members.some((member) => member.userId === user.id && user.role !== "CONSULTA");
 
-    const isAssignee = taskAccess.assigneeId === user.id;
+    const isAssignee = taskAccess.assigneeId === user.id && user.role !== "CONSULTA";
 
     if (!canManage && !isAssignee) {
       throw new AppError("Você não tem permissão para alterar o status desta tarefa", 403);

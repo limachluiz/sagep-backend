@@ -292,7 +292,10 @@ export class DiexService {
       return true;
     }
 
-    if (project.ownerId === user.id) {
+    if (
+      permissionsService.hasPermission(user, "projects.edit_own") &&
+      project.ownerId === user.id
+    ) {
       return true;
     }
 

@@ -51,7 +51,7 @@ const rolePermissions: Record<string, Permission[]> = {
     "service_orders.issue",
     "reports.export",
   ],
-  CONSULTA: ["projects.edit_own"],
+  CONSULTA: [],
 };
 
 export class PermissionsService {
