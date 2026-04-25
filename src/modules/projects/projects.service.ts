@@ -306,6 +306,7 @@ export class ProjectsService {
   }
 
   private buildPendingActions(project: {
+    status?: string | null;
     stage: ProjectStageValue;
     creditNoteNumber?: string | null;
     creditNoteReceivedAt?: Date | null;
@@ -331,6 +332,8 @@ export class ProjectsService {
     const openTasksCount = project.tasks.filter(
       (task) => task.status !== "CONCLUIDA" && task.status !== "CANCELADA",
     ).length;
+    const isProjectCompleted =
+      project.status === "CONCLUIDO" || project.stage === "SERVICO_CONCLUIDO";
 
     if (!hasFinalizedEstimate) {
       pendingActions.push({
@@ -458,7 +461,13 @@ export class ProjectsService {
       }
     }
 
-    if (openTasksCount > 0) {
+    if (openTasksCount > 0 && isProjectCompleted) {
+      pendingActions.push({
+        code: "TAREFAS_ABERTAS_POS_CONCLUSAO",
+        label: `Projeto concluído com ${openTasksCount} tarefa(s) aberta(s)`,
+        severity: "WARNING",
+      });
+    } else if (openTasksCount > 0) {
       pendingActions.push({
         code: "RESOLVER_TAREFAS_ABERTAS",
         label: `Resolver ${openTasksCount} tarefa(s) aberta(s)`,
