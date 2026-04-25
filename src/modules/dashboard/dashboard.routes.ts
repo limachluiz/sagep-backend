@@ -8,4 +8,6 @@ const controller = new DashboardController();
 
 dashboardRoutes.use(authMiddleware, requireRole("ADMIN", "GESTOR", "CONSULTA", "PROJETISTA"));
 
+dashboardRoutes.get("/operational", (req, res) => controller.operational(req, res));
+dashboardRoutes.get("/executive", (req, res) => controller.executive(req, res));
 dashboardRoutes.get("/", (req, res) => controller.overview(req, res));

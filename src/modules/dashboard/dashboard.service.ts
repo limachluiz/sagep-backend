@@ -1,5 +1,16 @@
 import { prisma } from "../../config/prisma.js";
-import type { DashboardOverviewQuery } from "./dashboard.schemas.js";
+import { OperationalAlertsService } from "../operational-alerts/operational-alerts.service.js";
+import { workflowService } from "../workflow/workflow.service.js";
+import type {
+  DashboardExecutiveQuery,
+  DashboardOperationalQuery,
+  DashboardOverviewQuery,
+} from "./dashboard.schemas.js";
+
+type CurrentUser = {
+  id: string;
+  role: string;
+};
 
 type DashboardPeriodType = "month" | "quarter" | "semester" | "year";
 
@@ -432,7 +443,26 @@ function getProjectSnapshotAsOf(
   };
 }
 
+const operationalAlertsService = new OperationalAlertsService();
+
 export class DashboardService {
+  private isPrivileged(role: string) {
+    return role === "ADMIN" || role === "GESTOR";
+  }
+
+  private getProjectAccessWhere(user: CurrentUser) {
+    if (this.isPrivileged(user.role)) {
+      return {};
+    }
+
+    return {
+      OR: [
+        { ownerId: user.id },
+        { members: { some: { userId: user.id } } },
+      ],
+    };
+  }
+
   async overview(filters: DashboardOverviewQuery = {}) {
     const filterContext = buildFilterContext(filters);
 
@@ -936,4 +966,345 @@ export class DashboardService {
       },
     };
   }
+
+  async operational(filters: DashboardOperationalQuery = {}, user: CurrentUser) {
+    const staleDays = filters.staleDays ?? 15;
+    const limit = filters.limit ?? 100;
+    const alerts = await operationalAlertsService.list({ staleDays, limit }, user);
+
+    const [projects, latestMovements] = await Promise.all([
+      prisma.project.findMany({
+        where: {
+          AND: [
+            this.getProjectAccessWhere(user),
+            {
+              deletedAt: null,
+              stage: {
+                notIn: ["SERVICO_CONCLUIDO", "CANCELADO"],
+              },
+            },
+          ],
+        },
+        select: {
+          id: true,
+          projectCode: true,
+          title: true,
+          status: true,
+          stage: true,
+          updatedAt: true,
+          creditNoteNumber: true,
+          creditNoteReceivedAt: true,
+          diexNumber: true,
+          diexIssuedAt: true,
+          commitmentNoteNumber: true,
+          commitmentNoteReceivedAt: true,
+          serviceOrderNumber: true,
+          serviceOrderIssuedAt: true,
+          executionStartedAt: true,
+          asBuiltReceivedAt: true,
+          invoiceAttestedAt: true,
+          serviceCompletedAt: true,
+          owner: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+        orderBy: {
+          updatedAt: "asc",
+        },
+        take: limit,
+      }),
+      prisma.auditLog.findMany({
+        where: {
+          entityType: {
+            in: ["PROJECT", "DIEX_REQUEST", "SERVICE_ORDER"],
+          },
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        take: 20,
+      }),
+    ]);
+
+    const nextActionCounts = new Map<string, number>();
+    const queue = projects.map((project) => {
+      const nextAction = workflowService.getNextAction({
+        id: project.id,
+        projectCode: project.projectCode,
+        stage: project.stage,
+        creditNoteNumber: project.creditNoteNumber,
+        creditNoteReceivedAt: project.creditNoteReceivedAt,
+        diexNumber: project.diexNumber,
+        diexIssuedAt: project.diexIssuedAt,
+        commitmentNoteNumber: project.commitmentNoteNumber,
+        commitmentNoteReceivedAt: project.commitmentNoteReceivedAt,
+        serviceOrderNumber: project.serviceOrderNumber,
+        serviceOrderIssuedAt: project.serviceOrderIssuedAt,
+        executionStartedAt: project.executionStartedAt,
+        asBuiltReceivedAt: project.asBuiltReceivedAt,
+        invoiceAttestedAt: project.invoiceAttestedAt,
+        serviceCompletedAt: project.serviceCompletedAt,
+      });
+
+      incrementMap(nextActionCounts, nextAction.code);
+
+      return {
+        id: project.id,
+        projectCode: project.projectCode,
+        title: project.title,
+        status: project.status,
+        stage: project.stage,
+        updatedAt: project.updatedAt,
+        owner: project.owner,
+        nextAction,
+        detailsPath: `/api/projects/${project.id}/details`,
+      };
+    });
+
+    return {
+      generatedAt: new Date().toISOString(),
+      filters: {
+        staleDays,
+        limit,
+      },
+      alerts: {
+        summary: alerts.summary,
+        bySeverity: alerts.groups.bySeverity,
+        byCategory: alerts.groups.byCategory,
+        items: alerts.alerts.slice(0, limit),
+      },
+      staleProjects: alerts.groups.byCategory.SEM_AVANCO,
+      pendingByStage: {
+        awaitingCreditNote: alerts.groups.byCategory.AGUARDANDO_NOTA_CREDITO.length,
+        awaitingDiex: alerts.groups.byCategory.AGUARDANDO_DIEX.length,
+        awaitingCommitmentNote: alerts.groups.byCategory.AGUARDANDO_NOTA_EMPENHO.length,
+        awaitingServiceOrder: alerts.groups.byCategory.AGUARDANDO_ORDEM_SERVICO.length,
+        awaitingExecutionStart: alerts.groups.byCategory.AGUARDANDO_INICIO_EXECUCAO.length,
+        awaitingAsBuilt: alerts.groups.byCategory.AGUARDANDO_AS_BUILT.length,
+        awaitingInvoiceAttestation: alerts.groups.byCategory.AGUARDANDO_ATESTO_NF.length,
+      },
+      operationalQueue: queue,
+      frequentNextActions: mapCounts(nextActionCounts),
+      latestMovements: latestMovements.map((item) => ({
+        id: item.id,
+        entityType: item.entityType,
+        entityId: item.entityId,
+        action: item.action,
+        summary: item.summary,
+        actorName: item.actorName,
+        at: item.createdAt,
+      })),
+    };
+  }
+
+  async executive(filters: DashboardExecutiveQuery = {}) {
+    const filterContext = buildFilterContext(filters);
+    const [projects, estimates, diexRequests, serviceOrders] = await Promise.all([
+      prisma.project.findMany({
+        select: {
+          id: true,
+          projectCode: true,
+          title: true,
+          status: true,
+          stage: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: {
+          projectCode: "asc",
+        },
+      }),
+      prisma.estimate.findMany({
+        select: {
+          id: true,
+          estimateCode: true,
+          status: true,
+          totalAmount: true,
+          omName: true,
+          destinationCityName: true,
+          destinationStateUf: true,
+          createdAt: true,
+          project: {
+            select: {
+              id: true,
+              projectCode: true,
+              title: true,
+              stage: true,
+              status: true,
+            },
+          },
+          ata: {
+            select: {
+              type: true,
+            },
+          },
+        },
+      }),
+      prisma.diexRequest.findMany({
+        select: {
+          id: true,
+          totalAmount: true,
+          createdAt: true,
+          issuedAt: true,
+          diexNumber: true,
+        },
+      }),
+      prisma.serviceOrder.findMany({
+        select: {
+          id: true,
+          totalAmount: true,
+          createdAt: true,
+          issuedAt: true,
+          serviceOrderNumber: true,
+        },
+      }),
+    ]);
+
+    const scopedProjects = filterByScope(projects, (project) => project.createdAt, filterContext);
+    const scopedEstimates = filterByScope(
+      estimates,
+      (estimate) => estimate.createdAt,
+      filterContext,
+    );
+    const scopedDiex = filterByScope(
+      diexRequests,
+      (diex) => diex.issuedAt ?? diex.createdAt,
+      filterContext,
+    );
+    const scopedServiceOrders = filterByScope(
+      serviceOrders,
+      (serviceOrder) => serviceOrder.issuedAt ?? serviceOrder.createdAt,
+      filterContext,
+    );
+
+    const totalEstimatedAmount = scopedEstimates.reduce(
+      (sum, estimate) => sum + toNumber(estimate.totalAmount),
+      0,
+    );
+    const totalWithDiex = scopedDiex.reduce(
+      (sum, diex) => sum + toNumber(diex.totalAmount),
+      0,
+    );
+    const totalWithServiceOrder = scopedServiceOrders.reduce(
+      (sum, serviceOrder) => sum + toNumber(serviceOrder.totalAmount),
+      0,
+    );
+    const finalizedEstimates = scopedEstimates.filter(
+      (estimate) => estimate.status === "FINALIZADA",
+    );
+
+    return {
+      generatedAt: new Date().toISOString(),
+      filter: {
+        mode: filterContext.mode,
+        label: filterContext.label,
+        periodType: filterContext.periodType,
+        referenceDate: serializeDate(filterContext.referenceDate),
+        startDate: serializeDate(filterContext.startDate),
+        endDate: serializeDate(filterContext.endDate),
+        asOfDate: serializeDate(filterContext.asOfDate),
+      },
+      summary: {
+        projectsTotal: scopedProjects.length,
+        projectsOpen: scopedProjects.filter(
+          (project) => project.status !== "CONCLUIDO" && project.stage !== "CANCELADO",
+        ).length,
+        projectsCompleted: scopedProjects.filter(
+          (project) => project.status === "CONCLUIDO" || project.stage === "SERVICO_CONCLUIDO",
+        ).length,
+        projectsCanceled: scopedProjects.filter(
+          (project) => project.status === "CANCELADO" || project.stage === "CANCELADO",
+        ).length,
+        estimatesTotal: scopedEstimates.length,
+        estimatesFinalized: finalizedEstimates.length,
+        diexIssued: scopedDiex.filter((diex) => diex.diexNumber && diex.issuedAt).length,
+        serviceOrdersIssued: scopedServiceOrders.length,
+        totalEstimatedAmount: formatAmount(totalEstimatedAmount),
+        totalFinalizedEstimatedAmount: formatAmount(
+          finalizedEstimates.reduce(
+            (sum, estimate) => sum + toNumber(estimate.totalAmount),
+            0,
+          ),
+        ),
+        totalWithDiex: formatAmount(totalWithDiex),
+        totalWithServiceOrder: formatAmount(totalWithServiceOrder),
+      },
+      projects: {
+        byStatus: aggregateCounts(scopedProjects, (project) => project.status),
+        byStage: STAGE_ORDER.map((stage) => ({
+          label: stage,
+          count: scopedProjects.filter((project) => project.stage === stage).length,
+          percentage: formatPercentage(
+            scopedProjects.filter((project) => project.stage === stage).length,
+            scopedProjects.length,
+          ),
+        })).filter((item) => item.count > 0),
+      },
+      financial: {
+        totalEstimatedAmount: formatAmount(totalEstimatedAmount),
+        totalWithDiex: formatAmount(totalWithDiex),
+        totalWithServiceOrder: formatAmount(totalWithServiceOrder),
+        byEstimateStatus: aggregateAmounts(
+          scopedEstimates,
+          (estimate) => estimate.status,
+          (estimate) => toNumber(estimate.totalAmount),
+        ),
+        byAtaType: aggregateAmounts(
+          scopedEstimates,
+          (estimate) => estimate.ata.type,
+          (estimate) => toNumber(estimate.totalAmount),
+        ),
+      },
+      distribution: {
+        byRegion: aggregateAmounts(
+          scopedEstimates,
+          (estimate) => estimate.destinationStateUf,
+          (estimate) => toNumber(estimate.totalAmount),
+        ),
+        byCity: aggregateAmounts(
+          scopedEstimates,
+          (estimate) => `${estimate.destinationCityName}/${estimate.destinationStateUf}`,
+          (estimate) => toNumber(estimate.totalAmount),
+        ).slice(0, 10),
+        byOm: aggregateAmounts(
+          scopedEstimates,
+          (estimate) => estimate.omName || "OM não informada",
+          (estimate) => toNumber(estimate.totalAmount),
+        ).slice(0, 10),
+        byAtaType: aggregateAmounts(
+          scopedEstimates,
+          (estimate) => estimate.ata.type,
+          (estimate) => toNumber(estimate.totalAmount),
+        ),
+      },
+      periodIndicators: {
+        projectsCreated: scopedProjects.length,
+        estimatesCreated: scopedEstimates.length,
+        diexIssued: scopedDiex.length,
+        serviceOrdersIssued: scopedServiceOrders.length,
+        averageEstimatedAmount:
+          scopedEstimates.length > 0
+            ? formatAmount(totalEstimatedAmount / scopedEstimates.length)
+            : "0.00",
+      },
+    };
+  }
+}
+
+function incrementMap(map: Map<string, number>, key: string) {
+  map.set(key, (map.get(key) ?? 0) + 1);
+}
+
+function mapCounts(map: Map<string, number>) {
+  return Array.from(map.entries())
+    .map(([label, count]) => ({ label, count }))
+    .sort((a, b) => {
+      const countDiff = b.count - a.count;
+      if (countDiff !== 0) return countDiff;
+      return a.label.localeCompare(b.label);
+    });
 }
