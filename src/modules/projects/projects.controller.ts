@@ -37,6 +37,12 @@ export class ProjectsController {
     return res.status(200).json(project);
   }
 
+  async details(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const details = await projectsService.getDetails(id, req.user!);
+    return res.status(200).json(details);
+  }
+
   async update(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
     const data = updateProjectSchema.parse(req.body);

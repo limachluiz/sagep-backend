@@ -64,6 +64,13 @@ type ListProjectsFilters = {
   search?: string;
 };
 
+type PendingAction = {
+  code: string;
+  label: string;
+  severity: "INFO" | "WARNING" | "BLOCKER";
+  targetStage?: ProjectStageValue;
+};
+
 const projectInclude = {
   owner: {
     select: {
@@ -283,6 +290,185 @@ export class ProjectsService {
     };
   }
 
+  private amountToNumber(value: { toString(): string } | string | number | null | undefined) {
+    if (value === null || value === undefined) {
+      return 0;
+    }
+
+    const parsed = Number(value.toString());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private sumAmounts(items: { totalAmount: { toString(): string } | string | number }[]) {
+    return items
+      .reduce((sum, item) => sum + this.amountToNumber(item.totalAmount), 0)
+      .toFixed(2);
+  }
+
+  private buildPendingActions(project: {
+    stage: ProjectStageValue;
+    creditNoteNumber?: string | null;
+    creditNoteReceivedAt?: Date | null;
+    diexNumber?: string | null;
+    diexIssuedAt?: Date | null;
+    commitmentNoteNumber?: string | null;
+    commitmentNoteReceivedAt?: Date | null;
+    serviceOrderNumber?: string | null;
+    serviceOrderIssuedAt?: Date | null;
+    executionStartedAt?: Date | null;
+    asBuiltReceivedAt?: Date | null;
+    invoiceAttestedAt?: Date | null;
+    serviceCompletedAt?: Date | null;
+    estimates: { status: string }[];
+    diexRequests: unknown[];
+    serviceOrders: unknown[];
+    tasks: { status: string }[];
+  }): PendingAction[] {
+    const pendingActions: PendingAction[] = [];
+    const hasFinalizedEstimate = project.estimates.some(
+      (estimate) => estimate.status === "FINALIZADA",
+    );
+    const openTasksCount = project.tasks.filter(
+      (task) => task.status !== "CONCLUIDA" && task.status !== "CANCELADA",
+    ).length;
+
+    if (!hasFinalizedEstimate) {
+      pendingActions.push({
+        code: "FINALIZAR_ESTIMATIVA",
+        label: "Finalizar pelo menos uma estimativa",
+        severity: "BLOCKER",
+        targetStage: "AGUARDANDO_NOTA_CREDITO",
+      });
+    }
+
+    if (
+      workflowService.isStageAtOrBeyond(project.stage, "AGUARDANDO_NOTA_CREDITO") &&
+      !project.creditNoteNumber &&
+      !project.creditNoteReceivedAt
+    ) {
+      pendingActions.push({
+        code: "INFORMAR_NOTA_CREDITO",
+        label: "Informar Nota de Crédito",
+        severity: project.stage === "AGUARDANDO_NOTA_CREDITO" ? "BLOCKER" : "WARNING",
+        targetStage: "DIEX_REQUISITORIO",
+      });
+    }
+
+    if (
+      workflowService.isStageAtOrBeyond(project.stage, "AGUARDANDO_NOTA_CREDITO") &&
+      hasFinalizedEstimate &&
+      project.diexRequests.length === 0
+    ) {
+      pendingActions.push({
+        code: "EMITIR_DIEX",
+        label: "Emitir DIEx requisitório",
+        severity: project.stage === "AGUARDANDO_NOTA_CREDITO" ? "BLOCKER" : "WARNING",
+        targetStage: "DIEX_REQUISITORIO",
+      });
+    }
+
+    if (
+      workflowService.isStageAtOrBeyond(project.stage, "DIEX_REQUISITORIO") &&
+      !project.diexNumber &&
+      !project.diexIssuedAt &&
+      project.diexRequests.length > 0
+    ) {
+      pendingActions.push({
+        code: "COMPLETAR_DADOS_DIEX",
+        label: "Completar número ou data do DIEx",
+        severity: "WARNING",
+        targetStage: "DIEX_REQUISITORIO",
+      });
+    }
+
+    if (
+      workflowService.isStageAtOrBeyond(project.stage, "DIEX_REQUISITORIO") &&
+      !project.commitmentNoteNumber &&
+      !project.commitmentNoteReceivedAt
+    ) {
+      pendingActions.push({
+        code: "INFORMAR_NOTA_EMPENHO",
+        label: "Informar Nota de Empenho",
+        severity: project.stage === "DIEX_REQUISITORIO" ? "BLOCKER" : "WARNING",
+        targetStage: "AGUARDANDO_NOTA_EMPENHO",
+      });
+    }
+
+    if (
+      workflowService.isStageAtOrBeyond(project.stage, "AGUARDANDO_NOTA_EMPENHO") &&
+      project.serviceOrders.length === 0
+    ) {
+      pendingActions.push({
+        code: "EMITIR_OS",
+        label: "Emitir Ordem de Serviço",
+        severity: project.stage === "AGUARDANDO_NOTA_EMPENHO" ? "BLOCKER" : "WARNING",
+        targetStage: "OS_LIBERADA",
+      });
+    }
+
+    if (
+      workflowService.isStageAtOrBeyond(project.stage, "OS_LIBERADA") &&
+      !project.serviceOrderNumber &&
+      !project.serviceOrderIssuedAt &&
+      project.serviceOrders.length > 0
+    ) {
+      pendingActions.push({
+        code: "COMPLETAR_DADOS_OS",
+        label: "Completar número ou data da Ordem de Serviço",
+        severity: "WARNING",
+        targetStage: "OS_LIBERADA",
+      });
+    }
+
+    if (project.stage === "OS_LIBERADA" && !project.executionStartedAt) {
+      pendingActions.push({
+        code: "INICIAR_EXECUCAO",
+        label: "Registrar início da execução",
+        severity: "BLOCKER",
+        targetStage: "SERVICO_EM_EXECUCAO",
+      });
+    }
+
+    if (project.stage === "SERVICO_EM_EXECUCAO" && !project.asBuiltReceivedAt) {
+      pendingActions.push({
+        code: "ANEXAR_AS_BUILT",
+        label: "Registrar recebimento do As-Built",
+        severity: "BLOCKER",
+        targetStage: "ANALISANDO_AS_BUILT",
+      });
+    }
+
+    if (project.stage === "ATESTAR_NF") {
+      if (!project.invoiceAttestedAt) {
+        pendingActions.push({
+          code: "ATESTAR_NF",
+          label: "Registrar atesto da NF",
+          severity: "BLOCKER",
+          targetStage: "SERVICO_CONCLUIDO",
+        });
+      }
+
+      if (!project.serviceCompletedAt) {
+        pendingActions.push({
+          code: "CONCLUIR_SERVICO",
+          label: "Registrar conclusão do serviço",
+          severity: "BLOCKER",
+          targetStage: "SERVICO_CONCLUIDO",
+        });
+      }
+    }
+
+    if (openTasksCount > 0) {
+      pendingActions.push({
+        code: "RESOLVER_TAREFAS_ABERTAS",
+        label: `Resolver ${openTasksCount} tarefa(s) aberta(s)`,
+        severity: "INFO",
+      });
+    }
+
+    return pendingActions;
+  }
+
   async create(data: CreateProjectInput, user: CurrentUser) {
     const project = await prisma.project.create({
       data: {
@@ -462,6 +648,224 @@ export class ProjectsService {
     }
 
     return project;
+  }
+
+  async getDetails(projectId: string, user: CurrentUser) {
+    await this.ensureCanView(projectId, user);
+
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        startDate: true,
+        endDate: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+        archivedAt: true,
+        deletedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        owner: {
+          select: {
+            id: true,
+            userCode: true,
+            name: true,
+            email: true,
+            role: true,
+          },
+        },
+        members: {
+          select: {
+            id: true,
+            role: true,
+            user: {
+              select: {
+                id: true,
+                userCode: true,
+                name: true,
+                email: true,
+                role: true,
+              },
+            },
+          },
+        },
+        tasks: {
+          select: {
+            id: true,
+            taskCode: true,
+            title: true,
+            status: true,
+            priority: true,
+            dueDate: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+        estimates: {
+          select: {
+            id: true,
+            estimateCode: true,
+            status: true,
+            destinationCityName: true,
+            destinationStateUf: true,
+            totalAmount: true,
+            createdAt: true,
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+        diexRequests: {
+          select: {
+            id: true,
+            diexCode: true,
+            diexNumber: true,
+            issuedAt: true,
+            documentStatus: true,
+            totalAmount: true,
+            supplierName: true,
+            createdAt: true,
+            estimate: {
+              select: {
+                id: true,
+                estimateCode: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+        serviceOrders: {
+          select: {
+            id: true,
+            serviceOrderCode: true,
+            serviceOrderNumber: true,
+            issuedAt: true,
+            documentStatus: true,
+            totalAmount: true,
+            contractorName: true,
+            createdAt: true,
+            estimate: {
+              select: {
+                id: true,
+                estimateCode: true,
+              },
+            },
+            diexRequest: {
+              select: {
+                id: true,
+                diexCode: true,
+                diexNumber: true,
+              },
+            },
+          },
+          orderBy: {
+            createdAt: "desc",
+          },
+        },
+        _count: {
+          select: {
+            members: true,
+            tasks: true,
+            estimates: true,
+            diexRequests: true,
+            serviceOrders: true,
+          },
+        },
+      },
+    });
+
+    if (!project) {
+      throw new AppError("Projeto nÃ£o encontrado", 404);
+    }
+
+    const workflowSnapshot = this.buildWorkflowSnapshot(project);
+    const nextAction = workflowService.getNextAction(workflowSnapshot);
+    const timeline = await auditService.listTimeline("PROJECT", project.id);
+    const finalizedEstimates = project.estimates.filter(
+      (estimate) => estimate.status === "FINALIZADA",
+    );
+    const openTasks = project.tasks.filter(
+      (task) => task.status !== "CONCLUIDA" && task.status !== "CANCELADA",
+    );
+
+    return {
+      project: {
+        id: project.id,
+        projectCode: project.projectCode,
+        title: project.title,
+        description: project.description,
+        owner: project.owner,
+        members: project.members,
+        startDate: project.startDate,
+        endDate: project.endDate,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        archivedAt: project.archivedAt,
+        deletedAt: project.deletedAt,
+      },
+      workflow: {
+        status: project.status,
+        stage: project.stage,
+        nextAction,
+        milestones: {
+          creditNoteNumber: project.creditNoteNumber,
+          creditNoteReceivedAt: project.creditNoteReceivedAt,
+          diexNumber: project.diexNumber,
+          diexIssuedAt: project.diexIssuedAt,
+          commitmentNoteNumber: project.commitmentNoteNumber,
+          commitmentNoteReceivedAt: project.commitmentNoteReceivedAt,
+          serviceOrderNumber: project.serviceOrderNumber,
+          serviceOrderIssuedAt: project.serviceOrderIssuedAt,
+          executionStartedAt: project.executionStartedAt,
+          asBuiltReceivedAt: project.asBuiltReceivedAt,
+          invoiceAttestedAt: project.invoiceAttestedAt,
+          serviceCompletedAt: project.serviceCompletedAt,
+        },
+      },
+      pendingActions: this.buildPendingActions(project),
+      timeline,
+      documents: {
+        estimates: project.estimates.slice(0, 5),
+        diexRequests: project.diexRequests.slice(0, 5),
+        serviceOrders: project.serviceOrders.slice(0, 5),
+      },
+      financialSummary: {
+        estimatesCount: project.estimates.length,
+        finalizedEstimatesCount: finalizedEstimates.length,
+        diexRequestsCount: project._count.diexRequests,
+        serviceOrdersCount: project._count.serviceOrders,
+        estimatedTotalAmount: this.sumAmounts(project.estimates),
+        finalizedEstimatedTotalAmount: this.sumAmounts(finalizedEstimates),
+        diexTotalAmount: this.sumAmounts(project.diexRequests),
+        serviceOrderTotalAmount: this.sumAmounts(project.serviceOrders),
+      },
+      operationalSummary: {
+        membersCount: project._count.members,
+        tasksCount: project._count.tasks,
+        openTasksCount: openTasks.length,
+        estimatesCount: project._count.estimates,
+        diexRequestsCount: project._count.diexRequests,
+        serviceOrdersCount: project._count.serviceOrders,
+      },
+    };
   }
 
   async findByCode(projectCode: number, user: CurrentUser) {
