@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
@@ -206,14 +207,14 @@ const serviceOrderInclude = {
 
 export class ServiceOrdersService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "projects.view_all");
   }
 
   private canManageProject(
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (this.isPrivileged(user.role)) return true;
+    if (permissionsService.hasPermission(user, "projects.edit_all")) return true;
     if (project.ownerId === user.id) return true;
 
     const isMember = project.members.some((member) => member.userId === user.id);
@@ -701,6 +702,10 @@ private buildWorkflowSnapshot(project: {
 }
 
   async create(data: CreateServiceOrderInput, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "service_orders.issue")) {
+      throw new AppError("Você não tem permissão para emitir Ordem de Serviço", 403);
+    }
+
     this.assertScheduleDates(data.plannedStartDate, data.plannedEndDate);
 
     const project = await this.resolveProject(data.projectId, data.projectCode);
@@ -1259,6 +1264,10 @@ private buildWorkflowSnapshot(project: {
   }
 
   async remove(serviceOrderId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "service_orders.cancel")) {
+      throw new AppError("Você não tem permissão para cancelar Ordem de Serviço", 403);
+    }
+
     const accessData = await this.ensureCanManage(serviceOrderId, user);
 
     if (!workflowService.isStageBefore(accessData.project.stage, "SERVICO_EM_EXECUCAO")) {

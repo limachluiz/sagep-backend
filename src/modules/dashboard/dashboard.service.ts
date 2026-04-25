@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { OperationalAlertsService } from "../operational-alerts/operational-alerts.service.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import type {
   DashboardExecutiveQuery,
@@ -447,7 +448,7 @@ const operationalAlertsService = new OperationalAlertsService();
 
 export class DashboardService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "projects.view_all");
   }
 
   private getProjectAccessWhere(user: CurrentUser) {

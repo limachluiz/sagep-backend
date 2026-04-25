@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
@@ -132,7 +133,7 @@ const diexInclude = {
 
 export class DiexService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "projects.view_all");
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -287,7 +288,7 @@ export class DiexService {
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (this.isPrivileged(user.role)) {
+    if (permissionsService.hasPermission(user, "projects.edit_all")) {
       return true;
     }
 
@@ -535,6 +536,10 @@ export class DiexService {
   }
 
   async create(data: CreateDiexInput, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "diex.issue")) {
+      throw new AppError("Você não tem permissão para emitir DIEx", 403);
+    }
+
     const project = await this.resolveProject(data.projectId, data.projectCode);
 
     workflowService.assertCanCreateDiex(this.buildWorkflowSnapshot(project));
@@ -963,6 +968,10 @@ export class DiexService {
   }
 
   async remove(diexId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "diex.cancel")) {
+      throw new AppError("Você não tem permissão para cancelar DIEx", 403);
+    }
+
     const accessData = await this.ensureCanManage(diexId, user);
 
     if (!workflowService.isStageBefore(accessData.project.stage, "AGUARDANDO_NOTA_EMPENHO")) {

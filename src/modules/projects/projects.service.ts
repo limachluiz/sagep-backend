@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
@@ -92,7 +93,7 @@ const projectInclude = {
 
 export class ProjectsService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "projects.view_all");
   }
 
   private async getProjectAccessData(projectId: string) {
@@ -192,7 +193,14 @@ export class ProjectsService {
   private async ensureCanManage(projectId: string, user: CurrentUser) {
     const project = await this.getProjectAccessData(projectId);
 
-    if (this.isPrivileged(user.role) || project.ownerId === user.id) {
+    if (permissionsService.hasPermission(user, "projects.edit_all")) {
+      return project;
+    }
+
+    if (
+      permissionsService.hasPermission(user, "projects.edit_own") &&
+      project.ownerId === user.id
+    ) {
       return project;
     }
 
@@ -1072,6 +1080,21 @@ export class ProjectsService {
 
     if (!currentProject) {
       throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (
+      data.stage === "SERVICO_CONCLUIDO" &&
+      !permissionsService.hasPermission(user, "projects.complete")
+    ) {
+      throw new AppError("Você não tem permissão para concluir projetos", 403);
+    }
+
+    if (
+      currentProject.stage === "SERVICO_CONCLUIDO" &&
+      data.stage !== "SERVICO_CONCLUIDO" &&
+      !permissionsService.hasPermission(user, "projects.reopen")
+    ) {
+      throw new AppError("Você não tem permissão para reabrir projetos", 403);
     }
 
     const finalizedEstimateCount = await prisma.estimate.count({

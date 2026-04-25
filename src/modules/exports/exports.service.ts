@@ -1,6 +1,7 @@
 import ExcelJS from "exceljs";
 import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
@@ -27,7 +28,7 @@ type ProjectExportFilters = {
 
 export class ExportsService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "projects.view_all");
   }
 
   private buildProjectWhere(filters: ProjectExportFilters, user: CurrentUser) {

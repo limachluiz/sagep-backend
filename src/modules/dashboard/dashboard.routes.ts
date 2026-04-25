@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { requireRole } from "../../middlewares/role.middleware.js";
 import { DashboardController } from "./dashboard.controller.js";
 
@@ -9,5 +10,11 @@ const controller = new DashboardController();
 dashboardRoutes.use(authMiddleware, requireRole("ADMIN", "GESTOR", "CONSULTA", "PROJETISTA"));
 
 dashboardRoutes.get("/operational", (req, res) => controller.operational(req, res));
-dashboardRoutes.get("/executive", (req, res) => controller.executive(req, res));
-dashboardRoutes.get("/", (req, res) => controller.overview(req, res));
+dashboardRoutes.get(
+  "/executive",
+  requirePermission("dashboard.financial_view"),
+  (req, res) => controller.executive(req, res),
+);
+dashboardRoutes.get("/", requirePermission("dashboard.financial_view"), (req, res) =>
+  controller.overview(req, res),
+);
