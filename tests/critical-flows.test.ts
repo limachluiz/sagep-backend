@@ -3,6 +3,7 @@ import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/config/prisma.js";
+import { hashToken } from "../src/shared/auth-tokens.js";
 
 const password = "123456";
 
@@ -217,25 +218,93 @@ describe("critical flows", () => {
     expect(adminAuth.accessToken).toBeTruthy();
     expect(adminAuth.refreshToken).toBeTruthy();
 
-    await new Promise((resolve) => setTimeout(resolve, 1100));
+    const loggedUser = await prisma.user.findUnique({
+      where: { id: admin.id },
+      select: { lastLoginAt: true },
+    });
+    expect(loggedUser?.lastLoginAt).toBeInstanceOf(Date);
+
+    const loginAudit = await prisma.auditLog.findFirst({
+      where: { action: "LOGIN", actorUserId: admin.id },
+      orderBy: { createdAt: "desc" },
+    });
+    const loginMetadata = loginAudit?.metadata as Record<string, unknown>;
+    expect(loginMetadata.email).toBe(admin.email);
+    expect(loginMetadata.role).toBe("ADMIN");
+    expect(loginMetadata.refreshTokenId).toBeTruthy();
 
     const refreshed = await request(app)
       .post("/api/auth/refresh")
+      .set("User-Agent", "sagep-test-agent")
       .send({ refreshToken: adminAuth.refreshToken })
       .expect(200);
 
     expect(refreshed.body.accessToken).toBeTruthy();
     expect(refreshed.body.refreshToken).toBeTruthy();
+    expect(refreshed.body.refreshToken).not.toBe(adminAuth.refreshToken);
+
+    const rotatedToken = await prisma.refreshToken.findUnique({
+      where: { tokenHash: hashToken(adminAuth.refreshToken) },
+    });
+    expect(rotatedToken?.lastUsedAt).toBeInstanceOf(Date);
+    expect(rotatedToken?.revokedReason).toBe("ROTATED");
+    expect(rotatedToken?.revokedByUserId).toBeNull();
+
+    const refreshAudit = await prisma.auditLog.findFirst({
+      where: { action: "TOKEN_REFRESH", actorUserId: admin.id },
+      orderBy: { createdAt: "desc" },
+    });
+    const refreshMetadata = refreshAudit?.metadata as Record<string, unknown>;
+    expect(refreshMetadata.oldRefreshTokenId).toBe(rotatedToken?.id);
+    expect(refreshMetadata.newRefreshTokenId).toBeTruthy();
+    expect(refreshMetadata.userAgent).toBe("sagep-test-agent");
 
     await request(app)
       .post("/api/auth/logout")
+      .set("User-Agent", "sagep-test-agent")
       .send({ refreshToken: refreshed.body.refreshToken })
       .expect(200);
+
+    const loggedOutToken = await prisma.refreshToken.findUnique({
+      where: { tokenHash: hashToken(refreshed.body.refreshToken) },
+    });
+    expect(loggedOutToken?.revokedReason).toBe("LOGOUT");
+    expect(loggedOutToken?.revokedByUserId).toBe(admin.id);
+
+    const logoutAudit = await prisma.auditLog.findFirst({
+      where: { action: "LOGOUT", actorUserId: admin.id },
+      orderBy: { createdAt: "desc" },
+    });
+    const logoutMetadata = logoutAudit?.metadata as Record<string, unknown>;
+    expect(logoutMetadata.refreshTokenId).toBe(loggedOutToken?.id);
+    expect(logoutMetadata.revokedReason).toBe("LOGOUT");
+    expect(logoutMetadata.alreadyRevoked).toBe(false);
 
     await request(app)
       .post("/api/auth/refresh")
       .send({ refreshToken: refreshed.body.refreshToken })
       .expect(401);
+  });
+
+  it("auth: records failed login without exposing sensitive token data", async () => {
+    await request(app)
+      .post("/api/auth/login")
+      .set("User-Agent", "sagep-test-agent")
+      .send({ email: admin.email, password: "senha-errada" })
+      .expect(401);
+
+    const failedLoginAudit = await prisma.auditLog.findFirst({
+      where: { action: "LOGIN_FAILED", actorUserId: admin.id },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const metadata = failedLoginAudit?.metadata as Record<string, unknown>;
+    expect(metadata.email).toBe(admin.email);
+    expect(metadata.reason).toBe("INVALID_PASSWORD");
+    expect(metadata.userAgent).toBe("sagep-test-agent");
+    expect(metadata.password).toBeUndefined();
+    expect(metadata.token).toBeUndefined();
+    expect(metadata.tokenHash).toBeUndefined();
   });
 
   it("projects: create, updateFlow and details", async () => {

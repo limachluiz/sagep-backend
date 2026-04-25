@@ -18,6 +18,7 @@ export type AuditActionType =
   | "FINALIZE"
   | "CANCEL"
   | "LOGIN"
+  | "LOGIN_FAILED"
   | "LOGOUT"
   | "TOKEN_REFRESH";
 

@@ -21,14 +21,45 @@ type LoginInput = {
   password: string;
 };
 
+type AuthRequestContext = {
+  ipAddress?: string;
+  userAgent?: string;
+};
+
 export class AuthService {
+  private async logFailedLogin(
+    email: string,
+    reason: "USER_NOT_FOUND" | "INVALID_PASSWORD" | "USER_INACTIVE",
+    context?: AuthRequestContext,
+    user?: { id: string; name: string | null },
+  ) {
+    await auditService.log({
+      entityType: "AUTH",
+      entityId: user?.id ?? "LOGIN_FAILED",
+      action: "LOGIN_FAILED",
+      actor: user
+        ? {
+            id: user.id,
+            name: user.name,
+          }
+        : undefined,
+      summary: `Falha de login para ${email}`,
+      metadata: {
+        email,
+        reason,
+        ipAddress: context?.ipAddress ?? null,
+        userAgent: context?.userAgent ?? null,
+      },
+    });
+  }
+
   async register(data: RegisterInput) {
     const userExists = await prisma.user.findUnique({
       where: { email: data.email },
     });
 
     if (userExists) {
-      throw new AppError("Já existe um usuário com este e-mail", 409);
+      throw new AppError("J\u00e1 existe um usu\u00e1rio com este e-mail", 409);
     }
 
     const passwordHash = await bcrypt.hash(data.password, 10);
@@ -54,23 +85,26 @@ export class AuthService {
     return user;
   }
 
-  async login(data: LoginInput) {
+  async login(data: LoginInput, context?: AuthRequestContext) {
     const user = await prisma.user.findUnique({
       where: { email: data.email },
     });
 
     if (!user) {
-      throw new AppError("E-mail ou senha inválidos", 401);
+      await this.logFailedLogin(data.email, "USER_NOT_FOUND", context);
+      throw new AppError("E-mail ou senha inv\u00e1lidos", 401);
     }
 
     const passwordMatches = await bcrypt.compare(data.password, user.passwordHash);
 
     if (!passwordMatches) {
-      throw new AppError("E-mail ou senha inválidos", 401);
+      await this.logFailedLogin(data.email, "INVALID_PASSWORD", context, user);
+      throw new AppError("E-mail ou senha inv\u00e1lidos", 401);
     }
 
     if (!user.active) {
-      throw new AppError("Usuário inativo", 403);
+      await this.logFailedLogin(data.email, "USER_INACTIVE", context, user);
+      throw new AppError("Usu\u00e1rio inativo", 403);
     }
 
     const accessToken = generateAccessToken(
@@ -89,12 +123,22 @@ export class AuthService {
       user.id,
     );
 
-    await prisma.refreshToken.create({
-      data: {
-        userId: user.id,
-        tokenHash: hashToken(refreshToken),
-        expiresAt: getRefreshTokenExpirationDate(),
-      },
+    const loginAt = new Date();
+    const storedRefreshToken = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { lastLoginAt: loginAt },
+      });
+
+      return tx.refreshToken.create({
+        data: {
+          userId: user.id,
+          tokenHash: hashToken(refreshToken),
+          expiresAt: getRefreshTokenExpirationDate(),
+          createdIpAddress: context?.ipAddress,
+          createdUserAgent: context?.userAgent,
+        },
+      });
     });
 
     await auditService.log({
@@ -109,6 +153,9 @@ export class AuthService {
       metadata: {
         email: user.email,
         role: user.role,
+        refreshTokenId: storedRefreshToken.id,
+        ipAddress: context?.ipAddress ?? null,
+        userAgent: context?.userAgent ?? null,
       },
     });
 
@@ -129,7 +176,7 @@ export class AuthService {
     };
   }
 
-  async refresh(refreshToken: string) {
+  async refresh(refreshToken: string, context?: AuthRequestContext) {
     verifyRefreshToken(refreshToken);
 
     const tokenHash = hashToken(refreshToken);
@@ -142,7 +189,7 @@ export class AuthService {
     });
 
     if (!storedToken) {
-      throw new AppError("Refresh token inválido", 401);
+      throw new AppError("Refresh token inv\u00e1lido", 401);
     }
 
     if (storedToken.revokedAt) {
@@ -154,13 +201,8 @@ export class AuthService {
     }
 
     if (!storedToken.user.active) {
-      throw new AppError("Usuário inativo", 401);
+      throw new AppError("Usu\u00e1rio inativo", 401);
     }
-
-    await prisma.refreshToken.update({
-      where: { id: storedToken.id },
-      data: { revokedAt: new Date() },
-    });
 
     const newAccessToken = generateAccessToken(
       {
@@ -178,12 +220,27 @@ export class AuthService {
       storedToken.user.id,
     );
 
-    await prisma.refreshToken.create({
-      data: {
-        userId: storedToken.user.id,
-        tokenHash: hashToken(newRefreshToken),
-        expiresAt: getRefreshTokenExpirationDate(),
-      },
+    const now = new Date();
+    const newStoredRefreshToken = await prisma.$transaction(async (tx) => {
+      await tx.refreshToken.update({
+        where: { id: storedToken.id },
+        data: {
+          lastUsedAt: now,
+          revokedAt: now,
+          revokedReason: "ROTATED",
+          revokedByUserId: null,
+        },
+      });
+
+      return tx.refreshToken.create({
+        data: {
+          userId: storedToken.user.id,
+          tokenHash: hashToken(newRefreshToken),
+          expiresAt: getRefreshTokenExpirationDate(),
+          createdIpAddress: context?.ipAddress,
+          createdUserAgent: context?.userAgent,
+        },
+      });
     });
 
     await auditService.log({
@@ -198,6 +255,9 @@ export class AuthService {
       metadata: {
         email: storedToken.user.email,
         oldRefreshTokenId: storedToken.id,
+        newRefreshTokenId: newStoredRefreshToken.id,
+        ipAddress: context?.ipAddress ?? null,
+        userAgent: context?.userAgent ?? null,
       },
     });
 
@@ -207,36 +267,52 @@ export class AuthService {
     };
   }
 
-  async logout(refreshToken: string) {
+  async logout(refreshToken: string, context?: AuthRequestContext) {
     const tokenHash = hashToken(refreshToken);
 
     const storedToken = await prisma.refreshToken.findUnique({
       where: { tokenHash },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
     });
 
     if (!storedToken) {
       return { message: "Logout realizado com sucesso" };
     }
 
-    await prisma.refreshToken.update({
-      where: { id: storedToken.id },
-      data: { revokedAt: new Date() },
-    });
+    const alreadyRevoked = Boolean(storedToken.revokedAt);
+    const revokedReason = storedToken.revokedReason ?? "LOGOUT";
 
-    const actor = await prisma.user.findUnique({
-      where: { id: storedToken.userId },
-      select: { id: true, name: true, email: true },
-    });
+    if (!alreadyRevoked) {
+      await prisma.refreshToken.update({
+        where: { id: storedToken.id },
+        data: {
+          revokedAt: new Date(),
+          revokedReason: "LOGOUT",
+          revokedByUserId: storedToken.userId,
+        },
+      });
+    }
 
     await auditService.log({
       entityType: "AUTH",
       entityId: storedToken.userId,
       action: "LOGOUT",
       actor: {
-        id: actor?.id,
-        name: actor?.name,
+        id: storedToken.user?.id,
+        name: storedToken.user?.name,
       },
-      summary: `Logout realizado${actor?.email ? ` por ${actor.email}` : ""}`,
+      summary: `Logout realizado${storedToken.user?.email ? ` por ${storedToken.user.email}` : ""}`,
+      metadata: {
+        refreshTokenId: storedToken.id,
+        revokedReason,
+        ipAddress: context?.ipAddress ?? null,
+        userAgent: context?.userAgent ?? null,
+        alreadyRevoked,
+      },
     });
 
     return { message: "Logout realizado com sucesso" };
@@ -259,7 +335,7 @@ export class AuthService {
     });
 
     if (!user) {
-      throw new AppError("Usuário não encontrado", 404);
+      throw new AppError("Usu\u00e1rio n\u00e3o encontrado", 404);
     }
 
     return user;

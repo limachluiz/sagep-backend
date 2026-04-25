@@ -88,8 +88,17 @@ enum AuditActionType {
   FINALIZE
   CANCEL
   LOGIN
+  LOGIN_FAILED
   LOGOUT
   TOKEN_REFRESH
+}
+
+enum RefreshTokenRevocationReason {
+  LOGOUT
+  ROTATED
+  EXPIRED
+  ADMIN_REVOKED
+  SECURITY
 }
 
 model User {
@@ -107,6 +116,7 @@ model User {
   auditLogs AuditLog[]
   assignedTasks Task[]          @relation("TaskAssignee")
   refreshTokens RefreshToken[]
+  lastLoginAt   DateTime?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 }
@@ -439,13 +449,18 @@ model ServiceOrderDeliveredDocument {
 }
 
 model RefreshToken {
-  id        String    @id @default(cuid())
-  userId    String
-  tokenHash String    @unique
-  expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  id               String                        @id @default(cuid())
+  userId           String
+  tokenHash        String                        @unique
+  expiresAt        DateTime
+  createdIpAddress String?
+  createdUserAgent String?
+  lastUsedAt       DateTime?
+  revokedAt        DateTime?
+  revokedReason    RefreshTokenRevocationReason?
+  revokedByUserId  String?
+  createdAt        DateTime                      @default(now())
+  updatedAt        DateTime                      @updatedAt
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
