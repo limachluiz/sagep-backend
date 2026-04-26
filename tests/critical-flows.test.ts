@@ -14,29 +14,26 @@ type TestUser = {
 };
 
 async function resetDatabase() {
-  await prisma.$executeRawUnsafe(`
-    TRUNCATE TABLE
-      "AuditLog",
-      "RefreshToken",
-      "ServiceOrderDeliveredDocument",
-      "ServiceOrderScheduleItem",
-      "ServiceOrderItem",
-      "ServiceOrder",
-      "DiexRequestItem",
-      "DiexRequest",
-      "EstimateItem",
-      "Estimate",
-      "Task",
-      "ProjectMember",
-      "Project",
-      "AtaItem",
-      "AtaCoverageLocality",
-      "AtaCoverageGroup",
-      "Ata",
-      "MilitaryOrganization",
-      "User"
-    RESTART IDENTITY CASCADE;
-  `);
+  // Keep reset sequential to avoid lock/ordering issues with the pg adapter.
+  await prisma.auditLog.deleteMany();
+  await prisma.refreshToken.deleteMany();
+  await prisma.serviceOrderDeliveredDocument.deleteMany();
+  await prisma.serviceOrderScheduleItem.deleteMany();
+  await prisma.serviceOrderItem.deleteMany();
+  await prisma.serviceOrder.deleteMany();
+  await prisma.diexRequestItem.deleteMany();
+  await prisma.diexRequest.deleteMany();
+  await prisma.estimateItem.deleteMany();
+  await prisma.estimate.deleteMany();
+  await prisma.task.deleteMany();
+  await prisma.projectMember.deleteMany();
+  await prisma.project.deleteMany();
+  await prisma.ataItem.deleteMany();
+  await prisma.ataCoverageLocality.deleteMany();
+  await prisma.ataCoverageGroup.deleteMany();
+  await prisma.ata.deleteMany();
+  await prisma.militaryOrganization.deleteMany();
+  await prisma.user.deleteMany();
 }
 
 async function createUser(
