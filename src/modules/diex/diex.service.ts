@@ -65,6 +65,7 @@ type ListDiexFilters = {
   projectCode?: number;
   estimateCode?: number;
   search?: string;
+  includeArchived?: boolean;
 };
 
 const diexInclude = {
@@ -132,6 +133,21 @@ const diexInclude = {
 } satisfies Prisma.DiexRequestInclude;
 
 export class DiexService {
+  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.DiexRequestWhereInput {
+    if (includeArchived) {
+      return { deletedAt: null };
+    }
+
+    return {
+      archivedAt: null,
+      deletedAt: null,
+    };
+  }
+
+  private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
+    return Boolean(includeArchived && this.isPrivileged(user.role));
+  }
+
   private isPrivileged(role: string) {
     return permissionsService.hasPermission({ role }, "projects.view_all");
   }
@@ -148,6 +164,8 @@ export class DiexService {
           stage: true,
           creditNoteNumber: true,
           creditNoteReceivedAt: true,
+          archivedAt: true,
+          deletedAt: true,
           members: {
             select: {
               userId: true,
@@ -156,7 +174,7 @@ export class DiexService {
         },
       });
 
-      if (!project) {
+      if (!project || project.deletedAt || project.archivedAt) {
         throw new AppError("Projeto não encontrado", 404);
       }
 
@@ -178,6 +196,8 @@ export class DiexService {
           stage: true,
           creditNoteNumber: true,
           creditNoteReceivedAt: true,
+          archivedAt: true,
+          deletedAt: true,
           members: {
             select: {
               userId: true,
@@ -186,7 +206,7 @@ export class DiexService {
         },
       });
 
-      if (!project) {
+      if (!project || project.deletedAt || project.archivedAt) {
         throw new AppError("Projeto não encontrado", 404);
       }
 
@@ -325,6 +345,8 @@ export class DiexService {
       select: {
         id: true,
         diexCode: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -340,7 +362,7 @@ export class DiexService {
       },
     });
 
-    if (!diex) {
+    if (!diex || diex.deletedAt || diex.archivedAt) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
@@ -353,6 +375,8 @@ export class DiexService {
       select: {
         id: true,
         diexCode: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -368,7 +392,7 @@ export class DiexService {
       },
     });
 
-    if (!diex) {
+    if (!diex || diex.deletedAt || diex.archivedAt) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
@@ -712,7 +736,10 @@ export class DiexService {
   }
 
   async list(filters: ListDiexFilters, user: CurrentUser) {
-    const andConditions: Prisma.DiexRequestWhereInput[] = [];
+    const includeArchived = this.canIncludeArchived(user, filters.includeArchived);
+    const andConditions: Prisma.DiexRequestWhereInput[] = [
+      this.buildArchiveVisibilityWhere(includeArchived),
+    ];
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -794,7 +821,7 @@ export class DiexService {
       include: diexInclude,
     });
 
-    if (!diex) {
+    if (!diex || diex.deletedAt || diex.archivedAt) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
@@ -813,7 +840,7 @@ export class DiexService {
       include: diexInclude,
     });
 
-    if (!diex) {
+    if (!diex || diex.deletedAt || diex.archivedAt) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
@@ -979,7 +1006,7 @@ export class DiexService {
 
     if (!workflowService.isStageBefore(accessData.project.stage, "AGUARDANDO_NOTA_EMPENHO")) {
       throw new AppError(
-        "Não é possível excluir o DIEx quando o projeto já avançou além da etapa de DIEx",
+        "Não é possível arquivar o DIEx quando o projeto já avançou além da etapa de DIEx",
         409
       );
     }
@@ -1005,6 +1032,8 @@ export class DiexService {
           requesterRole: true,
           notes: true,
           totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
           project: {
             select: {
               id: true,
@@ -1028,21 +1057,28 @@ export class DiexService {
         },
       });
 
-    if (!diex) {
+    if (!diex || diex.deletedAt) {
       throw new AppError("DIEx não encontrado", 404);
+    }
+
+    if (diex.archivedAt) {
+      throw new AppError("DIEx já está arquivado", 409);
     }
 
     await auditService.log({
         entityType: "DIEX_REQUEST",
         entityId: diex.id,
-        action: "DELETE",
+        action: "ARCHIVE",
         actor: this.getAuditActor(user),
-        summary: `DIEx ${diex.diexNumber ?? `#${diex.diexCode}`} excluído`,
+        summary: `DIEx ${diex.diexNumber ?? `#${diex.diexCode}`} arquivado`,
         before: this.buildDiexAuditSnapshot(diex),
       });
 
-      await prisma.diexRequest.delete({
+      await prisma.diexRequest.update({
         where: { id: diexId },
+        data: {
+          archivedAt: new Date(),
+        },
       });
     
       const updatedProject = await prisma.project.update({
@@ -1073,7 +1109,7 @@ export class DiexService {
       entityId: diex.projectId,
       action: "STAGE_CHANGE",
       actor: this.getAuditActor(user),
-      summary: `Projeto PRJ-${updatedProject.projectCode} retornou após exclusão do DIEx`,
+      summary: `Projeto PRJ-${updatedProject.projectCode} retornou após arquivamento do DIEx`,
       before: this.buildProjectAuditSnapshot(diex.project),
       after: this.buildProjectAuditSnapshot(updatedProject),
       metadata: {
@@ -1086,8 +1122,8 @@ export class DiexService {
       },
     });
 
-    return {
-      message: "DIEx excluído com sucesso",
-    };
+      return {
+        message: "DIEx arquivado com sucesso",
+      };
   }
 }

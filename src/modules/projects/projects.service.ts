@@ -63,6 +63,7 @@ type ListProjectsFilters = {
   status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
   stage?: ProjectStageValue;
   search?: string;
+  includeArchived?: boolean;
 };
 
 type PendingAction = {
@@ -92,11 +93,26 @@ const projectInclude = {
 } satisfies Prisma.ProjectInclude;
 
 export class ProjectsService {
+  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ProjectWhereInput {
+    if (includeArchived) {
+      return { deletedAt: null };
+    }
+
+    return {
+      archivedAt: null,
+      deletedAt: null,
+    };
+  }
+
+  private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
+    return Boolean(includeArchived && this.isPrivileged(user.role));
+  }
+
   private isPrivileged(role: string) {
     return permissionsService.hasPermission({ role }, "projects.view_all");
   }
 
-  private async getProjectAccessData(projectId: string) {
+  private async getProjectAccessData(projectId: string, includeArchived = false) {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: {
@@ -116,17 +132,19 @@ export class ProjectsService {
             estimates: true,
           },
         },
+        archivedAt: true,
+        deletedAt: true,
       },
     });
 
-    if (!project) {
+    if (!project || project.deletedAt || (!includeArchived && project.archivedAt)) {
       throw new AppError("Projeto não encontrado", 404);
     }
 
     return project;
   }
 
-  private async getProjectAccessDataByCode(projectCode: number) {
+  private async getProjectAccessDataByCode(projectCode: number, includeArchived = false) {
     const project = await prisma.project.findUnique({
       where: { projectCode },
       select: {
@@ -146,18 +164,20 @@ export class ProjectsService {
             estimates: true,
           },
         },
+        archivedAt: true,
+        deletedAt: true,
       },
     });
 
-    if (!project) {
+    if (!project || project.deletedAt || (!includeArchived && project.archivedAt)) {
       throw new AppError("Projeto não encontrado", 404);
     }
 
     return project;
   }
 
-  private async ensureCanView(projectId: string, user: CurrentUser) {
-    const project = await this.getProjectAccessData(projectId);
+  private async ensureCanView(projectId: string, user: CurrentUser, includeArchived = false) {
+    const project = await this.getProjectAccessData(projectId, includeArchived);
 
     if (this.isPrivileged(user.role)) {
       return project;
@@ -173,8 +193,8 @@ export class ProjectsService {
     return project;
   }
 
-  private async ensureCanViewByCode(projectCode: number, user: CurrentUser) {
-    const project = await this.getProjectAccessDataByCode(projectCode);
+  private async ensureCanViewByCode(projectCode: number, user: CurrentUser, includeArchived = false) {
+    const project = await this.getProjectAccessDataByCode(projectCode, includeArchived);
 
     if (this.isPrivileged(user.role)) {
       return project;
@@ -190,8 +210,8 @@ export class ProjectsService {
     return project;
   }
 
-  private async ensureCanManage(projectId: string, user: CurrentUser) {
-    const project = await this.getProjectAccessData(projectId);
+  private async ensureCanManage(projectId: string, user: CurrentUser, includeArchived = false) {
+    const project = await this.getProjectAccessData(projectId, includeArchived);
 
     if (permissionsService.hasPermission(user, "projects.edit_all")) {
       return project;
@@ -523,7 +543,10 @@ export class ProjectsService {
   }
 
   async list(filters: ListProjectsFilters, user: CurrentUser) {
+    const includeArchived = this.canIncludeArchived(user, filters.includeArchived);
     const andConditions: Prisma.ProjectWhereInput[] = [];
+
+    andConditions.push(this.buildArchiveVisibilityWhere(includeArchived));
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -749,6 +772,10 @@ export class ProjectsService {
           },
         },
         diexRequests: {
+          where: {
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: {
             id: true,
             diexCode: true,
@@ -770,6 +797,10 @@ export class ProjectsService {
           },
         },
         serviceOrders: {
+          where: {
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: {
             id: true,
             serviceOrderCode: true,
@@ -802,8 +833,6 @@ export class ProjectsService {
             members: true,
             tasks: true,
             estimates: true,
-            diexRequests: true,
-            serviceOrders: true,
           },
         },
       },
@@ -867,8 +896,8 @@ export class ProjectsService {
       financialSummary: {
         estimatesCount: project.estimates.length,
         finalizedEstimatesCount: finalizedEstimates.length,
-        diexRequestsCount: project._count.diexRequests,
-        serviceOrdersCount: project._count.serviceOrders,
+        diexRequestsCount: project.diexRequests.length,
+        serviceOrdersCount: project.serviceOrders.length,
         estimatedTotalAmount: this.sumAmounts(project.estimates),
         finalizedEstimatedTotalAmount: this.sumAmounts(finalizedEstimates),
         diexTotalAmount: this.sumAmounts(project.diexRequests),
@@ -879,8 +908,8 @@ export class ProjectsService {
         tasksCount: project._count.tasks,
         openTasksCount: openTasks.length,
         estimatesCount: project._count.estimates,
-        diexRequestsCount: project._count.diexRequests,
-        serviceOrdersCount: project._count.serviceOrders,
+        diexRequestsCount: project.diexRequests.length,
+        serviceOrdersCount: project.serviceOrders.length,
       },
     };
   }
@@ -1252,7 +1281,7 @@ export class ProjectsService {
       projectAccess._count.estimates > 0
     ) {
       throw new AppError(
-        "Não é possível excluir um projeto que já possui membros, tarefas ou estimativas vinculadas",
+        "Não é possível arquivar um projeto que já possui membros, tarefas ou estimativas vinculadas",
         409,
       );
     }
@@ -1281,28 +1310,37 @@ export class ProjectsService {
         asBuiltReceivedAt: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
+        archivedAt: true,
+        deletedAt: true,
       },
     });
 
-    if (!before) {
+    if (!before || before.deletedAt) {
       throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (before.archivedAt) {
+      throw new AppError("Projeto já está arquivado", 409);
     }
 
     await auditService.log({
       entityType: "PROJECT",
       entityId: before.id,
-      action: "DELETE",
+      action: "ARCHIVE",
       actor: this.getAuditActor(user),
-      summary: `Projeto PRJ-${before.projectCode} excluído`,
+      summary: `Projeto PRJ-${before.projectCode} arquivado`,
       before: this.buildProjectAuditSnapshot(before),
     });
 
-    await prisma.project.delete({
+    await prisma.project.update({
       where: { id: projectId },
+      data: {
+        archivedAt: new Date(),
+      },
     });
 
     return {
-      message: "Projeto excluído com sucesso",
+      message: "Projeto arquivado com sucesso",
     };
   }
 

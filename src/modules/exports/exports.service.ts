@@ -24,6 +24,7 @@ type ProjectExportFilters = {
     | "SERVICO_CONCLUIDO"
     | "CANCELADO";
   search?: string;
+  includeArchived?: boolean;
 };
 
 export class ExportsService {
@@ -33,6 +34,13 @@ export class ExportsService {
 
   private buildProjectWhere(filters: ProjectExportFilters, user: CurrentUser) {
     const andConditions: Prisma.ProjectWhereInput[] = [];
+    const includeArchived = Boolean(filters.includeArchived && this.isPrivileged(user.role));
+
+    andConditions.push(
+      includeArchived
+        ? { deletedAt: null }
+        : { archivedAt: null, deletedAt: null },
+    );
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -115,6 +123,10 @@ export class ExportsService {
           },
         },
         diexRequests: {
+          where: {
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: {
             diexNumber: true,
             issuedAt: true,
@@ -126,6 +138,10 @@ export class ExportsService {
           take: 1,
         },
         serviceOrders: {
+          where: {
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: {
             serviceOrderNumber: true,
             issuedAt: true,

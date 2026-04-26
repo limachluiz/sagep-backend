@@ -74,6 +74,10 @@ export class GlobalSearchService {
           AND: [
             projectAccessWhere,
             {
+              archivedAt: null,
+              deletedAt: null,
+            },
+            {
               OR: [
                 ...(code ? [{ projectCode: code }] : []),
                 { title: { contains: term, mode: "insensitive" } },
@@ -87,8 +91,24 @@ export class GlobalSearchService {
                 ...(ataTypes.length
                   ? [{ estimates: { some: { ata: { type: { in: ataTypes } } } } }]
                   : []),
-                { diexRequests: { some: { diexNumber: { contains: term, mode: "insensitive" } } } },
-                { serviceOrders: { some: { serviceOrderNumber: { contains: term, mode: "insensitive" } } } },
+                {
+                  diexRequests: {
+                    some: {
+                      archivedAt: null,
+                      deletedAt: null,
+                      diexNumber: { contains: term, mode: "insensitive" },
+                    },
+                  },
+                },
+                {
+                  serviceOrders: {
+                    some: {
+                      archivedAt: null,
+                      deletedAt: null,
+                      serviceOrderNumber: { contains: term, mode: "insensitive" },
+                    },
+                  },
+                },
               ],
             },
           ],
@@ -127,7 +147,13 @@ export class GlobalSearchService {
       prisma.estimate.findMany({
         where: {
           AND: [
-            { project: projectAccessWhere },
+            {
+              project: {
+                ...projectAccessWhere,
+                archivedAt: null,
+                deletedAt: null,
+              },
+            },
             {
               OR: [
                 ...(code ? [{ estimateCode: code }, { project: { projectCode: code } }] : []),
@@ -179,7 +205,17 @@ export class GlobalSearchService {
       prisma.diexRequest.findMany({
         where: {
           AND: [
-            { project: projectAccessWhere },
+            {
+              project: {
+                ...projectAccessWhere,
+                archivedAt: null,
+                deletedAt: null,
+              },
+            },
+            {
+              archivedAt: null,
+              deletedAt: null,
+            },
             {
               OR: [
                 ...(code ? [{ diexCode: code }, { project: { projectCode: code } }] : []),
@@ -239,7 +275,17 @@ export class GlobalSearchService {
       prisma.serviceOrder.findMany({
         where: {
           AND: [
-            { project: projectAccessWhere },
+            {
+              project: {
+                ...projectAccessWhere,
+                archivedAt: null,
+                deletedAt: null,
+              },
+            },
+            {
+              archivedAt: null,
+              deletedAt: null,
+            },
             {
               OR: [
                 ...(code ? [{ serviceOrderCode: code }, { project: { projectCode: code } }] : []),
@@ -253,7 +299,13 @@ export class GlobalSearchService {
                 { estimate: { destinationCityName: { contains: term, mode: "insensitive" } } },
                 ...(uf ? [{ estimate: { destinationStateUf: uf } }] : []),
                 ...(ataTypes.length ? [{ estimate: { ata: { type: { in: ataTypes } } } }] : []),
-                { diexRequest: { diexNumber: { contains: term, mode: "insensitive" } } },
+                {
+                  diexRequest: {
+                    archivedAt: null,
+                    deletedAt: null,
+                    diexNumber: { contains: term, mode: "insensitive" },
+                  },
+                },
               ],
             },
           ],

@@ -110,6 +110,7 @@ type ListServiceOrderFilters = {
   diexCode?: number;
   emergency?: boolean;
   search?: string;
+  includeArchived?: boolean;
 };
 
 const serviceOrderInclude = {
@@ -206,6 +207,21 @@ const serviceOrderInclude = {
 } satisfies Prisma.ServiceOrderInclude;
 
 export class ServiceOrdersService {
+  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ServiceOrderWhereInput {
+    if (includeArchived) {
+      return { deletedAt: null };
+    }
+
+    return {
+      archivedAt: null,
+      deletedAt: null,
+    };
+  }
+
+  private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
+    return Boolean(includeArchived && this.isPrivileged(user.role));
+  }
+
   private isPrivileged(role: string) {
     return permissionsService.hasPermission({ role }, "projects.view_all");
   }
@@ -293,11 +309,15 @@ export class ServiceOrdersService {
           stage: true,
           commitmentNoteNumber: true,
           commitmentNoteReceivedAt: true,
+          archivedAt: true,
+          deletedAt: true,
           members: { select: { userId: true } },
         },
       });
 
-      if (!project) throw new AppError("Projeto não encontrado", 404);
+      if (!project || project.deletedAt || project.archivedAt) {
+        throw new AppError("Projeto não encontrado", 404);
+      }
 
       if (projectCode && project.projectCode !== projectCode) {
         throw new AppError(
@@ -320,11 +340,15 @@ export class ServiceOrdersService {
           stage: true,
           commitmentNoteNumber: true,
           commitmentNoteReceivedAt: true,
+          archivedAt: true,
+          deletedAt: true,
           members: { select: { userId: true } },
         },
       });
 
-      if (!project) throw new AppError("Projeto não encontrado", 404);
+      if (!project || project.deletedAt || project.archivedAt) {
+        throw new AppError("Projeto não encontrado", 404);
+      }
       return project;
     }
 
@@ -433,10 +457,12 @@ export class ServiceOrdersService {
           diexCode: true,
           projectId: true,
           estimateId: true,
+          archivedAt: true,
+          deletedAt: true,
         },
       });
 
-      if (!diex) {
+      if (!diex || diex.deletedAt || diex.archivedAt) {
         throw new AppError("DIEx não encontrado", 404);
       }
 
@@ -462,10 +488,12 @@ export class ServiceOrdersService {
           diexCode: true,
           projectId: true,
           estimateId: true,
+          archivedAt: true,
+          deletedAt: true,
         },
       });
 
-      if (!diex) {
+      if (!diex || diex.deletedAt || diex.archivedAt) {
         throw new AppError("DIEx não encontrado", 404);
       }
 
@@ -486,10 +514,12 @@ export class ServiceOrdersService {
         diexCode: true,
         projectId: true,
         estimateId: true,
+        archivedAt: true,
+        deletedAt: true,
       },
     });
 
-    if (!diex) {
+    if (!diex || diex.deletedAt || diex.archivedAt) {
       throw new AppError(
         "Não é possível gerar a OS sem um DIEx requisitório vinculado à estimativa",
         409
@@ -512,6 +542,8 @@ export class ServiceOrdersService {
       select: {
         id: true,
         serviceOrderCode: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -523,7 +555,9 @@ export class ServiceOrdersService {
       },
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
     return serviceOrder;
   }
 
@@ -533,6 +567,8 @@ export class ServiceOrdersService {
       select: {
         id: true,
         serviceOrderCode: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -544,7 +580,9 @@ export class ServiceOrdersService {
       },
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
     return serviceOrder;
   }
 
@@ -932,7 +970,10 @@ private buildWorkflowSnapshot(project: {
   }
 
   async list(filters: ListServiceOrderFilters, user: CurrentUser) {
-    const andConditions: Prisma.ServiceOrderWhereInput[] = [];
+    const includeArchived = this.canIncludeArchived(user, filters.includeArchived);
+    const andConditions: Prisma.ServiceOrderWhereInput[] = [
+      this.buildArchiveVisibilityWhere(includeArchived),
+    ];
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -992,7 +1033,9 @@ private buildWorkflowSnapshot(project: {
       include: serviceOrderInclude,
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
     return serviceOrder;
   }
 
@@ -1008,7 +1051,9 @@ private buildWorkflowSnapshot(project: {
       include: serviceOrderInclude,
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
     return serviceOrder;
   }
 
@@ -1051,6 +1096,8 @@ private buildWorkflowSnapshot(project: {
         contractorRepresentativeRole: true,
         notes: true,
         totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -1277,7 +1324,7 @@ private buildWorkflowSnapshot(project: {
 
     if (!workflowService.isStageBefore(accessData.project.stage, "SERVICO_EM_EXECUCAO")) {
       throw new AppError(
-        "Não é possível excluir a OS quando o projeto já entrou em execução",
+        "Não é possível arquivar a OS quando o projeto já entrou em execução",
         409,
       );
     }
@@ -1318,6 +1365,8 @@ private buildWorkflowSnapshot(project: {
         contractorRepresentativeRole: true,
         notes: true,
         totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -1341,21 +1390,28 @@ private buildWorkflowSnapshot(project: {
       },
     });
 
-    if (!serviceOrder) {
+    if (!serviceOrder || serviceOrder.deletedAt) {
       throw new AppError("OS não encontrada", 404);
+    }
+
+    if (serviceOrder.archivedAt) {
+      throw new AppError("OS já está arquivada", 409);
     }
 
     await auditService.log({
       entityType: "SERVICE_ORDER",
       entityId: serviceOrder.id,
-      action: "DELETE",
+      action: "ARCHIVE",
       actor: this.getAuditActor(user),
-      summary: `OS ${serviceOrder.serviceOrderNumber ?? `#${serviceOrder.serviceOrderCode}`} excluída`,
+      summary: `OS ${serviceOrder.serviceOrderNumber ?? `#${serviceOrder.serviceOrderCode}`} arquivada`,
       before: this.buildServiceOrderAuditSnapshot(serviceOrder),
     });
 
-    await prisma.serviceOrder.delete({
+    await prisma.serviceOrder.update({
       where: { id: serviceOrderId },
+      data: {
+        archivedAt: new Date(),
+      },
     });
 
     const updatedProject = await prisma.project.update({
@@ -1386,7 +1442,7 @@ private buildWorkflowSnapshot(project: {
       entityId: serviceOrder.projectId,
       action: "STAGE_CHANGE",
       actor: this.getAuditActor(user),
-      summary: `Projeto PRJ-${updatedProject.projectCode} retornou após exclusão da OS`,
+      summary: `Projeto PRJ-${updatedProject.projectCode} retornou após arquivamento da OS`,
       before: this.buildProjectAuditSnapshot(serviceOrder.project),
       after: this.buildProjectAuditSnapshot(updatedProject),
       metadata: {
@@ -1400,7 +1456,7 @@ private buildWorkflowSnapshot(project: {
     });
 
     return {
-      message: "OS excluída com sucesso",
+      message: "OS arquivada com sucesso",
     };
   }
 }

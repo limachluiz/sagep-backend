@@ -26,6 +26,8 @@ export class ServiceOrderDocumentService {
       where: { id: serviceOrderId },
       select: {
         id: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             ownerId: true,
@@ -39,7 +41,7 @@ export class ServiceOrderDocumentService {
       },
     });
 
-    if (!serviceOrder) {
+    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
       throw new AppError("OS não encontrada", 404);
     }
 
@@ -62,6 +64,8 @@ export class ServiceOrderDocumentService {
       where: { id: serviceOrderId },
       select: {
         id: true,
+        archivedAt: true,
+        deletedAt: true,
         serviceOrderCode: true,
         serviceOrderNumber: true,
         issuedAt: true,
@@ -127,6 +131,10 @@ export class ServiceOrderDocumentService {
     });
 
     if (!serviceOrder) {
+      throw new AppError("OS não encontrada", 404);
+    }
+
+    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
       throw new AppError("OS não encontrada", 404);
     }
 

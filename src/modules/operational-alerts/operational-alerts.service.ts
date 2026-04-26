@@ -164,6 +164,7 @@ export class OperationalAlertsService {
         AND: [
           this.getProjectAccessWhere(user),
           {
+            archivedAt: null,
             deletedAt: null,
             stage: {
               notIn: ["SERVICO_CONCLUIDO", "CANCELADO"],
@@ -204,6 +205,10 @@ export class OperationalAlertsService {
           },
         },
         diexRequests: {
+          where: {
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: {
             id: true,
             diexCode: true,
@@ -217,6 +222,10 @@ export class OperationalAlertsService {
           take: 1,
         },
         serviceOrders: {
+          where: {
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: {
             id: true,
             serviceOrderCode: true,

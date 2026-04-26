@@ -485,6 +485,10 @@ export class DashboardService {
       prisma.ata.count(),
       prisma.ataItem.count(),
       prisma.project.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           projectCode: true,
@@ -507,6 +511,10 @@ export class DashboardService {
             },
           },
           diexRequests: {
+            where: {
+              archivedAt: null,
+              deletedAt: null,
+            },
             select: {
               createdAt: true,
             },
@@ -557,6 +565,10 @@ export class DashboardService {
         },
       }),
       prisma.diexRequest.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           diexCode: true,
@@ -579,6 +591,10 @@ export class DashboardService {
         },
       }),
       prisma.serviceOrder.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           serviceOrderCode: true,
@@ -979,6 +995,7 @@ export class DashboardService {
           AND: [
             this.getProjectAccessWhere(user),
             {
+              archivedAt: null,
               deletedAt: null,
               stage: {
                 notIn: ["SERVICO_CONCLUIDO", "CANCELADO"],
@@ -1106,6 +1123,10 @@ export class DashboardService {
     const filterContext = buildFilterContext(filters);
     const [projects, estimates, diexRequests, serviceOrders] = await Promise.all([
       prisma.project.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           projectCode: true,
@@ -1146,6 +1167,10 @@ export class DashboardService {
         },
       }),
       prisma.diexRequest.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           totalAmount: true,
@@ -1155,6 +1180,10 @@ export class DashboardService {
         },
       }),
       prisma.serviceOrder.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           totalAmount: true,
