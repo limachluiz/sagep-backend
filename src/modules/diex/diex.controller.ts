@@ -68,4 +68,10 @@ export class DiexController {
     const result = await diexService.remove(id, req.user!);
     return res.status(200).json(result);
   }
+
+  async restore(req: Request, res: Response) {
+    const { id } = diexIdParamSchema.parse(req.params);
+    const result = await diexService.restore(id, req.user!);
+    return res.status(200).json(result);
+  }
 }

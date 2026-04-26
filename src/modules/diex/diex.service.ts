@@ -1003,11 +1003,18 @@ export class DiexService {
     }
 
     const accessData = await this.ensureCanManage(diexId, user);
+    const activeServiceOrdersCount = await prisma.serviceOrder.count({
+      where: {
+        diexRequestId: diexId,
+        archivedAt: null,
+        deletedAt: null,
+      },
+    });
 
-    if (!workflowService.isStageBefore(accessData.project.stage, "AGUARDANDO_NOTA_EMPENHO")) {
+    if (activeServiceOrdersCount > 0) {
       throw new AppError(
-        "Não é possível arquivar o DIEx quando o projeto já avançou além da etapa de DIEx",
-        409
+        "Não é possível arquivar o DIEx enquanto existir Ordem de Serviço ativa vinculada",
+        409,
       );
     }
 
@@ -1125,5 +1132,148 @@ export class DiexService {
       return {
         message: "DIEx arquivado com sucesso",
       };
+  }
+
+  async restore(diexId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "diex.restore")) {
+      throw new AppError("Você não tem permissão para restaurar DIEx", 403);
+    }
+
+    const diex = await prisma.diexRequest.findUnique({
+      where: { id: diexId },
+      select: {
+        id: true,
+        diexCode: true,
+        projectId: true,
+        estimateId: true,
+        diexNumber: true,
+        issuedAt: true,
+        issuingOrganization: true,
+        commandName: true,
+        pregaoNumber: true,
+        uasg: true,
+        supplierName: true,
+        supplierCnpj: true,
+        requesterName: true,
+        requesterRank: true,
+        requesterCpf: true,
+        requesterRole: true,
+        notes: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            stage: true,
+            status: true,
+            archivedAt: true,
+            deletedAt: true,
+            diexNumber: true,
+            diexIssuedAt: true,
+            creditNoteNumber: true,
+            creditNoteReceivedAt: true,
+            commitmentNoteNumber: true,
+            commitmentNoteReceivedAt: true,
+            serviceOrderNumber: true,
+            serviceOrderIssuedAt: true,
+            executionStartedAt: true,
+            asBuiltReceivedAt: true,
+            invoiceAttestedAt: true,
+            serviceCompletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!diex || diex.deletedAt) {
+      throw new AppError("DIEx não encontrado", 404);
+    }
+
+    if (!diex.archivedAt) {
+      throw new AppError("DIEx não está arquivado", 409);
+    }
+
+    if (diex.project.deletedAt || diex.project.archivedAt) {
+      throw new AppError("Não é possível restaurar DIEx com o projeto pai arquivado", 409);
+    }
+
+    const restoredDiex = await prisma.diexRequest.update({
+      where: { id: diexId },
+      data: {
+        archivedAt: null,
+      },
+      include: diexInclude,
+    });
+
+    const updatedProject = await prisma.project.update({
+      where: { id: diex.projectId },
+      data: workflowService.getProjectPatchAfterDiexCreated(
+        this.buildWorkflowSnapshot({
+          ...diex.project,
+          id: diex.project.id,
+          projectCode: diex.project.projectCode,
+          stage: diex.project.stage,
+          diexNumber: restoredDiex.diexNumber ?? diex.project.diexNumber,
+          diexIssuedAt: restoredDiex.issuedAt ?? diex.project.diexIssuedAt,
+        }),
+      ),
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "DIEX_REQUEST",
+      entityId: restoredDiex.id,
+      action: "RESTORE",
+      actor: this.getAuditActor(user),
+      summary: `DIEx ${restoredDiex.diexNumber ?? `#${restoredDiex.diexCode}`} restaurado`,
+      before: this.buildDiexAuditSnapshot(diex),
+      after: this.buildDiexAuditSnapshot(restoredDiex),
+      metadata: {
+        permissionUsed: "diex.restore",
+      },
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: updatedProject.id,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${updatedProject.projectCode} sincronizado após restauração do DIEx`,
+      before: this.buildProjectAuditSnapshot(diex.project),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "diex.restore",
+        previousStage: diex.project.stage,
+        newStage: updatedProject.stage,
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
+      },
+    });
+
+    return {
+      message: "DIEx restaurado com sucesso",
+      permissionUsed: "diex.restore" as const,
+      diex: restoredDiex,
+    };
   }
 }

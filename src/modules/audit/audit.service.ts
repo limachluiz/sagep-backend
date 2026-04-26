@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
+import * as $Enums from "../../generated/prisma/enums.js";
 import {
   type AuditSnapshot,
   type CreateAuditLogInput,
@@ -83,9 +84,9 @@ export class AuditService {
   async log(input: CreateAuditLogInput) {
     return prisma.auditLog.create({
       data: {
-        entityType: input.entityType,
+        entityType: input.entityType as $Enums.AuditEntityType,
         entityId: input.entityId,
-        action: input.action,
+        action: input.action as $Enums.AuditActionType,
         actorUserId: input.actor?.id ?? undefined,
         actorName: input.actor?.name ?? undefined,
         summary: input.summary,

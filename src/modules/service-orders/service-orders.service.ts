@@ -1459,4 +1459,178 @@ private buildWorkflowSnapshot(project: {
       message: "OS arquivada com sucesso",
     };
   }
+
+  async restore(serviceOrderId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "service_orders.restore")) {
+      throw new AppError("Você não tem permissão para restaurar Ordem de Serviço", 403);
+    }
+
+    const serviceOrder = await prisma.serviceOrder.findUnique({
+      where: { id: serviceOrderId },
+      select: {
+        id: true,
+        serviceOrderCode: true,
+        projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderNumber: true,
+        issuedAt: true,
+        contractorName: true,
+        contractorCnpj: true,
+        commitmentNoteNumber: true,
+        requesterName: true,
+        requesterRank: true,
+        requesterCpf: true,
+        requesterRole: true,
+        issuingOrganization: true,
+        isEmergency: true,
+        plannedStartDate: true,
+        plannedEndDate: true,
+        requestingArea: true,
+        projectDisplayName: true,
+        projectAcronym: true,
+        contractNumber: true,
+        executionLocation: true,
+        executionHours: true,
+        contactName: true,
+        contactPhone: true,
+        contactExtension: true,
+        contractTotalTerm: true,
+        originProcess: true,
+        contractorRepresentativeName: true,
+        contractorRepresentativeRole: true,
+        notes: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            stage: true,
+            status: true,
+            archivedAt: true,
+            deletedAt: true,
+            creditNoteNumber: true,
+            creditNoteReceivedAt: true,
+            diexNumber: true,
+            diexIssuedAt: true,
+            commitmentNoteNumber: true,
+            commitmentNoteReceivedAt: true,
+            serviceOrderNumber: true,
+            serviceOrderIssuedAt: true,
+            executionStartedAt: true,
+            asBuiltReceivedAt: true,
+            invoiceAttestedAt: true,
+            serviceCompletedAt: true,
+          },
+        },
+        diexRequest: {
+          select: {
+            id: true,
+            archivedAt: true,
+            deletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!serviceOrder || serviceOrder.deletedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
+
+    if (!serviceOrder.archivedAt) {
+      throw new AppError("OS não está arquivada", 409);
+    }
+
+    if (serviceOrder.project.deletedAt || serviceOrder.project.archivedAt) {
+      throw new AppError("Não é possível restaurar OS com o projeto pai arquivado", 409);
+    }
+
+    if (
+      serviceOrder.diexRequest &&
+      (serviceOrder.diexRequest.deletedAt || serviceOrder.diexRequest.archivedAt)
+    ) {
+      throw new AppError("Não é possível restaurar OS com o DIEx vinculado arquivado", 409);
+    }
+
+    const restoredServiceOrder = await prisma.serviceOrder.update({
+      where: { id: serviceOrderId },
+      data: {
+        archivedAt: null,
+      },
+      include: serviceOrderInclude,
+    });
+
+    const updatedProject = await prisma.project.update({
+      where: { id: serviceOrder.projectId },
+      data: workflowService.getProjectPatchAfterServiceOrderCreated(
+        this.buildWorkflowSnapshot({
+          ...serviceOrder.project,
+          id: serviceOrder.project.id,
+          projectCode: serviceOrder.project.projectCode,
+          stage: serviceOrder.project.stage,
+          serviceOrderNumber:
+            restoredServiceOrder.serviceOrderNumber ?? serviceOrder.project.serviceOrderNumber,
+          serviceOrderIssuedAt:
+            restoredServiceOrder.issuedAt ?? serviceOrder.project.serviceOrderIssuedAt,
+        }),
+      ),
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: restoredServiceOrder.id,
+      action: "RESTORE",
+      actor: this.getAuditActor(user),
+      summary: `OS ${restoredServiceOrder.serviceOrderNumber ?? `#${restoredServiceOrder.serviceOrderCode}`} restaurada`,
+      before: this.buildServiceOrderAuditSnapshot(serviceOrder),
+      after: this.buildServiceOrderAuditSnapshot(restoredServiceOrder),
+      metadata: {
+        permissionUsed: "service_orders.restore",
+      },
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: updatedProject.id,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${updatedProject.projectCode} sincronizado após restauração da OS`,
+      before: this.buildProjectAuditSnapshot(serviceOrder.project),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "service-order.restore",
+        previousStage: serviceOrder.project.stage,
+        newStage: updatedProject.stage,
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
+      },
+    });
+
+    return {
+      message: "OS restaurada com sucesso",
+      permissionUsed: "service_orders.restore" as const,
+      serviceOrder: restoredServiceOrder,
+    };
+  }
 }

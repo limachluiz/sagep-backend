@@ -12,6 +12,7 @@ export type AuditActionType =
   | "UPDATE"
   | "DELETE"
   | "ARCHIVE"
+  | "RESTORE"
   | "STATUS_CHANGE"
   | "STAGE_CHANGE"
   | "ISSUE"

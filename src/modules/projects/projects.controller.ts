@@ -63,6 +63,12 @@ export class ProjectsController {
     return res.status(200).json(result);
   }
 
+  async restore(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const result = await projectsService.restore(id, req.user!);
+    return res.status(200).json(result);
+  }
+
   async timeline(req: Request, res: Response) {
     const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 

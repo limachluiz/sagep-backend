@@ -16,4 +16,5 @@ serviceOrdersRoutes.get("/:id/document/pdf", (req, res) => controller.documentPd
 
 serviceOrdersRoutes.get("/:id", (req, res) => controller.findById(req, res));
 serviceOrdersRoutes.patch("/:id", (req, res) => controller.update(req, res));
+serviceOrdersRoutes.post("/:id/restore", (req, res) => controller.restore(req, res));
 serviceOrdersRoutes.delete("/:id", (req, res) => controller.remove(req, res));

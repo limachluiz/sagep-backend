@@ -2,12 +2,15 @@ export type Permission =
   | "projects.view_all"
   | "projects.edit_own"
   | "projects.edit_all"
+  | "projects.restore"
   | "projects.complete"
   | "projects.reopen"
   | "diex.issue"
   | "diex.cancel"
+  | "diex.restore"
   | "service_orders.issue"
   | "service_orders.cancel"
+  | "service_orders.restore"
   | "dashboard.financial_view"
   | "reports.export"
   | "users.manage";
@@ -21,12 +24,15 @@ const rolePermissions: Record<string, Permission[]> = {
     "projects.view_all",
     "projects.edit_own",
     "projects.edit_all",
+    "projects.restore",
     "projects.complete",
     "projects.reopen",
     "diex.issue",
     "diex.cancel",
+    "diex.restore",
     "service_orders.issue",
     "service_orders.cancel",
+    "service_orders.restore",
     "dashboard.financial_view",
     "reports.export",
     "users.manage",
@@ -35,12 +41,15 @@ const rolePermissions: Record<string, Permission[]> = {
     "projects.view_all",
     "projects.edit_own",
     "projects.edit_all",
+    "projects.restore",
     "projects.complete",
     "projects.reopen",
     "diex.issue",
     "diex.cancel",
+    "diex.restore",
     "service_orders.issue",
     "service_orders.cancel",
+    "service_orders.restore",
     "dashboard.financial_view",
     "reports.export",
   ],

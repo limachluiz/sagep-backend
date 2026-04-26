@@ -1344,6 +1344,76 @@ export class ProjectsService {
     };
   }
 
+  async restore(projectId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "projects.restore")) {
+      throw new AppError("Você não tem permissão para restaurar este projeto", 403);
+    }
+
+    const before = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        ownerId: true,
+        startDate: true,
+        endDate: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (!before.archivedAt) {
+      throw new AppError("Projeto não está arquivado", 409);
+    }
+
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        archivedAt: null,
+      },
+      include: projectInclude,
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: project.id,
+      action: "RESTORE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${project.projectCode} restaurado`,
+      before: this.buildProjectAuditSnapshot(before),
+      after: this.buildProjectAuditSnapshot(project),
+      metadata: {
+        permissionUsed: "projects.restore",
+      },
+    });
+
+    return {
+      message: "Projeto restaurado com sucesso",
+      permissionUsed: "projects.restore" as const,
+      project,
+    };
+  }
+
     async getTimeline(projectId: string, user: CurrentUser) {
     await this.ensureCanView(projectId, user);
 

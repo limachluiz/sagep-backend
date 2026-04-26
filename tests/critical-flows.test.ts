@@ -198,15 +198,23 @@ async function issueDiex(projectId: string, estimateId: string, token: string) {
 
 describe("critical flows", () => {
   let admin: TestUser;
+  let gestor: TestUser;
+  let projetista: TestUser;
   let consulta: TestUser;
   let adminAuth: Awaited<ReturnType<typeof login>>;
+  let gestorAuth: Awaited<ReturnType<typeof login>>;
+  let projetistaAuth: Awaited<ReturnType<typeof login>>;
   let consultaAuth: Awaited<ReturnType<typeof login>>;
 
   beforeEach(async () => {
     await resetDatabase();
-    admin = await createUser("admin.tests@sagep.local", "ADMIN", "Admin Teste");
-    consulta = await createUser("consulta.tests@sagep.local", "CONSULTA", "Consulta Teste");
+    admin = await createUser("admin@sagep.com", "ADMIN");
+    gestor = await createUser("gestor@sagep.com", "GESTOR");
+    projetista = await createUser("projetista@sagep.com", "PROJETISTA");
+    consulta = await createUser("consulta@sagep.com", "CONSULTA");
     adminAuth = await login(admin.email);
+    gestorAuth = await login(gestor.email);
+    projetistaAuth = await login(projetista.email);
     consultaAuth = await login(consulta.email);
   });
 
@@ -598,6 +606,105 @@ describe("critical flows", () => {
       .get("/api/dashboard/executive")
       .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
       .expect(403);
+  });
+
+  it("restore permissions: GESTOR can restore and PROJETISTA/CONSULTA cannot", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    const archivedProject = await createProject(adminAuth.accessToken, "Projeto Arquivado");
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const serviceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        serviceOrderNumber: "OS-001",
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    // Arquivar na ordem correta
+    await request(app)
+      .delete(`/api/service-orders/${serviceOrder.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/diex/${diex.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/projects/${archivedProject.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .post(`/api/projects/${archivedProject.id}/restore`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .post(`/api/projects/${archivedProject.id}/restore`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("projects.restore");
+      });
+
+    await request(app)
+      .post(`/api/diex/${diex.id}/restore`)
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .post(`/api/diex/${diex.id}/restore`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("diex.restore");
+      });
+
+    await request(app)
+      .post(`/api/service-orders/${serviceOrder.body.id}/restore`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .post(`/api/service-orders/${serviceOrder.body.id}/restore`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("service_orders.restore");
+      });
   });
 
   it("global search and dashboards return grouped operational data", async () => {
