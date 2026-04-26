@@ -328,6 +328,110 @@ describe("critical flows", () => {
     expect(Array.isArray(details.body.pendingActions)).toBe(true);
   });
 
+  it("workflow and alerts: keeps AGUARDANDO_NOTA_EMPENHO aligned with commitment note state", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+    await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+      })
+      .expect(200);
+
+    const detailsWithoutCommitment = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsWithoutCommitment.body.workflow.stage).toBe("AGUARDANDO_NOTA_EMPENHO");
+    expect(detailsWithoutCommitment.body.workflow.nextAction.code).toBe(
+      "INFORMAR_NOTA_EMPENHO",
+    );
+
+    const alertsWithoutCommitment = await request(app)
+      .get("/api/operational-alerts")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(
+      alertsWithoutCommitment.body.alerts.some(
+        (alert: { project: { id: string }; category: string; nextAction: { code: string } }) =>
+          alert.project.id === project.id &&
+          alert.category === "AGUARDANDO_NOTA_EMPENHO" &&
+          alert.nextAction.code === "INFORMAR_NOTA_EMPENHO",
+      ),
+    ).toBe(true);
+
+    const dashboardWithoutCommitment = await request(app)
+      .get("/api/dashboard/operational")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(dashboardWithoutCommitment.body.pendingByStage.awaitingCommitmentNote).toBe(1);
+    expect(dashboardWithoutCommitment.body.pendingByStage.awaitingServiceOrder).toBe(0);
+    expect(
+      dashboardWithoutCommitment.body.operationalQueue.find(
+        (item: { id: string }) => item.id === project.id,
+      ).nextAction.code,
+    ).toBe("INFORMAR_NOTA_EMPENHO");
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-001",
+      })
+      .expect(200);
+
+    const detailsWithCommitment = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsWithCommitment.body.workflow.nextAction.code).toBe("EMITIR_OS");
+
+    const alertsWithCommitment = await request(app)
+      .get("/api/operational-alerts")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(
+      alertsWithCommitment.body.alerts.some(
+        (alert: { project: { id: string }; category: string; nextAction: { code: string } }) =>
+          alert.project.id === project.id &&
+          alert.category === "AGUARDANDO_ORDEM_SERVICO" &&
+          alert.nextAction.code === "EMITIR_OS",
+      ),
+    ).toBe(true);
+
+    const dashboardWithCommitment = await request(app)
+      .get("/api/dashboard/operational")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(dashboardWithCommitment.body.pendingByStage.awaitingCommitmentNote).toBe(0);
+    expect(dashboardWithCommitment.body.pendingByStage.awaitingServiceOrder).toBe(1);
+    expect(
+      dashboardWithCommitment.body.operationalQueue.find(
+        (item: { id: string }) => item.id === project.id,
+      ).nextAction.code,
+    ).toBe("EMITIR_OS");
+  });
+
   it("projects: rejects stage jumps", async () => {
     const { project } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 

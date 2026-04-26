@@ -287,6 +287,15 @@ export class WorkflowService {
           targetStage: "AGUARDANDO_NOTA_EMPENHO",
         };
       case "AGUARDANDO_NOTA_EMPENHO":
+        if (!project.commitmentNoteNumber && !project.commitmentNoteReceivedAt) {
+          return {
+            code: "INFORMAR_NOTA_EMPENHO",
+            label: "Informar Nota de Empenho",
+            description: "Antes de emitir a OS, registre os dados da Nota de Empenho.",
+            targetStage: "AGUARDANDO_NOTA_EMPENHO",
+          };
+        }
+
         return {
           code: "EMITIR_OS",
           label: "Emitir Ordem de Serviço",

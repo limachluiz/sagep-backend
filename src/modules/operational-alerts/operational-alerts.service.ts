@@ -282,13 +282,18 @@ export class OperationalAlertsService {
         });
       }
 
-      if (project.stage === "DIEX_REQUISITORIO" && !hasCommitmentNote) {
+      if (
+        (project.stage === "DIEX_REQUISITORIO" ||
+          project.stage === "AGUARDANDO_NOTA_EMPENHO") &&
+        !hasCommitmentNote
+      ) {
         alerts.push({
           id: `${project.id}:AGUARDANDO_NOTA_EMPENHO`,
           category: "AGUARDANDO_NOTA_EMPENHO",
           severity: "CRITICAL",
           title: `PRJ-${project.projectCode} aguardando Nota de Empenho`,
-          description: "Projeto está com DIEx requisitório e ainda não possui Nota de Empenho informada.",
+          description:
+            "Projeto está na etapa de Nota de Empenho e ainda não possui número ou data de recebimento informados.",
           project: projectSummary,
           nextAction,
           detailsPath,
