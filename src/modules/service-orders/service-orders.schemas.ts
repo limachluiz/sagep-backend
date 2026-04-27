@@ -129,6 +129,11 @@ export const listServiceOrdersQuerySchema = z.object({
   emergency: optionalBoolean,
   search: z.string().trim().optional(),
   includeArchived: z.coerce.boolean().optional(),
+  onlyArchived: z.coerce.boolean().optional(),
+});
+
+export const archivedServiceOrdersQuerySchema = z.object({
+  includeArchived: z.coerce.boolean().optional(),
 });
 
 export const serviceOrderIdParamSchema = z.object({

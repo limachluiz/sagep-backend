@@ -64,6 +64,7 @@ type ListProjectsFilters = {
   stage?: ProjectStageValue;
   search?: string;
   includeArchived?: boolean;
+  onlyArchived?: boolean;
 };
 
 type PendingAction = {
@@ -93,6 +94,10 @@ const projectInclude = {
 } satisfies Prisma.ProjectInclude;
 
 export class ProjectsService {
+  private isAdmin(role: string) {
+    return role === "ADMIN";
+  }
+
   private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ProjectWhereInput {
     if (includeArchived) {
       return { deletedAt: null };
@@ -106,6 +111,20 @@ export class ProjectsService {
 
   private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
     return Boolean(includeArchived && this.isPrivileged(user.role));
+  }
+
+  private resolveArchivedAccess(
+    user: CurrentUser,
+    filters: { includeArchived?: boolean; onlyArchived?: boolean },
+  ) {
+    if ((filters.includeArchived || filters.onlyArchived) && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    }
+
+    return {
+      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
+      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+    };
   }
 
   private isPrivileged(role: string) {
@@ -543,10 +562,14 @@ export class ProjectsService {
   }
 
   async list(filters: ListProjectsFilters, user: CurrentUser) {
-    const includeArchived = this.canIncludeArchived(user, filters.includeArchived);
+    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.ProjectWhereInput[] = [];
 
-    andConditions.push(this.buildArchiveVisibilityWhere(includeArchived));
+    andConditions.push(
+      onlyArchived
+        ? { archivedAt: { not: null }, deletedAt: null }
+        : this.buildArchiveVisibilityWhere(includeArchived),
+    );
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -608,8 +631,13 @@ export class ProjectsService {
     return projects;
   }
 
-  async findById(projectId: string, user: CurrentUser) {
-    await this.ensureCanView(projectId, user);
+  async findById(
+    projectId: string,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanView(projectId, user, includeArchived);
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -690,8 +718,13 @@ export class ProjectsService {
     return project;
   }
 
-  async getDetails(projectId: string, user: CurrentUser) {
-    await this.ensureCanView(projectId, user);
+  async getDetails(
+    projectId: string,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanView(projectId, user, includeArchived);
 
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -772,10 +805,14 @@ export class ProjectsService {
           },
         },
         diexRequests: {
-          where: {
-            archivedAt: null,
-            deletedAt: null,
-          },
+          where: includeArchived
+            ? {
+                deletedAt: null,
+              }
+            : {
+                archivedAt: null,
+                deletedAt: null,
+              },
           select: {
             id: true,
             diexCode: true,
@@ -784,6 +821,7 @@ export class ProjectsService {
             documentStatus: true,
             totalAmount: true,
             supplierName: true,
+            archivedAt: true,
             createdAt: true,
             estimate: {
               select: {
@@ -797,10 +835,14 @@ export class ProjectsService {
           },
         },
         serviceOrders: {
-          where: {
-            archivedAt: null,
-            deletedAt: null,
-          },
+          where: includeArchived
+            ? {
+                deletedAt: null,
+              }
+            : {
+                archivedAt: null,
+                deletedAt: null,
+              },
           select: {
             id: true,
             serviceOrderCode: true,
@@ -809,6 +851,7 @@ export class ProjectsService {
             documentStatus: true,
             totalAmount: true,
             contractorName: true,
+            archivedAt: true,
             createdAt: true,
             estimate: {
               select: {
@@ -914,8 +957,13 @@ export class ProjectsService {
     };
   }
 
-  async findByCode(projectCode: number, user: CurrentUser) {
-    await this.ensureCanViewByCode(projectCode, user);
+  async findByCode(
+    projectCode: number,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanViewByCode(projectCode, user, includeArchived);
 
     const project = await prisma.project.findUnique({
       where: { projectCode },

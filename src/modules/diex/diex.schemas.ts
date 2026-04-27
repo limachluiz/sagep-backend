@@ -59,6 +59,11 @@ export const listDiexQuerySchema = z.object({
   estimateCode: z.coerce.number().int().positive().optional(),
   search: z.string().trim().optional(),
   includeArchived: z.coerce.boolean().optional(),
+  onlyArchived: z.coerce.boolean().optional(),
+});
+
+export const archivedDiexQuerySchema = z.object({
+  includeArchived: z.coerce.boolean().optional(),
 });
 
 export const diexIdParamSchema = z.object({

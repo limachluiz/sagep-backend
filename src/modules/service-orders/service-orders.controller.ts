@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  archivedServiceOrdersQuerySchema,
   createServiceOrderSchema,
   listServiceOrdersQuerySchema,
   serviceOrderCodeParamSchema,
@@ -26,13 +27,15 @@ export class ServiceOrdersController {
 
   async findById(req: Request, res: Response) {
     const { id } = serviceOrderIdParamSchema.parse(req.params);
-    const serviceOrder = await serviceOrdersService.findById(id, req.user!);
+    const query = archivedServiceOrdersQuerySchema.parse(req.query);
+    const serviceOrder = await serviceOrdersService.findById(id, req.user!, query);
     return res.status(200).json(serviceOrder);
   }
 
   async findByCode(req: Request, res: Response) {
     const { code } = serviceOrderCodeParamSchema.parse(req.params);
-    const serviceOrder = await serviceOrdersService.findByCode(code, req.user!);
+    const query = archivedServiceOrdersQuerySchema.parse(req.query);
+    const serviceOrder = await serviceOrdersService.findByCode(code, req.user!, query);
     return res.status(200).json(serviceOrder);
   }
 

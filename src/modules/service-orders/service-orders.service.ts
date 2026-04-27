@@ -111,6 +111,7 @@ type ListServiceOrderFilters = {
   emergency?: boolean;
   search?: string;
   includeArchived?: boolean;
+  onlyArchived?: boolean;
 };
 
 const serviceOrderInclude = {
@@ -207,6 +208,10 @@ const serviceOrderInclude = {
 } satisfies Prisma.ServiceOrderInclude;
 
 export class ServiceOrdersService {
+  private isAdmin(role: string) {
+    return role === "ADMIN";
+  }
+
   private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ServiceOrderWhereInput {
     if (includeArchived) {
       return { deletedAt: null };
@@ -220,6 +225,20 @@ export class ServiceOrdersService {
 
   private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
     return Boolean(includeArchived && this.isPrivileged(user.role));
+  }
+
+  private resolveArchivedAccess(
+    user: CurrentUser,
+    filters: { includeArchived?: boolean; onlyArchived?: boolean },
+  ) {
+    if ((filters.includeArchived || filters.onlyArchived) && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    }
+
+    return {
+      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
+      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+    };
   }
 
   private isPrivileged(role: string) {
@@ -536,7 +555,7 @@ export class ServiceOrdersService {
     return diex;
   }
 
-  private async getServiceOrderAccessData(serviceOrderId: string) {
+  private async getServiceOrderAccessData(serviceOrderId: string, includeArchived = false) {
     const serviceOrder = await prisma.serviceOrder.findUnique({
       where: { id: serviceOrderId },
       select: {
@@ -555,13 +574,13 @@ export class ServiceOrdersService {
       },
     });
 
-    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
       throw new AppError("OS não encontrada", 404);
     }
     return serviceOrder;
   }
 
-  private async getServiceOrderAccessDataByCode(serviceOrderCode: number) {
+  private async getServiceOrderAccessDataByCode(serviceOrderCode: number, includeArchived = false) {
     const serviceOrder = await prisma.serviceOrder.findUnique({
       where: { serviceOrderCode },
       select: {
@@ -580,14 +599,14 @@ export class ServiceOrdersService {
       },
     });
 
-    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
       throw new AppError("OS não encontrada", 404);
     }
     return serviceOrder;
   }
 
-  private async ensureCanView(serviceOrderId: string, user: CurrentUser) {
-    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId);
+  private async ensureCanView(serviceOrderId: string, user: CurrentUser, includeArchived = false) {
+    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId, includeArchived);
 
     if (!this.canViewProject(serviceOrder.project, user)) {
       throw new AppError("Você não tem acesso a esta OS", 403);
@@ -970,9 +989,11 @@ private buildWorkflowSnapshot(project: {
   }
 
   async list(filters: ListServiceOrderFilters, user: CurrentUser) {
-    const includeArchived = this.canIncludeArchived(user, filters.includeArchived);
+    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.ServiceOrderWhereInput[] = [
-      this.buildArchiveVisibilityWhere(includeArchived),
+      onlyArchived
+        ? { archivedAt: { not: null }, deletedAt: null }
+        : this.buildArchiveVisibilityWhere(includeArchived),
     ];
 
     if (!this.isPrivileged(user.role)) {
@@ -1025,22 +1046,32 @@ private buildWorkflowSnapshot(project: {
     });
   }
 
-  async findById(serviceOrderId: string, user: CurrentUser) {
-    await this.ensureCanView(serviceOrderId, user);
+  async findById(
+    serviceOrderId: string,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanView(serviceOrderId, user, includeArchived);
 
     const serviceOrder = await prisma.serviceOrder.findUnique({
       where: { id: serviceOrderId },
       include: serviceOrderInclude,
     });
 
-    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
       throw new AppError("OS não encontrada", 404);
     }
     return serviceOrder;
   }
 
-  async findByCode(serviceOrderCode: number, user: CurrentUser) {
-    const accessData = await this.getServiceOrderAccessDataByCode(serviceOrderCode);
+  async findByCode(
+    serviceOrderCode: number,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    const accessData = await this.getServiceOrderAccessDataByCode(serviceOrderCode, includeArchived);
 
     if (!this.canViewProject(accessData.project, user)) {
       throw new AppError("Você não tem acesso a esta OS", 403);
@@ -1051,7 +1082,7 @@ private buildWorkflowSnapshot(project: {
       include: serviceOrderInclude,
     });
 
-    if (!serviceOrder || serviceOrder.deletedAt || serviceOrder.archivedAt) {
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
       throw new AppError("OS não encontrada", 404);
     }
     return serviceOrder;

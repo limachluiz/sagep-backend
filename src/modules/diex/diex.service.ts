@@ -66,6 +66,7 @@ type ListDiexFilters = {
   estimateCode?: number;
   search?: string;
   includeArchived?: boolean;
+  onlyArchived?: boolean;
 };
 
 const diexInclude = {
@@ -133,6 +134,10 @@ const diexInclude = {
 } satisfies Prisma.DiexRequestInclude;
 
 export class DiexService {
+  private isAdmin(role: string) {
+    return role === "ADMIN";
+  }
+
   private buildArchiveVisibilityWhere(includeArchived = false): Prisma.DiexRequestWhereInput {
     if (includeArchived) {
       return { deletedAt: null };
@@ -146,6 +151,20 @@ export class DiexService {
 
   private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
     return Boolean(includeArchived && this.isPrivileged(user.role));
+  }
+
+  private resolveArchivedAccess(
+    user: CurrentUser,
+    filters: { includeArchived?: boolean; onlyArchived?: boolean },
+  ) {
+    if ((filters.includeArchived || filters.onlyArchived) && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    }
+
+    return {
+      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
+      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+    };
   }
 
   private isPrivileged(role: string) {
@@ -339,7 +358,7 @@ export class DiexService {
     return project.members.some((member) => member.userId === user.id);
   }
 
-  private async getDiexAccessData(diexId: string) {
+  private async getDiexAccessData(diexId: string, includeArchived = false) {
     const diex = await prisma.diexRequest.findUnique({
       where: { id: diexId },
       select: {
@@ -362,14 +381,14 @@ export class DiexService {
       },
     });
 
-    if (!diex || diex.deletedAt || diex.archivedAt) {
+    if (!diex || diex.deletedAt || (!includeArchived && diex.archivedAt)) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
     return diex;
   }
 
-  private async getDiexAccessDataByCode(diexCode: number) {
+  private async getDiexAccessDataByCode(diexCode: number, includeArchived = false) {
     const diex = await prisma.diexRequest.findUnique({
       where: { diexCode },
       select: {
@@ -392,15 +411,15 @@ export class DiexService {
       },
     });
 
-    if (!diex || diex.deletedAt || diex.archivedAt) {
+    if (!diex || diex.deletedAt || (!includeArchived && diex.archivedAt)) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
     return diex;
   }
 
-  private async ensureCanView(diexId: string, user: CurrentUser) {
-    const diex = await this.getDiexAccessData(diexId);
+  private async ensureCanView(diexId: string, user: CurrentUser, includeArchived = false) {
+    const diex = await this.getDiexAccessData(diexId, includeArchived);
 
     if (!this.canViewProject(diex.project, user)) {
       throw new AppError("Você não tem acesso a este DIEx", 403);
@@ -736,9 +755,11 @@ export class DiexService {
   }
 
   async list(filters: ListDiexFilters, user: CurrentUser) {
-    const includeArchived = this.canIncludeArchived(user, filters.includeArchived);
+    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.DiexRequestWhereInput[] = [
-      this.buildArchiveVisibilityWhere(includeArchived),
+      onlyArchived
+        ? { archivedAt: { not: null }, deletedAt: null }
+        : this.buildArchiveVisibilityWhere(includeArchived),
     ];
 
     if (!this.isPrivileged(user.role)) {
@@ -813,23 +834,33 @@ export class DiexService {
     });
   }
 
-  async findById(diexId: string, user: CurrentUser) {
-    await this.ensureCanView(diexId, user);
+  async findById(
+    diexId: string,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanView(diexId, user, includeArchived);
 
     const diex = await prisma.diexRequest.findUnique({
       where: { id: diexId },
       include: diexInclude,
     });
 
-    if (!diex || diex.deletedAt || diex.archivedAt) {
+    if (!diex || diex.deletedAt || (!includeArchived && diex.archivedAt)) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
     return diex;
   }
 
-  async findByCode(diexCode: number, user: CurrentUser) {
-    const accessData = await this.getDiexAccessDataByCode(diexCode);
+  async findByCode(
+    diexCode: number,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    const accessData = await this.getDiexAccessDataByCode(diexCode, includeArchived);
 
     if (!this.canViewProject(accessData.project, user)) {
       throw new AppError("Você não tem acesso a este DIEx", 403);
@@ -840,7 +871,7 @@ export class DiexService {
       include: diexInclude,
     });
 
-    if (!diex || diex.deletedAt || diex.archivedAt) {
+    if (!diex || diex.deletedAt || (!includeArchived && diex.archivedAt)) {
       throw new AppError("DIEx não encontrado", 404);
     }
 

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  archivedQuerySchema,
   createProjectSchema,
   listProjectsQuerySchema,
   projectCodeParamSchema,
@@ -27,19 +28,22 @@ export class ProjectsController {
 
   async findById(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
-    const project = await projectsService.findById(id, req.user!);
+    const query = archivedQuerySchema.parse(req.query);
+    const project = await projectsService.findById(id, req.user!, query);
     return res.status(200).json(project);
   }
 
   async findByCode(req: Request, res: Response) {
     const { code } = projectCodeParamSchema.parse(req.params);
-    const project = await projectsService.findByCode(code, req.user!);
+    const query = archivedQuerySchema.parse(req.query);
+    const project = await projectsService.findByCode(code, req.user!, query);
     return res.status(200).json(project);
   }
 
   async details(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
-    const details = await projectsService.getDetails(id, req.user!);
+    const query = archivedQuerySchema.parse(req.query);
+    const details = await projectsService.getDetails(id, req.user!, query);
     return res.status(200).json(details);
   }
 

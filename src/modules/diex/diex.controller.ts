@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  archivedDiexQuerySchema,
   createDiexSchema,
   diexCodeParamSchema,
   diexIdParamSchema,
@@ -27,13 +28,15 @@ export class DiexController {
 
   async findById(req: Request, res: Response) {
     const { id } = diexIdParamSchema.parse(req.params);
-    const diex = await diexService.findById(id, req.user!);
+    const query = archivedDiexQuerySchema.parse(req.query);
+    const diex = await diexService.findById(id, req.user!, query);
     return res.status(200).json(diex);
   }
 
   async findByCode(req: Request, res: Response) {
     const { code } = diexCodeParamSchema.parse(req.params);
-    const diex = await diexService.findByCode(code, req.user!);
+    const query = archivedDiexQuerySchema.parse(req.query);
+    const diex = await diexService.findByCode(code, req.user!, query);
     return res.status(200).json(diex);
   }
 

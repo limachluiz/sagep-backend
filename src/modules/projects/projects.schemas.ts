@@ -91,6 +91,11 @@ export const listProjectsQuerySchema = z.object({
   stage: projectStageEnum.optional(),
   search: z.string().trim().optional(),
   includeArchived: z.coerce.boolean().optional(),
+  onlyArchived: z.coerce.boolean().optional(),
+});
+
+export const archivedQuerySchema = z.object({
+  includeArchived: z.coerce.boolean().optional(),
 });
 
 export const projectIdParamSchema = z.object({
