@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  archivedQuerySchema,
   createProjectSchema,
   listProjectsQuerySchema,
   projectCodeParamSchema,
@@ -8,6 +9,7 @@ import {
   updateProjectSchema,
 } from "./projects.schemas.js";
 import { ProjectsService } from "./projects.service.js";
+import { AppError } from "../../shared/app-error.js";
 
 const projectsService = new ProjectsService();
 
@@ -26,14 +28,23 @@ export class ProjectsController {
 
   async findById(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
-    const project = await projectsService.findById(id, req.user!);
+    const query = archivedQuerySchema.parse(req.query);
+    const project = await projectsService.findById(id, req.user!, query);
     return res.status(200).json(project);
   }
 
   async findByCode(req: Request, res: Response) {
     const { code } = projectCodeParamSchema.parse(req.params);
-    const project = await projectsService.findByCode(code, req.user!);
+    const query = archivedQuerySchema.parse(req.query);
+    const project = await projectsService.findByCode(code, req.user!, query);
     return res.status(200).json(project);
+  }
+
+  async details(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const query = archivedQuerySchema.parse(req.query);
+    const details = await projectsService.getDetails(id, req.user!, query);
+    return res.status(200).json(details);
   }
 
   async update(req: Request, res: Response) {
@@ -54,5 +65,33 @@ export class ProjectsController {
     const { id } = projectIdParamSchema.parse(req.params);
     const result = await projectsService.remove(id, req.user!);
     return res.status(200).json(result);
+  }
+
+  async restore(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const result = await projectsService.restore(id, req.user!);
+    return res.status(200).json(result);
+  }
+
+  async timeline(req: Request, res: Response) {
+    const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    if (!projectId) {
+      throw new AppError("ID do projeto é obrigatório", 400);
+    }
+
+    const result = await projectsService.getTimeline(projectId, req.user!);
+    return res.json(result);
+  }
+
+  async nextAction(req: Request, res: Response) {
+    const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+
+    if (!projectId) {
+      throw new AppError("ID do projeto é obrigatório", 400);
+    }
+
+    const result = await projectsService.getNextAction(projectId, req.user!);
+    return res.json(result);
   }
 }

@@ -1,6 +1,9 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { auditService } from "../audit/audit.service.js";
+import { permissionsService } from "../permissions/permissions.service.js";
+import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
   id: string;
@@ -44,8 +47,8 @@ type CreateServiceOrderInput = {
   serviceOrderNumber: string;
   issuedAt: Date;
   contractorCnpj: string;
-  requesterName: string;
-  requesterRank: string;
+  requesterName?: string;
+  requesterRank?: string;
   requesterRole?: string;
   issuingOrganization?: string;
   isEmergency?: boolean;
@@ -107,6 +110,8 @@ type ListServiceOrderFilters = {
   diexCode?: number;
   emergency?: boolean;
   search?: string;
+  includeArchived?: boolean;
+  onlyArchived?: boolean;
 };
 
 const serviceOrderInclude = {
@@ -203,47 +208,54 @@ const serviceOrderInclude = {
 } satisfies Prisma.ServiceOrderInclude;
 
 export class ServiceOrdersService {
-  private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+  private isAdmin(role: string) {
+    return role === "ADMIN";
   }
 
-  private stageOrder: ProjectStageValue[] = [
-    "ESTIMATIVA_PRECO",
-    "AGUARDANDO_NOTA_CREDITO",
-    "DIEX_REQUISITORIO",
-    "AGUARDANDO_NOTA_EMPENHO",
-    "OS_LIBERADA",
-    "SERVICO_EM_EXECUCAO",
-    "ANALISANDO_AS_BUILT",
-    "ATESTAR_NF",
-    "SERVICO_CONCLUIDO",
-    "CANCELADO",
-  ];
-
-  private isStageBefore(current: ProjectStageValue, target: ProjectStageValue) {
-    return this.stageOrder.indexOf(current) < this.stageOrder.indexOf(target);
-  }
-
-  private assertProjectStageAllowsServiceOrderCreation(stage: ProjectStageValue) {
-    const allowedStages: ProjectStageValue[] = [
-      "AGUARDANDO_NOTA_EMPENHO",
-      "OS_LIBERADA",
-    ];
-
-    if (!allowedStages.includes(stage)) {
-      throw new AppError(
-        "A Ordem de Serviço só pode ser criada quando o projeto estiver em AGUARDANDO_NOTA_EMPENHO ou OS_LIBERADA",
-        409
-      );
+  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ServiceOrderWhereInput {
+    if (includeArchived) {
+      return { deletedAt: null };
     }
+
+    return {
+      archivedAt: null,
+      deletedAt: null,
+    };
+  }
+
+  private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
+    return Boolean(includeArchived && this.isPrivileged(user.role));
+  }
+
+  private resolveArchivedAccess(
+    user: CurrentUser,
+    filters: { includeArchived?: boolean; onlyArchived?: boolean },
+  ) {
+    if ((filters.includeArchived || filters.onlyArchived) && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    }
+
+    return {
+      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
+      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+    };
+  }
+
+  private isPrivileged(role: string) {
+    return permissionsService.hasPermission({ role }, "projects.view_all");
   }
 
   private canManageProject(
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (this.isPrivileged(user.role)) return true;
-    if (project.ownerId === user.id) return true;
+    if (permissionsService.hasPermission(user, "projects.edit_all")) return true;
+    if (
+      permissionsService.hasPermission(user, "projects.edit_own") &&
+      project.ownerId === user.id
+    ) {
+      return true;
+    }
 
     const isMember = project.members.some((member) => member.userId === user.id);
     return isMember && user.role !== "CONSULTA";
@@ -316,11 +328,15 @@ export class ServiceOrdersService {
           stage: true,
           commitmentNoteNumber: true,
           commitmentNoteReceivedAt: true,
+          archivedAt: true,
+          deletedAt: true,
           members: { select: { userId: true } },
         },
       });
 
-      if (!project) throw new AppError("Projeto não encontrado", 404);
+      if (!project || project.deletedAt || project.archivedAt) {
+        throw new AppError("Projeto não encontrado", 404);
+      }
 
       if (projectCode && project.projectCode !== projectCode) {
         throw new AppError(
@@ -343,11 +359,15 @@ export class ServiceOrdersService {
           stage: true,
           commitmentNoteNumber: true,
           commitmentNoteReceivedAt: true,
+          archivedAt: true,
+          deletedAt: true,
           members: { select: { userId: true } },
         },
       });
 
-      if (!project) throw new AppError("Projeto não encontrado", 404);
+      if (!project || project.deletedAt || project.archivedAt) {
+        throw new AppError("Projeto não encontrado", 404);
+      }
       return project;
     }
 
@@ -456,10 +476,12 @@ export class ServiceOrdersService {
           diexCode: true,
           projectId: true,
           estimateId: true,
+          archivedAt: true,
+          deletedAt: true,
         },
       });
 
-      if (!diex) {
+      if (!diex || diex.deletedAt || diex.archivedAt) {
         throw new AppError("DIEx não encontrado", 404);
       }
 
@@ -485,10 +507,12 @@ export class ServiceOrdersService {
           diexCode: true,
           projectId: true,
           estimateId: true,
+          archivedAt: true,
+          deletedAt: true,
         },
       });
 
-      if (!diex) {
+      if (!diex || diex.deletedAt || diex.archivedAt) {
         throw new AppError("DIEx não encontrado", 404);
       }
 
@@ -509,10 +533,12 @@ export class ServiceOrdersService {
         diexCode: true,
         projectId: true,
         estimateId: true,
+        archivedAt: true,
+        deletedAt: true,
       },
     });
 
-    if (!diex) {
+    if (!diex || diex.deletedAt || diex.archivedAt) {
       throw new AppError(
         "Não é possível gerar a OS sem um DIEx requisitório vinculado à estimativa",
         409
@@ -529,12 +555,14 @@ export class ServiceOrdersService {
     return diex;
   }
 
-  private async getServiceOrderAccessData(serviceOrderId: string) {
+  private async getServiceOrderAccessData(serviceOrderId: string, includeArchived = false) {
     const serviceOrder = await prisma.serviceOrder.findUnique({
       where: { id: serviceOrderId },
       select: {
         id: true,
         serviceOrderCode: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -546,16 +574,20 @@ export class ServiceOrdersService {
       },
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+      throw new AppError("OS não encontrada", 404);
+    }
     return serviceOrder;
   }
 
-  private async getServiceOrderAccessDataByCode(serviceOrderCode: number) {
+  private async getServiceOrderAccessDataByCode(serviceOrderCode: number, includeArchived = false) {
     const serviceOrder = await prisma.serviceOrder.findUnique({
       where: { serviceOrderCode },
       select: {
         id: true,
         serviceOrderCode: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -567,12 +599,14 @@ export class ServiceOrdersService {
       },
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+      throw new AppError("OS não encontrada", 404);
+    }
     return serviceOrder;
   }
 
-  private async ensureCanView(serviceOrderId: string, user: CurrentUser) {
-    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId);
+  private async ensureCanView(serviceOrderId: string, user: CurrentUser, includeArchived = false) {
+    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId, includeArchived);
 
     if (!this.canViewProject(serviceOrder.project, user)) {
       throw new AppError("Você não tem acesso a esta OS", 403);
@@ -591,7 +625,149 @@ export class ServiceOrdersService {
     return serviceOrder;
   }
 
+  private getAuditActor(user: CurrentUser) {
+  return {
+    id: user.id,
+    name: user.name ?? user.email,
+  };
+}
+
+private buildServiceOrderAuditSnapshot(serviceOrder: {
+  id: string;
+  serviceOrderCode?: number | null;
+  projectId?: string | null;
+  estimateId?: string | null;
+  diexRequestId?: string | null;
+  serviceOrderNumber?: string | null;
+  issuedAt?: Date | null;
+  contractorName?: string | null;
+  contractorCnpj?: string | null;
+  commitmentNoteNumber?: string | null;
+  requesterName?: string | null;
+  requesterRank?: string | null;
+  requesterCpf?: string | null;
+  requesterRole?: string | null;
+  issuingOrganization?: string | null;
+  isEmergency?: boolean | null;
+  plannedStartDate?: Date | null;
+  plannedEndDate?: Date | null;
+  requestingArea?: string | null;
+  projectDisplayName?: string | null;
+  projectAcronym?: string | null;
+  contractNumber?: string | null;
+  executionLocation?: string | null;
+  executionHours?: string | null;
+  contactName?: string | null;
+  contactPhone?: string | null;
+  contactExtension?: string | null;
+  contractTotalTerm?: string | null;
+  originProcess?: string | null;
+  contractorRepresentativeName?: string | null;
+  contractorRepresentativeRole?: string | null;
+  notes?: string | null;
+  totalAmount?: { toString(): string } | string | number | null;
+}) {
+  return {
+    id: serviceOrder.id,
+    serviceOrderCode: serviceOrder.serviceOrderCode ?? null,
+    projectId: serviceOrder.projectId ?? null,
+    estimateId: serviceOrder.estimateId ?? null,
+    diexRequestId: serviceOrder.diexRequestId ?? null,
+    serviceOrderNumber: serviceOrder.serviceOrderNumber ?? null,
+    issuedAt: serviceOrder.issuedAt ?? null,
+    contractorName: serviceOrder.contractorName ?? null,
+    contractorCnpj: serviceOrder.contractorCnpj ?? null,
+    commitmentNoteNumber: serviceOrder.commitmentNoteNumber ?? null,
+    requesterName: serviceOrder.requesterName ?? null,
+    requesterRank: serviceOrder.requesterRank ?? null,
+    requesterCpf: serviceOrder.requesterCpf ?? null,
+    requesterRole: serviceOrder.requesterRole ?? null,
+    issuingOrganization: serviceOrder.issuingOrganization ?? null,
+    isEmergency: serviceOrder.isEmergency ?? false,
+    plannedStartDate: serviceOrder.plannedStartDate ?? null,
+    plannedEndDate: serviceOrder.plannedEndDate ?? null,
+    requestingArea: serviceOrder.requestingArea ?? null,
+    projectDisplayName: serviceOrder.projectDisplayName ?? null,
+    projectAcronym: serviceOrder.projectAcronym ?? null,
+    contractNumber: serviceOrder.contractNumber ?? null,
+    executionLocation: serviceOrder.executionLocation ?? null,
+    executionHours: serviceOrder.executionHours ?? null,
+    contactName: serviceOrder.contactName ?? null,
+    contactPhone: serviceOrder.contactPhone ?? null,
+    contactExtension: serviceOrder.contactExtension ?? null,
+    contractTotalTerm: serviceOrder.contractTotalTerm ?? null,
+    originProcess: serviceOrder.originProcess ?? null,
+    contractorRepresentativeName: serviceOrder.contractorRepresentativeName ?? null,
+    contractorRepresentativeRole: serviceOrder.contractorRepresentativeRole ?? null,
+    notes: serviceOrder.notes ?? null,
+    totalAmount:
+      serviceOrder.totalAmount &&
+      typeof serviceOrder.totalAmount === "object" &&
+      "toString" in serviceOrder.totalAmount
+        ? serviceOrder.totalAmount.toString()
+        : serviceOrder.totalAmount ?? null,
+  };
+}
+
+private buildProjectAuditSnapshot(project: {
+  id: string;
+  projectCode?: number | null;
+  stage?: ProjectStageValue | null;
+  status?: string | null;
+  serviceOrderNumber?: string | null;
+  serviceOrderIssuedAt?: Date | null;
+}) {
+  return {
+    id: project.id,
+    projectCode: project.projectCode ?? null,
+    stage: project.stage ?? null,
+    status: project.status ?? null,
+    serviceOrderNumber: project.serviceOrderNumber ?? null,
+    serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+  };
+}
+
+private buildWorkflowSnapshot(project: {
+  id: string;
+  projectCode?: number | null;
+  stage: ProjectStageValue;
+  creditNoteNumber?: string | null;
+  creditNoteReceivedAt?: Date | null;
+  diexNumber?: string | null;
+  diexIssuedAt?: Date | null;
+  commitmentNoteNumber?: string | null;
+  commitmentNoteReceivedAt?: Date | null;
+  serviceOrderNumber?: string | null;
+  serviceOrderIssuedAt?: Date | null;
+  executionStartedAt?: Date | null;
+  asBuiltReceivedAt?: Date | null;
+  invoiceAttestedAt?: Date | null;
+  serviceCompletedAt?: Date | null;
+}) {
+  return {
+    id: project.id,
+    projectCode: project.projectCode ?? undefined,
+    stage: project.stage,
+    creditNoteNumber: project.creditNoteNumber ?? null,
+    creditNoteReceivedAt: project.creditNoteReceivedAt ?? null,
+    diexNumber: project.diexNumber ?? null,
+    diexIssuedAt: project.diexIssuedAt ?? null,
+    commitmentNoteNumber: project.commitmentNoteNumber ?? null,
+    commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
+    serviceOrderNumber: project.serviceOrderNumber ?? null,
+    serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+    executionStartedAt: project.executionStartedAt ?? null,
+    asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
+    invoiceAttestedAt: project.invoiceAttestedAt ?? null,
+    serviceCompletedAt: project.serviceCompletedAt ?? null,
+  };
+}
+
   async create(data: CreateServiceOrderInput, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "service_orders.issue")) {
+      throw new AppError("Você não tem permissão para emitir Ordem de Serviço", 403);
+    }
+
     this.assertScheduleDates(data.plannedStartDate, data.plannedEndDate);
 
     const project = await this.resolveProject(data.projectId, data.projectCode);
@@ -600,7 +776,7 @@ export class ServiceOrdersService {
       throw new AppError("Você não tem permissão para criar OS neste projeto", 403);
     }
 
-    this.assertProjectStageAllowsServiceOrderCreation(project.stage);
+    workflowService.assertCanCreateServiceOrder(this.buildWorkflowSnapshot(project));
 
     const estimate = await this.resolveEstimate(data.estimateId, data.estimateCode);
 
@@ -610,13 +786,6 @@ export class ServiceOrdersService {
 
     if (estimate.status !== "FINALIZADA") {
       throw new AppError("Só é possível gerar OS a partir de uma estimativa finalizada", 409);
-    }
-
-    if (!project.commitmentNoteNumber && !project.commitmentNoteReceivedAt) {
-      throw new AppError(
-        "Para gerar a OS, o projeto precisa ter Nota/Empenho informada",
-        409
-      );
     }
 
     const alreadyExists = await prisma.serviceOrder.findUnique({
@@ -632,7 +801,7 @@ export class ServiceOrdersService {
       project.id,
       estimate.id,
       data.diexId,
-      data.diexCode
+      data.diexCode,
     );
 
     const requester = this.resolveRequesterData(
@@ -641,7 +810,7 @@ export class ServiceOrdersService {
         requesterRank: data.requesterRank,
         requesterCpf: data.requesterCpf,
       },
-      user
+      user,
     );
 
     const serviceOrder = await prisma.serviceOrder.create({
@@ -671,7 +840,8 @@ export class ServiceOrdersService {
           data.executionLocation?.trim() ||
           `${estimate.destinationCityName}/${estimate.destinationStateUf}`,
         executionHours:
-          data.executionHours?.trim() || "08:00h às 16:30h, iniciando a contar da O.S de acordo com o TR.",
+          data.executionHours?.trim() ||
+          "08:00h às 16:30h, iniciando a contar da O.S de acordo com o TR.",
         contactName: data.contactName?.trim(),
         contactPhone: data.contactPhone?.trim(),
         contactExtension: data.contactExtension?.trim(),
@@ -679,13 +849,11 @@ export class ServiceOrdersService {
         originProcess: data.originProcess?.trim() || "Pregão nº 90004/2025-CMA",
         contractorRepresentativeName: data.contractorRepresentativeName?.trim(),
         contractorRepresentativeRole:
-          data.contractorRepresentativeRole?.trim() ||
-          "Responsável pela Contratada",
+          data.contractorRepresentativeRole?.trim() || "Responsável pela Contratada",
         notes: data.notes?.trim(),
         totalAmount: estimate.totalAmount,
         items: {
           create: estimate.items.map((item) => ({
-            estimateItemId: item.id,
             itemCode: item.referenceCode,
             description: item.description,
             supplyUnit: item.unit,
@@ -693,6 +861,11 @@ export class ServiceOrdersService {
             unitPrice: item.unitPrice,
             totalPrice: item.subtotal,
             notes: item.notes,
+            estimateItem: {
+              connect: {
+                id: item.id,
+              },
+            },
           })),
         },
         scheduleItems: {
@@ -712,17 +885,100 @@ export class ServiceOrdersService {
       include: serviceOrderInclude,
     });
 
-    await prisma.project.update({
+    const updatedProject = await prisma.project.update({
       where: { id: project.id },
-      data: {
-        ...(project.stage === "AGUARDANDO_NOTA_EMPENHO"
-          ? {
-              stage: "OS_LIBERADA",
-              status: "EM_ANDAMENTO",
-            }
-          : {}),
+      data: workflowService.getProjectPatchAfterServiceOrderCreated(
+        this.buildWorkflowSnapshot({
+          ...project,
+          serviceOrderNumber: serviceOrder.serviceOrderNumber,
+          serviceOrderIssuedAt: serviceOrder.issuedAt,
+        }),
+      ),
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: serviceOrder.id,
+      action: "CREATE",
+      actor: this.getAuditActor(user),
+      summary: `OS ${serviceOrder.serviceOrderNumber ?? `#${serviceOrder.serviceOrderCode}`} criada para o projeto PRJ-${project.projectCode}`,
+      after: this.buildServiceOrderAuditSnapshot({
+        id: serviceOrder.id,
+        serviceOrderCode: serviceOrder.serviceOrderCode,
+        projectId: serviceOrder.projectId,
+        estimateId: serviceOrder.estimateId,
+        diexRequestId: serviceOrder.diexRequestId,
         serviceOrderNumber: serviceOrder.serviceOrderNumber,
-        serviceOrderIssuedAt: serviceOrder.issuedAt,
+        issuedAt: serviceOrder.issuedAt,
+        contractorName: serviceOrder.contractorName,
+        contractorCnpj: serviceOrder.contractorCnpj,
+        commitmentNoteNumber: serviceOrder.commitmentNoteNumber,
+        requesterName: serviceOrder.requesterName,
+        requesterRank: serviceOrder.requesterRank,
+        requesterCpf: serviceOrder.requesterCpf,
+        requesterRole: serviceOrder.requesterRole,
+        issuingOrganization: serviceOrder.issuingOrganization,
+        isEmergency: serviceOrder.isEmergency,
+        plannedStartDate: serviceOrder.plannedStartDate,
+        plannedEndDate: serviceOrder.plannedEndDate,
+        requestingArea: serviceOrder.requestingArea,
+        projectDisplayName: serviceOrder.projectDisplayName,
+        projectAcronym: serviceOrder.projectAcronym,
+        contractNumber: serviceOrder.contractNumber,
+        executionLocation: serviceOrder.executionLocation,
+        executionHours: serviceOrder.executionHours,
+        contactName: serviceOrder.contactName,
+        contactPhone: serviceOrder.contactPhone,
+        contactExtension: serviceOrder.contactExtension,
+        contractTotalTerm: serviceOrder.contractTotalTerm,
+        originProcess: serviceOrder.originProcess,
+        contractorRepresentativeName: serviceOrder.contractorRepresentativeName,
+        contractorRepresentativeRole: serviceOrder.contractorRepresentativeRole,
+        notes: serviceOrder.notes,
+        totalAmount: serviceOrder.totalAmount,
+      }),
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: project.id,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${project.projectCode} atualizado após criação da OS`,
+      before: this.buildProjectAuditSnapshot({
+        id: project.id,
+        projectCode: project.projectCode,
+        stage: project.stage,
+        status: "PLANEJAMENTO",
+        serviceOrderNumber: null,
+        serviceOrderIssuedAt: null,
+      }),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "service-order.create",
+        previousStage: project.stage,
+        newStage: updatedProject.stage,
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
       },
     });
 
@@ -733,7 +989,12 @@ export class ServiceOrdersService {
   }
 
   async list(filters: ListServiceOrderFilters, user: CurrentUser) {
-    const andConditions: Prisma.ServiceOrderWhereInput[] = [];
+    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
+    const andConditions: Prisma.ServiceOrderWhereInput[] = [
+      onlyArchived
+        ? { archivedAt: { not: null }, deletedAt: null }
+        : this.buildArchiveVisibilityWhere(includeArchived),
+    ];
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -785,20 +1046,32 @@ export class ServiceOrdersService {
     });
   }
 
-  async findById(serviceOrderId: string, user: CurrentUser) {
-    await this.ensureCanView(serviceOrderId, user);
+  async findById(
+    serviceOrderId: string,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanView(serviceOrderId, user, includeArchived);
 
     const serviceOrder = await prisma.serviceOrder.findUnique({
       where: { id: serviceOrderId },
       include: serviceOrderInclude,
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+      throw new AppError("OS não encontrada", 404);
+    }
     return serviceOrder;
   }
 
-  async findByCode(serviceOrderCode: number, user: CurrentUser) {
-    const accessData = await this.getServiceOrderAccessDataByCode(serviceOrderCode);
+  async findByCode(
+    serviceOrderCode: number,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    const accessData = await this.getServiceOrderAccessDataByCode(serviceOrderCode, includeArchived);
 
     if (!this.canViewProject(accessData.project, user)) {
       throw new AppError("Você não tem acesso a esta OS", 403);
@@ -809,27 +1082,82 @@ export class ServiceOrdersService {
       include: serviceOrderInclude,
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+      throw new AppError("OS não encontrada", 404);
+    }
     return serviceOrder;
   }
 
   async update(serviceOrderId: string, data: UpdateServiceOrderInput, user: CurrentUser) {
     await this.ensureCanManage(serviceOrderId, user);
 
-    const current = await prisma.serviceOrder.findUnique({
+    const before = await prisma.serviceOrder.findUnique({
       where: { id: serviceOrderId },
       select: {
+        id: true,
+        serviceOrderCode: true,
+        projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderNumber: true,
+        issuedAt: true,
+        contractorName: true,
+        contractorCnpj: true,
+        commitmentNoteNumber: true,
+        requesterName: true,
+        requesterRank: true,
+        requesterCpf: true,
+        requesterRole: true,
+        issuingOrganization: true,
+        isEmergency: true,
         plannedStartDate: true,
         plannedEndDate: true,
+        requestingArea: true,
+        projectDisplayName: true,
+        projectAcronym: true,
+        contractNumber: true,
+        executionLocation: true,
+        executionHours: true,
+        contactName: true,
+        contactPhone: true,
+        contactExtension: true,
+        contractTotalTerm: true,
+        originProcess: true,
+        contractorRepresentativeName: true,
+        contractorRepresentativeRole: true,
+        notes: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            stage: true,
+            status: true,
+            creditNoteNumber: true,
+            creditNoteReceivedAt: true,
+            diexNumber: true,
+            diexIssuedAt: true,
+            commitmentNoteNumber: true,
+            commitmentNoteReceivedAt: true,
+            serviceOrderNumber: true,
+            serviceOrderIssuedAt: true,
+            executionStartedAt: true,
+            asBuiltReceivedAt: true,
+            invoiceAttestedAt: true,
+            serviceCompletedAt: true,
+          },
+        },
       },
     });
 
-    if (!current) {
+    if (!before) {
       throw new AppError("OS não encontrada", 404);
     }
 
-    const nextStart = data.plannedStartDate ?? current.plannedStartDate ?? undefined;
-    const nextEnd = data.plannedEndDate ?? current.plannedEndDate ?? undefined;
+    const nextStart = data.plannedStartDate ?? before.plannedStartDate ?? undefined;
+    const nextEnd = data.plannedEndDate ?? before.plannedEndDate ?? undefined;
 
     this.assertScheduleDates(nextStart, nextEnd);
 
@@ -897,16 +1225,11 @@ export class ServiceOrdersService {
         ...(data.originProcess !== undefined && {
           originProcess: data.originProcess?.trim(),
         }),
-        ...(data.requesterCpf !== undefined && {
-          requesterCpf: data.requesterCpf?.trim(),
-        }),
         ...(data.contractorRepresentativeName !== undefined && {
-          contractorRepresentativeName:
-            data.contractorRepresentativeName?.trim(),
+          contractorRepresentativeName: data.contractorRepresentativeName?.trim(),
         }),
         ...(data.contractorRepresentativeRole !== undefined && {
-          contractorRepresentativeRole:
-            data.contractorRepresentativeRole?.trim(),
+          contractorRepresentativeRole: data.contractorRepresentativeRole?.trim(),
         }),
         ...(data.notes !== undefined && {
           notes: data.notes?.trim(),
@@ -934,11 +1257,89 @@ export class ServiceOrdersService {
       include: serviceOrderInclude,
     });
 
-    await prisma.project.update({
+    const updatedProject = await prisma.project.update({
       where: { id: serviceOrder.project.id },
       data: {
         serviceOrderNumber: serviceOrder.serviceOrderNumber,
         serviceOrderIssuedAt: serviceOrder.issuedAt,
+      },
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: serviceOrder.id,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `OS ${serviceOrder.serviceOrderNumber ?? `#${serviceOrder.serviceOrderCode}`} atualizada`,
+      before: this.buildServiceOrderAuditSnapshot(before),
+      after: this.buildServiceOrderAuditSnapshot({
+        id: serviceOrder.id,
+        serviceOrderCode: serviceOrder.serviceOrderCode,
+        projectId: serviceOrder.projectId,
+        estimateId: serviceOrder.estimateId,
+        diexRequestId: serviceOrder.diexRequestId,
+        serviceOrderNumber: serviceOrder.serviceOrderNumber,
+        issuedAt: serviceOrder.issuedAt,
+        contractorName: serviceOrder.contractorName,
+        contractorCnpj: serviceOrder.contractorCnpj,
+        commitmentNoteNumber: serviceOrder.commitmentNoteNumber,
+        requesterName: serviceOrder.requesterName,
+        requesterRank: serviceOrder.requesterRank,
+        requesterCpf: serviceOrder.requesterCpf,
+        requesterRole: serviceOrder.requesterRole,
+        issuingOrganization: serviceOrder.issuingOrganization,
+        isEmergency: serviceOrder.isEmergency,
+        plannedStartDate: serviceOrder.plannedStartDate,
+        plannedEndDate: serviceOrder.plannedEndDate,
+        requestingArea: serviceOrder.requestingArea,
+        projectDisplayName: serviceOrder.projectDisplayName,
+        projectAcronym: serviceOrder.projectAcronym,
+        contractNumber: serviceOrder.contractNumber,
+        executionLocation: serviceOrder.executionLocation,
+        executionHours: serviceOrder.executionHours,
+        contactName: serviceOrder.contactName,
+        contactPhone: serviceOrder.contactPhone,
+        contactExtension: serviceOrder.contactExtension,
+        contractTotalTerm: serviceOrder.contractTotalTerm,
+        originProcess: serviceOrder.originProcess,
+        contractorRepresentativeName: serviceOrder.contractorRepresentativeName,
+        contractorRepresentativeRole: serviceOrder.contractorRepresentativeRole,
+        notes: serviceOrder.notes,
+        totalAmount: serviceOrder.totalAmount,
+      }),
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: serviceOrder.project.id,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${updatedProject.projectCode} sincronizado após atualização da OS`,
+      before: this.buildProjectAuditSnapshot(before.project),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "service-order.update",
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
       },
     });
 
@@ -946,12 +1347,16 @@ export class ServiceOrdersService {
   }
 
   async remove(serviceOrderId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "service_orders.cancel")) {
+      throw new AppError("Você não tem permissão para cancelar Ordem de Serviço", 403);
+    }
+
     const accessData = await this.ensureCanManage(serviceOrderId, user);
 
-    if (!this.isStageBefore(accessData.project.stage, "SERVICO_EM_EXECUCAO")) {
+    if (!workflowService.isStageBefore(accessData.project.stage, "SERVICO_EM_EXECUCAO")) {
       throw new AppError(
-        "Não é possível excluir a OS quando o projeto já entrou em execução",
-        409
+        "Não é possível arquivar a OS quando o projeto já entrou em execução",
+        409,
       );
     }
 
@@ -959,28 +1364,304 @@ export class ServiceOrdersService {
       where: { id: serviceOrderId },
       select: {
         id: true,
+        serviceOrderCode: true,
         projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderNumber: true,
+        issuedAt: true,
+        contractorName: true,
+        contractorCnpj: true,
+        commitmentNoteNumber: true,
+        requesterName: true,
+        requesterRank: true,
+        requesterCpf: true,
+        requesterRole: true,
+        issuingOrganization: true,
+        isEmergency: true,
+        plannedStartDate: true,
+        plannedEndDate: true,
+        requestingArea: true,
+        projectDisplayName: true,
+        projectAcronym: true,
+        contractNumber: true,
+        executionLocation: true,
+        executionHours: true,
+        contactName: true,
+        contactPhone: true,
+        contactExtension: true,
+        contractTotalTerm: true,
+        originProcess: true,
+        contractorRepresentativeName: true,
+        contractorRepresentativeRole: true,
+        notes: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            stage: true,
+            status: true,
+            creditNoteNumber: true,
+            creditNoteReceivedAt: true,
+            diexNumber: true,
+            diexIssuedAt: true,
+            commitmentNoteNumber: true,
+            commitmentNoteReceivedAt: true,
+            serviceOrderNumber: true,
+            serviceOrderIssuedAt: true,
+            executionStartedAt: true,
+            asBuiltReceivedAt: true,
+            invoiceAttestedAt: true,
+            serviceCompletedAt: true,
+          },
+        },
       },
     });
 
-    if (!serviceOrder) throw new AppError("OS não encontrada", 404);
+    if (!serviceOrder || serviceOrder.deletedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
 
-    await prisma.serviceOrder.delete({
-      where: { id: serviceOrderId },
+    if (serviceOrder.archivedAt) {
+      throw new AppError("OS já está arquivada", 409);
+    }
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: serviceOrder.id,
+      action: "ARCHIVE",
+      actor: this.getAuditActor(user),
+      summary: `OS ${serviceOrder.serviceOrderNumber ?? `#${serviceOrder.serviceOrderCode}`} arquivada`,
+      before: this.buildServiceOrderAuditSnapshot(serviceOrder),
     });
 
-    await prisma.project.update({
-      where: { id: serviceOrder.projectId },
+    await prisma.serviceOrder.update({
+      where: { id: serviceOrderId },
       data: {
-        serviceOrderNumber: null,
-        serviceOrderIssuedAt: null,
-        stage: "AGUARDANDO_NOTA_EMPENHO",
-        status: "PLANEJAMENTO",
+        archivedAt: new Date(),
+      },
+    });
+
+    const updatedProject = await prisma.project.update({
+      where: { id: serviceOrder.projectId },
+      data: workflowService.getProjectPatchAfterServiceOrderRemoved(),
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: serviceOrder.projectId,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${updatedProject.projectCode} retornou após arquivamento da OS`,
+      before: this.buildProjectAuditSnapshot(serviceOrder.project),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "service-order.remove",
+        previousStage: serviceOrder.project.stage,
+        newStage: updatedProject.stage,
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
       },
     });
 
     return {
-      message: "OS excluída com sucesso",
+      message: "OS arquivada com sucesso",
+    };
+  }
+
+  async restore(serviceOrderId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "service_orders.restore")) {
+      throw new AppError("Você não tem permissão para restaurar Ordem de Serviço", 403);
+    }
+
+    const serviceOrder = await prisma.serviceOrder.findUnique({
+      where: { id: serviceOrderId },
+      select: {
+        id: true,
+        serviceOrderCode: true,
+        projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderNumber: true,
+        issuedAt: true,
+        contractorName: true,
+        contractorCnpj: true,
+        commitmentNoteNumber: true,
+        requesterName: true,
+        requesterRank: true,
+        requesterCpf: true,
+        requesterRole: true,
+        issuingOrganization: true,
+        isEmergency: true,
+        plannedStartDate: true,
+        plannedEndDate: true,
+        requestingArea: true,
+        projectDisplayName: true,
+        projectAcronym: true,
+        contractNumber: true,
+        executionLocation: true,
+        executionHours: true,
+        contactName: true,
+        contactPhone: true,
+        contactExtension: true,
+        contractTotalTerm: true,
+        originProcess: true,
+        contractorRepresentativeName: true,
+        contractorRepresentativeRole: true,
+        notes: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            stage: true,
+            status: true,
+            archivedAt: true,
+            deletedAt: true,
+            creditNoteNumber: true,
+            creditNoteReceivedAt: true,
+            diexNumber: true,
+            diexIssuedAt: true,
+            commitmentNoteNumber: true,
+            commitmentNoteReceivedAt: true,
+            serviceOrderNumber: true,
+            serviceOrderIssuedAt: true,
+            executionStartedAt: true,
+            asBuiltReceivedAt: true,
+            invoiceAttestedAt: true,
+            serviceCompletedAt: true,
+          },
+        },
+        diexRequest: {
+          select: {
+            id: true,
+            archivedAt: true,
+            deletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!serviceOrder || serviceOrder.deletedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
+
+    if (!serviceOrder.archivedAt) {
+      throw new AppError("OS não está arquivada", 409);
+    }
+
+    if (serviceOrder.project.deletedAt || serviceOrder.project.archivedAt) {
+      throw new AppError("Não é possível restaurar OS com o projeto pai arquivado", 409);
+    }
+
+    if (
+      serviceOrder.diexRequest &&
+      (serviceOrder.diexRequest.deletedAt || serviceOrder.diexRequest.archivedAt)
+    ) {
+      throw new AppError("Não é possível restaurar OS com o DIEx vinculado arquivado", 409);
+    }
+
+    const restoredServiceOrder = await prisma.serviceOrder.update({
+      where: { id: serviceOrderId },
+      data: {
+        archivedAt: null,
+      },
+      include: serviceOrderInclude,
+    });
+
+    const updatedProject = await prisma.project.update({
+      where: { id: serviceOrder.projectId },
+      data: workflowService.getProjectPatchAfterServiceOrderCreated(
+        this.buildWorkflowSnapshot({
+          ...serviceOrder.project,
+          id: serviceOrder.project.id,
+          projectCode: serviceOrder.project.projectCode,
+          stage: serviceOrder.project.stage,
+          serviceOrderNumber:
+            restoredServiceOrder.serviceOrderNumber ?? serviceOrder.project.serviceOrderNumber,
+          serviceOrderIssuedAt:
+            restoredServiceOrder.issuedAt ?? serviceOrder.project.serviceOrderIssuedAt,
+        }),
+      ),
+      select: {
+        id: true,
+        projectCode: true,
+        stage: true,
+        status: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: restoredServiceOrder.id,
+      action: "RESTORE",
+      actor: this.getAuditActor(user),
+      summary: `OS ${restoredServiceOrder.serviceOrderNumber ?? `#${restoredServiceOrder.serviceOrderCode}`} restaurada`,
+      before: this.buildServiceOrderAuditSnapshot(serviceOrder),
+      after: this.buildServiceOrderAuditSnapshot(restoredServiceOrder),
+      metadata: {
+        permissionUsed: "service_orders.restore",
+      },
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: updatedProject.id,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${updatedProject.projectCode} sincronizado após restauração da OS`,
+      before: this.buildProjectAuditSnapshot(serviceOrder.project),
+      after: this.buildProjectAuditSnapshot(updatedProject),
+      metadata: {
+        source: "service-order.restore",
+        previousStage: serviceOrder.project.stage,
+        newStage: updatedProject.stage,
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot(updatedProject),
+        ).code,
+      },
+    });
+
+    return {
+      message: "OS restaurada com sucesso",
+      permissionUsed: "service_orders.restore" as const,
+      serviceOrder: restoredServiceOrder,
     };
   }
 }

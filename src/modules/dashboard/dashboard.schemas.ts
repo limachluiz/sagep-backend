@@ -52,3 +52,13 @@ export const dashboardOverviewQuerySchema = z
   );
 
 export type DashboardOverviewQuery = z.infer<typeof dashboardOverviewQuerySchema>;
+
+export const dashboardOperationalQuerySchema = z.object({
+  staleDays: z.coerce.number().int().positive().max(365).optional(),
+  limit: z.coerce.number().int().positive().max(200).optional(),
+});
+
+export const dashboardExecutiveQuerySchema = dashboardOverviewQuerySchema;
+
+export type DashboardOperationalQuery = z.infer<typeof dashboardOperationalQuerySchema>;
+export type DashboardExecutiveQuery = z.infer<typeof dashboardExecutiveQuerySchema>;

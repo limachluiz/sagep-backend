@@ -22,6 +22,10 @@ projectsRoutes.delete("/:id/members/:memberId", (req, res) =>
 
 projectsRoutes.patch("/:id/flow", (req, res) => controller.updateFlow(req, res));
 projectsRoutes.use("/:id/service-order", serviceOrdersRoutes);
+projectsRoutes.get("/:id/details", (req, res) => controller.details(req, res));
+projectsRoutes.get("/:id/timeline", (req, res) => controller.timeline(req, res));
+projectsRoutes.get("/:id/next-action", (req, res) => controller.nextAction(req, res));
 projectsRoutes.get("/:id", (req, res) => controller.findById(req, res));
 projectsRoutes.patch("/:id", (req, res) => controller.update(req, res));
+projectsRoutes.post("/:id/restore", (req, res) => controller.restore(req, res));
 projectsRoutes.delete("/:id", (req, res) => controller.remove(req, res));

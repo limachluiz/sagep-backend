@@ -26,6 +26,7 @@ export function generateRefreshToken(payload: JwtBasePayload, userId: string) {
   const options: SignOptions = {
     subject: userId,
     expiresIn: refreshExpiresIn,
+    jwtid: crypto.randomUUID(),
   };
 
   return jwt.sign(payload, refreshSecret, options);

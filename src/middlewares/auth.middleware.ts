@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
+import { permissionsService } from "../modules/permissions/permissions.service.js";
 import { verifyAccessToken } from "../shared/auth-tokens.js";
 
 type JwtPayload = {
@@ -51,6 +52,7 @@ export async function authMiddleware(
       name: user.name,
       email: user.email,
       role: user.role,
+      permissions: permissionsService.getPermissionsForRole(user.role),
       rank: user.rank,
       cpf: user.cpf,
     };

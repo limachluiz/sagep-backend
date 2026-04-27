@@ -16,4 +16,5 @@ diexRoutes.get("/:id/document/pdf", (req, res) => controller.documentPdf(req, re
 
 diexRoutes.get("/:id", (req, res) => controller.findById(req, res));
 diexRoutes.patch("/:id", (req, res) => controller.update(req, res));
+diexRoutes.post("/:id/restore", (req, res) => controller.restore(req, res));
 diexRoutes.delete("/:id", (req, res) => controller.remove(req, res));

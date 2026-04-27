@@ -26,6 +26,8 @@ export class DiexDocumentService {
       where: { id: diexId },
       select: {
         id: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             ownerId: true,
@@ -39,7 +41,7 @@ export class DiexDocumentService {
       },
     });
 
-    if (!diex) {
+    if (!diex || diex.deletedAt || diex.archivedAt) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
@@ -62,6 +64,8 @@ export class DiexDocumentService {
       where: { id: diexId },
       select: {
         id: true,
+        archivedAt: true,
+        deletedAt: true,
         diexCode: true,
         diexNumber: true,
         issuedAt: true,
@@ -135,6 +139,10 @@ export class DiexDocumentService {
         "O documento do DIEx só pode ser gerado após o preenchimento do número e da data pela SALC",
         409
       );
+    }
+
+    if (!diex || diex.deletedAt || diex.archivedAt) {
+      throw new AppError("DIEx não encontrado", 404);
     }
 
     return diex;
