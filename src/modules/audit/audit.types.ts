@@ -21,7 +21,11 @@ export type AuditActionType =
   | "LOGIN"
   | "LOGIN_FAILED"
   | "LOGOUT"
-  | "TOKEN_REFRESH";
+  | "TOKEN_REFRESH"
+  | "SESSION_REVOKE"
+  | "SESSION_REVOKE_ALL"
+  | "SESSION_EXPIRE"
+  | "SESSION_CLEANUP";
 
 export type AuditPrimitive = string | number | boolean | null;
 export type AuditValue =

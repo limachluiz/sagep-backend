@@ -11,6 +11,8 @@ export type Permission =
   | "service_orders.issue"
   | "service_orders.cancel"
   | "service_orders.restore"
+  | "sessions.manage_own"
+  | "sessions.manage_all"
   | "dashboard.financial_view"
   | "reports.export"
   | "users.manage";
@@ -33,6 +35,8 @@ const rolePermissions: Record<string, Permission[]> = {
     "service_orders.issue",
     "service_orders.cancel",
     "service_orders.restore",
+    "sessions.manage_own",
+    "sessions.manage_all",
     "dashboard.financial_view",
     "reports.export",
     "users.manage",
@@ -50,6 +54,7 @@ const rolePermissions: Record<string, Permission[]> = {
     "service_orders.issue",
     "service_orders.cancel",
     "service_orders.restore",
+    "sessions.manage_own",
     "dashboard.financial_view",
     "reports.export",
   ],
@@ -58,9 +63,10 @@ const rolePermissions: Record<string, Permission[]> = {
     "projects.complete",
     "diex.issue",
     "service_orders.issue",
+    "sessions.manage_own",
     "reports.export",
   ],
-  CONSULTA: [],
+  CONSULTA: ["sessions.manage_own"],
 };
 
 export class PermissionsService {

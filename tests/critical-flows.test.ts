@@ -60,11 +60,14 @@ async function createUser(
   });
 }
 
-async function login(email: string) {
-  const response = await request(app)
-    .post("/api/auth/login")
-    .send({ email, password })
-    .expect(200);
+async function login(email: string, userAgent?: string) {
+  const requestBuilder = request(app).post("/api/auth/login");
+
+  if (userAgent) {
+    requestBuilder.set("User-Agent", userAgent);
+  }
+
+  const response = await requestBuilder.send({ email, password }).expect(200);
 
   return response.body as {
     accessToken: string;
@@ -310,6 +313,126 @@ describe("critical flows", () => {
     expect(metadata.password).toBeUndefined();
     expect(metadata.token).toBeUndefined();
     expect(metadata.tokenHash).toBeUndefined();
+  });
+
+  it("auth sessions: supports own and administrative management with differentiated status", async () => {
+    const secondAdminAuth = await login(admin.email, "sagep-admin-device-2");
+    const secondConsultaAuth = await login(consulta.email, "sagep-consulta-device-2");
+
+    await prisma.refreshToken.create({
+      data: {
+        userId: admin.id,
+        tokenHash: hashToken("expired-admin-session"),
+        expiresAt: new Date("2020-01-01T00:00:00.000Z"),
+        createdUserAgent: "sagep-expired-device",
+      },
+    });
+
+    const ownActiveSessions = await request(app)
+      .get("/api/auth/sessions")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(ownActiveSessions.body.permissionUsed).toBe("sessions.manage_own");
+    expect(ownActiveSessions.body.scope).toBe("OWN");
+    expect(ownActiveSessions.body.filters.status).toBe("ACTIVE");
+    expect(ownActiveSessions.body.summary.active).toBeGreaterThanOrEqual(2);
+    expect(ownActiveSessions.body.summary.expired).toBeGreaterThanOrEqual(1);
+
+    const secondAdminSession = ownActiveSessions.body.sessions.find(
+      (session: { createdUserAgent: string; status: string }) =>
+        session.createdUserAgent === "sagep-admin-device-2" && session.status === "ACTIVE",
+    );
+
+    expect(secondAdminSession?.id).toBeTruthy();
+
+    await request(app)
+      .post(`/api/auth/sessions/${secondAdminSession.id}/revoke`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("sessions.manage_own");
+        expect(response.body.session.status).toBe("REVOKED");
+        expect(response.body.session.revokedReason).toBe("SECURITY");
+      });
+
+    const revokedOwnSessions = await request(app)
+      .get("/api/auth/sessions")
+      .query({ status: "REVOKED" })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(
+      revokedOwnSessions.body.sessions.some(
+        (session: { id: string }) => session.id === secondAdminSession.id,
+      ),
+    ).toBe(true);
+
+    const expiredOwnSessions = await request(app)
+      .get("/api/auth/sessions")
+      .query({ status: "EXPIRED" })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(expiredOwnSessions.body.sessions.some((session: { status: string }) => session.status === "EXPIRED")).toBe(true);
+
+    await request(app)
+      .get(`/api/auth/users/${consulta.id}/sessions`)
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(403);
+
+    const consultaSessions = await request(app)
+      .get(`/api/auth/users/${consulta.id}/sessions`)
+      .query({ status: "ACTIVE" })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(consultaSessions.body.permissionUsed).toBe("sessions.manage_all");
+    expect(consultaSessions.body.scope).toBe("ADMIN");
+    expect(consultaSessions.body.user.id).toBe(consulta.id);
+
+    const consultaSessionToRevoke = consultaSessions.body.sessions.find(
+      (session: { createdUserAgent: string }) =>
+        session.createdUserAgent === "sagep-consulta-device-2",
+    );
+
+    expect(consultaSessionToRevoke?.id).toBeTruthy();
+
+    await request(app)
+      .post(`/api/auth/users/${consulta.id}/sessions/${consultaSessionToRevoke.id}/revoke`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("sessions.manage_all");
+        expect(response.body.session.status).toBe("REVOKED");
+        expect(response.body.session.revokedReason).toBe("ADMIN_REVOKED");
+      });
+
+    await request(app)
+      .post(`/api/auth/users/${consulta.id}/sessions/revoke-all`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("sessions.manage_all");
+        expect(response.body.revokedCount).toBeGreaterThanOrEqual(1);
+      });
+
+    const consultaTokenAfterAdminRevoke = await prisma.refreshToken.findUnique({
+      where: { tokenHash: hashToken(secondConsultaAuth.refreshToken) },
+    });
+    expect(consultaTokenAfterAdminRevoke?.revokedReason).toBe("ADMIN_REVOKED");
+
+    const revokeAudit = await prisma.auditLog.findFirst({
+      where: { action: "SESSION_REVOKE", actorUserId: admin.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(revokeAudit).toBeTruthy();
+
+    const revokeAllAudit = await prisma.auditLog.findFirst({
+      where: { action: "SESSION_REVOKE_ALL", actorUserId: admin.id },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(revokeAllAudit).toBeTruthy();
   });
 
   it("projects: create, updateFlow and details", async () => {
