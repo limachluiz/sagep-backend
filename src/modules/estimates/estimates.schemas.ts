@@ -93,6 +93,12 @@ export const listEstimatesQuerySchema = z.object({
   cityName: z.string().trim().optional(),
   stateUf: ufEnum.optional(),
   search: z.string().trim().optional(),
+  includeArchived: z.coerce.boolean().optional(),
+  onlyArchived: z.coerce.boolean().optional(),
+});
+
+export const archivedEstimateQuerySchema = z.object({
+  includeArchived: z.coerce.boolean().optional(),
 });
 
 export const estimateIdParamSchema = z.object({

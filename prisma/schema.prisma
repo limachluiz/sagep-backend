@@ -184,6 +184,8 @@ model Task {
   dueDate     DateTime?
   project     Project    @relation(fields: [projectId], references: [id])
   assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  archivedAt  DateTime?
+  deletedAt   DateTime?
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
 }
@@ -272,6 +274,8 @@ model Estimate {
   items               EstimateItem[]
   diexRequests        DiexRequest[]
   serviceOrders       ServiceOrder[]
+  archivedAt          DateTime?
+  deletedAt           DateTime?
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
 }

@@ -199,6 +199,10 @@ export class OperationalAlertsService {
           },
         },
         estimates: {
+          where: {
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: {
             id: true,
             status: true,

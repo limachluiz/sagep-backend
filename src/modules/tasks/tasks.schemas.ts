@@ -79,6 +79,12 @@ export const listTasksQuerySchema = z.object({
   assigneeCode: z.coerce.number().int().positive().optional(),
   status: taskStatusEnum.optional(),
   search: z.string().trim().optional(),
+  includeArchived: z.coerce.boolean().optional(),
+  onlyArchived: z.coerce.boolean().optional(),
+});
+
+export const archivedTaskQuerySchema = z.object({
+  includeArchived: z.coerce.boolean().optional(),
 });
 
 export const taskIdParamSchema = z.object({

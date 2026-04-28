@@ -1,6 +1,7 @@
 import { EstimateDocumentService } from "./estimate-document.service.js";
 import { Request, Response } from "express";
 import {
+  archivedEstimateQuerySchema,
   createEstimateSchema,
   estimateCodeParamSchema,
   estimateIdParamSchema,
@@ -28,13 +29,15 @@ export class EstimatesController {
 
   async findById(req: Request, res: Response) {
     const { id } = estimateIdParamSchema.parse(req.params);
-    const estimate = await estimatesService.findById(id, req.user!);
+    const query = archivedEstimateQuerySchema.parse(req.query);
+    const estimate = await estimatesService.findById(id, req.user!, query);
     return res.status(200).json(estimate);
   }
 
   async findByCode(req: Request, res: Response) {
     const { code } = estimateCodeParamSchema.parse(req.params);
-    const estimate = await estimatesService.findByCode(code, req.user!);
+    const query = archivedEstimateQuerySchema.parse(req.query);
+    const estimate = await estimatesService.findByCode(code, req.user!, query);
     return res.status(200).json(estimate);
   }
 
@@ -55,6 +58,12 @@ export class EstimatesController {
   async remove(req: Request, res: Response) {
     const { id } = estimateIdParamSchema.parse(req.params);
     const result = await estimatesService.remove(id, req.user!);
+    return res.status(200).json(result);
+  }
+
+  async restore(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+    const result = await estimatesService.restore(id, req.user!);
     return res.status(200).json(result);
   }
 

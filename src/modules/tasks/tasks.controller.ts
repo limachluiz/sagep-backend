@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  archivedTaskQuerySchema,
   createTaskSchema,
   listTasksQuerySchema,
   taskCodeParamSchema,
@@ -26,13 +27,15 @@ export class TasksController {
 
   async findById(req: Request, res: Response) {
     const { id } = taskIdParamSchema.parse(req.params);
-    const task = await tasksService.findById(id, req.user!);
+    const query = archivedTaskQuerySchema.parse(req.query);
+    const task = await tasksService.findById(id, req.user!, query);
     return res.status(200).json(task);
   }
 
   async findByCode(req: Request, res: Response) {
     const { code } = taskCodeParamSchema.parse(req.params);
-    const task = await tasksService.findByCode(code, req.user!);
+    const query = archivedTaskQuerySchema.parse(req.query);
+    const task = await tasksService.findByCode(code, req.user!, query);
     return res.status(200).json(task);
   }
 
@@ -53,6 +56,12 @@ export class TasksController {
   async remove(req: Request, res: Response) {
     const { id } = taskIdParamSchema.parse(req.params);
     const result = await tasksService.remove(id, req.user!);
+    return res.status(200).json(result);
+  }
+
+  async restore(req: Request, res: Response) {
+    const { id } = taskIdParamSchema.parse(req.params);
+    const result = await tasksService.restore(id, req.user!);
     return res.status(200).json(result);
   }
 }

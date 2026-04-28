@@ -22,6 +22,9 @@ tasksRoutes.patch(
   requirePermission("tasks.edit_all", "tasks.edit_own", "tasks.assign"),
   (req, res) => controller.update(req, res),
 );
+tasksRoutes.post("/:id/restore", requirePermission("tasks.restore"), (req, res) =>
+  controller.restore(req, res),
+);
 tasksRoutes.delete("/:id", requirePermission("tasks.archive"), (req, res) =>
   controller.remove(req, res),
 );

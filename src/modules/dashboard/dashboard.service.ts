@@ -506,6 +506,10 @@ export class DashboardService {
           invoiceAttestedAt: true,
           serviceCompletedAt: true,
           estimates: {
+            where: {
+              archivedAt: null,
+              deletedAt: null,
+            },
             select: {
               createdAt: true,
             },
@@ -525,6 +529,10 @@ export class DashboardService {
         },
       }),
       prisma.task.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           status: true,
@@ -532,6 +540,10 @@ export class DashboardService {
         },
       }),
       prisma.estimate.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           estimateCode: true,
@@ -1141,6 +1153,10 @@ export class DashboardService {
         },
       }),
       prisma.estimate.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+        },
         select: {
           id: true,
           estimateCode: true,

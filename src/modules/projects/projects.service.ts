@@ -667,6 +667,14 @@ export class ProjectsService {
           },
         },
         tasks: {
+          where: includeArchived
+            ? {
+                deletedAt: null,
+              }
+            : {
+                archivedAt: null,
+                deletedAt: null,
+              },
           select: {
             id: true,
             taskCode: true,
@@ -674,6 +682,7 @@ export class ProjectsService {
             status: true,
             priority: true,
             dueDate: true,
+            archivedAt: true,
             assignee: {
               select: {
                 id: true,
@@ -688,6 +697,14 @@ export class ProjectsService {
           },
         },
         estimates: {
+          where: includeArchived
+            ? {
+                deletedAt: null,
+              }
+            : {
+                archivedAt: null,
+                deletedAt: null,
+              },
           select: {
             id: true,
             estimateCode: true,
@@ -695,6 +712,7 @@ export class ProjectsService {
             destinationCityName: true,
             destinationStateUf: true,
             totalAmount: true,
+            archivedAt: true,
             createdAt: true,
           },
           orderBy: {
@@ -704,8 +722,26 @@ export class ProjectsService {
         _count: {
           select: {
             members: true,
-            tasks: true,
-            estimates: true,
+            tasks: {
+              where: includeArchived
+                ? {
+                    deletedAt: null,
+                  }
+                : {
+                    archivedAt: null,
+                    deletedAt: null,
+                  },
+            },
+            estimates: {
+              where: includeArchived
+                ? {
+                    deletedAt: null,
+                  }
+                : {
+                    archivedAt: null,
+                    deletedAt: null,
+                  },
+            },
           },
         },
       },
@@ -778,6 +814,14 @@ export class ProjectsService {
           },
         },
         tasks: {
+          where: includeArchived
+            ? {
+                deletedAt: null,
+              }
+            : {
+                archivedAt: null,
+                deletedAt: null,
+              },
           select: {
             id: true,
             taskCode: true,
@@ -785,12 +829,21 @@ export class ProjectsService {
             status: true,
             priority: true,
             dueDate: true,
+            archivedAt: true,
           },
           orderBy: {
             createdAt: "desc",
           },
         },
         estimates: {
+          where: includeArchived
+            ? {
+                deletedAt: null,
+              }
+            : {
+                archivedAt: null,
+                deletedAt: null,
+              },
           select: {
             id: true,
             estimateCode: true,
@@ -798,6 +851,7 @@ export class ProjectsService {
             destinationCityName: true,
             destinationStateUf: true,
             totalAmount: true,
+            archivedAt: true,
             createdAt: true,
           },
           orderBy: {
@@ -874,8 +928,26 @@ export class ProjectsService {
         _count: {
           select: {
             members: true,
-            tasks: true,
-            estimates: true,
+            tasks: {
+              where: includeArchived
+                ? {
+                    deletedAt: null,
+                  }
+                : {
+                    archivedAt: null,
+                    deletedAt: null,
+                  },
+            },
+            estimates: {
+              where: includeArchived
+                ? {
+                    deletedAt: null,
+                  }
+                : {
+                    archivedAt: null,
+                    deletedAt: null,
+                  },
+            },
           },
         },
       },
@@ -1178,6 +1250,8 @@ export class ProjectsService {
       where: {
         projectId,
         status: "FINALIZADA",
+        archivedAt: null,
+        deletedAt: null,
       },
     });
 

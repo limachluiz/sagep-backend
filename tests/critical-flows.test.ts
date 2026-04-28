@@ -827,6 +827,164 @@ describe("critical flows", () => {
       .expect(403);
   });
 
+  it("tasks archive: hides archived tasks by default, restores and updates open task summary", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto Task Archive");
+
+    const task = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        title: "Tarefa a arquivar",
+      })
+      .expect(201);
+
+    const detailsBeforeArchive = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsBeforeArchive.body.operationalSummary.openTasksCount).toBe(1);
+
+    await request(app)
+      .delete(`/api/tasks/${task.body.id}`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .delete(`/api/tasks/${task.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("tasks.archive");
+        expect(response.body.task.archivedAt).toBeTruthy();
+      });
+
+    const defaultTasks = await request(app)
+      .get("/api/tasks")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(defaultTasks.body.some((item: { id: string }) => item.id === task.body.id)).toBe(false);
+
+    const detailsAfterArchive = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsAfterArchive.body.operationalSummary.openTasksCount).toBe(0);
+
+    const archivedTasks = await request(app)
+      .get("/api/tasks")
+      .query({ onlyArchived: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(archivedTasks.body.some((item: { id: string; archivedAt: string | null }) => item.id === task.body.id && item.archivedAt)).toBe(true);
+
+    await request(app)
+      .post(`/api/tasks/${task.body.id}/restore`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .post(`/api/tasks/${task.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("tasks.restore");
+        expect(response.body.task.archivedAt).toBeNull();
+      });
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { entityType: "TASK", entityId: task.body.id, action: "RESTORE" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).toBeTruthy();
+  });
+
+  it("estimates archive: hides archived estimates by default, restores and updates financial summary", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto Estimate Archive");
+    const catalog = await createCatalog();
+
+    const estimate = await request(app)
+      .post("/api/estimates")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        ataId: catalog.ata.id,
+        coverageGroupId: catalog.coverageGroup.id,
+        omId: catalog.om.id,
+        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
+      })
+      .expect(201);
+
+    const detailsBeforeArchive = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsBeforeArchive.body.financialSummary.estimatesCount).toBe(1);
+    expect(detailsBeforeArchive.body.financialSummary.estimatedTotalAmount).toBe("100.00");
+
+    await request(app)
+      .delete(`/api/estimates/${estimate.body.id}`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .delete(`/api/estimates/${estimate.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("estimates.archive");
+        expect(response.body.estimate.archivedAt).toBeTruthy();
+      });
+
+    const defaultEstimates = await request(app)
+      .get("/api/estimates")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(defaultEstimates.body.some((item: { id: string }) => item.id === estimate.body.id)).toBe(false);
+
+    const detailsAfterArchive = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsAfterArchive.body.financialSummary.estimatesCount).toBe(0);
+    expect(detailsAfterArchive.body.financialSummary.estimatedTotalAmount).toBe("0.00");
+
+    const archivedEstimates = await request(app)
+      .get("/api/estimates")
+      .query({ onlyArchived: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(archivedEstimates.body.some((item: { id: string; archivedAt: string | null }) => item.id === estimate.body.id && item.archivedAt)).toBe(true);
+
+    await request(app)
+      .post(`/api/estimates/${estimate.body.id}/restore`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .post(`/api/estimates/${estimate.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("estimates.restore");
+        expect(response.body.estimate.archivedAt).toBeNull();
+      });
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { entityType: "ESTIMATE", entityId: estimate.body.id, action: "RESTORE" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit).toBeTruthy();
+  });
+
   it("restore permissions: GESTOR can restore and PROJETISTA/CONSULTA cannot", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
     const archivedProject = await createProject(adminAuth.accessToken, "Projeto Arquivado");

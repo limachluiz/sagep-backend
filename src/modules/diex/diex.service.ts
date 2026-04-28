@@ -245,6 +245,8 @@ export class DiexService {
           projectId: true,
           status: true,
           totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
           items: {
             select: {
               id: true,
@@ -269,7 +271,7 @@ export class DiexService {
         },
       });
 
-      if (!estimate) {
+      if (!estimate || estimate.deletedAt || estimate.archivedAt) {
         throw new AppError("Estimativa não encontrada", 404);
       }
 
@@ -289,6 +291,8 @@ export class DiexService {
           projectId: true,
           status: true,
           totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
           items: {
             select: {
               id: true,
@@ -313,7 +317,7 @@ export class DiexService {
         },
       });
 
-      if (!estimate) {
+      if (!estimate || estimate.deletedAt || estimate.archivedAt) {
         throw new AppError("Estimativa não encontrada", 404);
       }
 

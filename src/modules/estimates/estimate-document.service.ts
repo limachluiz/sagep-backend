@@ -41,6 +41,8 @@ export class EstimateDocumentService {
       where: { id: estimateId },
       select: {
         id: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             ownerId: true,
@@ -54,7 +56,7 @@ export class EstimateDocumentService {
       },
     });
 
-    if (!estimate) {
+    if (!estimate || estimate.deletedAt || estimate.archivedAt) {
       throw new AppError("Estimativa não encontrada", 404);
     }
 
