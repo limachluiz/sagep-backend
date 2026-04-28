@@ -9,6 +9,7 @@ import {
 } from "./diex.schemas.js";
 import { DiexService } from "./diex.service.js";
 import { DiexDocumentService } from "./diex-document.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const diexService = new DiexService();
 const diexDocumentService = new DiexDocumentService();
@@ -23,7 +24,18 @@ export class DiexController {
   async list(req: Request, res: Response) {
     const filters = listDiexQuerySchema.parse(req.query);
     const diex = await diexService.list(filters, req.user!);
-    return res.status(200).json(diex);
+    if (filters.format === "legacy") {
+      return res.status(200).json(diex);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: diex,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {

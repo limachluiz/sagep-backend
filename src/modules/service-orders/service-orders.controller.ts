@@ -9,6 +9,7 @@ import {
 } from "./service-orders.schemas.js";
 import { ServiceOrdersService } from "./service-orders.service.js";
 import { ServiceOrderDocumentService } from "./service-order-document.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const serviceOrdersService = new ServiceOrdersService();
 const serviceOrderDocumentService = new ServiceOrderDocumentService();
@@ -22,7 +23,18 @@ export class ServiceOrdersController {
   async list(req: Request, res: Response) {
     const filters = listServiceOrdersQuerySchema.parse(req.query);
     const serviceOrders = await serviceOrdersService.list(filters, req.user!);
-    return res.status(200).json(serviceOrders);
+    if (filters.format === "legacy") {
+      return res.status(200).json(serviceOrders);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: serviceOrders,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 import { optionalDate, optionalString} from "../../shared/zod-helpers.js";
 
 export const createDiexSchema = z.object({
@@ -53,7 +54,7 @@ export const updateDiexSchema = z.object({
   message: "Informe pelo menos um campo para atualizar",
 });
 
-export const listDiexQuerySchema = z.object({
+export const listDiexQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   projectCode: z.coerce.number().int().positive().optional(),
   estimateCode: z.coerce.number().int().positive().optional(),

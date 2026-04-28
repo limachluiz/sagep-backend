@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import puppeteer from "puppeteer";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 import { renderEstimateDocumentHtml } from "./estimate-document.template.js";
 
 type CurrentUser = {
@@ -18,7 +19,7 @@ const projectRoot = path.resolve(__dirname, "../../..");
 
 export class EstimateDocumentService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "estimates.view_all");
   }
 
   private async fileToDataUrl(relativePath: string) {
@@ -40,6 +41,8 @@ export class EstimateDocumentService {
       where: { id: estimateId },
       select: {
         id: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             ownerId: true,
@@ -53,7 +56,7 @@ export class EstimateDocumentService {
       },
     });
 
-    if (!estimate) {
+    if (!estimate || estimate.deletedAt || estimate.archivedAt) {
       throw new AppError("Estimativa não encontrada", 404);
     }
 

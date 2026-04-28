@@ -1,0 +1,5 @@
+ALTER TABLE "Task" ADD COLUMN "archivedAt" TIMESTAMP(3);
+ALTER TABLE "Task" ADD COLUMN "deletedAt" TIMESTAMP(3);
+
+ALTER TABLE "Estimate" ADD COLUMN "archivedAt" TIMESTAMP(3);
+ALTER TABLE "Estimate" ADD COLUMN "deletedAt" TIMESTAMP(3);

@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import {
+  archivedTaskQuerySchema,
   createTaskSchema,
   listTasksQuerySchema,
   taskCodeParamSchema,
@@ -8,6 +9,7 @@ import {
   updateTaskStatusSchema,
 } from "./tasks.schemas.js";
 import { TasksService } from "./tasks.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const tasksService = new TasksService();
 
@@ -21,18 +23,31 @@ export class TasksController {
   async list(req: Request, res: Response) {
     const filters = listTasksQuerySchema.parse(req.query);
     const tasks = await tasksService.list(filters, req.user!);
-    return res.status(200).json(tasks);
+    if (filters.format === "legacy") {
+      return res.status(200).json(tasks);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: tasks,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {
     const { id } = taskIdParamSchema.parse(req.params);
-    const task = await tasksService.findById(id, req.user!);
+    const query = archivedTaskQuerySchema.parse(req.query);
+    const task = await tasksService.findById(id, req.user!, query);
     return res.status(200).json(task);
   }
 
   async findByCode(req: Request, res: Response) {
     const { code } = taskCodeParamSchema.parse(req.params);
-    const task = await tasksService.findByCode(code, req.user!);
+    const query = archivedTaskQuerySchema.parse(req.query);
+    const task = await tasksService.findByCode(code, req.user!, query);
     return res.status(200).json(task);
   }
 
@@ -53,6 +68,12 @@ export class TasksController {
   async remove(req: Request, res: Response) {
     const { id } = taskIdParamSchema.parse(req.params);
     const result = await tasksService.remove(id, req.user!);
+    return res.status(200).json(result);
+  }
+
+  async restore(req: Request, res: Response) {
+    const { id } = taskIdParamSchema.parse(req.params);
+    const result = await tasksService.restore(id, req.user!);
     return res.status(200).json(result);
   }
 }

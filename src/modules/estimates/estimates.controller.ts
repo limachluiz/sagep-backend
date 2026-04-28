@@ -1,6 +1,7 @@
 import { EstimateDocumentService } from "./estimate-document.service.js";
 import { Request, Response } from "express";
 import {
+  archivedEstimateQuerySchema,
   createEstimateSchema,
   estimateCodeParamSchema,
   estimateIdParamSchema,
@@ -9,6 +10,7 @@ import {
   updateEstimateStatusSchema,
 } from "./estimates.schemas.js";
 import { EstimatesService } from "./estimates.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const estimatesService = new EstimatesService();
 const estimateDocumentService = new EstimateDocumentService();
@@ -23,18 +25,31 @@ export class EstimatesController {
   async list(req: Request, res: Response) {
     const filters = listEstimatesQuerySchema.parse(req.query);
     const estimates = await estimatesService.list(filters, req.user!);
-    return res.status(200).json(estimates);
+    if (filters.format === "legacy") {
+      return res.status(200).json(estimates);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: estimates,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {
     const { id } = estimateIdParamSchema.parse(req.params);
-    const estimate = await estimatesService.findById(id, req.user!);
+    const query = archivedEstimateQuerySchema.parse(req.query);
+    const estimate = await estimatesService.findById(id, req.user!, query);
     return res.status(200).json(estimate);
   }
 
   async findByCode(req: Request, res: Response) {
     const { code } = estimateCodeParamSchema.parse(req.params);
-    const estimate = await estimatesService.findByCode(code, req.user!);
+    const query = archivedEstimateQuerySchema.parse(req.query);
+    const estimate = await estimatesService.findByCode(code, req.user!, query);
     return res.status(200).json(estimate);
   }
 
@@ -55,6 +70,12 @@ export class EstimatesController {
   async remove(req: Request, res: Response) {
     const { id } = estimateIdParamSchema.parse(req.params);
     const result = await estimatesService.remove(id, req.user!);
+    return res.status(200).json(result);
+  }
+
+  async restore(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+    const result = await estimatesService.restore(id, req.user!);
     return res.status(200).json(result);
   }
 

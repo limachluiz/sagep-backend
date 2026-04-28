@@ -105,6 +105,10 @@ export class ExportsService {
           },
         },
         estimates: {
+          where: {
+            archivedAt: null,
+            deletedAt: null,
+          },
           select: {
             status: true,
             omName: true,

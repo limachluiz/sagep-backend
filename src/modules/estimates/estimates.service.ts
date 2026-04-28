@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 
 type CurrentUser = {
@@ -50,6 +51,8 @@ type ListEstimatesFilters = {
   cityName?: string;
   stateUf?: "AM" | "RO" | "RR" | "AC";
   search?: string;
+  includeArchived?: boolean;
+  onlyArchived?: boolean;
 };
 
 const estimateInclude = {
@@ -128,8 +131,70 @@ const estimateInclude = {
 } satisfies Prisma.EstimateInclude;
 
 export class EstimatesService {
+  private isAdmin(role: string) {
+    return role === "ADMIN";
+  }
+
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "estimates.view_all");
+  }
+
+  private resolveArchivedAccess(
+    user: CurrentUser,
+    filters: { includeArchived?: boolean; onlyArchived?: boolean },
+  ) {
+    if ((filters.includeArchived || filters.onlyArchived) && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar estimativas arquivadas", 403);
+    }
+
+    return {
+      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
+      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+    };
+  }
+
+  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.EstimateWhereInput {
+    if (includeArchived) {
+      return { deletedAt: null };
+    }
+
+    return {
+      archivedAt: null,
+      deletedAt: null,
+    };
+  }
+
+  private getAuditActor(user: CurrentUser) {
+    return {
+      id: user.id,
+      name: user.email,
+    };
+  }
+
+  private buildEstimateAuditSnapshot(estimate: {
+    id: string;
+    estimateCode?: number | null;
+    projectId?: string | null;
+    status?: string | null;
+    omName?: string | null;
+    destinationCityName?: string | null;
+    destinationStateUf?: string | null;
+    totalAmount?: unknown;
+    archivedAt?: Date | null;
+    deletedAt?: Date | null;
+  }) {
+    return {
+      id: estimate.id,
+      estimateCode: estimate.estimateCode ?? null,
+      projectId: estimate.projectId ?? null,
+      status: estimate.status ?? null,
+      omName: estimate.omName ?? null,
+      destinationCityName: estimate.destinationCityName ?? null,
+      destinationStateUf: estimate.destinationStateUf ?? null,
+      totalAmount: estimate.totalAmount?.toString() ?? null,
+      archivedAt: estimate.archivedAt ?? null,
+      deletedAt: estimate.deletedAt ?? null,
+    };
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -352,12 +417,12 @@ export class EstimatesService {
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (permissionsService.hasPermission(user, "projects.edit_all")) {
+    if (permissionsService.hasPermission(user, "estimates.edit")) {
       return true;
     }
 
     if (
-      permissionsService.hasPermission(user, "projects.edit_own") &&
+      permissionsService.hasPermission(user, "estimates.edit") &&
       project.ownerId === user.id
     ) {
       return true;
@@ -365,14 +430,14 @@ export class EstimatesService {
 
     const isMember = project.members.some((member) => member.userId === user.id);
 
-    return isMember && user.role !== "CONSULTA";
+    return isMember && permissionsService.hasPermission(user, "estimates.edit");
   }
 
   private canViewProject(
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (this.isPrivileged(user.role)) {
+    if (permissionsService.hasPermission(user, "estimates.view_all")) {
       return true;
     }
 
@@ -390,6 +455,8 @@ export class EstimatesService {
         id: true,
         estimateCode: true,
         status: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -404,7 +471,7 @@ export class EstimatesService {
       },
     });
 
-    if (!estimate) {
+    if (!estimate || estimate.deletedAt) {
       throw new AppError("Estimativa não encontrada", 404);
     }
 
@@ -418,6 +485,8 @@ export class EstimatesService {
         id: true,
         estimateCode: true,
         status: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -432,15 +501,19 @@ export class EstimatesService {
       },
     });
 
-    if (!estimate) {
+    if (!estimate || estimate.deletedAt) {
       throw new AppError("Estimativa não encontrada", 404);
     }
 
     return estimate;
   }
 
-  private async ensureCanView(estimateId: string, user: CurrentUser) {
+  private async ensureCanView(estimateId: string, user: CurrentUser, includeArchived = false) {
     const estimate = await this.getEstimateAccessData(estimateId);
+
+    if (!includeArchived && estimate.archivedAt) {
+      throw new AppError("Estimativa não encontrada", 404);
+    }
 
     if (!this.canViewProject(estimate.project, user)) {
       throw new AppError("Você não tem acesso a esta estimativa", 403);
@@ -451,6 +524,10 @@ export class EstimatesService {
 
   private async ensureCanManage(estimateId: string, user: CurrentUser) {
     const estimate = await this.getEstimateAccessData(estimateId);
+
+    if (estimate.archivedAt) {
+      throw new AppError("Estimativa arquivada não pode ser alterada", 409);
+    }
 
     if (!this.canManageProject(estimate.project, user)) {
       throw new AppError("Você não tem permissão para gerenciar esta estimativa", 403);
@@ -584,6 +661,10 @@ export class EstimatesService {
   async create(data: CreateEstimateInput, user: CurrentUser) {
     const project = await this.resolveProject(data.projectId, data.projectCode);
 
+    if (!permissionsService.hasPermission(user, "estimates.create")) {
+      throw new AppError("Você não tem permissão para criar estimativas", 403);
+    }
+
     if (!this.canManageProject(project, user)) {
       throw new AppError("Você não tem permissão para criar estimativas neste projeto", 403);
     }
@@ -654,7 +735,14 @@ export class EstimatesService {
   }
 
   async list(filters: ListEstimatesFilters, user: CurrentUser) {
+    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.EstimateWhereInput[] = [];
+
+    andConditions.push(
+      onlyArchived
+        ? { archivedAt: { not: null }, deletedAt: null }
+        : this.buildArchiveVisibilityWhere(includeArchived),
+    );
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -777,8 +865,13 @@ export class EstimatesService {
     return estimates;
   }
 
-  async findById(estimateId: string, user: CurrentUser) {
-    await this.ensureCanView(estimateId, user);
+  async findById(
+    estimateId: string,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanView(estimateId, user, includeArchived);
 
     const estimate = await prisma.estimate.findUnique({
       where: { id: estimateId },
@@ -792,8 +885,17 @@ export class EstimatesService {
     return estimate;
   }
 
-  async findByCode(estimateCode: number, user: CurrentUser) {
+  async findByCode(
+    estimateCode: number,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
     const accessData = await this.getEstimateAccessDataByCode(estimateCode);
+
+    if (!includeArchived && accessData.archivedAt) {
+      throw new AppError("Estimativa não encontrada", 404);
+    }
 
     if (!this.canViewProject(accessData.project, user)) {
       throw new AppError("Você não tem acesso a esta estimativa", 403);
@@ -812,6 +914,13 @@ export class EstimatesService {
   }
 
   async update(estimateId: string, data: UpdateEstimateInput, user: CurrentUser) {
+    if (
+      data.status === "FINALIZADA" &&
+      !permissionsService.hasPermission(user, "estimates.finalize")
+    ) {
+      throw new AppError("Você não tem permissão para finalizar estimativas", 403);
+    }
+
     await this.ensureCanManage(estimateId, user);
 
     const currentEstimate = await prisma.estimate.findUnique({
@@ -928,6 +1037,13 @@ export class EstimatesService {
   }
 
   async updateStatus(estimateId: string, data: UpdateEstimateStatusInput, user: CurrentUser) {
+    if (
+      data.status === "FINALIZADA" &&
+      !permissionsService.hasPermission(user, "estimates.finalize")
+    ) {
+      throw new AppError("Você não tem permissão para finalizar estimativas", 403);
+    }
+
     await this.ensureCanManage(estimateId, user);
 
     const estimate = await prisma.estimate.update({
@@ -942,18 +1058,146 @@ export class EstimatesService {
   }
 
   async remove(estimateId: string, user: CurrentUser) {
-    const accessData = await this.ensureCanManage(estimateId, user);
-
-    if (accessData.status === "FINALIZADA") {
-      throw new AppError("Não é possível excluir uma estimativa finalizada", 409);
+    if (!permissionsService.hasPermission(user, "estimates.archive")) {
+      throw new AppError("Você não tem permissão para arquivar esta estimativa", 403);
     }
 
-    await prisma.estimate.delete({
+    const before = await prisma.estimate.findUnique({
       where: { id: estimateId },
+      select: {
+        id: true,
+        estimateCode: true,
+        projectId: true,
+        status: true,
+        omName: true,
+        destinationCityName: true,
+        destinationStateUf: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+        diexRequests: {
+          where: {
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+          },
+        },
+        serviceOrders: {
+          where: {
+            deletedAt: null,
+          },
+          select: {
+            id: true,
+          },
+        },
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("Estimativa não encontrada", 404);
+    }
+
+    if (before.archivedAt) {
+      throw new AppError("Estimativa já está arquivada", 409);
+    }
+
+    if (before.diexRequests.length > 0 || before.serviceOrders.length > 0) {
+      throw new AppError("Não é possível arquivar estimativa com DIEx ou OS vinculados", 409);
+    }
+
+    const estimate = await prisma.estimate.update({
+      where: { id: estimateId },
+      data: {
+        archivedAt: new Date(),
+      },
+      include: estimateInclude,
+    });
+
+    await auditService.log({
+      entityType: "ESTIMATE",
+      entityId: before.id,
+      action: "ARCHIVE",
+      actor: this.getAuditActor(user),
+      summary: `Estimativa EST-${before.estimateCode} arquivada`,
+      before: this.buildEstimateAuditSnapshot(before),
+      after: this.buildEstimateAuditSnapshot(estimate),
+      metadata: {
+        permissionUsed: "estimates.archive",
+      },
     });
 
     return {
-      message: "Estimativa excluída com sucesso",
+      message: "Estimativa arquivada com sucesso",
+      permissionUsed: "estimates.archive" as const,
+      estimate,
+    };
+  }
+
+  async restore(estimateId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "estimates.restore")) {
+      throw new AppError("Você não tem permissão para restaurar esta estimativa", 403);
+    }
+
+    const before = await prisma.estimate.findUnique({
+      where: { id: estimateId },
+      select: {
+        id: true,
+        estimateCode: true,
+        projectId: true,
+        status: true,
+        omName: true,
+        destinationCityName: true,
+        destinationStateUf: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            archivedAt: true,
+            deletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("Estimativa não encontrada", 404);
+    }
+
+    if (!before.archivedAt) {
+      throw new AppError("Estimativa não está arquivada", 409);
+    }
+
+    if (before.project.deletedAt || before.project.archivedAt) {
+      throw new AppError("Não é possível restaurar estimativa de projeto arquivado", 409);
+    }
+
+    const estimate = await prisma.estimate.update({
+      where: { id: estimateId },
+      data: {
+        archivedAt: null,
+      },
+      include: estimateInclude,
+    });
+
+    await auditService.log({
+      entityType: "ESTIMATE",
+      entityId: before.id,
+      action: "RESTORE",
+      actor: this.getAuditActor(user),
+      summary: `Estimativa EST-${before.estimateCode} restaurada`,
+      before: this.buildEstimateAuditSnapshot(before),
+      after: this.buildEstimateAuditSnapshot(estimate),
+      metadata: {
+        permissionUsed: "estimates.restore",
+      },
+    });
+
+    return {
+      message: "Estimativa restaurada com sucesso",
+      permissionUsed: "estimates.restore" as const,
+      estimate,
     };
   }
 }

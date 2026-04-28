@@ -360,6 +360,12 @@ export class AuthService {
         cpf: user.cpf,
         active: user.active,
         createdAt: user.createdAt,
+        permissions: permissionsService.getPermissionsForRole(user.role),
+        access: {
+          role: user.role,
+          permissions: permissionsService.getPermissionsForRole(user.role),
+          isAdmin: user.role === "ADMIN",
+        },
       },
     };
   }
@@ -527,7 +533,15 @@ export class AuthService {
       throw new AppError("Usu\u00e1rio n\u00e3o encontrado", 404);
     }
 
-    return user;
+    return {
+      ...user,
+      permissions: permissionsService.getPermissionsForRole(user.role),
+      access: {
+        role: user.role,
+        permissions: permissionsService.getPermissionsForRole(user.role),
+        isAdmin: user.role === "ADMIN",
+      },
+    };
   }
 
   async listOwnSessions(user: CurrentUser, filters: ListSessionsInput) {

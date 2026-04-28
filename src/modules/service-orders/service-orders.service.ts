@@ -387,6 +387,8 @@ export class ServiceOrdersService {
           omName: true,
           destinationCityName: true,
           destinationStateUf: true,
+          archivedAt: true,
+          deletedAt: true,
           items: {
             select: {
               id: true,
@@ -409,7 +411,9 @@ export class ServiceOrdersService {
         },
       });
 
-      if (!estimate) throw new AppError("Estimativa não encontrada", 404);
+      if (!estimate || estimate.deletedAt || estimate.archivedAt) {
+        throw new AppError("Estimativa não encontrada", 404);
+      }
 
       if (estimateCode && estimate.estimateCode !== estimateCode) {
         throw new AppError(
@@ -433,6 +437,8 @@ export class ServiceOrdersService {
           omName: true,
           destinationCityName: true,
           destinationStateUf: true,
+          archivedAt: true,
+          deletedAt: true,
           items: {
             select: {
               id: true,
@@ -455,7 +461,9 @@ export class ServiceOrdersService {
         },
       });
 
-      if (!estimate) throw new AppError("Estimativa não encontrada", 404);
+      if (!estimate || estimate.deletedAt || estimate.archivedAt) {
+        throw new AppError("Estimativa não encontrada", 404);
+      }
       return estimate;
     }
 

@@ -28,6 +28,7 @@ O SAGEP foi pensado para apoiar o fluxo documental e operacional da **Divisão T
 - [Variáveis de ambiente](#variáveis-de-ambiente)
 - [Perfis do sistema](#perfis-do-sistema)
 - [Principais módulos e endpoints](#principais-módulos-e-endpoints)
+- [DocumentaÃ§Ã£o da API](#documentaÃ§Ã£o-da-api)
 - [Exemplos de uso da API](#exemplos-de-uso-da-api)
 - [Dashboards](#dashboards)
 - [Testes](#testes)
@@ -337,6 +338,21 @@ Além do perfil, o backend também utiliza permissões granulares para controlar
 - `GET /api/exports/projects.xlsx`
 - `GET /api/reports/projects/:id/dossier`
 - `GET /api/reports/projects/:id/dossier.pdf`
+
+---
+
+## DocumentaÃ§Ã£o da API
+
+A documentaÃ§Ã£o tÃ©cnica para consumo pelo frontend fica em:
+
+- [docs/api/README.md](docs/api/README.md)
+- [PadrÃµes da API](docs/api/patterns.md)
+- [Auth, sessÃµes e permissÃµes](docs/api/auth-and-permissions.md)
+- [Projetos, tarefas e estimativas](docs/api/projects-and-operations.md)
+- [DIEx e Ordens de ServiÃ§o](docs/api/documents.md)
+- [Dashboards, busca, alertas, relatÃ³rios e administraÃ§Ã£o](docs/api/insights-and-admin.md)
+
+Ela documenta envelopes de listagem, paginaÃ§Ã£o, `format=legacy`, permissÃµes, arquivamento/restore e payloads principais.
 
 ---
 

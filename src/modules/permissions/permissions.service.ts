@@ -5,6 +5,20 @@ export type Permission =
   | "projects.restore"
   | "projects.complete"
   | "projects.reopen"
+  | "tasks.view_all"
+  | "tasks.create"
+  | "tasks.edit_all"
+  | "tasks.edit_own"
+  | "tasks.assign"
+  | "tasks.complete"
+  | "tasks.archive"
+  | "tasks.restore"
+  | "estimates.view_all"
+  | "estimates.create"
+  | "estimates.edit"
+  | "estimates.finalize"
+  | "estimates.archive"
+  | "estimates.restore"
   | "diex.issue"
   | "diex.cancel"
   | "diex.restore"
@@ -13,6 +27,8 @@ export type Permission =
   | "service_orders.restore"
   | "sessions.manage_own"
   | "sessions.manage_all"
+  | "dashboard.view_operational"
+  | "dashboard.view_executive"
   | "dashboard.financial_view"
   | "reports.export"
   | "users.manage";
@@ -20,6 +36,26 @@ export type Permission =
 type UserLike = {
   role: string;
 };
+
+const taskPermissions: Permission[] = [
+  "tasks.view_all",
+  "tasks.create",
+  "tasks.edit_all",
+  "tasks.edit_own",
+  "tasks.assign",
+  "tasks.complete",
+  "tasks.archive",
+  "tasks.restore",
+];
+
+const estimatePermissions: Permission[] = [
+  "estimates.view_all",
+  "estimates.create",
+  "estimates.edit",
+  "estimates.finalize",
+  "estimates.archive",
+  "estimates.restore",
+];
 
 const rolePermissions: Record<string, Permission[]> = {
   ADMIN: [
@@ -29,6 +65,8 @@ const rolePermissions: Record<string, Permission[]> = {
     "projects.restore",
     "projects.complete",
     "projects.reopen",
+    ...taskPermissions,
+    ...estimatePermissions,
     "diex.issue",
     "diex.cancel",
     "diex.restore",
@@ -37,6 +75,8 @@ const rolePermissions: Record<string, Permission[]> = {
     "service_orders.restore",
     "sessions.manage_own",
     "sessions.manage_all",
+    "dashboard.view_operational",
+    "dashboard.view_executive",
     "dashboard.financial_view",
     "reports.export",
     "users.manage",
@@ -48,6 +88,8 @@ const rolePermissions: Record<string, Permission[]> = {
     "projects.restore",
     "projects.complete",
     "projects.reopen",
+    ...taskPermissions,
+    ...estimatePermissions,
     "diex.issue",
     "diex.cancel",
     "diex.restore",
@@ -55,18 +97,32 @@ const rolePermissions: Record<string, Permission[]> = {
     "service_orders.cancel",
     "service_orders.restore",
     "sessions.manage_own",
+    "dashboard.view_operational",
+    "dashboard.view_executive",
     "dashboard.financial_view",
     "reports.export",
   ],
   PROJETISTA: [
     "projects.edit_own",
     "projects.complete",
+    "tasks.create",
+    "tasks.edit_own",
+    "tasks.complete",
+    "estimates.create",
+    "estimates.edit",
+    "estimates.finalize",
     "diex.issue",
     "service_orders.issue",
     "sessions.manage_own",
+    "dashboard.view_operational",
     "reports.export",
   ],
-  CONSULTA: ["sessions.manage_own"],
+  CONSULTA: [
+    "tasks.view_all",
+    "estimates.view_all",
+    "sessions.manage_own",
+    "dashboard.view_operational",
+  ],
 };
 
 export class PermissionsService {

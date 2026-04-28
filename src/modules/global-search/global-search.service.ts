@@ -85,11 +85,39 @@ export class GlobalSearchService {
                 { owner: { name: { contains: term, mode: "insensitive" } } },
                 { owner: { email: { contains: term, mode: "insensitive" } } },
                 { members: { some: { user: { name: { contains: term, mode: "insensitive" } } } } },
-                { estimates: { some: { omName: { contains: term, mode: "insensitive" } } } },
-                { estimates: { some: { destinationCityName: { contains: term, mode: "insensitive" } } } },
-                ...(uf ? [{ estimates: { some: { destinationStateUf: uf } } }] : []),
+                {
+                  estimates: {
+                    some: {
+                      archivedAt: null,
+                      deletedAt: null,
+                      omName: { contains: term, mode: "insensitive" },
+                    },
+                  },
+                },
+                {
+                  estimates: {
+                    some: {
+                      archivedAt: null,
+                      deletedAt: null,
+                      destinationCityName: { contains: term, mode: "insensitive" },
+                    },
+                  },
+                },
+                ...(uf
+                  ? [{ estimates: { some: { archivedAt: null, deletedAt: null, destinationStateUf: uf } } }]
+                  : []),
                 ...(ataTypes.length
-                  ? [{ estimates: { some: { ata: { type: { in: ataTypes } } } } }]
+                  ? [
+                      {
+                        estimates: {
+                          some: {
+                            archivedAt: null,
+                            deletedAt: null,
+                            ata: { type: { in: ataTypes } },
+                          },
+                        },
+                      },
+                    ]
                   : []),
                 {
                   diexRequests: {
@@ -127,6 +155,10 @@ export class GlobalSearchService {
             },
           },
           estimates: {
+            where: {
+              archivedAt: null,
+              deletedAt: null,
+            },
             select: {
               omName: true,
               destinationCityName: true,
@@ -147,6 +179,10 @@ export class GlobalSearchService {
       prisma.estimate.findMany({
         where: {
           AND: [
+            {
+              archivedAt: null,
+              deletedAt: null,
+            },
             {
               project: {
                 ...projectAccessWhere,

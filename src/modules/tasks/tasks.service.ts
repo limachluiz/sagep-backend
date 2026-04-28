@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 
 type CurrentUser = {
@@ -42,6 +43,8 @@ type ListTasksFilters = {
   assigneeCode?: number;
   status?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA";
   search?: string;
+  includeArchived?: boolean;
+  onlyArchived?: boolean;
 };
 
 const taskInclude = {
@@ -67,8 +70,70 @@ const taskInclude = {
 } satisfies Prisma.TaskInclude;
 
 export class TasksService {
+  private isAdmin(role: string) {
+    return role === "ADMIN";
+  }
+
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "tasks.view_all");
+  }
+
+  private resolveArchivedAccess(
+    user: CurrentUser,
+    filters: { includeArchived?: boolean; onlyArchived?: boolean },
+  ) {
+    if ((filters.includeArchived || filters.onlyArchived) && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar tarefas arquivadas", 403);
+    }
+
+    return {
+      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
+      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+    };
+  }
+
+  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.TaskWhereInput {
+    if (includeArchived) {
+      return { deletedAt: null };
+    }
+
+    return {
+      archivedAt: null,
+      deletedAt: null,
+    };
+  }
+
+  private getAuditActor(user: CurrentUser) {
+    return {
+      id: user.id,
+      name: user.email,
+    };
+  }
+
+  private buildTaskAuditSnapshot(task: {
+    id: string;
+    taskCode?: number | null;
+    title?: string | null;
+    status?: string | null;
+    priority?: number | null;
+    projectId?: string | null;
+    assigneeId?: string | null;
+    dueDate?: Date | null;
+    archivedAt?: Date | null;
+    deletedAt?: Date | null;
+  }) {
+    return {
+      id: task.id,
+      taskCode: task.taskCode ?? null,
+      title: task.title ?? null,
+      status: task.status ?? null,
+      priority: task.priority ?? null,
+      projectId: task.projectId ?? null,
+      assigneeId: task.assigneeId ?? null,
+      dueDate: task.dueDate ?? null,
+      archivedAt: task.archivedAt ?? null,
+      deletedAt: task.deletedAt ?? null,
+    };
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -216,12 +281,12 @@ export class TasksService {
   }
 
   private canManageProject(project: { ownerId: string; members: { userId: string }[] }, user: CurrentUser) {
-    if (permissionsService.hasPermission(user, "projects.edit_all")) {
+    if (permissionsService.hasPermission(user, "tasks.edit_all")) {
       return true;
     }
 
     if (
-      permissionsService.hasPermission(user, "projects.edit_own") &&
+      permissionsService.hasPermission(user, "tasks.edit_own") &&
       project.ownerId === user.id
     ) {
       return true;
@@ -229,7 +294,7 @@ export class TasksService {
 
     const isMember = project.members.some((member) => member.userId === user.id);
 
-    if (isMember && user.role !== "CONSULTA") {
+    if (isMember && permissionsService.hasPermission(user, "tasks.edit_own")) {
       return true;
     }
 
@@ -258,6 +323,8 @@ export class TasksService {
         id: true,
         taskCode: true,
         assigneeId: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -274,7 +341,7 @@ export class TasksService {
       },
     });
 
-    if (!task) {
+    if (!task || task.deletedAt) {
       throw new AppError("Tarefa não encontrada", 404);
     }
 
@@ -288,6 +355,8 @@ export class TasksService {
         id: true,
         taskCode: true,
         assigneeId: true,
+        archivedAt: true,
+        deletedAt: true,
         project: {
           select: {
             id: true,
@@ -304,15 +373,19 @@ export class TasksService {
       },
     });
 
-    if (!task) {
+    if (!task || task.deletedAt) {
       throw new AppError("Tarefa não encontrada", 404);
     }
 
     return task;
   }
 
-  private async ensureCanView(taskId: string, user: CurrentUser) {
+  private async ensureCanView(taskId: string, user: CurrentUser, includeArchived = false) {
     const task = await this.getTaskAccessData(taskId);
+
+    if (!includeArchived && task.archivedAt) {
+      throw new AppError("Tarefa não encontrada", 404);
+    }
 
     if (this.isPrivileged(user.role)) {
       return task;
@@ -329,8 +402,12 @@ export class TasksService {
     return task;
   }
 
-  private async ensureCanViewByCode(taskCode: number, user: CurrentUser) {
+  private async ensureCanViewByCode(taskCode: number, user: CurrentUser, includeArchived = false) {
     const task = await this.getTaskAccessDataByCode(taskCode);
+
+    if (!includeArchived && task.archivedAt) {
+      throw new AppError("Tarefa não encontrada", 404);
+    }
 
     if (this.isPrivileged(user.role)) {
       return task;
@@ -350,20 +427,25 @@ export class TasksService {
   private async ensureCanManage(taskId: string, user: CurrentUser) {
     const task = await this.getTaskAccessData(taskId);
 
-    if (permissionsService.hasPermission(user, "projects.edit_all")) {
+    if (task.archivedAt) {
+      throw new AppError("Tarefa arquivada não pode ser alterada", 409);
+    }
+
+    if (permissionsService.hasPermission(user, "tasks.edit_all")) {
       return task;
     }
 
     if (
-      permissionsService.hasPermission(user, "projects.edit_own") &&
+      permissionsService.hasPermission(user, "tasks.edit_own") &&
       task.project.ownerId === user.id
     ) {
       return task;
     }
 
     const isMember = task.project.members.some((member) => member.userId === user.id);
+    const isAssignee = task.assigneeId === user.id;
 
-    if (isMember && user.role !== "CONSULTA") {
+    if ((isMember || isAssignee) && permissionsService.hasPermission(user, "tasks.edit_own")) {
       return task;
     }
 
@@ -378,6 +460,10 @@ export class TasksService {
     }
 
     const assignee = await this.resolveAssignee(data.assigneeId, data.assigneeUserCode);
+
+    if (assignee && !permissionsService.hasPermission(user, "tasks.assign")) {
+      throw new AppError("VocÃª nÃ£o tem permissÃ£o para atribuir tarefas", 403);
+    }
 
     if (assignee) {
       this.ensureAssigneeBelongsToProject(project, assignee.id);
@@ -400,7 +486,14 @@ export class TasksService {
   }
 
   async list(filters: ListTasksFilters, user: CurrentUser) {
+    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.TaskWhereInput[] = [];
+
+    andConditions.push(
+      onlyArchived
+        ? { archivedAt: { not: null }, deletedAt: null }
+        : this.buildArchiveVisibilityWhere(includeArchived),
+    );
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -473,8 +566,13 @@ export class TasksService {
     return tasks;
   }
 
-  async findById(taskId: string, user: CurrentUser) {
-    await this.ensureCanView(taskId, user);
+  async findById(
+    taskId: string,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanView(taskId, user, includeArchived);
 
     const task = await prisma.task.findUnique({
       where: { id: taskId },
@@ -516,8 +614,13 @@ export class TasksService {
     return task;
   }
 
-  async findByCode(taskCode: number, user: CurrentUser) {
-    await this.ensureCanViewByCode(taskCode, user);
+  async findByCode(
+    taskCode: number,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    await this.ensureCanViewByCode(taskCode, user, includeArchived);
 
     const task = await prisma.task.findUnique({
       where: { taskCode },
@@ -565,8 +668,16 @@ export class TasksService {
     let resolvedAssigneeId: string | undefined;
 
     if (data.clearAssignee) {
+      if (!permissionsService.hasPermission(user, "tasks.assign")) {
+        throw new AppError("VocÃª nÃ£o tem permissÃ£o para alterar atribuiÃ§Ã£o de tarefas", 403);
+      }
+
       resolvedAssigneeId = undefined;
     } else if (data.assigneeId || data.assigneeUserCode) {
+      if (!permissionsService.hasPermission(user, "tasks.assign")) {
+        throw new AppError("VocÃª nÃ£o tem permissÃ£o para alterar atribuiÃ§Ã£o de tarefas", 403);
+      }
+
       const assignee = await this.resolveAssignee(data.assigneeId, data.assigneeUserCode);
 
       if (assignee) {
@@ -596,15 +707,27 @@ export class TasksService {
   async updateStatus(taskId: string, data: UpdateTaskStatusInput, user: CurrentUser) {
     const taskAccess = await this.getTaskAccessData(taskId);
 
+    if (taskAccess.archivedAt) {
+      throw new AppError("Tarefa arquivada não pode ter status alterado", 409);
+    }
+
     const canManage =
-      permissionsService.hasPermission(user, "projects.edit_all") ||
-      (permissionsService.hasPermission(user, "projects.edit_own") &&
+      permissionsService.hasPermission(user, "tasks.edit_all") ||
+      (permissionsService.hasPermission(user, "tasks.edit_own") &&
         taskAccess.project.ownerId === user.id) ||
-      taskAccess.project.members.some((member) => member.userId === user.id && user.role !== "CONSULTA");
+      taskAccess.project.members.some(
+        (member) =>
+          member.userId === user.id && permissionsService.hasPermission(user, "tasks.edit_own"),
+      );
 
-    const isAssignee = taskAccess.assigneeId === user.id && user.role !== "CONSULTA";
+    const canCompleteOwn =
+      taskAccess.assigneeId === user.id && permissionsService.hasPermission(user, "tasks.complete");
 
-    if (!canManage && !isAssignee) {
+    if (data.status === "CONCLUIDA" && !canManage && !canCompleteOwn) {
+      throw new AppError("Você não tem permissão para concluir esta tarefa", 403);
+    }
+
+    if (data.status !== "CONCLUIDA" && !canManage && !canCompleteOwn) {
       throw new AppError("Você não tem permissão para alterar o status desta tarefa", 403);
     }
 
@@ -620,14 +743,126 @@ export class TasksService {
   }
 
   async remove(taskId: string, user: CurrentUser) {
-    await this.ensureCanManage(taskId, user);
+    if (!permissionsService.hasPermission(user, "tasks.archive")) {
+      throw new AppError("Você não tem permissão para arquivar esta tarefa", 403);
+    }
 
-    await prisma.task.delete({
+    const before = await prisma.task.findUnique({
       where: { id: taskId },
+      select: {
+        id: true,
+        taskCode: true,
+        title: true,
+        status: true,
+        priority: true,
+        projectId: true,
+        assigneeId: true,
+        dueDate: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("Tarefa não encontrada", 404);
+    }
+
+    if (before.archivedAt) {
+      throw new AppError("Tarefa já está arquivada", 409);
+    }
+
+    const task = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        archivedAt: new Date(),
+      },
+      include: taskInclude,
+    });
+
+    await auditService.log({
+      entityType: "TASK",
+      entityId: before.id,
+      action: "ARCHIVE",
+      actor: this.getAuditActor(user),
+      summary: `Tarefa TSK-${before.taskCode} arquivada`,
+      before: this.buildTaskAuditSnapshot(before),
+      after: this.buildTaskAuditSnapshot(task),
+      metadata: {
+        permissionUsed: "tasks.archive",
+      },
     });
 
     return {
-      message: "Tarefa excluída com sucesso",
+      message: "Tarefa arquivada com sucesso",
+      permissionUsed: "tasks.archive" as const,
+      task,
+    };
+  }
+
+  async restore(taskId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "tasks.restore")) {
+      throw new AppError("Você não tem permissão para restaurar esta tarefa", 403);
+    }
+
+    const before = await prisma.task.findUnique({
+      where: { id: taskId },
+      select: {
+        id: true,
+        taskCode: true,
+        title: true,
+        status: true,
+        priority: true,
+        projectId: true,
+        assigneeId: true,
+        dueDate: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            archivedAt: true,
+            deletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("Tarefa não encontrada", 404);
+    }
+
+    if (!before.archivedAt) {
+      throw new AppError("Tarefa não está arquivada", 409);
+    }
+
+    if (before.project.deletedAt || before.project.archivedAt) {
+      throw new AppError("Não é possível restaurar tarefa de projeto arquivado", 409);
+    }
+
+    const task = await prisma.task.update({
+      where: { id: taskId },
+      data: {
+        archivedAt: null,
+      },
+      include: taskInclude,
+    });
+
+    await auditService.log({
+      entityType: "TASK",
+      entityId: before.id,
+      action: "RESTORE",
+      actor: this.getAuditActor(user),
+      summary: `Tarefa TSK-${before.taskCode} restaurada`,
+      before: this.buildTaskAuditSnapshot(before),
+      after: this.buildTaskAuditSnapshot(task),
+      metadata: {
+        permissionUsed: "tasks.restore",
+      },
+    });
+
+    return {
+      message: "Tarefa restaurada com sucesso",
+      permissionUsed: "tasks.restore" as const,
+      task,
     };
   }
 }

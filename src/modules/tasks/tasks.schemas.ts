@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 import { optionalBoolean, optionalDate, optionalString } from "../../shared/zod-helpers.js";
 
 const taskStatusEnum = z.enum([
@@ -73,12 +74,18 @@ export const updateTaskStatusSchema = z.object({
   status: taskStatusEnum,
 });
 
-export const listTasksQuerySchema = z.object({
+export const listTasksQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   projectCode: z.coerce.number().int().positive().optional(),
   assigneeCode: z.coerce.number().int().positive().optional(),
   status: taskStatusEnum.optional(),
   search: z.string().trim().optional(),
+  includeArchived: z.coerce.boolean().optional(),
+  onlyArchived: z.coerce.boolean().optional(),
+});
+
+export const archivedTaskQuerySchema = z.object({
+  includeArchived: z.coerce.boolean().optional(),
 });
 
 export const taskIdParamSchema = z.object({

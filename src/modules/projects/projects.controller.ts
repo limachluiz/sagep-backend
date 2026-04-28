@@ -10,6 +10,7 @@ import {
 } from "./projects.schemas.js";
 import { ProjectsService } from "./projects.service.js";
 import { AppError } from "../../shared/app-error.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const projectsService = new ProjectsService();
 
@@ -23,7 +24,18 @@ export class ProjectsController {
   async list(req: Request, res: Response) {
     const filters = listProjectsQuerySchema.parse(req.query);
     const projects = await projectsService.list(filters, req.user!);
-    return res.status(200).json(projects);
+    if (filters.format === "legacy") {
+      return res.status(200).json(projects);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: projects,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {
