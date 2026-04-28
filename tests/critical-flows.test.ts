@@ -226,6 +226,16 @@ describe("critical flows", () => {
     expect(adminAuth.accessToken).toBeTruthy();
     expect(adminAuth.refreshToken).toBeTruthy();
 
+    const me = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(me.body.role).toBe("ADMIN");
+    expect(me.body.permissions).toContain("tasks.create");
+    expect(me.body.permissions).toContain("estimates.finalize");
+    expect(me.body.permissions).toContain("dashboard.view_executive");
+
     const loggedUser = await prisma.user.findUnique({
       where: { id: admin.id },
       select: { lastLoginAt: true },
@@ -725,6 +735,95 @@ describe("critical flows", () => {
     await request(app)
       .get("/api/dashboard/executive")
       .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .get("/api/dashboard/operational")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(200);
+  });
+
+  it("permissions: applies granular task and estimate permissions", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto RBAC granular");
+    await prisma.projectMember.create({
+      data: {
+        projectId: project.id,
+        userId: projetista.id,
+        role: "Projetista",
+      },
+    });
+
+    await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        title: "Tarefa atribuida sem permissao",
+        assigneeId: projetista.id,
+      })
+      .expect(403);
+
+    const task = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        title: "Tarefa operacional",
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/tasks/${task.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ assigneeId: projetista.id })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/tasks/${task.body.id}/status`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .send({ status: "CONCLUIDA" })
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/tasks/${task.body.id}`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(403);
+
+    const catalog = await createCatalog();
+
+    await request(app)
+      .post("/api/estimates")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        ataId: catalog.ata.id,
+        coverageGroupId: catalog.coverageGroup.id,
+        omId: catalog.om.id,
+        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
+      })
+      .expect(403);
+
+    const estimate = await request(app)
+      .post("/api/estimates")
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        ataId: catalog.ata.id,
+        coverageGroupId: catalog.coverageGroup.id,
+        omId: catalog.om.id,
+        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/estimates/${estimate.body.id}/status`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .send({ status: "FINALIZADA" })
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/estimates/${estimate.body.id}`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
       .expect(403);
   });
 

@@ -129,7 +129,7 @@ const estimateInclude = {
 
 export class EstimatesService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "estimates.view_all");
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -352,12 +352,12 @@ export class EstimatesService {
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (permissionsService.hasPermission(user, "projects.edit_all")) {
+    if (permissionsService.hasPermission(user, "estimates.edit")) {
       return true;
     }
 
     if (
-      permissionsService.hasPermission(user, "projects.edit_own") &&
+      permissionsService.hasPermission(user, "estimates.edit") &&
       project.ownerId === user.id
     ) {
       return true;
@@ -365,14 +365,14 @@ export class EstimatesService {
 
     const isMember = project.members.some((member) => member.userId === user.id);
 
-    return isMember && user.role !== "CONSULTA";
+    return isMember && permissionsService.hasPermission(user, "estimates.edit");
   }
 
   private canViewProject(
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (this.isPrivileged(user.role)) {
+    if (permissionsService.hasPermission(user, "estimates.view_all")) {
       return true;
     }
 
@@ -583,6 +583,10 @@ export class EstimatesService {
 
   async create(data: CreateEstimateInput, user: CurrentUser) {
     const project = await this.resolveProject(data.projectId, data.projectCode);
+
+    if (!permissionsService.hasPermission(user, "estimates.create")) {
+      throw new AppError("Você não tem permissão para criar estimativas", 403);
+    }
 
     if (!this.canManageProject(project, user)) {
       throw new AppError("Você não tem permissão para criar estimativas neste projeto", 403);
@@ -812,6 +816,13 @@ export class EstimatesService {
   }
 
   async update(estimateId: string, data: UpdateEstimateInput, user: CurrentUser) {
+    if (
+      data.status === "FINALIZADA" &&
+      !permissionsService.hasPermission(user, "estimates.finalize")
+    ) {
+      throw new AppError("Você não tem permissão para finalizar estimativas", 403);
+    }
+
     await this.ensureCanManage(estimateId, user);
 
     const currentEstimate = await prisma.estimate.findUnique({
@@ -928,6 +939,13 @@ export class EstimatesService {
   }
 
   async updateStatus(estimateId: string, data: UpdateEstimateStatusInput, user: CurrentUser) {
+    if (
+      data.status === "FINALIZADA" &&
+      !permissionsService.hasPermission(user, "estimates.finalize")
+    ) {
+      throw new AppError("Você não tem permissão para finalizar estimativas", 403);
+    }
+
     await this.ensureCanManage(estimateId, user);
 
     const estimate = await prisma.estimate.update({

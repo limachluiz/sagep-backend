@@ -68,7 +68,7 @@ const taskInclude = {
 
 export class TasksService {
   private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+    return permissionsService.hasPermission({ role }, "tasks.view_all");
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -216,12 +216,12 @@ export class TasksService {
   }
 
   private canManageProject(project: { ownerId: string; members: { userId: string }[] }, user: CurrentUser) {
-    if (permissionsService.hasPermission(user, "projects.edit_all")) {
+    if (permissionsService.hasPermission(user, "tasks.edit_all")) {
       return true;
     }
 
     if (
-      permissionsService.hasPermission(user, "projects.edit_own") &&
+      permissionsService.hasPermission(user, "tasks.edit_own") &&
       project.ownerId === user.id
     ) {
       return true;
@@ -229,7 +229,7 @@ export class TasksService {
 
     const isMember = project.members.some((member) => member.userId === user.id);
 
-    if (isMember && user.role !== "CONSULTA") {
+    if (isMember && permissionsService.hasPermission(user, "tasks.edit_own")) {
       return true;
     }
 
@@ -350,20 +350,21 @@ export class TasksService {
   private async ensureCanManage(taskId: string, user: CurrentUser) {
     const task = await this.getTaskAccessData(taskId);
 
-    if (permissionsService.hasPermission(user, "projects.edit_all")) {
+    if (permissionsService.hasPermission(user, "tasks.edit_all")) {
       return task;
     }
 
     if (
-      permissionsService.hasPermission(user, "projects.edit_own") &&
+      permissionsService.hasPermission(user, "tasks.edit_own") &&
       task.project.ownerId === user.id
     ) {
       return task;
     }
 
     const isMember = task.project.members.some((member) => member.userId === user.id);
+    const isAssignee = task.assigneeId === user.id;
 
-    if (isMember && user.role !== "CONSULTA") {
+    if ((isMember || isAssignee) && permissionsService.hasPermission(user, "tasks.edit_own")) {
       return task;
     }
 
@@ -378,6 +379,10 @@ export class TasksService {
     }
 
     const assignee = await this.resolveAssignee(data.assigneeId, data.assigneeUserCode);
+
+    if (assignee && !permissionsService.hasPermission(user, "tasks.assign")) {
+      throw new AppError("VocÃª nÃ£o tem permissÃ£o para atribuir tarefas", 403);
+    }
 
     if (assignee) {
       this.ensureAssigneeBelongsToProject(project, assignee.id);
@@ -565,8 +570,16 @@ export class TasksService {
     let resolvedAssigneeId: string | undefined;
 
     if (data.clearAssignee) {
+      if (!permissionsService.hasPermission(user, "tasks.assign")) {
+        throw new AppError("VocÃª nÃ£o tem permissÃ£o para alterar atribuiÃ§Ã£o de tarefas", 403);
+      }
+
       resolvedAssigneeId = undefined;
     } else if (data.assigneeId || data.assigneeUserCode) {
+      if (!permissionsService.hasPermission(user, "tasks.assign")) {
+        throw new AppError("VocÃª nÃ£o tem permissÃ£o para alterar atribuiÃ§Ã£o de tarefas", 403);
+      }
+
       const assignee = await this.resolveAssignee(data.assigneeId, data.assigneeUserCode);
 
       if (assignee) {
@@ -597,14 +610,22 @@ export class TasksService {
     const taskAccess = await this.getTaskAccessData(taskId);
 
     const canManage =
-      permissionsService.hasPermission(user, "projects.edit_all") ||
-      (permissionsService.hasPermission(user, "projects.edit_own") &&
+      permissionsService.hasPermission(user, "tasks.edit_all") ||
+      (permissionsService.hasPermission(user, "tasks.edit_own") &&
         taskAccess.project.ownerId === user.id) ||
-      taskAccess.project.members.some((member) => member.userId === user.id && user.role !== "CONSULTA");
+      taskAccess.project.members.some(
+        (member) =>
+          member.userId === user.id && permissionsService.hasPermission(user, "tasks.edit_own"),
+      );
 
-    const isAssignee = taskAccess.assigneeId === user.id && user.role !== "CONSULTA";
+    const canCompleteOwn =
+      taskAccess.assigneeId === user.id && permissionsService.hasPermission(user, "tasks.complete");
 
-    if (!canManage && !isAssignee) {
+    if (data.status === "CONCLUIDA" && !canManage && !canCompleteOwn) {
+      throw new AppError("Você não tem permissão para concluir esta tarefa", 403);
+    }
+
+    if (data.status !== "CONCLUIDA" && !canManage && !canCompleteOwn) {
       throw new AppError("Você não tem permissão para alterar o status desta tarefa", 403);
     }
 

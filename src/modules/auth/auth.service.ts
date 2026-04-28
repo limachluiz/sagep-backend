@@ -527,7 +527,10 @@ export class AuthService {
       throw new AppError("Usu\u00e1rio n\u00e3o encontrado", 404);
     }
 
-    return user;
+    return {
+      ...user,
+      permissions: permissionsService.getPermissionsForRole(user.role),
+    };
   }
 
   async listOwnSessions(user: CurrentUser, filters: ListSessionsInput) {
