@@ -9,6 +9,7 @@ import {
   updateTaskStatusSchema,
 } from "./tasks.schemas.js";
 import { TasksService } from "./tasks.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const tasksService = new TasksService();
 
@@ -22,7 +23,18 @@ export class TasksController {
   async list(req: Request, res: Response) {
     const filters = listTasksQuerySchema.parse(req.query);
     const tasks = await tasksService.list(filters, req.user!);
-    return res.status(200).json(tasks);
+    if (filters.format === "legacy") {
+      return res.status(200).json(tasks);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: tasks,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {

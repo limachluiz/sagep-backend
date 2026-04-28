@@ -10,6 +10,7 @@ import {
   updateEstimateStatusSchema,
 } from "./estimates.schemas.js";
 import { EstimatesService } from "./estimates.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const estimatesService = new EstimatesService();
 const estimateDocumentService = new EstimateDocumentService();
@@ -24,7 +25,18 @@ export class EstimatesController {
   async list(req: Request, res: Response) {
     const filters = listEstimatesQuerySchema.parse(req.query);
     const estimates = await estimatesService.list(filters, req.user!);
-    return res.status(200).json(estimates);
+    if (filters.format === "legacy") {
+      return res.status(200).json(estimates);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: estimates,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {

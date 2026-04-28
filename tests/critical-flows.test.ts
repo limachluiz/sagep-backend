@@ -72,7 +72,12 @@ async function login(email: string, userAgent?: string) {
   return response.body as {
     accessToken: string;
     refreshToken: string;
-    user: { id: string; role: string };
+    user: {
+      id: string;
+      role: string;
+      permissions: string[];
+      access: { role: string; permissions: string[]; isAdmin: boolean };
+    };
   };
 }
 
@@ -235,6 +240,9 @@ describe("critical flows", () => {
     expect(me.body.permissions).toContain("tasks.create");
     expect(me.body.permissions).toContain("estimates.finalize");
     expect(me.body.permissions).toContain("dashboard.view_executive");
+    expect(me.body.access.role).toBe("ADMIN");
+    expect(me.body.access.isAdmin).toBe(true);
+    expect(adminAuth.user.permissions).toContain("tasks.create");
 
     const loggedUser = await prisma.user.findUnique({
       where: { id: admin.id },
@@ -865,7 +873,8 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(defaultTasks.body.some((item: { id: string }) => item.id === task.body.id)).toBe(false);
+    expect(defaultTasks.body.meta.totalItems).toBe(0);
+    expect(defaultTasks.body.items.some((item: { id: string }) => item.id === task.body.id)).toBe(false);
 
     const detailsAfterArchive = await request(app)
       .get(`/api/projects/${project.id}/details`)
@@ -880,7 +889,8 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(archivedTasks.body.some((item: { id: string; archivedAt: string | null }) => item.id === task.body.id && item.archivedAt)).toBe(true);
+    expect(archivedTasks.body.filters.onlyArchived).toBe(true);
+    expect(archivedTasks.body.items.some((item: { id: string; archivedAt: string | null }) => item.id === task.body.id && item.archivedAt)).toBe(true);
 
     await request(app)
       .post(`/api/tasks/${task.body.id}/restore`)
@@ -946,7 +956,8 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(defaultEstimates.body.some((item: { id: string }) => item.id === estimate.body.id)).toBe(false);
+    expect(defaultEstimates.body.meta.totalItems).toBe(0);
+    expect(defaultEstimates.body.items.some((item: { id: string }) => item.id === estimate.body.id)).toBe(false);
 
     const detailsAfterArchive = await request(app)
       .get(`/api/projects/${project.id}/details`)
@@ -962,7 +973,8 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(archivedEstimates.body.some((item: { id: string; archivedAt: string | null }) => item.id === estimate.body.id && item.archivedAt)).toBe(true);
+    expect(archivedEstimates.body.filters.onlyArchived).toBe(true);
+    expect(archivedEstimates.body.items.some((item: { id: string; archivedAt: string | null }) => item.id === estimate.body.id && item.archivedAt)).toBe(true);
 
     await request(app)
       .post(`/api/estimates/${estimate.body.id}/restore`)

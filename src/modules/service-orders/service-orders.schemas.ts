@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 import {
   optionalBoolean,
   optionalDate,
@@ -121,7 +122,7 @@ export const updateServiceOrderSchema = z.object({
   path: ["plannedEndDate"],
 });
 
-export const listServiceOrdersQuerySchema = z.object({
+export const listServiceOrdersQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   projectCode: z.coerce.number().int().positive().optional(),
   estimateCode: z.coerce.number().int().positive().optional(),

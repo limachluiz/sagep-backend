@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { optionalDate, optionalString } from "../../shared/zod-helpers.js";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 
 const projectStatusEnum = z.enum([
   "PLANEJAMENTO",
@@ -85,7 +86,7 @@ export const updateProjectFlowSchema = z.object({
   serviceCompletedAt: optionalDate,
 });
 
-export const listProjectsQuerySchema = z.object({
+export const listProjectsQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   status: projectStatusEnum.optional(),
   stage: projectStageEnum.optional(),

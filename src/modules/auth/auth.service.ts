@@ -360,6 +360,12 @@ export class AuthService {
         cpf: user.cpf,
         active: user.active,
         createdAt: user.createdAt,
+        permissions: permissionsService.getPermissionsForRole(user.role),
+        access: {
+          role: user.role,
+          permissions: permissionsService.getPermissionsForRole(user.role),
+          isAdmin: user.role === "ADMIN",
+        },
       },
     };
   }
@@ -530,6 +536,11 @@ export class AuthService {
     return {
       ...user,
       permissions: permissionsService.getPermissionsForRole(user.role),
+      access: {
+        role: user.role,
+        permissions: permissionsService.getPermissionsForRole(user.role),
+        isAdmin: user.role === "ADMIN",
+      },
     };
   }
 
