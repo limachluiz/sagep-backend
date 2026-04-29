@@ -131,6 +131,8 @@ export const listServiceOrdersQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().optional(),
   includeArchived: z.coerce.boolean().optional(),
   onlyArchived: z.coerce.boolean().optional(),
+  archivedFrom: optionalDate,
+  archivedUntil: optionalDate,
 });
 
 export const archivedServiceOrdersQuerySchema = z.object({

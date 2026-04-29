@@ -8,6 +8,7 @@ import {
   updateAtaItemSchema,
 } from "./ata-items.schemas.js";
 import { AtaItemsService } from "./ata-items.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const ataItemsService = new AtaItemsService();
 
@@ -27,7 +28,18 @@ export class AtaItemsController {
 
     const items = await ataItemsService.listByAta(id, filters);
 
-    return res.status(200).json(items);
+    if (filters.format === "legacy") {
+      return res.status(200).json(items);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async list(req: Request, res: Response) {
@@ -35,7 +47,18 @@ export class AtaItemsController {
 
     const items = await ataItemsService.list(filters);
 
-    return res.status(200).json(items);
+    if (filters.format === "legacy") {
+      return res.status(200).json(items);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {

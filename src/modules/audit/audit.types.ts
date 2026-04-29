@@ -55,6 +55,8 @@ export type CreateAuditLogInput = {
 export type TimelineItem = {
   id: string;
   at: Date;
+  entityType: AuditEntityType;
+  entityId: string;
   action: AuditActionType;
   label: string;
   actorName: string | null;
@@ -62,4 +64,6 @@ export type TimelineItem = {
   before: AuditSnapshot | null;
   after: AuditSnapshot | null;
   metadata: AuditSnapshot | null;
+  source: "AUDIT";
+  context?: AuditSnapshot | null;
 };

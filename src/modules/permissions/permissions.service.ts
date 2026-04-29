@@ -25,6 +25,8 @@ export type Permission =
   | "service_orders.issue"
   | "service_orders.cancel"
   | "service_orders.restore"
+  | "atas.manage"
+  | "military_organizations.manage"
   | "sessions.manage_own"
   | "sessions.manage_all"
   | "dashboard.view_operational"
@@ -73,6 +75,8 @@ const rolePermissions: Record<string, Permission[]> = {
     "service_orders.issue",
     "service_orders.cancel",
     "service_orders.restore",
+    "atas.manage",
+    "military_organizations.manage",
     "sessions.manage_own",
     "sessions.manage_all",
     "dashboard.view_operational",

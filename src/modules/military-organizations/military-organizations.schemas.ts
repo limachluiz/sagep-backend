@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 import { optionalBoolean, optionalString } from "../../shared/zod-helpers.js";
 
 const ufEnum = z.enum(["AM", "RO", "RR", "AC"]);
@@ -20,7 +21,7 @@ export const updateMilitaryOrganizationSchema = z.object({
   message: "Informe pelo menos um campo para atualizar",
 });
 
-export const listMilitaryOrganizationsQuerySchema = z.object({
+export const listMilitaryOrganizationsQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   sigla: optionalString,
   cityName: optionalString,

@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { withArchiveContext } from "../../shared/archive-context.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 
@@ -45,6 +46,8 @@ type ListTasksFilters = {
   search?: string;
   includeArchived?: boolean;
   onlyArchived?: boolean;
+  archivedFrom?: Date;
+  archivedUntil?: Date;
 };
 
 const taskInclude = {
@@ -80,9 +83,20 @@ export class TasksService {
 
   private resolveArchivedAccess(
     user: CurrentUser,
-    filters: { includeArchived?: boolean; onlyArchived?: boolean },
+    filters: {
+      includeArchived?: boolean;
+      onlyArchived?: boolean;
+      archivedFrom?: Date;
+      archivedUntil?: Date;
+    },
   ) {
-    if ((filters.includeArchived || filters.onlyArchived) && !this.isAdmin(user.role)) {
+    if (
+      (filters.includeArchived ||
+        filters.onlyArchived ||
+        filters.archivedFrom ||
+        filters.archivedUntil) &&
+      !this.isAdmin(user.role)
+    ) {
       throw new AppError("Apenas ADMIN pode consultar tarefas arquivadas", 403);
     }
 
@@ -488,10 +502,18 @@ export class TasksService {
   async list(filters: ListTasksFilters, user: CurrentUser) {
     const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.TaskWhereInput[] = [];
+    const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
 
     andConditions.push(
-      onlyArchived
-        ? { archivedAt: { not: null }, deletedAt: null }
+      onlyArchived || hasArchivedPeriod
+        ? {
+            archivedAt: {
+              not: null,
+              ...(filters.archivedFrom && { gte: filters.archivedFrom }),
+              ...(filters.archivedUntil && { lte: filters.archivedUntil }),
+            },
+            deletedAt: null,
+          }
         : this.buildArchiveVisibilityWhere(includeArchived),
     );
 
@@ -562,6 +584,10 @@ export class TasksService {
         { taskCode: "asc" },
       ],
     });
+
+    if (includeArchived || onlyArchived || hasArchivedPeriod) {
+      return withArchiveContext("TASK", tasks);
+    }
 
     return tasks;
   }

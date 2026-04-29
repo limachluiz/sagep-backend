@@ -10,6 +10,7 @@ import {
   registerSchema,
   sessionIdParamSchema,
 } from "./auth.schemas.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const authService = new AuthService();
 
@@ -57,9 +58,25 @@ export class AuthController {
 
   async listOwnSessions(req: Request, res: Response) {
     const query = listSessionsQuerySchema.parse(req.query);
-    const sessions = await authService.listOwnSessions(req.user!, query);
+    const sessions = await authService.listOwnSessions(req.user!, query, getRequestContext(req));
+    if (query.format === "legacy") {
+      return res.status(200).json(sessions);
+    }
 
-    return res.status(200).json(sessions);
+    const envelope = buildListResponse({
+      items: sessions.sessions,
+      pagination: query,
+      filters: query,
+      path: req.originalUrl,
+    });
+
+    return res.status(200).json({
+      ...sessions,
+      filters: envelope.filters,
+      sessions: envelope.items,
+      meta: envelope.meta,
+      links: envelope.links,
+    });
   }
 
   async revokeOwnSession(req: Request, res: Response) {
@@ -78,9 +95,30 @@ export class AuthController {
   async listUserSessions(req: Request, res: Response) {
     const { userId } = authUserIdParamSchema.parse(req.params);
     const query = listSessionsQuerySchema.parse(req.query);
-    const sessions = await authService.listUserSessions(userId, req.user!, query);
+    const sessions = await authService.listUserSessions(
+      userId,
+      req.user!,
+      query,
+      getRequestContext(req),
+    );
+    if (query.format === "legacy") {
+      return res.status(200).json(sessions);
+    }
 
-    return res.status(200).json(sessions);
+    const envelope = buildListResponse({
+      items: sessions.sessions,
+      pagination: query,
+      filters: query,
+      path: req.originalUrl,
+    });
+
+    return res.status(200).json({
+      ...sessions,
+      filters: envelope.filters,
+      sessions: envelope.items,
+      meta: envelope.meta,
+      links: envelope.links,
+    });
   }
 
   async revokeUserSession(req: Request, res: Response) {

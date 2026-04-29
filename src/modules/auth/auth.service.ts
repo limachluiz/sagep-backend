@@ -68,6 +68,33 @@ type SessionRecord = {
   updatedAt: Date;
 };
 
+type SerializedSession = {
+  id: string;
+  userId: string;
+  status: SessionStatus;
+  statusDetail: {
+    code: SessionStatus;
+    label: string;
+    reason: string | null;
+    reasonLabel: string | null;
+  };
+  currentSession: boolean;
+  expiresAt: Date;
+  createdIpAddress: string | null;
+  createdUserAgent: string | null;
+  lastUsedAt: Date | null;
+  lastActivityAt: Date;
+  revokedAt: Date | null;
+  revokedReason: SessionRecord["revokedReason"];
+  revokedByUserId: string | null;
+  securityContext: {
+    ipAddress: string | null;
+    userAgent: string | null;
+  };
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 export class AuthService {
   private getSessionStatus(token: Pick<SessionRecord, "expiresAt" | "revokedAt">, now = new Date()) {
     if (token.revokedAt) {
@@ -81,20 +108,108 @@ export class AuthService {
     return "ACTIVE" as const;
   }
 
-  private serializeSession(token: SessionRecord, now = new Date()) {
+  private getSessionStatusDetail(status: SessionStatus, revokedReason: SessionRecord["revokedReason"]) {
+    const reasonLabels: Record<NonNullable<SessionRecord["revokedReason"]>, string> = {
+      LOGOUT: "Logout do usuario",
+      ROTATED: "Token renovado",
+      EXPIRED: "Expiracao registrada",
+      ADMIN_REVOKED: "Revogacao administrativa",
+      SECURITY: "Revogacao por seguranca",
+    };
+
+    const labels: Record<SessionStatus, string> = {
+      ACTIVE: "Ativa",
+      REVOKED: "Revogada",
+      EXPIRED: "Expirada",
+    };
+
+    return {
+      code: status,
+      label: labels[status],
+      reason: revokedReason,
+      reasonLabel: revokedReason ? reasonLabels[revokedReason] : null,
+    };
+  }
+
+  private serializeSession(token: SessionRecord, now = new Date()): SerializedSession {
+    const status = this.getSessionStatus(token, now);
+
     return {
       id: token.id,
       userId: token.userId,
-      status: this.getSessionStatus(token, now),
+      status,
+      statusDetail: this.getSessionStatusDetail(status, token.revokedReason),
+      currentSession: false,
       expiresAt: token.expiresAt,
       createdIpAddress: token.createdIpAddress,
       createdUserAgent: token.createdUserAgent,
       lastUsedAt: token.lastUsedAt,
+      lastActivityAt: token.lastUsedAt ?? token.createdAt,
       revokedAt: token.revokedAt,
       revokedReason: token.revokedReason,
       revokedByUserId: token.revokedByUserId,
+      securityContext: {
+        ipAddress: token.createdIpAddress,
+        userAgent: token.createdUserAgent,
+      },
       createdAt: token.createdAt,
       updatedAt: token.updatedAt,
+    };
+  }
+
+  private resolveCurrentSession(
+    sessions: SerializedSession[],
+    scope: "OWN" | "ADMIN",
+    context?: AuthRequestContext,
+  ) {
+    if (scope !== "OWN") {
+      return {
+        currentSessionId: null as string | null,
+        currentSessionDetected: false,
+        currentSessionConfidence: "UNAVAILABLE" as const,
+      };
+    }
+
+    const activeSessions = sessions
+      .filter((session) => session.status === "ACTIVE")
+      .sort((a, b) => b.lastActivityAt.getTime() - a.lastActivityAt.getTime());
+
+    if (activeSessions.length === 0) {
+      return {
+        currentSessionId: null as string | null,
+        currentSessionDetected: false,
+        currentSessionConfidence: "UNAVAILABLE" as const,
+      };
+    }
+
+    const userAgentMatch = context?.userAgent
+      ? activeSessions.find((session) => session.createdUserAgent === context.userAgent)
+      : null;
+
+    if (userAgentMatch) {
+      return {
+        currentSessionId: userAgentMatch.id,
+        currentSessionDetected: true,
+        currentSessionConfidence: "USER_AGENT" as const,
+      };
+    }
+
+    return {
+      currentSessionId: activeSessions[0].id,
+      currentSessionDetected: true,
+      currentSessionConfidence: "LATEST_ACTIVE" as const,
+    };
+  }
+
+  private buildSessionGovernance(scope: "OWN" | "ADMIN") {
+    return {
+      scope,
+      canListOwn: true,
+      canRevokeOwn: true,
+      canListAll: scope === "ADMIN",
+      canRevokeAll: scope === "ADMIN",
+      canCleanup: scope === "ADMIN",
+      retentionManagedBy: "sessions.manage_all",
     };
   }
 
@@ -179,6 +294,7 @@ export class AuthService {
     filters: ListSessionsInput,
     permissionUsed: "sessions.manage_own" | "sessions.manage_all",
     scope: "OWN" | "ADMIN",
+    context?: AuthRequestContext,
   ) {
     const now = new Date();
     const tokens = await prisma.refreshToken.findMany({
@@ -191,19 +307,39 @@ export class AuthService {
     });
 
     const serializedSessions = tokens.map((token) => this.serializeSession(token, now));
+    const currentSession = this.resolveCurrentSession(serializedSessions, scope, context);
+    const sessionsWithCurrent = serializedSessions.map((session) => ({
+      ...session,
+      currentSession: session.id === currentSession.currentSessionId,
+    }));
     const summary = serializedSessions.reduce(
       (acc, session) => {
         acc.total += 1;
         acc[session.status.toLowerCase() as "active" | "revoked" | "expired"] += 1;
         return acc;
       },
-      { total: 0, active: 0, revoked: 0, expired: 0 },
+      {
+        total: 0,
+        active: 0,
+        revoked: 0,
+        expired: 0,
+        byStatus: {
+          ACTIVE: 0,
+          REVOKED: 0,
+          EXPIRED: 0,
+        },
+        generatedAt: now,
+        ...currentSession,
+      },
     );
+    summary.byStatus.ACTIVE = summary.active;
+    summary.byStatus.REVOKED = summary.revoked;
+    summary.byStatus.EXPIRED = summary.expired;
 
     const sessions =
       filters.status === "ALL"
-        ? serializedSessions
-        : serializedSessions.filter((session) => session.status === filters.status);
+        ? sessionsWithCurrent
+        : sessionsWithCurrent.filter((session) => session.status === filters.status);
 
     return {
       scope,
@@ -211,6 +347,7 @@ export class AuthService {
       user: targetUser,
       filters,
       summary,
+      governance: this.buildSessionGovernance(scope),
       sessions,
     };
   }
@@ -544,20 +681,31 @@ export class AuthService {
     };
   }
 
-  async listOwnSessions(user: CurrentUser, filters: ListSessionsInput) {
+  async listOwnSessions(user: CurrentUser, filters: ListSessionsInput, context?: AuthRequestContext) {
     this.assertOwnSessionPermission(user);
 
     const targetUser = await this.getSessionTargetUser(user.id);
 
-    return this.listSessionsForUser(targetUser, filters, "sessions.manage_own", "OWN");
+    return this.listSessionsForUser(targetUser, filters, "sessions.manage_own", "OWN", context);
   }
 
-  async listUserSessions(userId: string, currentUser: CurrentUser, filters: ListSessionsInput) {
+  async listUserSessions(
+    userId: string,
+    currentUser: CurrentUser,
+    filters: ListSessionsInput,
+    context?: AuthRequestContext,
+  ) {
     this.assertAdminSessionPermission(currentUser);
 
     const targetUser = await this.getSessionTargetUser(userId);
 
-    return this.listSessionsForUser(targetUser, filters, "sessions.manage_all", "ADMIN");
+    return this.listSessionsForUser(
+      targetUser,
+      filters,
+      "sessions.manage_all",
+      "ADMIN",
+      context,
+    );
   }
 
   async revokeOwnSession(
@@ -689,15 +837,35 @@ export class AuthService {
     return {
       message: "Limpeza de sessões executada com sucesso",
       permissionUsed: "sessions.manage_all",
+      scope: "ADMIN",
+      governance: this.buildSessionGovernance("ADMIN"),
       retention: {
         refreshTokenRetentionDays: data.refreshTokenRetentionDays,
         auditRetentionDays: data.auditRetentionDays,
         refreshTokenCutoff,
         auditCutoff,
       },
+      retentionPolicy: {
+        refreshTokens: {
+          retentionDays: data.refreshTokenRetentionDays,
+          cutoff: refreshTokenCutoff,
+          removesRevokedBeforeCutoff: true,
+          removesExpiredBeforeCutoff: true,
+        },
+        auditLogs: {
+          retentionDays: data.auditRetentionDays,
+          cutoff: auditCutoff,
+          entityType: "AUTH",
+        },
+      },
       deleted: {
         refreshTokens: deletedRefreshTokens.count,
         auditLogs: deletedAuditLogs.count,
+      },
+      summary: {
+        deletedRefreshTokens: deletedRefreshTokens.count,
+        deletedAuditLogs: deletedAuditLogs.count,
+        executedAt: now,
       },
     };
   }

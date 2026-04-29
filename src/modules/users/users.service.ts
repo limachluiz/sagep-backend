@@ -23,6 +23,12 @@ type UpdateUserRoleInput = {
   cpf?: string;
 };
 
+type ListUsersFilters = {
+  role?: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
+  active?: boolean;
+  search?: string;
+};
+
 export class UsersService {
   async create(data: CreateUserByAdminInput) {
     const userExists = await prisma.user.findUnique({
@@ -58,8 +64,20 @@ export class UsersService {
     return user;
   }
 
-  async list() {
+  async list(filters: ListUsersFilters = {}) {
     const users = await prisma.user.findMany({
+      where: {
+        ...(filters.role && { role: filters.role }),
+        ...(filters.active !== undefined && { active: filters.active }),
+        ...(filters.search && {
+          OR: [
+            { name: { contains: filters.search, mode: "insensitive" } },
+            { email: { contains: filters.search, mode: "insensitive" } },
+            { rank: { contains: filters.search, mode: "insensitive" } },
+            { cpf: { contains: filters.search, mode: "insensitive" } },
+          ],
+        }),
+      },
       select: {
         id: true,
         userCode: true,

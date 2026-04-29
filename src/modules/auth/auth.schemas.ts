@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 
 export const registerSchema = z.object({
   name: z.string().trim().min(3, "Nome inválido"),
@@ -21,7 +22,7 @@ export const logoutSchema = z.object({
 
 export const sessionStatusSchema = z.enum(["ACTIVE", "REVOKED", "EXPIRED", "ALL"]);
 
-export const listSessionsQuerySchema = z.object({
+export const listSessionsQuerySchema = paginationQuerySchema.extend({
   status: sessionStatusSchema.default("ACTIVE"),
 });
 

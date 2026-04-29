@@ -7,6 +7,7 @@ import {
   updateMilitaryOrganizationSchema,
 } from "./military-organizations.schemas.js";
 import { MilitaryOrganizationsService } from "./military-organizations.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const service = new MilitaryOrganizationsService();
 
@@ -20,7 +21,18 @@ export class MilitaryOrganizationsController {
   async list(req: Request, res: Response) {
     const filters = listMilitaryOrganizationsQuerySchema.parse(req.query);
     const oms = await service.list(filters);
-    return res.status(200).json(oms);
+    if (filters.format === "legacy") {
+      return res.status(200).json(oms);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: oms,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {

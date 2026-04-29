@@ -75,8 +75,14 @@ Parametros:
 |---|---|
 | `includeArchived=true` | Retorna ativos e arquivados. Apenas `ADMIN`. |
 | `onlyArchived=true` | Retorna somente arquivados. Apenas `ADMIN`. |
+| `archivedFrom` / `archivedUntil` | Filtra por periodo de arquivamento e retorna somente arquivados. Apenas `ADMIN`. |
 
 Por padrao, arquivados e deletados logicamente nao aparecem em listagens, detalhes, dashboards, exports e resumos operacionais/financeiros.
+
+Quando uma listagem administrativa retorna itens arquivados, cada item arquivado
+pode trazer `archiveContext` com `archivedAt`, `auditLogId`, `summary`,
+`actorUserId`, `actorName` e `metadata`, derivado do evento real de auditoria
+`ARCHIVE` quando disponivel.
 
 ## IDs E Codigos Amigaveis
 
@@ -134,3 +140,8 @@ Para projetos, consulte:
 ```http
 GET /api/projects/:id/timeline
 ```
+
+Esse endpoint agrega eventos de auditoria de `PROJECT`, `ESTIMATE`,
+`DIEX_REQUEST`, `SERVICE_ORDER` e `TASK` relacionados ao projeto. Os itens
+incluem `entityType`, `entityId`, `source` e `context`, alem dos campos comuns
+de auditoria, para facilitar a renderizacao por modulo no frontend.

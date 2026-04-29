@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { withArchiveContext } from "../../shared/archive-context.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
@@ -67,6 +68,8 @@ type ListDiexFilters = {
   search?: string;
   includeArchived?: boolean;
   onlyArchived?: boolean;
+  archivedFrom?: Date;
+  archivedUntil?: Date;
 };
 
 const diexInclude = {
@@ -155,9 +158,20 @@ export class DiexService {
 
   private resolveArchivedAccess(
     user: CurrentUser,
-    filters: { includeArchived?: boolean; onlyArchived?: boolean },
+    filters: {
+      includeArchived?: boolean;
+      onlyArchived?: boolean;
+      archivedFrom?: Date;
+      archivedUntil?: Date;
+    },
   ) {
-    if ((filters.includeArchived || filters.onlyArchived) && !this.isAdmin(user.role)) {
+    if (
+      (filters.includeArchived ||
+        filters.onlyArchived ||
+        filters.archivedFrom ||
+        filters.archivedUntil) &&
+      !this.isAdmin(user.role)
+    ) {
       throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
     }
 
@@ -760,9 +774,17 @@ export class DiexService {
 
   async list(filters: ListDiexFilters, user: CurrentUser) {
     const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
+    const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
     const andConditions: Prisma.DiexRequestWhereInput[] = [
-      onlyArchived
-        ? { archivedAt: { not: null }, deletedAt: null }
+      onlyArchived || hasArchivedPeriod
+        ? {
+            archivedAt: {
+              not: null,
+              ...(filters.archivedFrom && { gte: filters.archivedFrom }),
+              ...(filters.archivedUntil && { lte: filters.archivedUntil }),
+            },
+            deletedAt: null,
+          }
         : this.buildArchiveVisibilityWhere(includeArchived),
     ];
 
@@ -829,13 +851,19 @@ export class DiexService {
     const where: Prisma.DiexRequestWhereInput | undefined =
       andConditions.length > 0 ? { AND: andConditions } : undefined;
 
-    return prisma.diexRequest.findMany({
+    const diexRequests = await prisma.diexRequest.findMany({
       where,
       include: diexInclude,
       orderBy: {
         diexCode: "asc",
       },
     });
+
+    if (includeArchived || onlyArchived || hasArchivedPeriod) {
+      return withArchiveContext("DIEX_REQUEST", diexRequests);
+    }
+
+    return diexRequests;
   }
 
   async findById(

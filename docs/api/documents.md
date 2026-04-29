@@ -37,6 +37,7 @@ Filtros:
 | `estimateCode` | number |
 | `search` | string |
 | `includeArchived`, `onlyArchived` | boolean, apenas `ADMIN` |
+| `archivedFrom`, `archivedUntil` | datas ISO, apenas `ADMIN`; filtram por periodo de arquivamento |
 | `format` | `envelope` ou `legacy` |
 
 ### Criar DIEx
@@ -111,6 +112,7 @@ Filtros:
 | `emergency` | boolean |
 | `search` | string |
 | `includeArchived`, `onlyArchived` | boolean, apenas `ADMIN` |
+| `archivedFrom`, `archivedUntil` | datas ISO, apenas `ADMIN`; filtram por periodo de arquivamento |
 | `format` | `envelope` ou `legacy` |
 
 ### Criar OS

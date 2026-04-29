@@ -286,10 +286,10 @@ Além do perfil, o backend também utiliza permissões granulares para controlar
 - `POST /api/auth/login`
 - `POST /api/auth/refresh`
 - `POST /api/auth/logout`
-- `GET /api/auth/sessions`
+- `GET /api/auth/sessions` (paginado; `format=legacy` disponÃ­vel)
 
 ### Usuários
-- `GET /api/users`
+- `GET /api/users` (paginado; filtros `role`, `active`, `search`)
 - `POST /api/users`
 - `PATCH /api/users/:id`
 

@@ -105,6 +105,8 @@ Base:
 ```
 
 Todas as rotas exigem `users.manage`.
+`GET /api/users` usa envelope paginado por padrao e aceita `page`, `pageSize`,
+`format=legacy`, `role`, `active` e `search`.
 
 Rotas principais:
 
@@ -135,7 +137,11 @@ Base:
 /api/ata-items
 ```
 
-Leitura exige usuario autenticado. Escrita usa `ADMIN` ou `GESTOR` em rotas ainda protegidas por role.
+Leitura exige usuario autenticado para `ADMIN`, `GESTOR`, `PROJETISTA` e
+`CONSULTA`. Escrita/manutencao exige `atas.manage`, permissao exclusiva de
+`ADMIN`.
+Listagens (`GET /api/atas`, `GET /api/atas/:id/items` e `GET /api/ata-items`)
+usam envelope paginado por padrao e aceitam `format=legacy`.
 
 Rotas comuns:
 
@@ -161,7 +167,11 @@ Base:
 /api/military-organizations
 ```
 
-Leitura exige usuario autenticado. Escrita usa `ADMIN` ou `GESTOR`.
+Leitura exige usuario autenticado para `ADMIN`, `GESTOR`, `PROJETISTA` e
+`CONSULTA`. Escrita/manutencao exige `military_organizations.manage`,
+permissao exclusiva de `ADMIN`.
+`GET /api/military-organizations` usa envelope paginado por padrao e aceita
+`format=legacy`.
 
 Uso: catalogo de OMs/destinos para estimativas.
 
