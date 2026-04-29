@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 import { optionalString } from "../../shared/zod-helpers.js";
 
 export const createUserByAdminSchema = z.object({
@@ -14,6 +15,12 @@ export const updateUserRoleSchema = z.object({
   role: z.enum(["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"]),
   rank: optionalString,
   cpf: optionalString,
+});
+
+export const listUsersQuerySchema = paginationQuerySchema.extend({
+  role: z.enum(["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"]).optional(),
+  active: z.coerce.boolean().optional(),
+  search: optionalString,
 });
 
 export const userIdParamSchema = z.object({

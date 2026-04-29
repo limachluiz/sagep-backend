@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 import { optionalBoolean, optionalDate, optionalString } from "../../shared/zod-helpers.js";
 
 const ataTypeEnum = z.enum(["CFTV", "FIBRA_OPTICA"]);
@@ -68,7 +69,7 @@ export const updateAtaSchema = z
     }
   );
 
-export const listAtasQuerySchema = z.object({
+export const listAtasQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   type: ataTypeEnum.optional(),
   groupCode: z.string().trim().optional(),

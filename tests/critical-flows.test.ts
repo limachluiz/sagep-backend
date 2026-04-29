@@ -387,6 +387,8 @@ describe("critical flows", () => {
     expect(ownActiveSessions.body.permissionUsed).toBe("sessions.manage_own");
     expect(ownActiveSessions.body.scope).toBe("OWN");
     expect(ownActiveSessions.body.filters.status).toBe("ACTIVE");
+    expect(ownActiveSessions.body.meta.totalItems).toBeGreaterThanOrEqual(2);
+    expect(ownActiveSessions.body.links.self).toContain("/api/auth/sessions");
     expect(ownActiveSessions.body.summary.active).toBeGreaterThanOrEqual(2);
     expect(ownActiveSessions.body.summary.expired).toBeGreaterThanOrEqual(1);
 
@@ -441,6 +443,7 @@ describe("critical flows", () => {
     expect(consultaSessions.body.permissionUsed).toBe("sessions.manage_all");
     expect(consultaSessions.body.scope).toBe("ADMIN");
     expect(consultaSessions.body.user.id).toBe(consulta.id);
+    expect(consultaSessions.body.meta.totalItems).toBeGreaterThanOrEqual(1);
 
     const consultaSessionToRevoke = consultaSessions.body.sessions.find(
       (session: { createdUserAgent: string }) =>
@@ -998,6 +1001,68 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
       .send({ name: "Tentativa Gestor" })
       .expect(403);
+  });
+
+  it("ergonomics: secondary modules expose paginated envelopes and legacy format", async () => {
+    const catalog = await createCatalog();
+
+    const users = await request(app)
+      .get("/api/users")
+      .query({ role: "GESTOR", pageSize: 1 })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(users.body.items).toHaveLength(1);
+    expect(users.body.items[0].role).toBe("GESTOR");
+    expect(users.body.meta.totalItems).toBe(1);
+    expect(users.body.filters.role).toBe("GESTOR");
+    expect(users.body.links.self).toContain("/api/users");
+
+    const legacyUsers = await request(app)
+      .get("/api/users")
+      .query({ format: "legacy" })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(Array.isArray(legacyUsers.body)).toBe(true);
+
+    const atas = await request(app)
+      .get("/api/atas")
+      .query({ search: catalog.ata.number, pageSize: 1 })
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .expect(200);
+
+    expect(atas.body.items).toHaveLength(1);
+    expect(atas.body.items[0].id).toBe(catalog.ata.id);
+    expect(atas.body.filters.search).toBe(catalog.ata.number);
+
+    const ataItems = await request(app)
+      .get(`/api/atas/${catalog.ata.id}/items`)
+      .query({ format: "envelope", pageSize: 1 })
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(200);
+
+    expect(ataItems.body.items).toHaveLength(1);
+    expect(ataItems.body.items[0].id).toBe(catalog.ataItem.id);
+    expect(ataItems.body.meta.totalItems).toBe(1);
+
+    const legacyAtaItems = await request(app)
+      .get("/api/ata-items")
+      .query({ format: "legacy" })
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(200);
+
+    expect(Array.isArray(legacyAtaItems.body)).toBe(true);
+
+    const oms = await request(app)
+      .get("/api/military-organizations")
+      .query({ sigla: catalog.om.sigla })
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(200);
+
+    expect(oms.body.items).toHaveLength(1);
+    expect(oms.body.items[0].id).toBe(catalog.om.id);
+    expect(oms.body.filters.sigla).toBe(catalog.om.sigla);
   });
 
   it("permissions: applies granular task and estimate permissions", async () => {

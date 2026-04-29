@@ -7,6 +7,7 @@ import {
   updateAtaSchema,
 } from "./atas.schemas.js";
 import { AtasService } from "./atas.service.js";
+import { buildListResponse } from "../../shared/pagination.js";
 
 const atasService = new AtasService();
 
@@ -20,7 +21,18 @@ export class AtasController {
   async list(req: Request, res: Response) {
     const filters = listAtasQuerySchema.parse(req.query);
     const atas = await atasService.list(filters);
-    return res.status(200).json(atas);
+    if (filters.format === "legacy") {
+      return res.status(200).json(atas);
+    }
+
+    return res.status(200).json(
+      buildListResponse({
+        items: atas,
+        pagination: filters,
+        filters,
+        path: req.originalUrl,
+      }),
+    );
   }
 
   async findById(req: Request, res: Response) {

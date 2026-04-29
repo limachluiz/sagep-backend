@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { paginationQuerySchema } from "../../shared/pagination.js";
 import { optionalBoolean, optionalString } from "../../shared/zod-helpers.js";
 
 const ufEnum = z.enum(["AM", "RO", "RR", "AC"]);
@@ -34,7 +35,7 @@ export const updateAtaItemSchema = z
     message: "Informe pelo menos um campo para atualizar",
   });
 
-export const listAtaItemsQuerySchema = z.object({
+export const listAtaItemsQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   ataCode: z.coerce.number().int().positive().optional(),
   groupCode: z.string().trim().optional(),

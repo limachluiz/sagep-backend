@@ -132,14 +132,25 @@ Status aceitos:
 - `EXPIRED`
 - `ALL`
 
-Resposta de listagem de sessoes ja possui envelope proprio:
+Resposta de listagem de sessoes possui envelope proprio com paginacao em
+`sessions`. Aceita `page`, `pageSize`, `format=legacy` e `status`:
 
 ```json
 {
   "scope": "OWN",
   "permissionUsed": "sessions.manage_own",
   "summary": { "total": 2, "active": 1, "revoked": 1, "expired": 0 },
-  "sessions": []
+  "sessions": [],
+  "meta": {
+    "page": 1,
+    "pageSize": 50,
+    "totalItems": 1,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPreviousPage": false
+  },
+  "filters": { "status": "ACTIVE" },
+  "links": { "self": "/api/auth/sessions?status=ACTIVE" }
 }
 ```
 
