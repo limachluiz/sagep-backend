@@ -381,16 +381,21 @@ describe("critical flows", () => {
 
     const ownActiveSessions = await request(app)
       .get("/api/auth/sessions")
+      .set("User-Agent", "sagep-admin-device-2")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
     expect(ownActiveSessions.body.permissionUsed).toBe("sessions.manage_own");
     expect(ownActiveSessions.body.scope).toBe("OWN");
+    expect(ownActiveSessions.body.governance.canCleanup).toBe(false);
     expect(ownActiveSessions.body.filters.status).toBe("ACTIVE");
     expect(ownActiveSessions.body.meta.totalItems).toBeGreaterThanOrEqual(2);
     expect(ownActiveSessions.body.links.self).toContain("/api/auth/sessions");
     expect(ownActiveSessions.body.summary.active).toBeGreaterThanOrEqual(2);
     expect(ownActiveSessions.body.summary.expired).toBeGreaterThanOrEqual(1);
+    expect(ownActiveSessions.body.summary.byStatus.ACTIVE).toBe(ownActiveSessions.body.summary.active);
+    expect(ownActiveSessions.body.summary.currentSessionDetected).toBe(true);
+    expect(ownActiveSessions.body.summary.currentSessionConfidence).toBe("USER_AGENT");
 
     const secondAdminSession = ownActiveSessions.body.sessions.find(
       (session: { createdUserAgent: string; status: string }) =>
@@ -398,6 +403,10 @@ describe("critical flows", () => {
     );
 
     expect(secondAdminSession?.id).toBeTruthy();
+    expect(secondAdminSession.currentSession).toBe(true);
+    expect(secondAdminSession.statusDetail.label).toBe("Ativa");
+    expect(secondAdminSession.securityContext.userAgent).toBe("sagep-admin-device-2");
+    expect(ownActiveSessions.body.summary.currentSessionId).toBe(secondAdminSession.id);
 
     await request(app)
       .post(`/api/auth/sessions/${secondAdminSession.id}/revoke`)
@@ -442,6 +451,8 @@ describe("critical flows", () => {
 
     expect(consultaSessions.body.permissionUsed).toBe("sessions.manage_all");
     expect(consultaSessions.body.scope).toBe("ADMIN");
+    expect(consultaSessions.body.governance.canCleanup).toBe(true);
+    expect(consultaSessions.body.summary.currentSessionDetected).toBe(false);
     expect(consultaSessions.body.user.id).toBe(consulta.id);
     expect(consultaSessions.body.meta.totalItems).toBeGreaterThanOrEqual(1);
 
@@ -487,6 +498,19 @@ describe("critical flows", () => {
       orderBy: { createdAt: "desc" },
     });
     expect(revokeAllAudit).toBeTruthy();
+
+    await request(app)
+      .post("/api/auth/sessions/cleanup")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ refreshTokenRetentionDays: 3650, auditRetentionDays: 3650 })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("sessions.manage_all");
+        expect(response.body.scope).toBe("ADMIN");
+        expect(response.body.governance.canCleanup).toBe(true);
+        expect(response.body.retentionPolicy.refreshTokens.retentionDays).toBe(3650);
+        expect(response.body.summary.deletedRefreshTokens).toBeGreaterThanOrEqual(0);
+      });
   });
 
   it("projects: create, updateFlow and details", async () => {

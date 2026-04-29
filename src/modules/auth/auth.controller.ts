@@ -58,7 +58,7 @@ export class AuthController {
 
   async listOwnSessions(req: Request, res: Response) {
     const query = listSessionsQuerySchema.parse(req.query);
-    const sessions = await authService.listOwnSessions(req.user!, query);
+    const sessions = await authService.listOwnSessions(req.user!, query, getRequestContext(req));
     if (query.format === "legacy") {
       return res.status(200).json(sessions);
     }
@@ -95,7 +95,12 @@ export class AuthController {
   async listUserSessions(req: Request, res: Response) {
     const { userId } = authUserIdParamSchema.parse(req.params);
     const query = listSessionsQuerySchema.parse(req.query);
-    const sessions = await authService.listUserSessions(userId, req.user!, query);
+    const sessions = await authService.listUserSessions(
+      userId,
+      req.user!,
+      query,
+      getRequestContext(req),
+    );
     if (query.format === "legacy") {
       return res.status(200).json(sessions);
     }

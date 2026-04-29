@@ -133,14 +133,55 @@ Status aceitos:
 - `ALL`
 
 Resposta de listagem de sessoes possui envelope proprio com paginacao em
-`sessions`. Aceita `page`, `pageSize`, `format=legacy` e `status`:
+`sessions`. Aceita `page`, `pageSize`, `format=legacy` e `status`.
+Quando possivel, a listagem propria marca `currentSession` pela combinacao
+do usuario autenticado com o `User-Agent` da requisicao; se nao houver
+correspondencia direta, usa a sessao ativa mais recente como inferencia.
+Listagens administrativas nao marcam a sessao atual do operador no usuario
+alvo.
 
 ```json
 {
   "scope": "OWN",
   "permissionUsed": "sessions.manage_own",
-  "summary": { "total": 2, "active": 1, "revoked": 1, "expired": 0 },
-  "sessions": [],
+  "summary": {
+    "total": 2,
+    "active": 1,
+    "revoked": 1,
+    "expired": 0,
+    "byStatus": { "ACTIVE": 1, "REVOKED": 1, "EXPIRED": 0 },
+    "currentSessionId": "...",
+    "currentSessionDetected": true,
+    "currentSessionConfidence": "USER_AGENT",
+    "generatedAt": "2026-04-28T00:00:00.000Z"
+  },
+  "governance": {
+    "scope": "OWN",
+    "canListOwn": true,
+    "canRevokeOwn": true,
+    "canListAll": false,
+    "canRevokeAll": false,
+    "canCleanup": false,
+    "retentionManagedBy": "sessions.manage_all"
+  },
+  "sessions": [
+    {
+      "id": "...",
+      "status": "ACTIVE",
+      "statusDetail": {
+        "code": "ACTIVE",
+        "label": "Ativa",
+        "reason": null,
+        "reasonLabel": null
+      },
+      "currentSession": true,
+      "lastActivityAt": "2026-04-28T00:00:00.000Z",
+      "securityContext": {
+        "ipAddress": "::1",
+        "userAgent": "Mozilla/5.0"
+      }
+    }
+  ],
   "meta": {
     "page": 1,
     "pageSize": 50,
@@ -171,6 +212,36 @@ Permissao: `sessions.manage_all` (`ADMIN`).
 {
   "refreshTokenRetentionDays": 90,
   "auditRetentionDays": 180
+}
+```
+
+Resposta administrativa de cleanup mantem `retention` e `deleted`, e tambem
+explicita `scope`, `governance`, `retentionPolicy` e `summary`:
+
+```json
+{
+  "message": "Limpeza de sessoes executada com sucesso",
+  "permissionUsed": "sessions.manage_all",
+  "scope": "ADMIN",
+  "retentionPolicy": {
+    "refreshTokens": {
+      "retentionDays": 90,
+      "cutoff": "2026-01-28T00:00:00.000Z",
+      "removesRevokedBeforeCutoff": true,
+      "removesExpiredBeforeCutoff": true
+    },
+    "auditLogs": {
+      "retentionDays": 180,
+      "cutoff": "2025-10-30T00:00:00.000Z",
+      "entityType": "AUTH"
+    }
+  },
+  "deleted": { "refreshTokens": 0, "auditLogs": 0 },
+  "summary": {
+    "deletedRefreshTokens": 0,
+    "deletedAuditLogs": 0,
+    "executedAt": "2026-04-28T00:00:00.000Z"
+  }
 }
 ```
 
