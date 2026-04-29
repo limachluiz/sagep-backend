@@ -1478,8 +1478,14 @@ describe("critical flows", () => {
     ).toBe(true);
     expect(
       projectsWithArchived.body.items.some(
-        (item: { id: string; archivedAt: string | null }) =>
-          item.id === archivedProject.id && item.archivedAt,
+        (item: {
+          id: string;
+          archivedAt: string | null;
+          archiveContext?: { actorUserId: string | null };
+        }) =>
+          item.id === archivedProject.id &&
+          item.archivedAt &&
+          item.archiveContext?.actorUserId === admin.id,
       ),
     ).toBe(true);
 
@@ -1514,10 +1520,39 @@ describe("critical flows", () => {
     ).toBe(true);
     expect(
       tasksWithArchived.body.items.some(
-        (item: { id: string; archivedAt: string | null }) =>
-          item.id === archivedTask.body.id && item.archivedAt,
+        (item: {
+          id: string;
+          archivedAt: string | null;
+          archiveContext?: { actorUserId: string | null; summary: string | null };
+        }) =>
+          item.id === archivedTask.body.id &&
+          item.archivedAt &&
+          item.archiveContext?.actorUserId === admin.id &&
+          item.archiveContext.summary?.includes("arquivada"),
       ),
     ).toBe(true);
+
+    const tasksArchivedByPeriod = await request(app)
+      .get("/api/tasks")
+      .query({
+        archivedFrom: "2000-01-01T00:00:00.000Z",
+        archivedUntil: "2999-12-31T23:59:59.999Z",
+      })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(tasksArchivedByPeriod.body.filters.archivedFrom).toBeDefined();
+    expect(
+      tasksArchivedByPeriod.body.items.every((item: { archivedAt: string | null }) =>
+        Boolean(item.archivedAt),
+      ),
+    ).toBe(true);
+
+    await request(app)
+      .get("/api/tasks")
+      .query({ archivedFrom: "2000-01-01T00:00:00.000Z" })
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .expect(403);
 
     const estimatesOnlyArchived = await request(app)
       .get("/api/estimates")
@@ -1528,8 +1563,14 @@ describe("critical flows", () => {
     expect(estimatesOnlyArchived.body.filters.onlyArchived).toBe(true);
     expect(
       estimatesOnlyArchived.body.items.some(
-        (item: { id: string; archivedAt: string | null }) =>
-          item.id === archivedEstimate.body.id && item.archivedAt,
+        (item: {
+          id: string;
+          archivedAt: string | null;
+          archiveContext?: { actorUserId: string | null };
+        }) =>
+          item.id === archivedEstimate.body.id &&
+          item.archivedAt &&
+          item.archiveContext?.actorUserId === admin.id,
       ),
     ).toBe(true);
     expect(
@@ -1537,6 +1578,89 @@ describe("critical flows", () => {
         (item: { id: string }) => item.id === activeEstimate.body.id,
       ),
     ).toBe(false);
+
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const serviceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        serviceOrderNumber: "OS-ARCHIVE-FILTER",
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/service-orders/${serviceOrder.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    await request(app)
+      .delete(`/api/diex/${diex.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    const archivedServiceOrders = await request(app)
+      .get("/api/service-orders")
+      .query({ onlyArchived: true, archivedFrom: "2000-01-01T00:00:00.000Z" })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(
+      archivedServiceOrders.body.items.some(
+        (item: {
+          id: string;
+          archivedAt: string | null;
+          archiveContext?: { actorUserId: string | null };
+        }) =>
+          item.id === serviceOrder.body.id &&
+          item.archivedAt &&
+          item.archiveContext?.actorUserId === admin.id,
+      ),
+    ).toBe(true);
+
+    const archivedDiex = await request(app)
+      .get("/api/diex")
+      .query({ onlyArchived: true, archivedUntil: "2999-12-31T23:59:59.999Z" })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(
+      archivedDiex.body.items.some(
+        (item: {
+          id: string;
+          archivedAt: string | null;
+          archiveContext?: { actorUserId: string | null };
+        }) =>
+          item.id === diex.id &&
+          item.archivedAt &&
+          item.archiveContext?.actorUserId === admin.id,
+      ),
+    ).toBe(true);
   });
 
   it("archive/restore: rejects invalid repeated operations and parent archive conflicts", async () => {

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../../shared/pagination.js";
-import { optionalString} from "../../shared/zod-helpers.js";
+import { optionalDate, optionalString} from "../../shared/zod-helpers.js";
 
 const estimateStatusEnum = z.enum(["RASCUNHO", "FINALIZADA", "CANCELADA"]);
 const ufEnum = z.enum(["AM", "RO", "RR", "AC"]);
@@ -96,6 +96,8 @@ export const listEstimatesQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().optional(),
   includeArchived: z.coerce.boolean().optional(),
   onlyArchived: z.coerce.boolean().optional(),
+  archivedFrom: optionalDate,
+  archivedUntil: optionalDate,
 });
 
 export const archivedEstimateQuerySchema = z.object({

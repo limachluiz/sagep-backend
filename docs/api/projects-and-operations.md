@@ -40,6 +40,7 @@ Filtros:
 | `search` | string |
 | `includeArchived` | boolean, apenas `ADMIN` |
 | `onlyArchived` | boolean, apenas `ADMIN` |
+| `archivedFrom`, `archivedUntil` | datas ISO, apenas `ADMIN`; filtram por periodo de arquivamento |
 | `format` | `envelope` ou `legacy` |
 
 ### Criar Projeto
@@ -149,6 +150,7 @@ GET /api/tasks?projectCode=1&status=PENDENTE&page=1&pageSize=20
 | `status` | `PENDENTE`, `EM_ANDAMENTO`, `REVISAO`, `CONCLUIDA`, `CANCELADA` |
 | `search` | string |
 | `includeArchived`, `onlyArchived` | boolean, apenas `ADMIN` |
+| `archivedFrom`, `archivedUntil` | datas ISO, apenas `ADMIN`; filtram por periodo de arquivamento |
 | `format` | `envelope` ou `legacy` |
 
 ### Criar Tarefa
@@ -203,6 +205,7 @@ Base:
 | `stateUf` | `AM`, `RO`, `RR`, `AC` |
 | `search` | string |
 | `includeArchived`, `onlyArchived` | boolean, apenas `ADMIN` |
+| `archivedFrom`, `archivedUntil` | datas ISO, apenas `ADMIN`; filtram por periodo de arquivamento |
 | `format` | `envelope` ou `legacy` |
 
 ### Criar Estimativa
