@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
+import type { AuditEntityType, AuditSnapshot } from "../audit/audit.types.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
@@ -72,6 +73,12 @@ type PendingAction = {
   label: string;
   severity: "INFO" | "WARNING" | "BLOCKER";
   targetStage?: ProjectStageValue;
+};
+
+type TimelineEntityInput = {
+  entityType: AuditEntityType;
+  entityId: string;
+  context: AuditSnapshot;
 };
 
 const projectInclude = {
@@ -525,6 +532,221 @@ export class ProjectsService {
     return pendingActions;
   }
 
+  private buildTimelineEntities(project: {
+    id: string;
+    projectCode: number;
+    title: string;
+    estimates?: Array<{
+      id: string;
+      estimateCode: number;
+      status?: string;
+      totalAmount?: unknown;
+      destinationCityName?: string;
+      destinationStateUf?: string;
+    }>;
+    diexRequests?: Array<{
+      id: string;
+      diexCode: number;
+      diexNumber?: string | null;
+      documentStatus?: string;
+      totalAmount?: unknown;
+      estimate?: { id: string; estimateCode: number } | null;
+    }>;
+    serviceOrders?: Array<{
+      id: string;
+      serviceOrderCode: number;
+      serviceOrderNumber?: string | null;
+      documentStatus?: string;
+      totalAmount?: unknown;
+      estimate?: { id: string; estimateCode: number } | null;
+      diexRequest?: { id: string; diexCode: number; diexNumber?: string | null } | null;
+    }>;
+    tasks?: Array<{
+      id: string;
+      taskCode: number;
+      title: string;
+      status?: string;
+      priority?: number | string;
+    }>;
+  }): TimelineEntityInput[] {
+    const baseProjectContext: AuditSnapshot = {
+      projectId: project.id,
+      projectCode: project.projectCode,
+      projectTitle: project.title,
+    };
+
+    const entities: TimelineEntityInput[] = [
+      {
+        entityType: "PROJECT",
+        entityId: project.id,
+        context: {
+          ...baseProjectContext,
+          resourceType: "PROJECT",
+          resourceCode: `PRJ-${project.projectCode}`,
+          resourceLabel: project.title,
+        },
+      },
+    ];
+
+    for (const estimate of project.estimates ?? []) {
+      entities.push({
+        entityType: "ESTIMATE",
+        entityId: estimate.id,
+        context: {
+          ...baseProjectContext,
+          resourceType: "ESTIMATE",
+          resourceCode: `EST-${estimate.estimateCode}`,
+          resourceLabel: `Estimativa EST-${estimate.estimateCode}`,
+          status: estimate.status ?? null,
+          totalAmount: estimate.totalAmount?.toString() ?? null,
+          destination: estimate.destinationCityName && estimate.destinationStateUf
+            ? `${estimate.destinationCityName}/${estimate.destinationStateUf}`
+            : null,
+        },
+      });
+    }
+
+    for (const diex of project.diexRequests ?? []) {
+      entities.push({
+        entityType: "DIEX_REQUEST",
+        entityId: diex.id,
+        context: {
+          ...baseProjectContext,
+          resourceType: "DIEX_REQUEST",
+          resourceCode: diex.diexNumber ?? `DIEX-${diex.diexCode}`,
+          resourceLabel: `DIEx ${diex.diexNumber ?? `#${diex.diexCode}`}`,
+          documentStatus: diex.documentStatus ?? null,
+          totalAmount: diex.totalAmount?.toString() ?? null,
+          estimateId: diex.estimate?.id ?? null,
+          estimateCode: diex.estimate ? `EST-${diex.estimate.estimateCode}` : null,
+        },
+      });
+    }
+
+    for (const serviceOrder of project.serviceOrders ?? []) {
+      entities.push({
+        entityType: "SERVICE_ORDER",
+        entityId: serviceOrder.id,
+        context: {
+          ...baseProjectContext,
+          resourceType: "SERVICE_ORDER",
+          resourceCode: serviceOrder.serviceOrderNumber ?? `OS-${serviceOrder.serviceOrderCode}`,
+          resourceLabel: `OS ${serviceOrder.serviceOrderNumber ?? `#${serviceOrder.serviceOrderCode}`}`,
+          documentStatus: serviceOrder.documentStatus ?? null,
+          totalAmount: serviceOrder.totalAmount?.toString() ?? null,
+          estimateId: serviceOrder.estimate?.id ?? null,
+          estimateCode: serviceOrder.estimate
+            ? `EST-${serviceOrder.estimate.estimateCode}`
+            : null,
+          diexRequestId: serviceOrder.diexRequest?.id ?? null,
+          diexCode: serviceOrder.diexRequest
+            ? serviceOrder.diexRequest.diexNumber ??
+              `DIEX-${serviceOrder.diexRequest.diexCode}`
+            : null,
+        },
+      });
+    }
+
+    for (const task of project.tasks ?? []) {
+      entities.push({
+        entityType: "TASK",
+        entityId: task.id,
+        context: {
+          ...baseProjectContext,
+          resourceType: "TASK",
+          resourceCode: `TSK-${task.taskCode}`,
+          resourceLabel: task.title,
+          status: task.status ?? null,
+          priority: task.priority ?? null,
+        },
+      });
+    }
+
+    return entities;
+  }
+
+  private async buildUnifiedTimeline(project: {
+    id: string;
+    projectCode: number;
+    title: string;
+  }) {
+    const related = await prisma.project.findUnique({
+      where: { id: project.id },
+      select: {
+        estimates: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            estimateCode: true,
+            status: true,
+            totalAmount: true,
+            destinationCityName: true,
+            destinationStateUf: true,
+          },
+        },
+        diexRequests: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            diexCode: true,
+            diexNumber: true,
+            documentStatus: true,
+            totalAmount: true,
+            estimate: {
+              select: {
+                id: true,
+                estimateCode: true,
+              },
+            },
+          },
+        },
+        serviceOrders: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            serviceOrderCode: true,
+            serviceOrderNumber: true,
+            documentStatus: true,
+            totalAmount: true,
+            estimate: {
+              select: {
+                id: true,
+                estimateCode: true,
+              },
+            },
+            diexRequest: {
+              select: {
+                id: true,
+                diexCode: true,
+                diexNumber: true,
+              },
+            },
+          },
+        },
+        tasks: {
+          where: { deletedAt: null },
+          select: {
+            id: true,
+            taskCode: true,
+            title: true,
+            status: true,
+            priority: true,
+          },
+        },
+      },
+    });
+
+    return auditService.listTimelineForEntities(
+      this.buildTimelineEntities({
+        ...project,
+        estimates: related?.estimates ?? [],
+        diexRequests: related?.diexRequests ?? [],
+        serviceOrders: related?.serviceOrders ?? [],
+        tasks: related?.tasks ?? [],
+      }),
+    );
+  }
+
   async create(data: CreateProjectInput, user: CurrentUser) {
     const project = await prisma.project.create({
       data: {
@@ -959,7 +1181,7 @@ export class ProjectsService {
 
     const workflowSnapshot = this.buildWorkflowSnapshot(project);
     const nextAction = workflowService.getNextAction(workflowSnapshot);
-    const timeline = await auditService.listTimeline("PROJECT", project.id);
+    const timeline = await this.buildUnifiedTimeline(project);
     const finalizedEstimates = project.estimates.filter(
       (estimate) => estimate.status === "FINALIZADA",
     );
@@ -1536,10 +1758,23 @@ export class ProjectsService {
     };
   }
 
-    async getTimeline(projectId: string, user: CurrentUser) {
+  async getTimeline(projectId: string, user: CurrentUser) {
     await this.ensureCanView(projectId, user);
 
-    return auditService.listTimeline("PROJECT", projectId);
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+      },
+    });
+
+    if (!project) {
+      throw new AppError("Projeto nÃ£o encontrado", 404);
+    }
+
+    return this.buildUnifiedTimeline(project);
   }
 
   async getNextAction(projectId: string, user: CurrentUser) {

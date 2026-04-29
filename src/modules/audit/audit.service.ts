@@ -2,6 +2,7 @@ import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import * as $Enums from "../../generated/prisma/enums.js";
 import {
+  type AuditEntityType,
   type AuditSnapshot,
   type CreateAuditLogInput,
   type TimelineItem,
@@ -101,19 +102,44 @@ export class AuditService {
     entityType: CreateAuditLogInput["entityType"],
     entityId: string,
   ): Promise<TimelineItem[]> {
+    return this.listTimelineForEntities([{ entityType, entityId }]);
+  }
+
+  async listTimelineForEntities(
+    entities: Array<{
+      entityType: AuditEntityType;
+      entityId: string;
+      context?: AuditSnapshot | null;
+    }>,
+  ): Promise<TimelineItem[]> {
+    if (entities.length === 0) {
+      return [];
+    }
+
+    const contextByEntity = new Map(
+      entities.map((entity) => [
+        `${entity.entityType}:${entity.entityId}`,
+        entity.context ?? null,
+      ]),
+    );
+
     const items = await prisma.auditLog.findMany({
       where: {
-        entityType,
-        entityId,
+        OR: entities.map((entity) => ({
+          entityType: entity.entityType as $Enums.AuditEntityType,
+          entityId: entity.entityId,
+        })),
       },
       orderBy: {
-        createdAt: "desc",
+        createdAt: "asc",
       },
     });
 
     return items.map((item) => ({
       id: item.id,
       at: item.createdAt,
+      entityType: item.entityType as TimelineItem["entityType"],
+      entityId: item.entityId,
       action: item.action as TimelineItem["action"],
       label: item.summary,
       actorName: item.actorName,
@@ -121,6 +147,8 @@ export class AuditService {
       before: parseSnapshot(item.beforeJson),
       after: parseSnapshot(item.afterJson),
       metadata: parseSnapshot(item.metadata),
+      source: "AUDIT",
+      context: contextByEntity.get(`${item.entityType}:${item.entityId}`) ?? null,
     }));
   }
 }

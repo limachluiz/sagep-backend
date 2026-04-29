@@ -17,7 +17,7 @@ Base:
 | `GET` | `/projects/:id` | Detalhe simples. | Pode ver projeto. |
 | `GET` | `/projects/code/:code` | Detalhe por codigo. | Pode ver projeto. |
 | `GET` | `/projects/:id/details` | Visao amigavel para tela de projeto. | Pode ver projeto. |
-| `GET` | `/projects/:id/timeline` | Timeline de auditoria. | Pode ver projeto. |
+| `GET` | `/projects/:id/timeline` | Timeline unificada do projeto e entidades relacionadas. | Pode ver projeto. |
 | `GET` | `/projects/:id/next-action` | Proxima acao do workflow. | Pode ver projeto. |
 | `PATCH` | `/projects/:id` | Atualiza dados basicos. | `projects.edit_all` ou `projects.edit_own` em escopo. |
 | `PATCH` | `/projects/:id/flow` | Atualiza etapa/marcos documentais. | Regras de edicao e workflow. |
@@ -91,7 +91,11 @@ Campos aceitos:
 - `project`: identificacao, dono, membros e datas.
 - `workflow`: etapa, status, marcos e proxima acao.
 - `pendingActions`: pendencias calculadas.
-- `timeline`: auditoria do projeto.
+- `timeline`: timeline unificada com auditoria do projeto e entidades relacionadas
+  (`PROJECT`, `ESTIMATE`, `DIEX_REQUEST`, `SERVICE_ORDER`, `TASK`). Cada item
+  mantem `id`, `at`, `action`, `label`, `summary`, `actorName`, `before`,
+  `after` e `metadata`, e tambem informa `entityType`, `entityId`, `source` e
+  `context` para a UI identificar o recurso de origem.
 - `documents`: ultimas estimativas, DIEx e OS.
 - `financialSummary`: totais financeiros sem arquivados por padrao.
 - `operationalSummary`: contagens, incluindo `openTasksCount` sem arquivadas.

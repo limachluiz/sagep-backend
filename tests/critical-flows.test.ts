@@ -700,6 +700,129 @@ describe("critical flows", () => {
     expect(serviceOrder.body.serviceOrderNumber).toBe("OS-001");
   });
 
+  it("projects timeline: aggregates audit events from related modules", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    const catalog = await createCatalog();
+
+    const task = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        title: "Tarefa na timeline",
+      })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/tasks/${task.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    const archivedEstimate = await request(app)
+      .post("/api/estimates")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        ataId: catalog.ata.id,
+        coverageGroupId: catalog.coverageGroup.id,
+        omId: catalog.om.id,
+        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
+      })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/estimates/${archivedEstimate.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const serviceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexRequestId: diex.id,
+        serviceOrderNumber: "OS-TIMELINE",
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    const details = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    const entityTypes = details.body.timeline.map(
+      (item: { entityType: string }) => item.entityType,
+    );
+
+    expect(entityTypes).toContain("PROJECT");
+    expect(entityTypes).toContain("TASK");
+    expect(entityTypes).toContain("ESTIMATE");
+    expect(entityTypes).toContain("DIEX_REQUEST");
+    expect(entityTypes).toContain("SERVICE_ORDER");
+
+    const taskEvent = details.body.timeline.find(
+      (item: { entityType: string; entityId: string }) =>
+        item.entityType === "TASK" && item.entityId === task.body.id,
+    );
+    expect(taskEvent.context.resourceCode).toBe(`TSK-${task.body.taskCode}`);
+    expect(taskEvent.context.projectId).toBe(project.id);
+
+    const serviceOrderEvent = details.body.timeline.find(
+      (item: { entityType: string; entityId: string }) =>
+        item.entityType === "SERVICE_ORDER" && item.entityId === serviceOrder.body.id,
+    );
+    expect(serviceOrderEvent.context.resourceCode).toBe("OS-TIMELINE");
+    expect(serviceOrderEvent.context.diexRequestId).toBe(diex.id);
+
+    const timelineResponse = await request(app)
+      .get(`/api/projects/${project.id}/timeline`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(timelineResponse.body.map((item: { entityType: string }) => item.entityType))
+      .toEqual(entityTypes);
+
+    const dossier = await request(app)
+      .get(`/api/reports/projects/${project.id}/dossier`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(
+      dossier.body.timelineSummary.some(
+        (item: { source: string; action: string }) =>
+          item.source === "AUDIT" && item.action === "DIEX_EMITIDO",
+      ),
+    ).toBe(true);
+  });
+
   it("service-orders: rejects OS without commitment note and without DIEx", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
     await prisma.project.update({

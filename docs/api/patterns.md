@@ -134,3 +134,8 @@ Para projetos, consulte:
 ```http
 GET /api/projects/:id/timeline
 ```
+
+Esse endpoint agrega eventos de auditoria de `PROJECT`, `ESTIMATE`,
+`DIEX_REQUEST`, `SERVICE_ORDER` e `TASK` relacionados ao projeto. Os itens
+incluem `entityType`, `entityId`, `source` e `context`, alem dos campos comuns
+de auditoria, para facilitar a renderizacao por modulo no frontend.
