@@ -18,6 +18,7 @@
 | Estimativas | `estimates.view_all`, `estimates.create`, `estimates.edit`, `estimates.finalize`, `estimates.archive`, `estimates.restore` |
 | DIEx | `diex.issue`, `diex.cancel`, `diex.restore` |
 | OS | `service_orders.issue`, `service_orders.cancel`, `service_orders.restore` |
+| Catalogos | `atas.manage`, `military_organizations.manage` |
 | Dashboards | `dashboard.view_operational`, `dashboard.view_executive`, `dashboard.financial_view` |
 | Relatorios | `reports.export` |
 | Sessoes | `sessions.manage_own`, `sessions.manage_all` |

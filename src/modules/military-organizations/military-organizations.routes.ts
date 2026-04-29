@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
-import { requireRole } from "../../middlewares/role.middleware.js";
+import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { MilitaryOrganizationsController } from "./military-organizations.controller.js";
 
 export const militaryOrganizationsRoutes = Router();
@@ -16,13 +16,13 @@ militaryOrganizationsRoutes.get("/code/:code", (req, res) =>
 
 militaryOrganizationsRoutes.patch(
   "/code/:code",
-  requireRole("ADMIN", "GESTOR"),
+  requirePermission("military_organizations.manage"),
   (req, res) => controller.updateByCode(req, res)
 );
 
 militaryOrganizationsRoutes.delete(
   "/code/:code",
-  requireRole("ADMIN", "GESTOR"),
+  requirePermission("military_organizations.manage"),
   (req, res) => controller.removeByCode(req, res)
 );
 
@@ -30,18 +30,18 @@ militaryOrganizationsRoutes.get("/:id", (req, res) => controller.findById(req, r
 
 militaryOrganizationsRoutes.post(
   "/",
-  requireRole("ADMIN", "GESTOR"),
+  requirePermission("military_organizations.manage"),
   (req, res) => controller.create(req, res)
 );
 
 militaryOrganizationsRoutes.patch(
   "/:id",
-  requireRole("ADMIN", "GESTOR"),
+  requirePermission("military_organizations.manage"),
   (req, res) => controller.update(req, res)
 );
 
 militaryOrganizationsRoutes.delete(
   "/:id",
-  requireRole("ADMIN", "GESTOR"),
+  requirePermission("military_organizations.manage"),
   (req, res) => controller.remove(req, res)
 );

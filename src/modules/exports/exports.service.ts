@@ -28,13 +28,14 @@ type ProjectExportFilters = {
 };
 
 export class ExportsService {
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "projects.view_all");
+  private canViewAllProjects(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private buildProjectWhere(filters: ProjectExportFilters, user: CurrentUser) {
     const andConditions: Prisma.ProjectWhereInput[] = [];
-    const includeArchived = Boolean(filters.includeArchived && this.isPrivileged(user.role));
+    const canViewAllProjects = this.canViewAllProjects(user);
+    const includeArchived = Boolean(filters.includeArchived && canViewAllProjects);
 
     andConditions.push(
       includeArchived
@@ -42,7 +43,7 @@ export class ExportsService {
         : { archivedAt: null, deletedAt: null },
     );
 
-    if (!this.isPrivileged(user.role)) {
+    if (!canViewAllProjects) {
       andConditions.push({
         OR: [
           { ownerId: user.id },

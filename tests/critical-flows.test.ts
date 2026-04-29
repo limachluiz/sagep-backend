@@ -240,6 +240,8 @@ describe("critical flows", () => {
     expect(me.body.permissions).toContain("tasks.create");
     expect(me.body.permissions).toContain("estimates.finalize");
     expect(me.body.permissions).toContain("dashboard.view_executive");
+    expect(me.body.permissions).toContain("atas.manage");
+    expect(me.body.permissions).toContain("military_organizations.manage");
     expect(me.body.access.role).toBe("ADMIN");
     expect(me.body.access.isAdmin).toBe(true);
     expect(adminAuth.user.permissions).toContain("tasks.create");
@@ -749,6 +751,65 @@ describe("critical flows", () => {
       .get("/api/dashboard/operational")
       .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
       .expect(200);
+  });
+
+  it("permissions: catalog and OM writes use granular permissions", async () => {
+    expect(gestorAuth.user.permissions).toContain("atas.manage");
+    expect(gestorAuth.user.permissions).toContain("military_organizations.manage");
+    expect(projetistaAuth.user.permissions).not.toContain("atas.manage");
+    expect(consultaAuth.user.permissions).not.toContain("military_organizations.manage");
+
+    await request(app)
+      .post("/api/atas")
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .send({})
+      .expect(403)
+      .expect((response) => {
+        expect(response.body.requiredPermissions).toEqual(["atas.manage"]);
+      });
+
+    await request(app)
+      .post("/api/military-organizations")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .send({})
+      .expect(403)
+      .expect((response) => {
+        expect(response.body.requiredPermissions).toEqual([
+          "military_organizations.manage",
+        ]);
+      });
+
+    const ata = await request(app)
+      .post("/api/atas")
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({
+        number: "ATA-RBAC-001",
+        type: "CFTV",
+        vendorName: "Fornecedor RBAC",
+        coverageGroups: [
+          {
+            code: "AM",
+            name: "Amazonas",
+            localities: [{ cityName: "Manaus", stateUf: "AM" }],
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(ata.body.number).toBe("ATA-RBAC-001");
+
+    const om = await request(app)
+      .post("/api/military-organizations")
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({
+        sigla: "OMR",
+        name: "Organizacao Militar RBAC",
+        cityName: "Manaus",
+        stateUf: "AM",
+      })
+      .expect(201);
+
+    expect(om.body.sigla).toBe("OMR");
   });
 
   it("permissions: applies granular task and estimate permissions", async () => {
