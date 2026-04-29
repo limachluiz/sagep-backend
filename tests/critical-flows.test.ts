@@ -785,14 +785,16 @@ describe("critical flows", () => {
   });
 
   it("permissions: catalog and OM writes use granular permissions", async () => {
-    expect(gestorAuth.user.permissions).toContain("atas.manage");
-    expect(gestorAuth.user.permissions).toContain("military_organizations.manage");
+    expect(adminAuth.user.permissions).toContain("atas.manage");
+    expect(adminAuth.user.permissions).toContain("military_organizations.manage");
+    expect(gestorAuth.user.permissions).not.toContain("atas.manage");
+    expect(gestorAuth.user.permissions).not.toContain("military_organizations.manage");
     expect(projetistaAuth.user.permissions).not.toContain("atas.manage");
     expect(consultaAuth.user.permissions).not.toContain("military_organizations.manage");
 
     await request(app)
       .post("/api/atas")
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
       .send({})
       .expect(403)
       .expect((response) => {
@@ -801,7 +803,7 @@ describe("critical flows", () => {
 
     await request(app)
       .post("/api/military-organizations")
-      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
       .send({})
       .expect(403)
       .expect((response) => {
@@ -812,7 +814,7 @@ describe("critical flows", () => {
 
     const ata = await request(app)
       .post("/api/atas")
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         number: "ATA-RBAC-001",
         type: "CFTV",
@@ -829,9 +831,25 @@ describe("critical flows", () => {
 
     expect(ata.body.number).toBe("ATA-RBAC-001");
 
+    await request(app)
+      .get("/api/atas")
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .get("/api/ata-items")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/atas/${ata.body.id}`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ notes: "tentativa gestor" })
+      .expect(403);
+
     const om = await request(app)
       .post("/api/military-organizations")
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         sigla: "OMR",
         name: "Organizacao Militar RBAC",
@@ -841,6 +859,22 @@ describe("critical flows", () => {
       .expect(201);
 
     expect(om.body.sigla).toBe("OMR");
+
+    await request(app)
+      .get("/api/military-organizations")
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .get("/api/military-organizations")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/military-organizations/${om.body.id}`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ name: "Tentativa Gestor" })
+      .expect(403);
   });
 
   it("permissions: applies granular task and estimate permissions", async () => {

@@ -100,8 +100,6 @@ const rolePermissions: Record<string, Permission[]> = {
     "service_orders.issue",
     "service_orders.cancel",
     "service_orders.restore",
-    "atas.manage",
-    "military_organizations.manage",
     "sessions.manage_own",
     "dashboard.view_operational",
     "dashboard.view_executive",

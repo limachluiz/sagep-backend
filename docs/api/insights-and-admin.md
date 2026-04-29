@@ -135,7 +135,9 @@ Base:
 /api/ata-items
 ```
 
-Leitura exige usuario autenticado. Escrita exige `atas.manage`.
+Leitura exige usuario autenticado para `ADMIN`, `GESTOR`, `PROJETISTA` e
+`CONSULTA`. Escrita/manutencao exige `atas.manage`, permissao exclusiva de
+`ADMIN`.
 
 Rotas comuns:
 
@@ -161,7 +163,9 @@ Base:
 /api/military-organizations
 ```
 
-Leitura exige usuario autenticado. Escrita exige `military_organizations.manage`.
+Leitura exige usuario autenticado para `ADMIN`, `GESTOR`, `PROJETISTA` e
+`CONSULTA`. Escrita/manutencao exige `military_organizations.manage`,
+permissao exclusiva de `ADMIN`.
 
 Uso: catalogo de OMs/destinos para estimativas.
 

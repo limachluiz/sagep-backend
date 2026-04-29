@@ -25,6 +25,9 @@
 | Usuarios | `users.manage` |
 
 As permissoes sao derivadas por role no codigo, nao persistidas no banco.
+Nesta matriz, permissoes de manutencao de catalogos (`atas.manage` e
+`military_organizations.manage`) sao exclusivas de `ADMIN`; `GESTOR`,
+`PROJETISTA` e `CONSULTA` mantem acesso autenticado de leitura aos catalogos.
 
 ## Login
 
