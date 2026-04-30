@@ -1195,6 +1195,8 @@ export const openApiDocument: OpenApiDocument = {
       },
       UserCreateRequest: {
         type: "object",
+        description:
+          "Cadastro administrativo de usuario. Na criacao administrativa atual, `ADMIN` nao e aceito como role de entrada.",
         required: ["name", "email", "password", "role"],
         properties: {
           name: { type: "string", minLength: 3 },
@@ -1207,9 +1209,19 @@ export const openApiDocument: OpenApiDocument = {
           rank: { type: "string", nullable: true },
           cpf: { type: "string", nullable: true },
         },
+        example: {
+          name: "1 Ten Maria Souza",
+          email: "maria.souza@sagep.mil.br",
+          password: "123456",
+          role: "GESTOR",
+          rank: "1 Ten",
+          cpf: "12345678900",
+        },
       },
       UserRoleUpdateRequest: {
         type: "object",
+        description:
+          "O schema aceita `rank` e `cpf`, mas o backend atual persiste apenas a alteracao de `role` nesta rota.",
         required: ["role"],
         properties: {
           role: {
@@ -1218,6 +1230,11 @@ export const openApiDocument: OpenApiDocument = {
           },
           rank: { type: "string", nullable: true },
           cpf: { type: "string", nullable: true },
+        },
+        example: {
+          role: "CONSULTA",
+          rank: "1 Ten",
+          cpf: "12345678900",
         },
       },
       UserListEnvelope: {
@@ -1245,6 +1262,8 @@ export const openApiDocument: OpenApiDocument = {
       },
       AtaCoverageGroup: {
         type: "object",
+        description:
+          "Grupo de cobertura dentro da ATA. E a ponte entre a ata e as localidades atendidas, e tambem referencia os itens usados em estimativas.",
         required: ["code", "name", "localities"],
         properties: {
           code: { type: "string", minLength: 2 },
@@ -1256,9 +1275,20 @@ export const openApiDocument: OpenApiDocument = {
             items: { $ref: "#/components/schemas/AtaCoverageLocality" },
           },
         },
+        example: {
+          code: "MNS",
+          name: "Grupo Manaus",
+          description: "Atendimento urbano",
+          localities: [
+            { cityName: "Manaus", stateUf: "AM" },
+            { cityName: "Iranduba", stateUf: "AM" },
+          ],
+        },
       },
       Ata: {
         type: "object",
+        description:
+          "Catalogo principal de contratacao. Cada ata agrega grupos de cobertura e itens precificaveis consumidos pelo modulo de estimativas.",
         properties: {
           id: { type: "string" },
           ataCode: { type: "integer" },
@@ -1278,6 +1308,8 @@ export const openApiDocument: OpenApiDocument = {
       },
       AtaCreateRequest: {
         type: "object",
+        description:
+          "Cria a ATA e toda a estrutura inicial de grupos/localidades em uma unica operacao.",
         required: ["number", "type", "vendorName", "coverageGroups"],
         properties: {
           number: { type: "string", minLength: 3 },
@@ -1293,9 +1325,31 @@ export const openApiDocument: OpenApiDocument = {
             items: { $ref: "#/components/schemas/AtaCoverageGroup" },
           },
         },
+        example: {
+          number: "ATA 04/2025",
+          type: "CFTV",
+          vendorName: "Empresa Alpha Ltda",
+          managingAgency: "4 CTA",
+          validFrom: "2026-01-01T00:00:00.000Z",
+          validUntil: "2026-12-31T00:00:00.000Z",
+          notes: "Ata principal de CFTV",
+          coverageGroups: [
+            {
+              code: "MNS",
+              name: "Grupo Manaus",
+              description: "Atendimento urbano",
+              localities: [
+                { cityName: "Manaus", stateUf: "AM" },
+                { cityName: "Iranduba", stateUf: "AM" },
+              ],
+            },
+          ],
+        },
       },
       AtaUpdateRequest: {
         type: "object",
+        description:
+          "Update parcial. Quando `coverageGroups` e enviado, o backend atual substitui toda a estrutura de grupos/localidades da ata.",
         properties: {
           number: { type: "string", minLength: 3 },
           type: { type: "string", enum: ["CFTV", "FIBRA_OPTICA"] },
@@ -1329,7 +1383,112 @@ export const openApiDocument: OpenApiDocument = {
       },
       AtaItem: {
         type: "object",
-        additionalProperties: true,
+        description:
+          "Item precificavel de uma ATA, sempre associado a um grupo de cobertura especifico.",
+        properties: {
+          id: { type: "string" },
+          ataItemCode: { type: "integer" },
+          ataId: { type: "string" },
+          coverageGroupId: { type: "string" },
+          referenceCode: { type: "string" },
+          description: { type: "string" },
+          unit: { type: "string" },
+          unitPrice: { type: "string", description: "Decimal serializado pelo Prisma." },
+          notes: { type: "string", nullable: true },
+          isActive: { type: "boolean" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+          ata: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              ataCode: { type: "integer" },
+              number: { type: "string" },
+              type: { type: "string", enum: ["CFTV", "FIBRA_OPTICA"] },
+              vendorName: { type: "string" },
+              isActive: { type: "boolean" },
+            },
+          },
+          coverageGroup: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              code: { type: "string" },
+              name: { type: "string" },
+              description: { type: "string", nullable: true },
+              localities: {
+                type: "array",
+                items: { $ref: "#/components/schemas/AtaCoverageLocality" },
+              },
+            },
+          },
+        },
+        example: {
+          id: "cmitem123",
+          ataItemCode: 12,
+          ataId: "cmata123",
+          coverageGroupId: "cmgroup123",
+          referenceCode: "CAM-001",
+          description: "Camera IP externa",
+          unit: "UN",
+          unitPrice: "1250.50",
+          notes: "Modelo padrao",
+          isActive: true,
+          createdAt: "2026-04-29T00:00:00.000Z",
+          updatedAt: "2026-04-29T00:00:00.000Z",
+          ata: {
+            id: "cmata123",
+            ataCode: 3,
+            number: "ATA 04/2025",
+            type: "CFTV",
+            vendorName: "Empresa Alpha Ltda",
+            isActive: true,
+          },
+          coverageGroup: {
+            id: "cmgroup123",
+            code: "MNS",
+            name: "Grupo Manaus",
+            description: "Atendimento urbano",
+            localities: [{ cityName: "Manaus", stateUf: "AM" }],
+          },
+        },
+      },
+      AtaItemCreateRequest: {
+        type: "object",
+        required: ["coverageGroupCode", "referenceCode", "description", "unit", "unitPrice"],
+        properties: {
+          coverageGroupCode: { type: "string", minLength: 2 },
+          referenceCode: { type: "string", minLength: 1 },
+          description: { type: "string", minLength: 3 },
+          unit: { type: "string", minLength: 1 },
+          unitPrice: { type: "number", exclusiveMinimum: 0 },
+          notes: { type: "string", nullable: true },
+        },
+        example: {
+          coverageGroupCode: "MNS",
+          referenceCode: "CAM-001",
+          description: "Camera IP externa",
+          unit: "un",
+          unitPrice: 1250.5,
+          notes: "Modelo padrao",
+        },
+      },
+      AtaItemUpdateRequest: {
+        type: "object",
+        properties: {
+          coverageGroupCode: { type: "string", minLength: 2 },
+          referenceCode: { type: "string", minLength: 1 },
+          description: { type: "string", minLength: 3 },
+          unit: { type: "string", minLength: 1 },
+          unitPrice: { type: "number", exclusiveMinimum: 0 },
+          notes: { type: "string", nullable: true },
+          isActive: { type: "boolean", nullable: true },
+        },
+        example: {
+          coverageGroupCode: "INT",
+          unitPrice: 1310,
+          isActive: false,
+        },
       },
       AtaItemsEnvelope: {
         type: "object",
@@ -1348,14 +1507,18 @@ export const openApiDocument: OpenApiDocument = {
       },
       MilitaryOrganization: {
         type: "object",
+        description:
+          "Catalogo de OMs usadas como destino operacional em estimativas. A localidade da OM e usada para validar compatibilidade com o grupo de cobertura da ATA.",
         properties: {
           id: { type: "string" },
-          organizationCode: { type: "integer" },
+          omCode: { type: "integer" },
           sigla: { type: "string" },
           name: { type: "string" },
           cityName: { type: "string" },
           stateUf: { type: "string", enum: ["AM", "RO", "RR", "AC"] },
           isActive: { type: "boolean" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
         },
       },
       MilitaryOrganizationCreateRequest: {
@@ -1367,6 +1530,12 @@ export const openApiDocument: OpenApiDocument = {
           cityName: { type: "string", minLength: 2 },
           stateUf: { type: "string", enum: ["AM", "RO", "RR", "AC"] },
         },
+        example: {
+          sigla: "4CTA",
+          name: "4 Centro de Telematica de Area",
+          cityName: "Manaus",
+          stateUf: "AM",
+        },
       },
       MilitaryOrganizationUpdateRequest: {
         type: "object",
@@ -1376,6 +1545,10 @@ export const openApiDocument: OpenApiDocument = {
           cityName: { type: "string", minLength: 2 },
           stateUf: { type: "string", enum: ["AM", "RO", "RR", "AC"] },
           isActive: { type: "boolean", nullable: true },
+        },
+        example: {
+          name: "4 Centro de Telematica de Area - Sede Manaus",
+          isActive: false,
         },
       },
       MilitaryOrganizationListEnvelope: {
@@ -2644,6 +2817,8 @@ export const openApiDocument: OpenApiDocument = {
       get: {
         tags: ["users"],
         summary: "Listar usuarios",
+        description:
+          "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `email`, `rank` e `cpf`.",
         security: bearerSecurity,
         parameters: [
           ...paginationParameters,
@@ -2667,6 +2842,8 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["users"],
         summary: "Criar usuario administrativo",
+        description:
+          "Cria usuario com role inicial entre `PROJETISTA`, `GESTOR` e `CONSULTA`. A resposta atual nao inclui `rank` e `cpf`.",
         security: bearerSecurity,
         requestBody: {
           required: true,
@@ -2682,7 +2859,9 @@ export const openApiDocument: OpenApiDocument = {
     "/users/{id}/role": {
       patch: {
         tags: ["users"],
-        summary: "Atualizar role, rank e CPF de usuario",
+        summary: "Atualizar role de usuario",
+        description:
+          "Embora o schema aceite `rank` e `cpf`, o service atual persiste apenas a alteracao de `role` nesta rota.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/UserId" }],
         requestBody: {
@@ -2700,6 +2879,8 @@ export const openApiDocument: OpenApiDocument = {
       get: {
         tags: ["atas"],
         summary: "Listar atas",
+        description:
+          "Catalogo autenticado de atas. Pode filtrar por grupo de cobertura e por localidades cobertas, o que o torna util para telas de selecao do fluxo de estimativas.",
         security: bearerSecurity,
         parameters: [
           ...paginationParameters,
@@ -2730,6 +2911,8 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["atas"],
         summary: "Criar ata",
+        description:
+          "Cria a ata junto com a estrutura inicial de grupos de cobertura e localidades.",
         security: bearerSecurity,
         requestBody: {
           required: true,
@@ -2768,6 +2951,8 @@ export const openApiDocument: OpenApiDocument = {
       patch: {
         tags: ["atas"],
         summary: "Atualizar ata",
+        description:
+          "Update parcial. Se `coverageGroups` for enviado, o backend atual substitui todos os grupos/localidades anteriores da ata.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
         requestBody: {
@@ -2796,10 +2981,26 @@ export const openApiDocument: OpenApiDocument = {
       get: {
         tags: ["ata-items"],
         summary: "Listar itens de uma ata",
+        description:
+          "Lista itens filtrados no contexto de uma ata especifica. O filtro opcional `groupCode` ajuda a montar seletores em cascata no frontend.",
         security: bearerSecurity,
         parameters: [
           { $ref: "#/components/parameters/AtaId" },
           ...paginationParameters,
+          queryParameter("code", "Codigo sequencial do item.", {
+            type: "integer",
+            minimum: 1,
+          }),
+          queryParameter("groupCode", "Codigo do grupo de cobertura.", { type: "string" }),
+          queryParameter("cityName", "Cidade da localidade do grupo.", { type: "string" }),
+          queryParameter("stateUf", "UF da localidade do grupo.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("active", "Filtrar itens ativos.", { type: "boolean" }),
+          queryParameter("search", "Busca em referencia, descricao e notas.", {
+            type: "string",
+          }),
         ],
         responses: {
           "200": okJson("#/components/schemas/AtaItemsEnvelope"),
@@ -2809,18 +3010,13 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["ata-items"],
         summary: "Criar item em uma ata",
+        description:
+          "Cria item precificavel vinculado a um grupo de cobertura existente dentro da ata informada.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
         requestBody: {
           required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                additionalProperties: true,
-              },
-            },
-          },
+          content: jsonContent("#/components/schemas/AtaItemCreateRequest"),
         },
         responses: {
           "201": createdJson("#/components/schemas/AtaItem"),
@@ -2833,8 +3029,30 @@ export const openApiDocument: OpenApiDocument = {
       get: {
         tags: ["ata-items"],
         summary: "Listar itens de ata",
+        description:
+          "Listagem global de itens de catalogo. Permite filtrar por ata, grupo, localidade e status de ativacao.",
         security: bearerSecurity,
-        parameters: [...paginationParameters],
+        parameters: [
+          ...paginationParameters,
+          queryParameter("code", "Codigo sequencial do item.", {
+            type: "integer",
+            minimum: 1,
+          }),
+          queryParameter("ataCode", "Codigo da ata.", {
+            type: "integer",
+            minimum: 1,
+          }),
+          queryParameter("groupCode", "Codigo do grupo de cobertura.", { type: "string" }),
+          queryParameter("cityName", "Cidade da localidade do grupo.", { type: "string" }),
+          queryParameter("stateUf", "UF da localidade do grupo.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("active", "Filtrar itens ativos.", { type: "boolean" }),
+          queryParameter("search", "Busca em referencia, descricao e notas.", {
+            type: "string",
+          }),
+        ],
         responses: {
           "200": okJson("#/components/schemas/AtaItemsEnvelope"),
           ...defaultErrorResponses,
@@ -2867,18 +3085,13 @@ export const openApiDocument: OpenApiDocument = {
       patch: {
         tags: ["ata-items"],
         summary: "Atualizar item de ata",
+        description:
+          "Update parcial. Se `coverageGroupCode` for enviado, ele deve existir na mesma ata do item atual.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
         requestBody: {
           required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                additionalProperties: true,
-              },
-            },
-          },
+          content: jsonContent("#/components/schemas/AtaItemUpdateRequest"),
         },
         responses: {
           "200": okJson("#/components/schemas/AtaItem"),
@@ -2902,6 +3115,8 @@ export const openApiDocument: OpenApiDocument = {
       get: {
         tags: ["military-organizations"],
         summary: "Listar organizacoes militares",
+        description:
+          "Catalogo autenticado de OMs. No fluxo de estimativas, a localidade da OM e usada para validar compatibilidade com o grupo de cobertura da ATA.",
         security: bearerSecurity,
         parameters: [
           ...paginationParameters,
@@ -2926,6 +3141,7 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["military-organizations"],
         summary: "Criar organizacao militar",
+        description: "Cria uma OM com `sigla` unica no catalogo.",
         security: bearerSecurity,
         requestBody: {
           required: true,
