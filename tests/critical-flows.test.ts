@@ -1687,6 +1687,279 @@ describe("critical flows", () => {
     ).toBe(true);
   });
 
+  it("logical delete filters: deleted records stay out of default and archived views, but can be isolated administratively", async () => {
+    const deletedProject = await createProject(adminAuth.accessToken, "Projeto Deleted");
+    await prisma.project.update({
+      where: { id: deletedProject.id },
+      data: {
+        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
+        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
+      },
+    });
+
+    const taskProject = await createProject(adminAuth.accessToken, "Projeto Deleted Task");
+    const deletedTask = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ projectId: taskProject.id, title: "Tarefa deleted" })
+      .expect(201);
+    await prisma.task.update({
+      where: { id: deletedTask.body.id },
+      data: {
+        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
+        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
+      },
+    });
+
+    const estimateProject = await createProject(adminAuth.accessToken, "Projeto Deleted Estimate");
+    const catalog = await createCatalog();
+    const deletedEstimate = await request(app)
+      .post("/api/estimates")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: estimateProject.id,
+        ataId: catalog.ata.id,
+        coverageGroupId: catalog.coverageGroup.id,
+        omId: catalog.om.id,
+        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
+      })
+      .expect(201);
+    await prisma.estimate.update({
+      where: { id: deletedEstimate.body.id },
+      data: {
+        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
+        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
+      },
+    });
+
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-DELETE-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const deletedDiex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-DELETE-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const deletedServiceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        serviceOrderNumber: "OS-DELETE-001",
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Delete",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await prisma.diexRequest.update({
+      where: { id: deletedDiex.id },
+      data: {
+        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
+        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
+      },
+    });
+    await prisma.serviceOrder.update({
+      where: { id: deletedServiceOrder.body.id },
+      data: {
+        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
+        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
+      },
+    });
+
+    const defaultProjects = await request(app)
+      .get("/api/projects")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(defaultProjects.body.items.some((item: { id: string }) => item.id === deletedProject.id)).toBe(false);
+
+    const archivedProjects = await request(app)
+      .get("/api/projects")
+      .query({ onlyArchived: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(archivedProjects.body.items.some((item: { id: string }) => item.id === deletedProject.id)).toBe(false);
+
+    const deletedProjects = await request(app)
+      .get("/api/projects")
+      .query({ onlyDeleted: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(deletedProjects.body.filters.onlyDeleted).toBe(true);
+    expect(deletedProjects.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedProject.id && item.deletedAt)).toBe(true);
+
+    const archivedTasks = await request(app)
+      .get("/api/tasks")
+      .query({ onlyArchived: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(archivedTasks.body.items.some((item: { id: string }) => item.id === deletedTask.body.id)).toBe(false);
+
+    const deletedTasks = await request(app)
+      .get("/api/tasks")
+      .query({ onlyDeleted: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(deletedTasks.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedTask.body.id && item.deletedAt)).toBe(true);
+
+    const archivedEstimates = await request(app)
+      .get("/api/estimates")
+      .query({ onlyArchived: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(archivedEstimates.body.items.some((item: { id: string }) => item.id === deletedEstimate.body.id)).toBe(false);
+
+    const deletedEstimates = await request(app)
+      .get("/api/estimates")
+      .query({ onlyDeleted: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(deletedEstimates.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedEstimate.body.id && item.deletedAt)).toBe(true);
+
+    const archivedDiex = await request(app)
+      .get("/api/diex")
+      .query({ onlyArchived: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(archivedDiex.body.items.some((item: { id: string }) => item.id === deletedDiex.id)).toBe(false);
+
+    const deletedDiexList = await request(app)
+      .get("/api/diex")
+      .query({ onlyDeleted: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(deletedDiexList.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedDiex.id && item.deletedAt)).toBe(true);
+
+    const archivedServiceOrders = await request(app)
+      .get("/api/service-orders")
+      .query({ onlyArchived: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(archivedServiceOrders.body.items.some((item: { id: string }) => item.id === deletedServiceOrder.body.id)).toBe(false);
+
+    const deletedServiceOrders = await request(app)
+      .get("/api/service-orders")
+      .query({ onlyDeleted: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(deletedServiceOrders.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedServiceOrder.body.id && item.deletedAt)).toBe(true);
+
+    await request(app)
+      .post(`/api/projects/${deletedProject.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(404);
+    await request(app)
+      .post(`/api/tasks/${deletedTask.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(404);
+    await request(app)
+      .post(`/api/estimates/${deletedEstimate.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(404);
+    await request(app)
+      .post(`/api/diex/${deletedDiex.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(404);
+    await request(app)
+      .post(`/api/service-orders/${deletedServiceOrder.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(404);
+  });
+
+  it("logical delete on project parent hides active child records from operational reads", async () => {
+    const { project: activeProject, estimate: finalizedEstimate } =
+      await createProjectWithFinalizedEstimate(adminAuth.accessToken, "Projeto Pai Deleted");
+    const task = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ projectId: activeProject.id, title: "Tarefa do projeto deletado" })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/projects/${activeProject.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-PARENT-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(activeProject.id, finalizedEstimate.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${activeProject.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-PARENT-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const serviceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: activeProject.id,
+        estimateId: finalizedEstimate.id,
+        serviceOrderNumber: "OS-PARENT-001",
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Parent",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await prisma.project.update({
+      where: { id: activeProject.id },
+      data: {
+        deletedAt: new Date("2026-04-22T00:00:00.000Z"),
+      },
+    });
+
+    const tasks = await request(app)
+      .get("/api/tasks")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(tasks.body.items.some((item: { id: string }) => item.id === task.body.id)).toBe(false);
+
+    const estimates = await request(app)
+      .get("/api/estimates")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(estimates.body.items.some((item: { id: string }) => item.id === finalizedEstimate.id)).toBe(false);
+
+    const diexList = await request(app)
+      .get("/api/diex")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(diexList.body.items.some((item: { id: string }) => item.id === diex.id)).toBe(false);
+
+    const serviceOrders = await request(app)
+      .get("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(serviceOrders.body.items.some((item: { id: string }) => item.id === serviceOrder.body.id)).toBe(false);
+  });
+
   it("archive/restore: rejects invalid repeated operations and parent archive conflicts", async () => {
     const project = await createProject(adminAuth.accessToken, "Projeto Conflitos Archive");
     const task = await request(app)

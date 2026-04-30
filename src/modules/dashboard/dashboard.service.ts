@@ -532,6 +532,9 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -543,6 +546,9 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -580,6 +586,12 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
+          estimate: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -606,6 +618,22 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
+          estimate: {
+            deletedAt: null,
+          },
+          OR: [
+            {
+              diexRequestId: null,
+            },
+            {
+              diexRequest: {
+                deletedAt: null,
+              },
+            },
+          ],
         },
         select: {
           id: true,
@@ -1156,6 +1184,9 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -1186,6 +1217,12 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
+          estimate: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -1199,6 +1236,22 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
+          estimate: {
+            deletedAt: null,
+          },
+          OR: [
+            {
+              diexRequestId: null,
+            },
+            {
+              diexRequest: {
+                deletedAt: null,
+              },
+            },
+          ],
         },
         select: {
           id: true,

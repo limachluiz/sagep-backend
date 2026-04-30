@@ -98,6 +98,8 @@ const paginationParameters = [
 const archiveFilterParameters = [
   { $ref: "#/components/parameters/IncludeArchived" },
   { $ref: "#/components/parameters/OnlyArchived" },
+  { $ref: "#/components/parameters/IncludeDeleted" },
+  { $ref: "#/components/parameters/OnlyDeleted" },
   { $ref: "#/components/parameters/ArchivedFrom" },
   { $ref: "#/components/parameters/ArchivedUntil" },
 ];
@@ -204,6 +206,16 @@ export const openApiDocument: OpenApiDocument = {
       OnlyArchived: queryParameter(
         "onlyArchived",
         "Retorna apenas arquivados. Uso administrativo.",
+        { type: "boolean" },
+      ),
+      IncludeDeleted: queryParameter(
+        "includeDeleted",
+        "Inclui ativos e deletados logicamente. Uso administrativo.",
+        { type: "boolean" },
+      ),
+      OnlyDeleted: queryParameter(
+        "onlyDeleted",
+        "Retorna apenas deletados logicamente. Uso administrativo.",
         { type: "boolean" },
       ),
       ArchivedFrom: queryParameter(
@@ -515,6 +527,7 @@ export const openApiDocument: OpenApiDocument = {
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
           archivedAt: { type: "string", format: "date-time", nullable: true },
+          deletedAt: { type: "string", format: "date-time", nullable: true },
           archiveContext: { $ref: "#/components/schemas/ArchiveContext" },
         },
       },
@@ -692,6 +705,7 @@ export const openApiDocument: OpenApiDocument = {
           assigneeName: { type: "string", nullable: true },
           dueDate: { type: "string", format: "date-time", nullable: true },
           archivedAt: { type: "string", format: "date-time", nullable: true },
+          deletedAt: { type: "string", format: "date-time", nullable: true },
           archiveContext: { $ref: "#/components/schemas/ArchiveContext" },
         },
       },
@@ -778,6 +792,7 @@ export const openApiDocument: OpenApiDocument = {
           notes: { type: "string", nullable: true },
           totalAmount: { type: "number", nullable: true },
           archivedAt: { type: "string", format: "date-time", nullable: true },
+          deletedAt: { type: "string", format: "date-time", nullable: true },
           archiveContext: { $ref: "#/components/schemas/ArchiveContext" },
           items: {
             type: "array",
@@ -872,6 +887,7 @@ export const openApiDocument: OpenApiDocument = {
           uasg: { type: "string", nullable: true },
           notes: { type: "string", nullable: true },
           archivedAt: { type: "string", format: "date-time", nullable: true },
+          deletedAt: { type: "string", format: "date-time", nullable: true },
           archiveContext: { $ref: "#/components/schemas/ArchiveContext" },
         },
       },
@@ -978,6 +994,7 @@ export const openApiDocument: OpenApiDocument = {
             items: { $ref: "#/components/schemas/ServiceOrderDeliveredDocument" },
           },
           archivedAt: { type: "string", format: "date-time", nullable: true },
+          deletedAt: { type: "string", format: "date-time", nullable: true },
           archiveContext: { $ref: "#/components/schemas/ArchiveContext" },
         },
       },

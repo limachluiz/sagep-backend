@@ -68,6 +68,8 @@ type ListDiexFilters = {
   search?: string;
   includeArchived?: boolean;
   onlyArchived?: boolean;
+  includeDeleted?: boolean;
+  onlyDeleted?: boolean;
   archivedFrom?: Date;
   archivedUntil?: Date;
 };
@@ -141,9 +143,20 @@ export class DiexService {
     return role === "ADMIN";
   }
 
-  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.DiexRequestWhereInput {
+  private buildLifecycleVisibilityWhere(
+    includeArchived = false,
+    includeDeleted = false,
+  ): Prisma.DiexRequestWhereInput {
+    if (includeArchived && includeDeleted) {
+      return {};
+    }
+
     if (includeArchived) {
       return { deletedAt: null };
+    }
+
+    if (includeDeleted) {
+      return { archivedAt: null };
     }
 
     return {
@@ -161,6 +174,8 @@ export class DiexService {
     filters: {
       includeArchived?: boolean;
       onlyArchived?: boolean;
+      includeDeleted?: boolean;
+      onlyDeleted?: boolean;
       archivedFrom?: Date;
       archivedUntil?: Date;
     },
@@ -168,6 +183,8 @@ export class DiexService {
     if (
       (filters.includeArchived ||
         filters.onlyArchived ||
+        filters.includeDeleted ||
+        filters.onlyDeleted ||
         filters.archivedFrom ||
         filters.archivedUntil) &&
       !this.isAdmin(user.role)
@@ -175,9 +192,15 @@ export class DiexService {
       throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
     }
 
+    if (filters.onlyArchived && filters.onlyDeleted) {
+      throw new AppError("Use onlyArchived ou onlyDeleted, não ambos", 400);
+    }
+
     return {
       includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
       onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
+      onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
   }
 
@@ -389,6 +412,7 @@ export class DiexService {
             id: true,
             ownerId: true,
             stage: true,
+            deletedAt: true,
             members: {
               select: {
                 userId: true,
@@ -396,10 +420,21 @@ export class DiexService {
             },
           },
         },
+        estimate: {
+          select: {
+            deletedAt: true,
+          },
+        },
       },
     });
 
-    if (!diex || diex.deletedAt || (!includeArchived && diex.archivedAt)) {
+    if (
+      !diex ||
+      diex.deletedAt ||
+      diex.project.deletedAt ||
+      diex.estimate.deletedAt ||
+      (!includeArchived && diex.archivedAt)
+    ) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
@@ -419,6 +454,7 @@ export class DiexService {
             id: true,
             ownerId: true,
             stage: true,
+            deletedAt: true,
             members: {
               select: {
                 userId: true,
@@ -426,10 +462,21 @@ export class DiexService {
             },
           },
         },
+        estimate: {
+          select: {
+            deletedAt: true,
+          },
+        },
       },
     });
 
-    if (!diex || diex.deletedAt || (!includeArchived && diex.archivedAt)) {
+    if (
+      !diex ||
+      diex.deletedAt ||
+      diex.project.deletedAt ||
+      diex.estimate.deletedAt ||
+      (!includeArchived && diex.archivedAt)
+    ) {
       throw new AppError("DIEx não encontrado", 404);
     }
 
@@ -773,10 +820,17 @@ export class DiexService {
   }
 
   async list(filters: ListDiexFilters, user: CurrentUser) {
-    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
+    const { includeArchived, onlyArchived, includeDeleted, onlyDeleted } =
+      this.resolveArchivedAccess(user, filters);
     const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
     const andConditions: Prisma.DiexRequestWhereInput[] = [
-      onlyArchived || hasArchivedPeriod
+      onlyDeleted
+        ? {
+            deletedAt: {
+              not: null,
+            },
+          }
+        : onlyArchived || hasArchivedPeriod
         ? {
             archivedAt: {
               not: null,
@@ -785,8 +839,23 @@ export class DiexService {
             },
             deletedAt: null,
           }
-        : this.buildArchiveVisibilityWhere(includeArchived),
+        : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     ];
+
+    if (!onlyDeleted) {
+      andConditions.push(
+        {
+          project: {
+            deletedAt: null,
+          },
+        },
+        {
+          estimate: {
+            deletedAt: null,
+          },
+        },
+      );
+    }
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({

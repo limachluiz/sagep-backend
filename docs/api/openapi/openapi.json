@@ -206,6 +206,24 @@
           "type": "boolean"
         }
       },
+      "IncludeDeleted": {
+        "name": "includeDeleted",
+        "in": "query",
+        "required": false,
+        "description": "Inclui ativos e deletados logicamente. Uso administrativo.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
+      "OnlyDeleted": {
+        "name": "onlyDeleted",
+        "in": "query",
+        "required": false,
+        "description": "Retorna apenas deletados logicamente. Uso administrativo.",
+        "schema": {
+          "type": "boolean"
+        }
+      },
       "ArchivedFrom": {
         "name": "archivedFrom",
         "in": "query",
@@ -897,6 +915,11 @@
             "format": "date-time",
             "nullable": true
           },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "archiveContext": {
             "$ref": "#/components/schemas/ArchiveContext"
           }
@@ -1252,6 +1275,11 @@
             "format": "date-time",
             "nullable": true
           },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "archiveContext": {
             "$ref": "#/components/schemas/ArchiveContext"
           }
@@ -1453,6 +1481,11 @@
             "format": "date-time",
             "nullable": true
           },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "archiveContext": {
             "$ref": "#/components/schemas/ArchiveContext"
           },
@@ -1649,6 +1682,11 @@
             "nullable": true
           },
           "archivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "deletedAt": {
             "type": "string",
             "format": "date-time",
             "nullable": true
@@ -1932,6 +1970,11 @@
             }
           },
           "archivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "deletedAt": {
             "type": "string",
             "format": "date-time",
             "nullable": true
@@ -3754,6 +3797,12 @@
             "$ref": "#/components/parameters/OnlyArchived"
           },
           {
+            "$ref": "#/components/parameters/IncludeDeleted"
+          },
+          {
+            "$ref": "#/components/parameters/OnlyDeleted"
+          },
+          {
             "$ref": "#/components/parameters/ArchivedFrom"
           },
           {
@@ -4480,6 +4529,12 @@
             "$ref": "#/components/parameters/OnlyArchived"
           },
           {
+            "$ref": "#/components/parameters/IncludeDeleted"
+          },
+          {
+            "$ref": "#/components/parameters/OnlyDeleted"
+          },
+          {
             "$ref": "#/components/parameters/ArchivedFrom"
           },
           {
@@ -4934,6 +4989,12 @@
           },
           {
             "$ref": "#/components/parameters/OnlyArchived"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeDeleted"
+          },
+          {
+            "$ref": "#/components/parameters/OnlyDeleted"
           },
           {
             "$ref": "#/components/parameters/ArchivedFrom"
@@ -5499,6 +5560,12 @@
             "$ref": "#/components/parameters/OnlyArchived"
           },
           {
+            "$ref": "#/components/parameters/IncludeDeleted"
+          },
+          {
+            "$ref": "#/components/parameters/OnlyDeleted"
+          },
+          {
             "$ref": "#/components/parameters/ArchivedFrom"
           },
           {
@@ -5952,6 +6019,12 @@
           },
           {
             "$ref": "#/components/parameters/OnlyArchived"
+          },
+          {
+            "$ref": "#/components/parameters/IncludeDeleted"
+          },
+          {
+            "$ref": "#/components/parameters/OnlyDeleted"
           },
           {
             "$ref": "#/components/parameters/ArchivedFrom"

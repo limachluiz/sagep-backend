@@ -67,6 +67,8 @@ type ListProjectsFilters = {
   search?: string;
   includeArchived?: boolean;
   onlyArchived?: boolean;
+  includeDeleted?: boolean;
+  onlyDeleted?: boolean;
   archivedFrom?: Date;
   archivedUntil?: Date;
 };
@@ -97,8 +99,16 @@ const projectInclude = {
   _count: {
     select: {
       members: true,
-      tasks: true,
-      estimates: true,
+      tasks: {
+        where: {
+          deletedAt: null,
+        },
+      },
+      estimates: {
+        where: {
+          deletedAt: null,
+        },
+      },
     },
   },
 } satisfies Prisma.ProjectInclude;
@@ -108,9 +118,20 @@ export class ProjectsService {
     return role === "ADMIN";
   }
 
-  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ProjectWhereInput {
+  private buildLifecycleVisibilityWhere(
+    includeArchived = false,
+    includeDeleted = false,
+  ): Prisma.ProjectWhereInput {
+    if (includeArchived && includeDeleted) {
+      return {};
+    }
+
     if (includeArchived) {
       return { deletedAt: null };
+    }
+
+    if (includeDeleted) {
+      return { archivedAt: null };
     }
 
     return {
@@ -128,6 +149,8 @@ export class ProjectsService {
     filters: {
       includeArchived?: boolean;
       onlyArchived?: boolean;
+      includeDeleted?: boolean;
+      onlyDeleted?: boolean;
       archivedFrom?: Date;
       archivedUntil?: Date;
     },
@@ -135,6 +158,8 @@ export class ProjectsService {
     if (
       (filters.includeArchived ||
         filters.onlyArchived ||
+        filters.includeDeleted ||
+        filters.onlyDeleted ||
         filters.archivedFrom ||
         filters.archivedUntil) &&
       !this.isAdmin(user.role)
@@ -142,9 +167,15 @@ export class ProjectsService {
       throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
     }
 
+    if (filters.onlyArchived && filters.onlyDeleted) {
+      throw new AppError("Use onlyArchived ou onlyDeleted, não ambos", 400);
+    }
+
     return {
       includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
       onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
+      onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
   }
 
@@ -168,8 +199,16 @@ export class ProjectsService {
         _count: {
           select: {
             members: true,
-            tasks: true,
-            estimates: true,
+            tasks: {
+              where: {
+                deletedAt: null,
+              },
+            },
+            estimates: {
+              where: {
+                deletedAt: null,
+              },
+            },
           },
         },
         archivedAt: true,
@@ -798,12 +837,19 @@ export class ProjectsService {
   }
 
   async list(filters: ListProjectsFilters, user: CurrentUser) {
-    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
+    const { includeArchived, onlyArchived, includeDeleted, onlyDeleted } =
+      this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.ProjectWhereInput[] = [];
     const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
 
     andConditions.push(
-      onlyArchived || hasArchivedPeriod
+      onlyDeleted
+        ? {
+            deletedAt: {
+              not: null,
+            },
+          }
+        : onlyArchived || hasArchivedPeriod
         ? {
             archivedAt: {
               not: null,
@@ -812,7 +858,7 @@ export class ProjectsService {
             },
             deletedAt: null,
           }
-        : this.buildArchiveVisibilityWhere(includeArchived),
+        : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     );
 
     if (!this.isPrivileged(user.role)) {

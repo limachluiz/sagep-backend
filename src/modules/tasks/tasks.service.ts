@@ -46,6 +46,8 @@ type ListTasksFilters = {
   search?: string;
   includeArchived?: boolean;
   onlyArchived?: boolean;
+  includeDeleted?: boolean;
+  onlyDeleted?: boolean;
   archivedFrom?: Date;
   archivedUntil?: Date;
 };
@@ -86,6 +88,8 @@ export class TasksService {
     filters: {
       includeArchived?: boolean;
       onlyArchived?: boolean;
+      includeDeleted?: boolean;
+      onlyDeleted?: boolean;
       archivedFrom?: Date;
       archivedUntil?: Date;
     },
@@ -93,6 +97,8 @@ export class TasksService {
     if (
       (filters.includeArchived ||
         filters.onlyArchived ||
+        filters.includeDeleted ||
+        filters.onlyDeleted ||
         filters.archivedFrom ||
         filters.archivedUntil) &&
       !this.isAdmin(user.role)
@@ -100,15 +106,32 @@ export class TasksService {
       throw new AppError("Apenas ADMIN pode consultar tarefas arquivadas", 403);
     }
 
+    if (filters.onlyArchived && filters.onlyDeleted) {
+      throw new AppError("Use onlyArchived ou onlyDeleted, não ambos", 400);
+    }
+
     return {
       includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
       onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
+      onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
   }
 
-  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.TaskWhereInput {
+  private buildLifecycleVisibilityWhere(
+    includeArchived = false,
+    includeDeleted = false,
+  ): Prisma.TaskWhereInput {
+    if (includeArchived && includeDeleted) {
+      return {};
+    }
+
     if (includeArchived) {
       return { deletedAt: null };
+    }
+
+    if (includeDeleted) {
+      return { archivedAt: null };
     }
 
     return {
@@ -159,6 +182,8 @@ export class TasksService {
           projectCode: true,
           title: true,
           ownerId: true,
+          archivedAt: true,
+          deletedAt: true,
           members: {
             select: {
               userId: true,
@@ -167,7 +192,7 @@ export class TasksService {
         },
       });
 
-      if (!project || project.projectCode !== projectCode) {
+      if (!project || project.deletedAt || project.archivedAt || project.projectCode !== projectCode) {
         throw new AppError("ProjectId e projectCode não correspondem ao mesmo projeto", 400);
       }
 
@@ -182,6 +207,8 @@ export class TasksService {
           projectCode: true,
           title: true,
           ownerId: true,
+          archivedAt: true,
+          deletedAt: true,
           members: {
             select: {
               userId: true,
@@ -190,7 +217,7 @@ export class TasksService {
         },
       });
 
-      if (!project) {
+      if (!project || project.deletedAt || project.archivedAt) {
         throw new AppError("Projeto não encontrado", 404);
       }
 
@@ -205,6 +232,8 @@ export class TasksService {
           projectCode: true,
           title: true,
           ownerId: true,
+          archivedAt: true,
+          deletedAt: true,
           members: {
             select: {
               userId: true,
@@ -213,7 +242,7 @@ export class TasksService {
         },
       });
 
-      if (!project) {
+      if (!project || project.deletedAt || project.archivedAt) {
         throw new AppError("Projeto não encontrado", 404);
       }
 
@@ -345,6 +374,7 @@ export class TasksService {
             projectCode: true,
             title: true,
             ownerId: true,
+            deletedAt: true,
             members: {
               select: {
                 userId: true,
@@ -355,7 +385,7 @@ export class TasksService {
       },
     });
 
-    if (!task || task.deletedAt) {
+    if (!task || task.deletedAt || task.project.deletedAt) {
       throw new AppError("Tarefa não encontrada", 404);
     }
 
@@ -377,6 +407,7 @@ export class TasksService {
             projectCode: true,
             title: true,
             ownerId: true,
+            deletedAt: true,
             members: {
               select: {
                 userId: true,
@@ -387,7 +418,7 @@ export class TasksService {
       },
     });
 
-    if (!task || task.deletedAt) {
+    if (!task || task.deletedAt || task.project.deletedAt) {
       throw new AppError("Tarefa não encontrada", 404);
     }
 
@@ -500,12 +531,19 @@ export class TasksService {
   }
 
   async list(filters: ListTasksFilters, user: CurrentUser) {
-    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
+    const { includeArchived, onlyArchived, includeDeleted, onlyDeleted } =
+      this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.TaskWhereInput[] = [];
     const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
 
     andConditions.push(
-      onlyArchived || hasArchivedPeriod
+      onlyDeleted
+        ? {
+            deletedAt: {
+              not: null,
+            },
+          }
+        : onlyArchived || hasArchivedPeriod
         ? {
             archivedAt: {
               not: null,
@@ -514,8 +552,16 @@ export class TasksService {
             },
             deletedAt: null,
           }
-        : this.buildArchiveVisibilityWhere(includeArchived),
+        : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     );
+
+    if (!onlyDeleted) {
+      andConditions.push({
+        project: {
+          deletedAt: null,
+        },
+      });
+    }
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({

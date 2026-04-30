@@ -113,6 +113,8 @@ type ListServiceOrderFilters = {
   search?: string;
   includeArchived?: boolean;
   onlyArchived?: boolean;
+  includeDeleted?: boolean;
+  onlyDeleted?: boolean;
   archivedFrom?: Date;
   archivedUntil?: Date;
 };
@@ -215,9 +217,20 @@ export class ServiceOrdersService {
     return role === "ADMIN";
   }
 
-  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ServiceOrderWhereInput {
+  private buildLifecycleVisibilityWhere(
+    includeArchived = false,
+    includeDeleted = false,
+  ): Prisma.ServiceOrderWhereInput {
+    if (includeArchived && includeDeleted) {
+      return {};
+    }
+
     if (includeArchived) {
       return { deletedAt: null };
+    }
+
+    if (includeDeleted) {
+      return { archivedAt: null };
     }
 
     return {
@@ -235,6 +248,8 @@ export class ServiceOrdersService {
     filters: {
       includeArchived?: boolean;
       onlyArchived?: boolean;
+      includeDeleted?: boolean;
+      onlyDeleted?: boolean;
       archivedFrom?: Date;
       archivedUntil?: Date;
     },
@@ -242,6 +257,8 @@ export class ServiceOrdersService {
     if (
       (filters.includeArchived ||
         filters.onlyArchived ||
+        filters.includeDeleted ||
+        filters.onlyDeleted ||
         filters.archivedFrom ||
         filters.archivedUntil) &&
       !this.isAdmin(user.role)
@@ -249,9 +266,15 @@ export class ServiceOrdersService {
       throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
     }
 
+    if (filters.onlyArchived && filters.onlyDeleted) {
+      throw new AppError("Use onlyArchived ou onlyDeleted, não ambos", 400);
+    }
+
     return {
       includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
       onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
+      onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
   }
 
@@ -590,13 +613,31 @@ export class ServiceOrdersService {
             id: true,
             ownerId: true,
             stage: true,
+            deletedAt: true,
             members: { select: { userId: true } },
+          },
+        },
+        estimate: {
+          select: {
+            deletedAt: true,
+          },
+        },
+        diexRequest: {
+          select: {
+            deletedAt: true,
           },
         },
       },
     });
 
-    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+    if (
+      !serviceOrder ||
+      serviceOrder.deletedAt ||
+      serviceOrder.project.deletedAt ||
+      serviceOrder.estimate.deletedAt ||
+      serviceOrder.diexRequest?.deletedAt ||
+      (!includeArchived && serviceOrder.archivedAt)
+    ) {
       throw new AppError("OS não encontrada", 404);
     }
     return serviceOrder;
@@ -615,13 +656,31 @@ export class ServiceOrdersService {
             id: true,
             ownerId: true,
             stage: true,
+            deletedAt: true,
             members: { select: { userId: true } },
+          },
+        },
+        estimate: {
+          select: {
+            deletedAt: true,
+          },
+        },
+        diexRequest: {
+          select: {
+            deletedAt: true,
           },
         },
       },
     });
 
-    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+    if (
+      !serviceOrder ||
+      serviceOrder.deletedAt ||
+      serviceOrder.project.deletedAt ||
+      serviceOrder.estimate.deletedAt ||
+      serviceOrder.diexRequest?.deletedAt ||
+      (!includeArchived && serviceOrder.archivedAt)
+    ) {
       throw new AppError("OS não encontrada", 404);
     }
     return serviceOrder;
@@ -1011,10 +1070,17 @@ private buildWorkflowSnapshot(project: {
   }
 
   async list(filters: ListServiceOrderFilters, user: CurrentUser) {
-    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
+    const { includeArchived, onlyArchived, includeDeleted, onlyDeleted } =
+      this.resolveArchivedAccess(user, filters);
     const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
     const andConditions: Prisma.ServiceOrderWhereInput[] = [
-      onlyArchived || hasArchivedPeriod
+      onlyDeleted
+        ? {
+            deletedAt: {
+              not: null,
+            },
+          }
+        : onlyArchived || hasArchivedPeriod
         ? {
             archivedAt: {
               not: null,
@@ -1023,8 +1089,35 @@ private buildWorkflowSnapshot(project: {
             },
             deletedAt: null,
           }
-        : this.buildArchiveVisibilityWhere(includeArchived),
+        : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     ];
+
+    if (!onlyDeleted) {
+      andConditions.push(
+        {
+          project: {
+            deletedAt: null,
+          },
+        },
+        {
+          estimate: {
+            deletedAt: null,
+          },
+        },
+        {
+          OR: [
+            {
+              diexRequestId: null,
+            },
+            {
+              diexRequest: {
+                deletedAt: null,
+              },
+            },
+          ],
+        },
+      );
+    }
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
