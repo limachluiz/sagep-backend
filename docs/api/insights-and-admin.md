@@ -108,18 +108,19 @@ Todas as rotas exigem `users.manage`.
 `GET /api/users` usa envelope paginado por padrao e aceita `page`, `pageSize`,
 `format=legacy`, `role`, `active` e `search`.
 
-Rotas principais:
+Rotas implementadas hoje:
 
 ```http
 GET /api/users
 POST /api/users
-GET /api/users/:id
-GET /api/users/code/:code
-PATCH /api/users/:id
 PATCH /api/users/:id/role
-PATCH /api/users/:id/password
-PATCH /api/users/:id/activation
 ```
+
+Observacao:
+
+- endpoints administrativos adicionais de detalhe, senha e ativacao ainda nao
+  estao expostos nas rotas atuais; por isso nao entram na OpenAPI formal desta
+  iteracao.
 
 Roles aceitos:
 

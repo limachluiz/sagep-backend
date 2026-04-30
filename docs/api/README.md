@@ -19,6 +19,7 @@ Authorization: Bearer <accessToken>
 - [Projetos e operacao](./projects-and-operations.md): projetos, membros, tarefas, estimativas e fluxo documental.
 - [Documentos](./documents.md): DIEx, Ordens de Servico, HTML/PDF e restore.
 - [Consulta e gestao](./insights-and-admin.md): dashboards, busca, alertas, exports, reports, usuarios, atas e OMs.
+- [OpenAPI formal](./openapi/README.md): especificacao JSON, cobertura atual, validacao e exposicao em runtime.
 
 ## Modulos Principais
 
@@ -89,6 +90,8 @@ Rotas com `format=legacy`: `GET /projects`, `GET /tasks`, `GET /estimates`, `GET
 ## Validacao Recomendada
 
 ```bash
+npm run openapi:validate
+npm run openapi:export
 npx tsc --noEmit
 npm test
 ```
