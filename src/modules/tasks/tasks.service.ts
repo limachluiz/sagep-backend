@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { withArchiveContext } from "../../shared/archive-context.js";
+import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 
@@ -871,12 +872,12 @@ export class TasksService {
     };
   }
 
-  async restore(taskId: string, user: CurrentUser) {
+  async restore(taskId: string, user: CurrentUser, options: RestoreOptions = {}) {
     if (!permissionsService.hasPermission(user, "tasks.restore")) {
       throw new AppError("Você não tem permissão para restaurar esta tarefa", 403);
     }
 
-    const before = await prisma.task.findUnique({
+    let before = await prisma.task.findUnique({
       where: { id: taskId },
       select: {
         id: true,
@@ -906,7 +907,41 @@ export class TasksService {
       throw new AppError("Tarefa não está arquivada", 409);
     }
 
-    if (before.project.deletedAt || before.project.archivedAt) {
+    if (before.project.deletedAt) {
+      throw new AppError("Não é possível restaurar tarefa de projeto removido logicamente", 409);
+    }
+
+    if (before.project.archivedAt && options.cascade) {
+      const { ProjectsService } = await import("../projects/projects.service.js");
+      const projectsService = new ProjectsService();
+
+      await projectsService.restore(before.projectId, user);
+
+      before = await prisma.task.findUnique({
+        where: { id: taskId },
+        select: {
+          id: true,
+          taskCode: true,
+          projectId: true,
+          title: true,
+          description: true,
+          status: true,
+          priority: true,
+          assigneeId: true,
+          dueDate: true,
+          archivedAt: true,
+          deletedAt: true,
+          project: {
+            select: {
+              archivedAt: true,
+              deletedAt: true,
+            },
+          },
+        },
+      });
+    }
+
+    if (!before || before.project.deletedAt || before.project.archivedAt) {
       throw new AppError("Não é possível restaurar tarefa de projeto arquivado", 409);
     }
 
@@ -928,12 +963,14 @@ export class TasksService {
       after: this.buildTaskAuditSnapshot(task),
       metadata: {
         permissionUsed: "tasks.restore",
+        cascade: Boolean(options.cascade),
       },
     });
 
     return {
       message: "Tarefa restaurada com sucesso",
       permissionUsed: "tasks.restore" as const,
+      cascadeApplied: Boolean(options.cascade),
       task,
     };
   }

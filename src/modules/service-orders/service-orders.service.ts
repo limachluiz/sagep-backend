@@ -2,13 +2,14 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { withArchiveContext } from "../../shared/archive-context.js";
+import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
   id: string;
-  name: string;
+  name?: string;
   email: string;
   role: string;
   rank?: string | null;
@@ -1620,12 +1621,16 @@ private buildWorkflowSnapshot(project: {
     };
   }
 
-  async restore(serviceOrderId: string, user: CurrentUser) {
+  async restore(
+    serviceOrderId: string,
+    user: CurrentUser,
+    options: RestoreOptions = {},
+  ) {
     if (!permissionsService.hasPermission(user, "service_orders.restore")) {
       throw new AppError("Você não tem permissão para restaurar Ordem de Serviço", 403);
     }
 
-    const serviceOrder = await prisma.serviceOrder.findUnique({
+    let serviceOrder = await prisma.serviceOrder.findUnique({
       where: { id: serviceOrderId },
       select: {
         id: true,
@@ -1685,6 +1690,13 @@ private buildWorkflowSnapshot(project: {
             serviceCompletedAt: true,
           },
         },
+        estimate: {
+          select: {
+            id: true,
+            archivedAt: true,
+            deletedAt: true,
+          },
+        },
         diexRequest: {
           select: {
             id: true,
@@ -1703,8 +1715,133 @@ private buildWorkflowSnapshot(project: {
       throw new AppError("OS não está arquivada", 409);
     }
 
-    if (serviceOrder.project.deletedAt || serviceOrder.project.archivedAt) {
+    if (serviceOrder.project.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar OS com o projeto pai removido logicamente",
+        409,
+      );
+    }
+
+    if (serviceOrder.estimate.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar OS com a estimativa vinculada removida logicamente",
+        409,
+      );
+    }
+
+    if (serviceOrder.diexRequest?.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar OS com o DIEx vinculado removido logicamente",
+        409,
+      );
+    }
+
+    if (options.cascade) {
+      if (serviceOrder.project.archivedAt) {
+        const { ProjectsService } = await import("../projects/projects.service.js");
+        const projectsService = new ProjectsService();
+
+        await projectsService.restore(serviceOrder.projectId, user);
+      }
+
+      if (serviceOrder.estimate.archivedAt) {
+        const { EstimatesService } = await import("../estimates/estimates.service.js");
+        const estimatesService = new EstimatesService();
+
+        await estimatesService.restore(serviceOrder.estimateId, user);
+      }
+
+      if (serviceOrder.diexRequest?.archivedAt) {
+        const { DiexService } = await import("../diex/diex.service.js");
+        const diexService = new DiexService();
+
+        await diexService.restore(serviceOrder.diexRequest.id, user);
+      }
+
+      serviceOrder = await prisma.serviceOrder.findUnique({
+        where: { id: serviceOrderId },
+        select: {
+          id: true,
+          serviceOrderCode: true,
+          projectId: true,
+          estimateId: true,
+          diexRequestId: true,
+          serviceOrderNumber: true,
+          issuedAt: true,
+          contractorName: true,
+          contractorCnpj: true,
+          commitmentNoteNumber: true,
+          requesterName: true,
+          requesterRank: true,
+          requesterCpf: true,
+          requesterRole: true,
+          issuingOrganization: true,
+          isEmergency: true,
+          plannedStartDate: true,
+          plannedEndDate: true,
+          requestingArea: true,
+          projectDisplayName: true,
+          projectAcronym: true,
+          contractNumber: true,
+          executionLocation: true,
+          executionHours: true,
+          contactName: true,
+          contactPhone: true,
+          contactExtension: true,
+          contractTotalTerm: true,
+          originProcess: true,
+          contractorRepresentativeName: true,
+          contractorRepresentativeRole: true,
+          notes: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+          project: {
+            select: {
+              id: true,
+              projectCode: true,
+              stage: true,
+              status: true,
+              archivedAt: true,
+              deletedAt: true,
+              creditNoteNumber: true,
+              creditNoteReceivedAt: true,
+              diexNumber: true,
+              diexIssuedAt: true,
+              commitmentNoteNumber: true,
+              commitmentNoteReceivedAt: true,
+              serviceOrderNumber: true,
+              serviceOrderIssuedAt: true,
+              executionStartedAt: true,
+              asBuiltReceivedAt: true,
+              invoiceAttestedAt: true,
+              serviceCompletedAt: true,
+            },
+          },
+          estimate: {
+            select: {
+              id: true,
+              archivedAt: true,
+              deletedAt: true,
+            },
+          },
+          diexRequest: {
+            select: {
+              id: true,
+              archivedAt: true,
+              deletedAt: true,
+            },
+          },
+        },
+      });
+    }
+
+    if (!serviceOrder || serviceOrder.project.deletedAt || serviceOrder.project.archivedAt) {
       throw new AppError("Não é possível restaurar OS com o projeto pai arquivado", 409);
+    }
+
+    if (serviceOrder.estimate.deletedAt || serviceOrder.estimate.archivedAt) {
+      throw new AppError("Não é possível restaurar OS com a estimativa vinculada arquivada", 409);
     }
 
     if (
@@ -1766,6 +1903,7 @@ private buildWorkflowSnapshot(project: {
       after: this.buildServiceOrderAuditSnapshot(restoredServiceOrder),
       metadata: {
         permissionUsed: "service_orders.restore",
+        cascade: Boolean(options.cascade),
       },
     });
 
@@ -1790,6 +1928,7 @@ private buildWorkflowSnapshot(project: {
     return {
       message: "OS restaurada com sucesso",
       permissionUsed: "service_orders.restore" as const,
+      cascadeApplied: Boolean(options.cascade),
       serviceOrder: restoredServiceOrder,
     };
   }

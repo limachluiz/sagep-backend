@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { withArchiveContext } from "../../shared/archive-context.js";
+import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
@@ -1266,12 +1267,12 @@ export class DiexService {
       };
   }
 
-  async restore(diexId: string, user: CurrentUser) {
+  async restore(diexId: string, user: CurrentUser, options: RestoreOptions = {}) {
     if (!permissionsService.hasPermission(user, "diex.restore")) {
       throw new AppError("Você não tem permissão para restaurar DIEx", 403);
     }
 
-    const diex = await prisma.diexRequest.findUnique({
+    let diex = await prisma.diexRequest.findUnique({
       where: { id: diexId },
       select: {
         id: true,
@@ -1316,6 +1317,13 @@ export class DiexService {
             serviceCompletedAt: true,
           },
         },
+        estimate: {
+          select: {
+            id: true,
+            archivedAt: true,
+            deletedAt: true,
+          },
+        },
       },
     });
 
@@ -1327,8 +1335,97 @@ export class DiexService {
       throw new AppError("DIEx não está arquivado", 409);
     }
 
-    if (diex.project.deletedAt || diex.project.archivedAt) {
+    if (diex.project.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar DIEx com o projeto pai removido logicamente",
+        409,
+      );
+    }
+
+    if (diex.estimate.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar DIEx com a estimativa vinculada removida logicamente",
+        409,
+      );
+    }
+
+    if (options.cascade) {
+      if (diex.project.archivedAt) {
+        const { ProjectsService } = await import("../projects/projects.service.js");
+        const projectsService = new ProjectsService();
+
+        await projectsService.restore(diex.projectId, user);
+      }
+
+      if (diex.estimate.archivedAt) {
+        const { EstimatesService } = await import("../estimates/estimates.service.js");
+        const estimatesService = new EstimatesService();
+
+        await estimatesService.restore(diex.estimateId, user);
+      }
+
+      diex = await prisma.diexRequest.findUnique({
+        where: { id: diexId },
+        select: {
+          id: true,
+          diexCode: true,
+          projectId: true,
+          estimateId: true,
+          diexNumber: true,
+          issuedAt: true,
+          issuingOrganization: true,
+          commandName: true,
+          pregaoNumber: true,
+          uasg: true,
+          supplierName: true,
+          supplierCnpj: true,
+          requesterName: true,
+          requesterRank: true,
+          requesterCpf: true,
+          requesterRole: true,
+          notes: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+          project: {
+            select: {
+              id: true,
+              projectCode: true,
+              stage: true,
+              status: true,
+              archivedAt: true,
+              deletedAt: true,
+              diexNumber: true,
+              diexIssuedAt: true,
+              creditNoteNumber: true,
+              creditNoteReceivedAt: true,
+              commitmentNoteNumber: true,
+              commitmentNoteReceivedAt: true,
+              serviceOrderNumber: true,
+              serviceOrderIssuedAt: true,
+              executionStartedAt: true,
+              asBuiltReceivedAt: true,
+              invoiceAttestedAt: true,
+              serviceCompletedAt: true,
+            },
+          },
+          estimate: {
+            select: {
+              id: true,
+              archivedAt: true,
+              deletedAt: true,
+            },
+          },
+        },
+      });
+    }
+
+    if (!diex || diex.project.deletedAt || diex.project.archivedAt) {
       throw new AppError("Não é possível restaurar DIEx com o projeto pai arquivado", 409);
+    }
+
+    if (diex.estimate.deletedAt || diex.estimate.archivedAt) {
+      throw new AppError("Não é possível restaurar DIEx com a estimativa vinculada arquivada", 409);
     }
 
     const restoredDiex = await prisma.diexRequest.update({
@@ -1381,6 +1478,7 @@ export class DiexService {
       after: this.buildDiexAuditSnapshot(restoredDiex),
       metadata: {
         permissionUsed: "diex.restore",
+        cascade: Boolean(options.cascade),
       },
     });
 
@@ -1405,6 +1503,7 @@ export class DiexService {
     return {
       message: "DIEx restaurado com sucesso",
       permissionUsed: "diex.restore" as const,
+      cascadeApplied: Boolean(options.cascade),
       diex: restoredDiex,
     };
   }

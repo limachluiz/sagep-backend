@@ -11,6 +11,7 @@ import {
 } from "./estimates.schemas.js";
 import { EstimatesService } from "./estimates.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
 
 const estimatesService = new EstimatesService();
 const estimateDocumentService = new EstimateDocumentService();
@@ -75,7 +76,8 @@ export class EstimatesController {
 
   async restore(req: Request, res: Response) {
     const { id } = estimateIdParamSchema.parse(req.params);
-    const result = await estimatesService.restore(id, req.user!);
+    const options = restoreOptionsSchema.parse(req.body ?? {});
+    const result = await estimatesService.restore(id, req.user!, options);
     return res.status(200).json(result);
   }
 

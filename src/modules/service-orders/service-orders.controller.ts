@@ -10,6 +10,7 @@ import {
 import { ServiceOrdersService } from "./service-orders.service.js";
 import { ServiceOrderDocumentService } from "./service-order-document.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
 
 const serviceOrdersService = new ServiceOrdersService();
 const serviceOrderDocumentService = new ServiceOrderDocumentService();
@@ -66,7 +67,8 @@ export class ServiceOrdersController {
 
   async restore(req: Request, res: Response) {
     const { id } = serviceOrderIdParamSchema.parse(req.params);
-    const result = await serviceOrdersService.restore(id, req.user!);
+    const options = restoreOptionsSchema.parse(req.body ?? {});
+    const result = await serviceOrdersService.restore(id, req.user!, options);
     return res.status(200).json(result);
   }
     async documentHtml(req: Request, res: Response) {

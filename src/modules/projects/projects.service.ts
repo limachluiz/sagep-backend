@@ -2,14 +2,19 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { withArchiveContext } from "../../shared/archive-context.js";
+import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import type { AuditEntityType, AuditSnapshot } from "../audit/audit.types.js";
+import { DiexService } from "../diex/diex.service.js";
+import { EstimatesService } from "../estimates/estimates.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
+import { ServiceOrdersService } from "../service-orders/service-orders.service.js";
+import { TasksService } from "../tasks/tasks.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
   id: string;
-  name: string;
+  name?: string;
   email: string;
   role: string;
   rank?: string | null;
@@ -112,6 +117,11 @@ const projectInclude = {
     },
   },
 } satisfies Prisma.ProjectInclude;
+
+const tasksService = new TasksService();
+const estimatesService = new EstimatesService();
+const diexService = new DiexService();
+const serviceOrdersService = new ServiceOrdersService();
 
 export class ProjectsService {
   private isAdmin(role: string) {
@@ -1760,7 +1770,7 @@ export class ProjectsService {
     };
   }
 
-  async restore(projectId: string, user: CurrentUser) {
+  async restore(projectId: string, user: CurrentUser, options: RestoreOptions = {}) {
     if (!permissionsService.hasPermission(user, "projects.restore")) {
       throw new AppError("Você não tem permissão para restaurar este projeto", 403);
     }
@@ -1802,13 +1812,22 @@ export class ProjectsService {
       throw new AppError("Projeto não está arquivado", 409);
     }
 
-    const project = await prisma.project.update({
+    await prisma.project.update({
       where: { id: projectId },
       data: {
         archivedAt: null,
       },
       include: projectInclude,
     });
+
+    let project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: projectInclude,
+    });
+
+    if (!project) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
 
     await auditService.log({
       entityType: "PROJECT",
@@ -1820,12 +1839,163 @@ export class ProjectsService {
       after: this.buildProjectAuditSnapshot(project),
       metadata: {
         permissionUsed: "projects.restore",
+        cascade: Boolean(options.cascade),
       },
     });
+
+    const cascade = {
+      restored: {
+        tasks: 0,
+        estimates: 0,
+        diexRequests: 0,
+        serviceOrders: 0,
+      },
+      skipped: {
+        tasksDeleted: 0,
+        estimatesDeleted: 0,
+        diexDeleted: 0,
+        serviceOrdersDeleted: 0,
+      },
+    };
+
+    if (options.cascade) {
+      const [archivedTasks, archivedEstimates, archivedDiex, archivedServiceOrders] =
+        await Promise.all([
+          prisma.task.findMany({
+            where: {
+              projectId,
+              archivedAt: {
+                not: null,
+              },
+            },
+            select: {
+              id: true,
+              deletedAt: true,
+            },
+            orderBy: {
+              taskCode: "asc",
+            },
+          }),
+          prisma.estimate.findMany({
+            where: {
+              projectId,
+              archivedAt: {
+                not: null,
+              },
+            },
+            select: {
+              id: true,
+              deletedAt: true,
+            },
+            orderBy: {
+              estimateCode: "asc",
+            },
+          }),
+          prisma.diexRequest.findMany({
+            where: {
+              projectId,
+              archivedAt: {
+                not: null,
+              },
+            },
+            select: {
+              id: true,
+              deletedAt: true,
+              estimate: {
+                select: {
+                  deletedAt: true,
+                },
+              },
+            },
+            orderBy: {
+              diexCode: "asc",
+            },
+          }),
+          prisma.serviceOrder.findMany({
+            where: {
+              projectId,
+              archivedAt: {
+                not: null,
+              },
+            },
+            select: {
+              id: true,
+              deletedAt: true,
+              estimate: {
+                select: {
+                  deletedAt: true,
+                },
+              },
+              diexRequest: {
+                select: {
+                  deletedAt: true,
+                },
+              },
+            },
+            orderBy: {
+              serviceOrderCode: "asc",
+            },
+          }),
+        ]);
+
+      const taskIds = archivedTasks.filter((item) => !item.deletedAt).map((item) => item.id);
+      const estimateIds = archivedEstimates
+        .filter((item) => !item.deletedAt)
+        .map((item) => item.id);
+      const diexIds = archivedDiex
+        .filter((item) => !item.deletedAt && !item.estimate.deletedAt)
+        .map((item) => item.id);
+      const serviceOrderIds = archivedServiceOrders
+        .filter(
+          (item) =>
+            !item.deletedAt &&
+            !item.estimate.deletedAt &&
+            (!item.diexRequest || !item.diexRequest.deletedAt),
+        )
+        .map((item) => item.id);
+
+      cascade.skipped.tasksDeleted = archivedTasks.length - taskIds.length;
+      cascade.skipped.estimatesDeleted = archivedEstimates.length - estimateIds.length;
+      cascade.skipped.diexDeleted =
+        archivedDiex.length - diexIds.length;
+      cascade.skipped.serviceOrdersDeleted =
+        archivedServiceOrders.length - serviceOrderIds.length;
+
+      for (const estimateId of estimateIds) {
+        await estimatesService.restore(estimateId, user);
+        cascade.restored.estimates += 1;
+      }
+
+      for (const taskId of taskIds) {
+        await tasksService.restore(taskId, user);
+        cascade.restored.tasks += 1;
+      }
+
+      for (const diexId of diexIds) {
+        await diexService.restore(diexId, user);
+        cascade.restored.diexRequests += 1;
+      }
+
+      for (const serviceOrderId of serviceOrderIds) {
+        await serviceOrdersService.restore(serviceOrderId, user);
+        cascade.restored.serviceOrders += 1;
+      }
+
+      project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: projectInclude,
+      });
+
+      if (!project) {
+        throw new AppError("Projeto não encontrado", 404);
+      }
+    }
 
     return {
       message: "Projeto restaurado com sucesso",
       permissionUsed: "projects.restore" as const,
+      cascadeApplied: Boolean(options.cascade),
+      ...(options.cascade && { cascade }),
       project,
     };
   }

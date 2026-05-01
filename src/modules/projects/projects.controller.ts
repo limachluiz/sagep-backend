@@ -11,6 +11,7 @@ import {
 import { ProjectsService } from "./projects.service.js";
 import { AppError } from "../../shared/app-error.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
 
 const projectsService = new ProjectsService();
 
@@ -81,7 +82,8 @@ export class ProjectsController {
 
   async restore(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
-    const result = await projectsService.restore(id, req.user!);
+    const options = restoreOptionsSchema.parse(req.body ?? {});
+    const result = await projectsService.restore(id, req.user!, options);
     return res.status(200).json(result);
   }
 

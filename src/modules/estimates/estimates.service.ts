@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { withArchiveContext } from "../../shared/archive-context.js";
+import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 
@@ -1204,12 +1205,12 @@ export class EstimatesService {
     };
   }
 
-  async restore(estimateId: string, user: CurrentUser) {
+  async restore(estimateId: string, user: CurrentUser, options: RestoreOptions = {}) {
     if (!permissionsService.hasPermission(user, "estimates.restore")) {
       throw new AppError("Você não tem permissão para restaurar esta estimativa", 403);
     }
 
-    const before = await prisma.estimate.findUnique({
+    let before = await prisma.estimate.findUnique({
       where: { id: estimateId },
       select: {
         id: true,
@@ -1239,7 +1240,43 @@ export class EstimatesService {
       throw new AppError("Estimativa não está arquivada", 409);
     }
 
-    if (before.project.deletedAt || before.project.archivedAt) {
+    if (before.project.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar estimativa de projeto removido logicamente",
+        409,
+      );
+    }
+
+    if (before.project.archivedAt && options.cascade) {
+      const { ProjectsService } = await import("../projects/projects.service.js");
+      const projectsService = new ProjectsService();
+
+      await projectsService.restore(before.projectId, user);
+
+      before = await prisma.estimate.findUnique({
+        where: { id: estimateId },
+        select: {
+          id: true,
+          estimateCode: true,
+          projectId: true,
+          status: true,
+          omName: true,
+          destinationCityName: true,
+          destinationStateUf: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+          project: {
+            select: {
+              archivedAt: true,
+              deletedAt: true,
+            },
+          },
+        },
+      });
+    }
+
+    if (!before || before.project.deletedAt || before.project.archivedAt) {
       throw new AppError("Não é possível restaurar estimativa de projeto arquivado", 409);
     }
 
@@ -1261,12 +1298,14 @@ export class EstimatesService {
       after: this.buildEstimateAuditSnapshot(estimate),
       metadata: {
         permissionUsed: "estimates.restore",
+        cascade: Boolean(options.cascade),
       },
     });
 
     return {
       message: "Estimativa restaurada com sucesso",
       permissionUsed: "estimates.restore" as const,
+      cascadeApplied: Boolean(options.cascade),
       estimate,
     };
   }

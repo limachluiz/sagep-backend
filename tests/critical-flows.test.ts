@@ -1434,6 +1434,300 @@ describe("critical flows", () => {
       });
   });
 
+  it("restore cascade: project can restore eligible archived children and skip logically deleted ones", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-CASCADE-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const task = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ projectId: project.id, title: "Tarefa restauravel em cascata" })
+      .expect(201);
+
+    const deletedTask = await request(app)
+      .post("/api/tasks")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ projectId: project.id, title: "Tarefa removida logicamente" })
+      .expect(201);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-CASCADE-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const serviceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexId: diex.id,
+        serviceOrderNumber: "OS-CASCADE-001",
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Cascade",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/service-orders/${serviceOrder.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/diex/${diex.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/tasks/${task.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    const lifecycleDate = new Date("2026-04-10T00:00:00.000Z");
+
+    await prisma.estimate.update({
+      where: { id: estimate.id },
+      data: {
+        archivedAt: lifecycleDate,
+      },
+    });
+
+    await prisma.task.update({
+      where: { id: deletedTask.body.id },
+      data: {
+        archivedAt: lifecycleDate,
+        deletedAt: lifecycleDate,
+      },
+    });
+
+    await prisma.project.update({
+      where: { id: project.id },
+      data: {
+        archivedAt: lifecycleDate,
+      },
+    });
+
+    await request(app)
+      .post(`/api/projects/${project.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ cascade: true })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("projects.restore");
+        expect(response.body.cascadeApplied).toBe(true);
+        expect(response.body.project.archivedAt).toBeNull();
+        expect(response.body.cascade.restored).toEqual({
+          tasks: 1,
+          estimates: 1,
+          diexRequests: 1,
+          serviceOrders: 1,
+        });
+        expect(response.body.cascade.skipped.tasksDeleted).toBe(1);
+      });
+
+    const [restoredTask, logicallyDeletedTask, restoredEstimate, restoredDiex, restoredServiceOrder] =
+      await Promise.all([
+        prisma.task.findUnique({ where: { id: task.body.id } }),
+        prisma.task.findUnique({ where: { id: deletedTask.body.id } }),
+        prisma.estimate.findUnique({ where: { id: estimate.id } }),
+        prisma.diexRequest.findUnique({ where: { id: diex.id } }),
+        prisma.serviceOrder.findUnique({ where: { id: serviceOrder.body.id } }),
+      ]);
+
+    expect(restoredTask?.archivedAt).toBeNull();
+    expect(restoredEstimate?.archivedAt).toBeNull();
+    expect(restoredDiex?.archivedAt).toBeNull();
+    expect(restoredServiceOrder?.archivedAt).toBeNull();
+    expect(logicallyDeletedTask?.deletedAt).toBeTruthy();
+    expect(logicallyDeletedTask?.archivedAt).toBeTruthy();
+  });
+
+  it("restore cascade: service order can restore archived dependency chain, but blocks logical deletes", async () => {
+    const firstChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await moveToCreditNote(firstChain.project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${firstChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-SO-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const firstDiex = await issueDiex(
+      firstChain.project.id,
+      firstChain.estimate.id,
+      adminAuth.accessToken,
+    );
+
+    await request(app)
+      .patch(`/api/projects/${firstChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-SO-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const firstServiceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: firstChain.project.id,
+        estimateId: firstChain.estimate.id,
+        diexId: firstDiex.id,
+        serviceOrderNumber: "OS-UP-001",
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Restore",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/service-orders/${firstServiceOrder.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/diex/${firstDiex.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    const firstLifecycleDate = new Date("2026-04-15T00:00:00.000Z");
+
+    await prisma.estimate.update({
+      where: { id: firstChain.estimate.id },
+      data: {
+        archivedAt: firstLifecycleDate,
+      },
+    });
+
+    await prisma.project.update({
+      where: { id: firstChain.project.id },
+      data: {
+        archivedAt: firstLifecycleDate,
+      },
+    });
+
+    await request(app)
+      .post(`/api/service-orders/${firstServiceOrder.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(409);
+
+    await request(app)
+      .post(`/api/service-orders/${firstServiceOrder.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ cascade: true })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.permissionUsed).toBe("service_orders.restore");
+        expect(response.body.cascadeApplied).toBe(true);
+        expect(response.body.serviceOrder.archivedAt).toBeNull();
+      });
+
+    const [restoredProject, restoredEstimate, restoredDiex, restoredServiceOrder] =
+      await Promise.all([
+        prisma.project.findUnique({ where: { id: firstChain.project.id } }),
+        prisma.estimate.findUnique({ where: { id: firstChain.estimate.id } }),
+        prisma.diexRequest.findUnique({ where: { id: firstDiex.id } }),
+        prisma.serviceOrder.findUnique({ where: { id: firstServiceOrder.body.id } }),
+      ]);
+
+    expect(restoredProject?.archivedAt).toBeNull();
+    expect(restoredEstimate?.archivedAt).toBeNull();
+    expect(restoredDiex?.archivedAt).toBeNull();
+    expect(restoredServiceOrder?.archivedAt).toBeNull();
+
+    const secondChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await moveToCreditNote(secondChain.project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${secondChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-SO-002",
+        creditNoteReceivedAt: "2026-04-11T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const secondDiex = await issueDiex(
+      secondChain.project.id,
+      secondChain.estimate.id,
+      adminAuth.accessToken,
+    );
+
+    await request(app)
+      .patch(`/api/projects/${secondChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-SO-002",
+        commitmentNoteReceivedAt: "2026-04-12T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const secondServiceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: secondChain.project.id,
+        estimateId: secondChain.estimate.id,
+        diexId: secondDiex.id,
+        serviceOrderNumber: "OS-UP-002",
+        issuedAt: "2026-04-13T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Block",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .delete(`/api/service-orders/${secondServiceOrder.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    await prisma.diexRequest.update({
+      where: { id: secondDiex.id },
+      data: {
+        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
+        deletedAt: new Date("2026-04-20T00:00:00.000Z"),
+      },
+    });
+
+    await request(app)
+      .post(`/api/service-orders/${secondServiceOrder.body.id}/restore`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ cascade: true })
+      .expect(409);
+  });
+
   it("archive filters: admin can include or isolate archived records", async () => {
     const activeProject = await createProject(adminAuth.accessToken, "Projeto Ativo");
     const archivedProject = await createProject(adminAuth.accessToken, "Projeto Arquivado");

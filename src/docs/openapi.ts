@@ -123,10 +123,29 @@ const archiveResponseExample = {
 const restoreResponseExample = {
   message: "Projeto restaurado com sucesso",
   permissionUsed: "projects.restore",
+  cascadeApplied: true,
+  cascade: {
+    restored: {
+      tasks: 2,
+      estimates: 1,
+      diexRequests: 1,
+      serviceOrders: 1,
+    },
+    skipped: {
+      tasksDeleted: 0,
+      estimatesDeleted: 0,
+      diexDeleted: 0,
+      serviceOrdersDeleted: 0,
+    },
+  },
   project: {
     id: "f4d9e8f8-4b26-4f9a-b1e2-a9913b77f69f",
     archivedAt: null,
   },
+};
+
+const restoreRequestExample = {
+  cascade: true,
 };
 
 export const openApiDocument: OpenApiDocument = {
@@ -1101,6 +1120,8 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           message: { type: "string" },
           permissionUsed: { type: "string", nullable: true },
+          cascadeApplied: { type: "boolean" },
+          cascade: { $ref: "#/components/schemas/CascadeRestoreResult" },
           project: {
             type: "object",
             additionalProperties: true,
@@ -1120,6 +1141,33 @@ export const openApiDocument: OpenApiDocument = {
           serviceOrder: {
             type: "object",
             additionalProperties: true,
+          },
+        },
+      },
+      RestoreRequest: {
+        type: "object",
+        properties: {
+          cascade: {
+            type: "boolean",
+            description:
+              "Quando true, restaura dependencias pai ou filhos elegiveis em cascata, sem incluir registros com deletedAt.",
+          },
+        },
+      },
+      CascadeRestoreResult: {
+        type: "object",
+        properties: {
+          restored: {
+            type: "object",
+            additionalProperties: {
+              type: "integer",
+            },
+          },
+          skipped: {
+            type: "object",
+            additionalProperties: {
+              type: "integer",
+            },
           },
         },
       },
@@ -1942,6 +1990,10 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Restaurar projeto arquivado",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/RestoreRequest", restoreRequestExample),
+        },
         responses: {
           "200": okJson("#/components/schemas/ArchiveResponse", "Projeto restaurado", restoreResponseExample),
           ...defaultErrorResponses,
@@ -2179,6 +2231,10 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Restaurar tarefa arquivada",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/RestoreRequest", restoreRequestExample),
+        },
         responses: {
           "200": okJson("#/components/schemas/ArchiveResponse", "Tarefa restaurada"),
           ...defaultErrorResponses,
@@ -2315,6 +2371,10 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Restaurar estimativa arquivada",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/EstimateId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/RestoreRequest", restoreRequestExample),
+        },
         responses: {
           "200": okJson("#/components/schemas/ArchiveResponse", "Estimativa restaurada"),
           ...defaultErrorResponses,
@@ -2444,6 +2504,10 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Restaurar DIEx arquivado",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/DiexId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/RestoreRequest", restoreRequestExample),
+        },
         responses: {
           "200": okJson("#/components/schemas/ArchiveResponse", "DIEx restaurado"),
           ...defaultErrorResponses,
@@ -2578,6 +2642,10 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Restaurar ordem de servico arquivada",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/ServiceOrderId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/RestoreRequest", restoreRequestExample),
+        },
         responses: {
           "200": okJson("#/components/schemas/ArchiveResponse", "OS restaurada"),
           ...defaultErrorResponses,
