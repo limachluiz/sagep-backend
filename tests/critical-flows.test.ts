@@ -3139,6 +3139,66 @@ describe("critical flows", () => {
     expect(executive.body.summary.projectsTotal).toBeGreaterThanOrEqual(1);
   });
 
+  it("dashboards: expose inventory balance indicators for operational and executive views", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto Dashboard Saldo");
+    const { estimate, ataItem } = await seedFinalizedEstimateWithBalance(project.id, {
+      initialQuantity: "3.00",
+      quantity: "2.00",
+    });
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-DASH-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-DASH-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const operational = await request(app)
+      .get("/api/dashboard/operational")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(operational.body.inventory.summary.lowStockItems).toBeGreaterThanOrEqual(1);
+    expect(operational.body.inventory.summary.itemsWithActiveConsumption).toBeGreaterThanOrEqual(1);
+    expect(operational.body.inventory.summary.totalConsumedAmount).toBe("200.00");
+    expect(
+      operational.body.inventory.criticalItems.some(
+        (item: { id: string; balance: { availableQuantity: string } }) =>
+          item.id === ataItem.id && item.balance.availableQuantity === "1",
+      ),
+    ).toBe(true);
+
+    const executive = await request(app)
+      .get("/api/dashboard/executive")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(executive.body.summary.ataItemsAtRisk).toBeGreaterThanOrEqual(1);
+    expect(executive.body.financial.inventoryCurrentConsumedAmount).toBe("200.00");
+    expect(executive.body.inventory.snapshot.itemsWithActiveConsumption).toBeGreaterThanOrEqual(1);
+    expect(
+      executive.body.inventory.criticalItems.some(
+        (item: { id: string; balance: { availableQuantity: string } }) =>
+          item.id === ataItem.id && item.balance.availableQuantity === "1",
+      ),
+    ).toBe(true);
+  });
+
   it("exports and reports expose authorized project outputs", async () => {
     const { project } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 

@@ -1415,25 +1415,68 @@ export const openApiDocument: OpenApiDocument = {
       DashboardOperationalResponse: {
         type: "object",
         properties: {
+          generatedAt: { type: "string", format: "date-time" },
+          filters: {
+            type: "object",
+            additionalProperties: true,
+          },
           summary: {
             type: "object",
             additionalProperties: true,
           },
-          groups: {
-            type: "array",
-            items: {
-              type: "object",
-              additionalProperties: true,
-            },
-          },
           alerts: {
+            type: "object",
+            additionalProperties: true,
+          },
+          pendingByStage: {
+            type: "object",
+            additionalProperties: true,
+          },
+          inventory: {
+            type: "object",
+            properties: {
+              summary: {
+                type: "object",
+                additionalProperties: true,
+              },
+              criticalItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+              staleReservations: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+              recentReversals: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+          operationalQueue: {
             type: "array",
             items: {
               type: "object",
               additionalProperties: true,
             },
           },
-          nextActions: {
+          frequentNextActions: {
+            type: "array",
+            items: {
+              type: "object",
+              additionalProperties: true,
+            },
+          },
+          latestMovements: {
             type: "array",
             items: {
               type: "object",
@@ -1444,7 +1487,53 @@ export const openApiDocument: OpenApiDocument = {
       },
       DashboardExecutiveResponse: {
         type: "object",
-        additionalProperties: true,
+        properties: {
+          generatedAt: { type: "string", format: "date-time" },
+          filter: {
+            type: "object",
+            additionalProperties: true,
+          },
+          summary: {
+            type: "object",
+            additionalProperties: true,
+          },
+          financial: {
+            type: "object",
+            additionalProperties: true,
+          },
+          distribution: {
+            type: "object",
+            additionalProperties: true,
+          },
+          periodIndicators: {
+            type: "object",
+            additionalProperties: true,
+          },
+          inventory: {
+            type: "object",
+            properties: {
+              snapshot: {
+                type: "object",
+                additionalProperties: true,
+              },
+              periodActivity: {
+                type: "object",
+                additionalProperties: true,
+              },
+              distribution: {
+                type: "object",
+                additionalProperties: true,
+              },
+              criticalItems: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+        },
       },
       DashboardOverviewResponse: {
         type: "object",
