@@ -15,6 +15,7 @@ const tagExternalDocs = {
   exports: "./insights-and-admin.md",
   reports: "./insights-and-admin.md",
   users: "./insights-and-admin.md",
+  permissions: "./insights-and-admin.md",
   atas: "./insights-and-admin.md",
   "ata-items": "./insights-and-admin.md",
   "military-organizations": "./insights-and-admin.md",
@@ -176,6 +177,7 @@ export const openApiDocument: OpenApiDocument = {
     "exports",
     "reports",
     "users",
+    "permissions",
     "atas",
     "ata-items",
     "military-organizations",
@@ -273,6 +275,14 @@ export const openApiDocument: OpenApiDocument = {
         minimum: 1,
       }),
       UserId: pathIdParameter("id", "Identificador UUID do usuario."),
+      RoleName: pathIdParameter("role", "Role do RBAC persistido.", {
+        type: "string",
+        enum: ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"],
+      }),
+      PermissionCode: pathIdParameter(
+        "permissionCode",
+        "Codigo da permissao no catalogo RBAC persistido.",
+      ),
       SessionId: pathIdParameter("sessionId", "Identificador da sessao."),
       AtaId: pathIdParameter("id", "Identificador UUID da ata."),
       AtaCode: pathIdParameter("code", "Codigo sequencial da ata.", {
@@ -411,6 +421,210 @@ export const openApiDocument: OpenApiDocument = {
             items: { type: "string" },
           },
           access: { $ref: "#/components/schemas/AccessProfile" },
+        },
+      },
+      PermissionCatalogItem: {
+        type: "object",
+        required: ["code", "module", "group", "action", "description", "defaultRoles"],
+        properties: {
+          code: { type: "string" },
+          module: { type: "string" },
+          group: { type: "string" },
+          action: { type: "string" },
+          description: { type: "string" },
+          defaultRoles: {
+            type: "array",
+            items: {
+              type: "string",
+              enum: ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"],
+            },
+          },
+        },
+      },
+      PermissionCatalogResponse: {
+        type: "object",
+        required: ["items"],
+        properties: {
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/PermissionCatalogItem" },
+          },
+        },
+      },
+      RolePermissionItem: {
+        allOf: [
+          { $ref: "#/components/schemas/PermissionCatalogItem" },
+          {
+            type: "object",
+            required: ["assigned"],
+            properties: {
+              assigned: { type: "boolean" },
+            },
+          },
+        ],
+      },
+      RolePermissionsRequest: {
+        type: "object",
+        required: ["permissions"],
+        properties: {
+          permissions: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+      },
+      RolePermissionsResponse: {
+        type: "object",
+        required: ["role", "source", "basePermissions", "items"],
+        properties: {
+          message: { type: "string" },
+          role: {
+            type: "string",
+            enum: ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"],
+          },
+          source: {
+            type: "string",
+            enum: ["database", "fallback"],
+          },
+          basePermissions: {
+            type: "array",
+            items: { type: "string" },
+          },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/RolePermissionItem" },
+          },
+        },
+      },
+      UserPermissionOverrideItem: {
+        type: "object",
+        required: [
+          "code",
+          "module",
+          "group",
+          "action",
+          "description",
+          "effect",
+          "effective",
+          "grantedByRole",
+        ],
+        properties: {
+          code: { type: "string" },
+          module: { type: "string" },
+          group: { type: "string" },
+          action: { type: "string" },
+          description: { type: "string" },
+          effect: { type: "string", enum: ["ALLOW", "DENY"] },
+          effective: { type: "boolean" },
+          grantedByRole: { type: "boolean" },
+          createdAt: { type: "string", format: "date-time", nullable: true },
+          updatedAt: { type: "string", format: "date-time", nullable: true },
+        },
+      },
+      UserPermissionItem: {
+        allOf: [
+          { $ref: "#/components/schemas/PermissionCatalogItem" },
+          {
+            type: "object",
+            required: ["grantedByRole", "overrideEffect", "effective"],
+            properties: {
+              grantedByRole: { type: "boolean" },
+              overrideEffect: {
+                type: "string",
+                enum: ["ALLOW", "DENY"],
+                nullable: true,
+              },
+              effective: { type: "boolean" },
+            },
+          },
+        ],
+      },
+      UserPermissionsResponse: {
+        type: "object",
+        required: [
+          "user",
+          "rolePermissionSource",
+          "roleBasePermissions",
+          "overrides",
+          "effectivePermissions",
+          "items",
+        ],
+        properties: {
+          user: { $ref: "#/components/schemas/UserSummary" },
+          rolePermissionSource: {
+            type: "string",
+            enum: ["database", "fallback"],
+          },
+          roleBasePermissions: {
+            type: "array",
+            items: { type: "string" },
+          },
+          overrides: {
+            type: "array",
+            items: {
+              type: "object",
+              required: ["permission", "effect"],
+              properties: {
+                permission: { type: "string" },
+                effect: { type: "string", enum: ["ALLOW", "DENY"] },
+                createdAt: { type: "string", format: "date-time" },
+                updatedAt: { type: "string", format: "date-time" },
+              },
+            },
+          },
+          effectivePermissions: {
+            type: "array",
+            items: { type: "string" },
+          },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/UserPermissionItem" },
+          },
+        },
+      },
+      UserPermissionOverridesResponse: {
+        type: "object",
+        required: ["user", "overrides"],
+        properties: {
+          user: { $ref: "#/components/schemas/UserSummary" },
+          overrides: {
+            type: "array",
+            items: { $ref: "#/components/schemas/UserPermissionOverrideItem" },
+          },
+        },
+      },
+      UserPermissionOverrideRequest: {
+        type: "object",
+        required: ["permissionCode"],
+        properties: {
+          permissionCode: { type: "string" },
+        },
+      },
+      UserPermissionOverrideMutationResponse: {
+        type: "object",
+        required: ["message", "user", "summary"],
+        properties: {
+          message: { type: "string" },
+          user: { $ref: "#/components/schemas/UserSummary" },
+          override: {
+            type: "object",
+            properties: {
+              code: { type: "string" },
+              module: { type: "string" },
+              group: { type: "string" },
+              action: { type: "string" },
+              description: { type: "string" },
+              effect: { type: "string", enum: ["ALLOW", "DENY"] },
+            },
+          },
+          removedOverride: {
+            type: "object",
+            properties: {
+              code: { type: "string" },
+              effect: { type: "string", enum: ["ALLOW", "DENY"] },
+            },
+          },
+          summary: { $ref: "#/components/schemas/UserPermissionsResponse" },
         },
       },
       AuthTokensResponse: {
@@ -2958,6 +3172,122 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["users.manage"],
+      },
+    },
+    "/permissions/catalog": {
+      get: {
+        tags: ["permissions"],
+        summary: "Listar catalogo administrativo de permissões",
+        description:
+          "Retorna o catalogo RBAC com metadados de UI, incluindo modulo, grupo, descricao e roles padrao de origem da matriz historica.",
+        security: bearerSecurity,
+        responses: {
+          "200": okJson("#/components/schemas/PermissionCatalogResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/permissions/roles/{role}": {
+      get: {
+        tags: ["permissions"],
+        summary: "Consultar permissões base de uma role",
+        description:
+          "Expõe a base persistida da role e um espelho do catalogo com flag `assigned` para facilitar checklists no frontend.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/RoleName" }],
+        responses: {
+          "200": okJson("#/components/schemas/RolePermissionsResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+      put: {
+        tags: ["permissions"],
+        summary: "Atualizar permissões base de uma role",
+        description:
+          "Substitui a base atual da role no banco. A role continua sendo a origem principal das permissões efetivas dos usuários.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/RoleName" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/RolePermissionsRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/RolePermissionsResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/permissions/users/{id}": {
+      get: {
+        tags: ["permissions"],
+        summary: "Consultar permissões efetivas de um usuário",
+        description:
+          "Retorna lado a lado a base da role, os overrides aplicados e o resultado efetivo final para montagem de telas administrativas.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        responses: {
+          "200": okJson("#/components/schemas/UserPermissionsResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/permissions/users/{id}/overrides": {
+      get: {
+        tags: ["permissions"],
+        summary: "Listar overrides de permissões de um usuário",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        responses: {
+          "200": okJson("#/components/schemas/UserPermissionOverridesResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/permissions/users/{id}/overrides/allow": {
+      post: {
+        tags: ["permissions"],
+        summary: "Aplicar override ALLOW para um usuário",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/UserPermissionOverrideRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/UserPermissionOverrideMutationResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/permissions/users/{id}/overrides/deny": {
+      post: {
+        tags: ["permissions"],
+        summary: "Aplicar override DENY para um usuário",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/UserPermissionOverrideRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/UserPermissionOverrideMutationResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/permissions/users/{id}/overrides/{permissionCode}": {
+      delete: {
+        tags: ["permissions"],
+        summary: "Remover override de permissão de um usuário",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/UserId" },
+          { $ref: "#/components/parameters/PermissionCode" },
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/UserPermissionOverrideMutationResponse"),
+          ...defaultErrorResponses,
+        },
       },
     },
     "/atas": {

@@ -35,6 +35,10 @@ export type Permission =
   | "reports.export"
   | "users.manage";
 
+export const roleValues = ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"] as const;
+
+export type UserRole = (typeof roleValues)[number];
+
 const taskPermissions: Permission[] = [
   "tasks.view_all",
   "tasks.create",
@@ -55,7 +59,7 @@ const estimatePermissions: Permission[] = [
   "estimates.restore",
 ];
 
-export const rolePermissions: Record<string, Permission[]> = {
+export const rolePermissions: Record<UserRole, Permission[]> = {
   ADMIN: [
     "projects.view_all",
     "projects.edit_own",
@@ -165,4 +169,48 @@ export const permissionDescriptions: Record<Permission, string> = {
 
 export const allPermissions = Object.keys(permissionDescriptions) as Permission[];
 
-export const allRoles = Object.keys(rolePermissions) as Array<keyof typeof rolePermissions>;
+const permissionGroupLabels: Record<string, string> = {
+  projects: "Projetos",
+  tasks: "Tarefas",
+  estimates: "Estimativas",
+  diex: "DIEx",
+  service_orders: "Ordens de Servico",
+  atas: "Atas",
+  military_organizations: "Organizacoes Militares",
+  sessions: "Sessoes",
+  dashboard: "Dashboards",
+  reports: "Relatorios",
+  users: "Usuarios",
+};
+
+export type PermissionCatalogItem = {
+  code: Permission;
+  module: string;
+  group: string;
+  action: string;
+  description: string;
+  defaultRoles: UserRole[];
+};
+
+export const allRoles = [...roleValues];
+
+function getDefaultRolesForPermission(code: Permission): UserRole[] {
+  return allRoles.filter((role) => rolePermissions[role].includes(code));
+}
+
+export function getPermissionCatalogItem(code: Permission): PermissionCatalogItem {
+  const [module, action] = code.split(".");
+
+  return {
+    code,
+    module,
+    group: permissionGroupLabels[module] ?? module,
+    action,
+    description: permissionDescriptions[code],
+    defaultRoles: getDefaultRolesForPermission(code),
+  };
+}
+
+export function getPermissionCatalog() {
+  return allPermissions.map((code) => getPermissionCatalogItem(code));
+}

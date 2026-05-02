@@ -520,6 +520,170 @@ describe("critical flows", () => {
       .expect(403);
   });
 
+  it("permissions admin: only ADMIN can manage persisted RBAC endpoints", async () => {
+    await request(app)
+      .get("/api/permissions/catalog")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .get("/api/permissions/catalog")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+  });
+
+  it("permissions admin: exposes catalog, role base, overrides and effective permissions for frontend", async () => {
+    const catalogResponse = await request(app)
+      .get("/api/permissions/catalog")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(catalogResponse.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "dashboard.view_executive",
+          module: "dashboard",
+          group: "Dashboards",
+          action: "view_executive",
+        }),
+      ]),
+    );
+
+    const roleResponse = await request(app)
+      .get("/api/permissions/roles/CONSULTA")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(roleResponse.body.role).toBe("CONSULTA");
+    expect(roleResponse.body.source).toBe("database");
+    expect(roleResponse.body.basePermissions).toContain("dashboard.view_operational");
+    expect(roleResponse.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "dashboard.view_operational",
+          assigned: true,
+        }),
+      ]),
+    );
+
+    const allowResponse = await request(app)
+      .post(`/api/permissions/users/${consulta.id}/overrides/allow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ permissionCode: "dashboard.view_executive" })
+      .expect(200);
+
+    expect(allowResponse.body.override.effect).toBe("ALLOW");
+    expect(allowResponse.body.summary.effectivePermissions).toContain("dashboard.view_executive");
+
+    const denyResponse = await request(app)
+      .post(`/api/permissions/users/${consulta.id}/overrides/deny`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ permissionCode: "dashboard.view_operational" })
+      .expect(200);
+
+    expect(denyResponse.body.override.effect).toBe("DENY");
+    expect(denyResponse.body.summary.effectivePermissions).not.toContain(
+      "dashboard.view_operational",
+    );
+
+    const userResponse = await request(app)
+      .get(`/api/permissions/users/${consulta.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(userResponse.body.user.id).toBe(consulta.id);
+    expect(userResponse.body.roleBasePermissions).toContain("dashboard.view_operational");
+    expect(userResponse.body.effectivePermissions).toContain("dashboard.view_executive");
+    expect(userResponse.body.effectivePermissions).not.toContain("dashboard.view_operational");
+    expect(userResponse.body.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "dashboard.view_executive",
+          grantedByRole: false,
+          overrideEffect: "ALLOW",
+          effective: true,
+        }),
+        expect.objectContaining({
+          code: "dashboard.view_operational",
+          grantedByRole: true,
+          overrideEffect: "DENY",
+          effective: false,
+        }),
+      ]),
+    );
+
+    const overridesResponse = await request(app)
+      .get(`/api/permissions/users/${consulta.id}/overrides`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(overridesResponse.body.overrides).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "dashboard.view_executive",
+          effect: "ALLOW",
+        }),
+        expect.objectContaining({
+          code: "dashboard.view_operational",
+          effect: "DENY",
+        }),
+      ]),
+    );
+
+    const removeResponse = await request(app)
+      .delete(`/api/permissions/users/${consulta.id}/overrides/dashboard.view_operational`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(removeResponse.body.removedOverride).toEqual({
+      code: "dashboard.view_operational",
+      effect: "DENY",
+    });
+    expect(removeResponse.body.summary.effectivePermissions).toContain(
+      "dashboard.view_operational",
+    );
+  });
+
+  it("permissions admin: updating role base in the API changes login, /auth/me and authorization", async () => {
+    const nextConsultaPermissions = [
+      ...rolePermissions.CONSULTA.filter((permission) => permission !== "dashboard.view_operational"),
+      "dashboard.view_executive",
+    ];
+
+    const updateResponse = await request(app)
+      .put("/api/permissions/roles/CONSULTA")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ permissions: nextConsultaPermissions })
+      .expect(200);
+
+    expect(updateResponse.body.role).toBe("CONSULTA");
+    expect(updateResponse.body.basePermissions).toContain("dashboard.view_executive");
+    expect(updateResponse.body.basePermissions).not.toContain("dashboard.view_operational");
+
+    const consultaWithUpdatedRole = await login(consulta.email);
+
+    expect(consultaWithUpdatedRole.user.permissions).toContain("dashboard.view_executive");
+    expect(consultaWithUpdatedRole.user.permissions).not.toContain("dashboard.view_operational");
+
+    const me = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${consultaWithUpdatedRole.accessToken}`)
+      .expect(200);
+
+    expect(me.body.permissions).toContain("dashboard.view_executive");
+    expect(me.body.permissions).not.toContain("dashboard.view_operational");
+
+    await request(app)
+      .get("/api/dashboard/executive")
+      .set("Authorization", `Bearer ${consultaWithUpdatedRole.accessToken}`)
+      .expect(200);
+
+    await request(app)
+      .get("/api/dashboard/operational")
+      .set("Authorization", `Bearer ${consultaWithUpdatedRole.accessToken}`)
+      .expect(403);
+  });
+
   it("auth: records failed login without exposing sensitive token data", async () => {
     await request(app)
       .post("/api/auth/login")
