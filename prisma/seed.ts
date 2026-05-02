@@ -2,6 +2,12 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "../src/generated/prisma/client.js";
+import {
+  allPermissions,
+  allRoles,
+  permissionDescriptions,
+  rolePermissions,
+} from "../src/modules/permissions/permissions.catalog.js";
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL!,
@@ -156,6 +162,37 @@ async function upsertUsers() {
   );
 
   return { admin, gestor, projetista, consulta };
+}
+
+async function ensurePermissionCatalog() {
+  for (const code of allPermissions) {
+    await prisma.permission.upsert({
+      where: { code },
+      update: {
+        description: permissionDescriptions[code],
+      },
+      create: {
+        code,
+        description: permissionDescriptions[code],
+      },
+    });
+  }
+}
+
+async function ensureRolePermissionMatrix() {
+  await prisma.$executeRawUnsafe(`DELETE FROM "RolePermission"`);
+
+  for (const role of allRoles) {
+    for (const code of rolePermissions[role]) {
+      await prisma.$executeRaw`
+        INSERT INTO "RolePermission" ("id", "role", "permissionId", "createdAt")
+        SELECT ${`role:${role}:${code}`}, ${role}::"UserRole", p."id", CURRENT_TIMESTAMP
+        FROM "Permission" p
+        WHERE p."code" = ${code}
+        ON CONFLICT ("role", "permissionId") DO NOTHING
+      `;
+    }
+  }
 }
 
 async function upsertOms() {
@@ -1217,6 +1254,8 @@ async function seedDemo(context: Awaited<ReturnType<typeof seedBase>>) {
 }
 
 async function seedBase() {
+  await ensurePermissionCatalog();
+  await ensureRolePermissionMatrix();
   const seededUsers = await upsertUsers();
   await upsertOms();
   const catalog = await seedCatalog();

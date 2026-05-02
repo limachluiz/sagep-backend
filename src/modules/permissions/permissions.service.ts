@@ -1,141 +1,121 @@
-export type Permission =
-  | "projects.view_all"
-  | "projects.edit_own"
-  | "projects.edit_all"
-  | "projects.restore"
-  | "projects.complete"
-  | "projects.reopen"
-  | "tasks.view_all"
-  | "tasks.create"
-  | "tasks.edit_all"
-  | "tasks.edit_own"
-  | "tasks.assign"
-  | "tasks.complete"
-  | "tasks.archive"
-  | "tasks.restore"
-  | "estimates.view_all"
-  | "estimates.create"
-  | "estimates.edit"
-  | "estimates.finalize"
-  | "estimates.archive"
-  | "estimates.restore"
-  | "diex.issue"
-  | "diex.cancel"
-  | "diex.restore"
-  | "service_orders.issue"
-  | "service_orders.cancel"
-  | "service_orders.restore"
-  | "atas.manage"
-  | "military_organizations.manage"
-  | "sessions.manage_own"
-  | "sessions.manage_all"
-  | "dashboard.view_operational"
-  | "dashboard.view_executive"
-  | "dashboard.financial_view"
-  | "reports.export"
-  | "users.manage";
+import { prisma } from "../../config/prisma.js";
+import {
+  allPermissions,
+  permissionDescriptions,
+  rolePermissions,
+  type Permission,
+} from "./permissions.catalog.js";
 
 type UserLike = {
   role: string;
+  permissions?: string[];
 };
 
-const taskPermissions: Permission[] = [
-  "tasks.view_all",
-  "tasks.create",
-  "tasks.edit_all",
-  "tasks.edit_own",
-  "tasks.assign",
-  "tasks.complete",
-  "tasks.archive",
-  "tasks.restore",
-];
+export type { Permission } from "./permissions.catalog.js";
 
-const estimatePermissions: Permission[] = [
-  "estimates.view_all",
-  "estimates.create",
-  "estimates.edit",
-  "estimates.finalize",
-  "estimates.archive",
-  "estimates.restore",
-];
-
-const rolePermissions: Record<string, Permission[]> = {
-  ADMIN: [
-    "projects.view_all",
-    "projects.edit_own",
-    "projects.edit_all",
-    "projects.restore",
-    "projects.complete",
-    "projects.reopen",
-    ...taskPermissions,
-    ...estimatePermissions,
-    "diex.issue",
-    "diex.cancel",
-    "diex.restore",
-    "service_orders.issue",
-    "service_orders.cancel",
-    "service_orders.restore",
-    "atas.manage",
-    "military_organizations.manage",
-    "sessions.manage_own",
-    "sessions.manage_all",
-    "dashboard.view_operational",
-    "dashboard.view_executive",
-    "dashboard.financial_view",
-    "reports.export",
-    "users.manage",
-  ],
-  GESTOR: [
-    "projects.view_all",
-    "projects.edit_own",
-    "projects.edit_all",
-    "projects.restore",
-    "projects.complete",
-    "projects.reopen",
-    ...taskPermissions,
-    ...estimatePermissions,
-    "diex.issue",
-    "diex.cancel",
-    "diex.restore",
-    "service_orders.issue",
-    "service_orders.cancel",
-    "service_orders.restore",
-    "sessions.manage_own",
-    "dashboard.view_operational",
-    "dashboard.view_executive",
-    "dashboard.financial_view",
-    "reports.export",
-  ],
-  PROJETISTA: [
-    "projects.edit_own",
-    "projects.complete",
-    "tasks.create",
-    "tasks.edit_own",
-    "tasks.complete",
-    "estimates.create",
-    "estimates.edit",
-    "estimates.finalize",
-    "diex.issue",
-    "service_orders.issue",
-    "sessions.manage_own",
-    "dashboard.view_operational",
-    "reports.export",
-  ],
-  CONSULTA: [
-    "tasks.view_all",
-    "estimates.view_all",
-    "sessions.manage_own",
-    "dashboard.view_operational",
-  ],
-};
+function uniquePermissions(permissions: string[]) {
+  return Array.from(new Set(permissions)).sort();
+}
 
 export class PermissionsService {
-  getPermissionsForRole(role: string): Permission[] {
+  private rolePermissionsCache = new Map<string, Permission[]>();
+
+  private hasPersistedRoleMatrix = false;
+
+  private async refreshRolePermissionsCache() {
+    const assignments = await prisma.$queryRaw<Array<{ role: string; code: string }>>`
+      SELECT rp."role", p."code"
+      FROM "RolePermission" rp
+      INNER JOIN "Permission" p ON p."id" = rp."permissionId"
+    `;
+
+    const nextCache = new Map<string, Permission[]>();
+
+    for (const assignment of assignments) {
+      const currentPermissions = nextCache.get(assignment.role) ?? [];
+      currentPermissions.push(assignment.code as Permission);
+      nextCache.set(assignment.role, currentPermissions);
+    }
+
+    for (const [role, permissions] of nextCache.entries()) {
+      nextCache.set(role, uniquePermissions(permissions) as Permission[]);
+    }
+
+    this.rolePermissionsCache = nextCache;
+    this.hasPersistedRoleMatrix = assignments.length > 0;
+  }
+
+  private getFallbackRolePermissions(role: string): Permission[] {
     return rolePermissions[role] ?? [];
   }
 
+  getPermissionsForRole(role: string): Permission[] {
+    if (!this.hasPersistedRoleMatrix) {
+      return this.getFallbackRolePermissions(role);
+    }
+
+    return this.rolePermissionsCache.get(role) ?? [];
+  }
+
+  getAllPermissions() {
+    return allPermissions;
+  }
+
+  getPermissionDescriptions() {
+    return permissionDescriptions;
+  }
+
+  private resolveUserPermissions(user: UserLike) {
+    if (Array.isArray(user.permissions)) {
+      return uniquePermissions(user.permissions) as Permission[];
+    }
+
+    return this.getPermissionsForRole(user.role);
+  }
+
+  async getPersistedRolePermissionsForRole(role: string) {
+    await this.refreshRolePermissionsCache();
+
+    return this.getPermissionsForRole(role);
+  }
+
+  async getPersistedPermissionOverridesForUser(userId: string) {
+    const assignments = await prisma.$queryRaw<
+      Array<{ effect: "ALLOW" | "DENY"; code: string }>
+    >`
+      SELECT upo."effect", p."code"
+      FROM "UserPermissionOverride" upo
+      INNER JOIN "Permission" p ON p."id" = upo."permissionId"
+      WHERE upo."userId" = ${userId}
+    `;
+
+    return assignments
+      .filter((assignment) => this.getAllPermissions().includes(assignment.code as Permission))
+      .map((assignment) => ({
+        effect: assignment.effect,
+        permission: assignment.code as Permission,
+      }));
+  }
+
+  async getEffectivePermissionsForUser(userId: string, role: string) {
+    const basePermissions = await this.getPersistedRolePermissionsForRole(role);
+    const overrides = await this.getPersistedPermissionOverridesForUser(userId);
+    const effectivePermissions = new Set(basePermissions);
+
+    for (const override of overrides) {
+      if (override.effect === "ALLOW") {
+        effectivePermissions.add(override.permission);
+        continue;
+      }
+
+      effectivePermissions.delete(override.permission);
+    }
+
+    return uniquePermissions(Array.from(effectivePermissions)) as Permission[];
+  }
+
   hasPermission(user: UserLike, permission: Permission) {
-    return this.getPermissionsForRole(user.role).includes(permission);
+    return this.resolveUserPermissions(user).includes(permission);
   }
 
   hasAnyPermission(user: UserLike, permissions: Permission[]) {

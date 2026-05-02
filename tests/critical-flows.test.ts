@@ -4,6 +4,10 @@ import request from "supertest";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/config/prisma.js";
+import {
+  allPermissions,
+  rolePermissions,
+} from "../src/modules/permissions/permissions.catalog.js";
 import { hashToken } from "../src/shared/auth-tokens.js";
 
 const password = "123456";
@@ -27,6 +31,7 @@ async function resetDatabase() {
   // Keep reset sequential to avoid lock/ordering issues with the pg adapter.
   await prisma.auditLog.deleteMany();
   await prisma.refreshToken.deleteMany();
+  await prisma.$executeRawUnsafe(`DELETE FROM "UserPermissionOverride"`);
   await prisma.serviceOrderDeliveredDocument.deleteMany();
   await prisma.serviceOrderScheduleItem.deleteMany();
   await prisma.serviceOrderItem.deleteMany();
@@ -38,12 +43,44 @@ async function resetDatabase() {
   await prisma.task.deleteMany();
   await prisma.projectMember.deleteMany();
   await prisma.project.deleteMany();
+  await prisma.$executeRawUnsafe(`DELETE FROM "RolePermission"`);
   await prisma.ataItem.deleteMany();
   await prisma.ataCoverageLocality.deleteMany();
   await prisma.ataCoverageGroup.deleteMany();
   await prisma.ata.deleteMany();
   await prisma.militaryOrganization.deleteMany();
   await prisma.user.deleteMany();
+  await prisma.permission.deleteMany();
+}
+
+async function seedPermissionsMatrix() {
+  for (const code of allPermissions) {
+    await prisma.permission.upsert({
+      where: { code },
+      update: {},
+      create: { code },
+    });
+  }
+
+  for (const [role, permissions] of Object.entries(rolePermissions)) {
+    for (const code of permissions) {
+      const permission = await prisma.permission.findUniqueOrThrow({
+        where: { code },
+        select: { id: true },
+      });
+
+      await prisma.$executeRaw`
+        INSERT INTO "RolePermission" ("id", "role", "permissionId", "createdAt")
+        VALUES (
+          ${`role:${role}:${code}`},
+          ${role}::"UserRole",
+          ${permission.id},
+          CURRENT_TIMESTAMP
+        )
+        ON CONFLICT ("role", "permissionId") DO NOTHING
+      `;
+    }
+  }
 }
 
 async function createUser(
@@ -244,6 +281,7 @@ describe("critical flows", () => {
   beforeEach(async () => {
     await resetDatabase();
     catalogSequence = 1;
+    await seedPermissionsMatrix();
     admin = await createUser("admin@sagep.com", "ADMIN");
     gestor = await createUser("gestor@sagep.com", "GESTOR");
     projetista = await createUser("projetista@sagep.com", "PROJETISTA");
@@ -343,6 +381,138 @@ describe("critical flows", () => {
       .post("/api/auth/refresh")
       .send({ refreshToken: refreshed.body.refreshToken })
       .expect(401);
+  });
+
+  it("permissions persistence: role base is governed by persisted role permissions", async () => {
+    const operationalPermission = await prisma.permission.findUniqueOrThrow({
+      where: { code: "dashboard.view_operational" },
+      select: { id: true },
+    });
+
+    await prisma.$executeRaw`
+      DELETE FROM "RolePermission"
+      WHERE "role" = ${"CONSULTA"}::"UserRole"
+        AND "permissionId" = ${operationalPermission.id}
+    `;
+
+    const consultaWithoutOperational = await login(consulta.email);
+
+    expect(consultaWithoutOperational.user.role).toBe("CONSULTA");
+    expect(consultaWithoutOperational.user.permissions).not.toContain(
+      "dashboard.view_operational",
+    );
+
+    const me = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${consultaWithoutOperational.accessToken}`)
+      .expect(200);
+
+    expect(me.body.permissions).not.toContain("dashboard.view_operational");
+
+    await request(app)
+      .get("/api/dashboard/operational")
+      .set("Authorization", `Bearer ${consultaWithoutOperational.accessToken}`)
+      .expect(403);
+  });
+
+  it("permissions persistence: override ALLOW adds permission outside the role base", async () => {
+    await request(app)
+      .get("/api/dashboard/executive")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(403);
+
+    const permission = await prisma.permission.findUniqueOrThrow({
+      where: {
+        code: "dashboard.view_executive",
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await prisma.$executeRaw`
+      INSERT INTO "UserPermissionOverride" (
+        "id",
+        "userId",
+        "permissionId",
+        "effect",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${`override:${consulta.id}:${permission.id}`},
+        ${consulta.id},
+        ${permission.id},
+        ${"ALLOW"}::"PermissionOverrideEffect",
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `;
+
+    const consultaWithAllow = await login(consulta.email);
+
+    expect(consultaWithAllow.user.permissions).toContain("dashboard.view_executive");
+    expect(consultaWithAllow.user.permissions).toContain("dashboard.view_operational");
+
+    const me = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${consultaWithAllow.accessToken}`)
+      .expect(200);
+
+    expect(me.body.permissions).toContain("dashboard.view_executive");
+    expect(me.body.access.permissions).toContain("dashboard.view_executive");
+
+    await request(app)
+      .get("/api/dashboard/executive")
+      .set("Authorization", `Bearer ${consultaWithAllow.accessToken}`)
+      .expect(200);
+  });
+
+  it("permissions persistence: override DENY removes permission inherited from the role", async () => {
+    const permission = await prisma.permission.findUniqueOrThrow({
+      where: {
+        code: "dashboard.view_operational",
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await prisma.$executeRaw`
+      INSERT INTO "UserPermissionOverride" (
+        "id",
+        "userId",
+        "permissionId",
+        "effect",
+        "createdAt",
+        "updatedAt"
+      )
+      VALUES (
+        ${`override:${consulta.id}:${permission.id}`},
+        ${consulta.id},
+        ${permission.id},
+        ${"DENY"}::"PermissionOverrideEffect",
+        CURRENT_TIMESTAMP,
+        CURRENT_TIMESTAMP
+      )
+    `;
+
+    const consultaWithDeny = await login(consulta.email);
+
+    expect(consultaWithDeny.user.permissions).not.toContain("dashboard.view_operational");
+
+    const me = await request(app)
+      .get("/api/auth/me")
+      .set("Authorization", `Bearer ${consultaWithDeny.accessToken}`)
+      .expect(200);
+
+    expect(me.body.permissions).not.toContain("dashboard.view_operational");
+    expect(me.body.access.permissions).not.toContain("dashboard.view_operational");
+
+    await request(app)
+      .get("/api/dashboard/operational")
+      .set("Authorization", `Bearer ${consultaWithDeny.accessToken}`)
+      .expect(403);
   });
 
   it("auth: records failed login without exposing sensitive token data", async () => {
