@@ -520,7 +520,7 @@ describe("critical flows", () => {
       .expect(403);
   });
 
-  it("permissions admin: only ADMIN can manage persisted RBAC endpoints", async () => {
+  it("permissions admin: permissions.view allows read access, but write remains restricted", async () => {
     await request(app)
       .get("/api/permissions/catalog")
       .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
@@ -528,8 +528,14 @@ describe("critical flows", () => {
 
     await request(app)
       .get("/api/permissions/catalog")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
       .expect(200);
+
+    await request(app)
+      .put("/api/permissions/roles/CONSULTA")
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ permissions: rolePermissions.CONSULTA })
+      .expect(403);
   });
 
   it("permissions admin: exposes catalog, role base, overrides and effective permissions for frontend", async () => {
@@ -574,6 +580,22 @@ describe("critical flows", () => {
 
     expect(allowResponse.body.override.effect).toBe("ALLOW");
     expect(allowResponse.body.summary.effectivePermissions).toContain("dashboard.view_executive");
+
+    const allowAudit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "USER",
+        entityId: consulta.id,
+        action: "UPDATE",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+    const allowAuditMetadata = allowAudit?.metadata as Record<string, unknown>;
+    expect(allowAudit?.summary).toContain("override ALLOW");
+    expect(allowAuditMetadata.source).toBe("override");
+    expect(allowAuditMetadata.permission).toBe("dashboard.view_executive");
+    expect(allowAuditMetadata.afterEffect).toBe("ALLOW");
 
     const denyResponse = await request(app)
       .post(`/api/permissions/users/${consulta.id}/overrides/deny`)
@@ -660,6 +682,24 @@ describe("critical flows", () => {
     expect(updateResponse.body.basePermissions).toContain("dashboard.view_executive");
     expect(updateResponse.body.basePermissions).not.toContain("dashboard.view_operational");
 
+    const roleAudit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "AUTH",
+        entityId: "role:CONSULTA",
+        action: "UPDATE",
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+    const roleAuditMetadata = roleAudit?.metadata as Record<string, unknown>;
+    expect(roleAudit?.summary).toContain("role CONSULTA");
+    expect(roleAuditMetadata.source).toBe("role");
+    expect(roleAuditMetadata.targetRole).toBe("CONSULTA");
+    expect(roleAuditMetadata.addedPermissions).toEqual(
+      expect.arrayContaining(["dashboard.view_executive"]),
+    );
+
     const consultaWithUpdatedRole = await login(consulta.email);
 
     expect(consultaWithUpdatedRole.user.permissions).toContain("dashboard.view_executive");
@@ -681,6 +721,68 @@ describe("critical flows", () => {
     await request(app)
       .get("/api/dashboard/operational")
       .set("Authorization", `Bearer ${consultaWithUpdatedRole.accessToken}`)
+      .expect(403);
+  });
+
+  it("permissions admin: blocks self-permission changes and editing own role base", async () => {
+    await request(app)
+      .post(`/api/permissions/users/${admin.id}/overrides/allow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ permissionCode: "dashboard.view_executive" })
+      .expect(403);
+
+    await request(app)
+      .delete(`/api/permissions/users/${admin.id}/overrides/dashboard.view_executive`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .put("/api/permissions/roles/ADMIN")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ permissions: rolePermissions.ADMIN })
+      .expect(403);
+  });
+
+  it("permissions admin: non-admin override manager cannot grant critical permissions", async () => {
+    const manageUserOverridesPermission = await prisma.permission.findUniqueOrThrow({
+      where: {
+        code: "permissions.manage_user_overrides",
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    await prisma.userPermissionOverride.upsert({
+      where: {
+        userId_permissionId: {
+          userId: gestor.id,
+          permissionId: manageUserOverridesPermission.id,
+        },
+      },
+      update: {
+        effect: "ALLOW",
+      },
+      create: {
+        id: `override:${gestor.id}:${manageUserOverridesPermission.id}`,
+        userId: gestor.id,
+        permissionId: manageUserOverridesPermission.id,
+        effect: "ALLOW",
+      },
+    });
+
+    const gestorWithOverrideManagement = await login(gestor.email);
+
+    await request(app)
+      .post(`/api/permissions/users/${consulta.id}/overrides/allow`)
+      .set("Authorization", `Bearer ${gestorWithOverrideManagement.accessToken}`)
+      .send({ permissionCode: "atas.manage" })
+      .expect(403);
+
+    await request(app)
+      .post(`/api/permissions/users/${gestor.id}/overrides/allow`)
+      .set("Authorization", `Bearer ${gestorWithOverrideManagement.accessToken}`)
+      .send({ permissionCode: "reports.export" })
       .expect(403);
   });
 

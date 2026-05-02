@@ -1,6 +1,7 @@
 import { prisma } from "../../config/prisma.js";
 import {
   allPermissions,
+  criticalPermissions,
   getPermissionCatalog,
   getPermissionCatalogItem,
   permissionDescriptions,
@@ -9,10 +10,27 @@ import {
   type UserRole,
 } from "./permissions.catalog.js";
 import { AppError } from "../../shared/app-error.js";
+import { auditService } from "../audit/audit.service.js";
 
 type UserLike = {
+  id?: string;
+  name?: string | null;
+  email?: string | null;
   role: string;
   permissions?: string[];
+};
+
+type PermissionOverrideEffect = "ALLOW" | "DENY";
+
+type PermissionActor = Required<Pick<UserLike, "id" | "name" | "email" | "role">> & {
+  permissions?: string[];
+};
+
+const roleLevels: Record<UserRole, number> = {
+  CONSULTA: 1,
+  PROJETISTA: 2,
+  GESTOR: 3,
+  ADMIN: 4,
 };
 
 export type { Permission } from "./permissions.catalog.js";
@@ -60,6 +78,69 @@ export class PermissionsService {
     }
 
     return [];
+  }
+
+  private isKnownRole(role: string): role is UserRole {
+    return role in roleLevels;
+  }
+
+  private getRoleLevel(role: string) {
+    if (!this.isKnownRole(role)) {
+      return 0;
+    }
+
+    return roleLevels[role];
+  }
+
+  private isCriticalPermission(permission: Permission) {
+    return criticalPermissions.includes(permission);
+  }
+
+  private assertAdminForCriticalPermission(actor: PermissionActor, permission: Permission) {
+    if (this.isCriticalPermission(permission) && actor.role !== "ADMIN") {
+      throw new AppError(
+        "Apenas ADMIN pode conceder ou remover permissoes criticas",
+        403,
+      );
+    }
+  }
+
+  private assertCanAdministrateRole(actor: PermissionActor, targetRole: UserRole) {
+    if (actor.role === targetRole) {
+      throw new AppError(
+        "Voce nao pode alterar permissoes base da propria role",
+        403,
+      );
+    }
+
+    if (actor.role !== "ADMIN" && this.getRoleLevel(targetRole) >= this.getRoleLevel(actor.role)) {
+      throw new AppError(
+        "Voce nao pode administrar permissoes de uma role do mesmo nivel ou superior",
+        403,
+      );
+    }
+  }
+
+  private assertCanAdministrateUser(actor: PermissionActor, targetUser: { id: string; role: string }) {
+    if (actor.id === targetUser.id) {
+      throw new AppError("Voce nao pode alterar as proprias permissoes", 403);
+    }
+
+    if (
+      actor.role !== "ADMIN" &&
+      this.getRoleLevel(targetUser.role) >= this.getRoleLevel(actor.role)
+    ) {
+      throw new AppError(
+        "Voce nao pode administrar permissoes de usuarios do mesmo nivel ou superior",
+        403,
+      );
+    }
+  }
+
+  private assertPermissionCapability(actor: PermissionActor, permission: Permission) {
+    if (!this.hasPermission(actor, permission)) {
+      throw new AppError("Voce nao tem permissao para administrar este recurso", 403);
+    }
   }
 
   private applyOverrides(
@@ -172,8 +253,12 @@ export class PermissionsService {
     };
   }
 
-  async updateRolePermissions(role: UserRole, nextPermissions: Permission[]) {
+  async updateRolePermissions(actor: PermissionActor, role: UserRole, nextPermissions: Permission[]) {
+    this.assertPermissionCapability(actor, "permissions.manage_role_permissions");
+    this.assertCanAdministrateRole(actor, role);
+
     const uniqueCodes = uniquePermissions(nextPermissions) as Permission[];
+    const currentPermissions = await this.getPersistedRolePermissionsForRole(role);
     const persistedPermissions = await prisma.permission.findMany({
       where: {
         code: {
@@ -191,6 +276,16 @@ export class PermissionsService {
       const missingCode = uniqueCodes.find((code) => !foundCodes.has(code));
 
       throw new AppError(`Permissão inválida: ${missingCode ?? "desconhecida"}`, 400);
+    }
+
+    for (const permission of uniqueCodes) {
+      this.assertAdminForCriticalPermission(actor, permission);
+    }
+
+    for (const permission of currentPermissions) {
+      if (!uniqueCodes.includes(permission)) {
+        this.assertAdminForCriticalPermission(actor, permission);
+      }
     }
 
     await prisma.$transaction(async (tx) => {
@@ -212,9 +307,47 @@ export class PermissionsService {
       });
     });
 
+    const nextSnapshot = await this.getRolePermissionsAdministration(role);
+    const addedPermissions = uniqueCodes.filter((permission) => !currentPermissions.includes(permission));
+    const removedPermissions = currentPermissions.filter(
+      (permission) => !uniqueCodes.includes(permission),
+    );
+
+    await auditService.log({
+      entityType: "AUTH",
+      entityId: `role:${role}`,
+      action: "UPDATE",
+      actor: {
+        id: actor.id,
+        name: actor.name,
+      },
+      summary: `${actor.email} atualizou as permissoes base da role ${role}`,
+      before: {
+        source: "role",
+        role,
+        permissions: currentPermissions,
+      },
+      after: {
+        source: "role",
+        role,
+        permissions: nextSnapshot.basePermissions,
+      },
+      metadata: {
+        source: "role",
+        role,
+        addedPermissions,
+        removedPermissions,
+        containsCriticalPermissions:
+          addedPermissions.some((permission) => this.isCriticalPermission(permission)) ||
+          removedPermissions.some((permission) => this.isCriticalPermission(permission)),
+        actorRole: actor.role,
+        targetRole: role,
+      },
+    });
+
     return {
       message: "Permissões base da role atualizadas com sucesso",
-      ...(await this.getRolePermissionsAdministration(role)),
+      ...nextSnapshot,
     };
   }
 
@@ -293,11 +426,15 @@ export class PermissionsService {
   }
 
   async upsertUserPermissionOverride(
+    actor: PermissionActor,
     userId: string,
     permissionCode: Permission,
-    effect: "ALLOW" | "DENY",
+    effect: PermissionOverrideEffect,
   ) {
+    this.assertPermissionCapability(actor, "permissions.manage_user_overrides");
     const user = await this.getManagedUserOrThrow(userId);
+    this.assertCanAdministrateUser(actor, user);
+    this.assertAdminForCriticalPermission(actor, permissionCode);
     const permission = await prisma.permission.findUnique({
       where: {
         code: permissionCode,
@@ -310,6 +447,20 @@ export class PermissionsService {
     if (!permission) {
       throw new AppError("Permissão não encontrada", 404);
     }
+
+    const previousOverride = await prisma.userPermissionOverride.findUnique({
+      where: {
+        userId_permissionId: {
+          userId: user.id,
+          permissionId: permission.id,
+        },
+      },
+      select: {
+        effect: true,
+      },
+    });
+
+    const beforeSummary = await this.getUserPermissionsAdministration(user.id);
 
     await prisma.userPermissionOverride.upsert({
       where: {
@@ -329,6 +480,45 @@ export class PermissionsService {
     });
 
     const catalogItem = getPermissionCatalogItem(permissionCode);
+    const summary = await this.getUserPermissionsAdministration(user.id);
+
+    await auditService.log({
+      entityType: "USER",
+      entityId: user.id,
+      action: "UPDATE",
+      actor: {
+        id: actor.id,
+        name: actor.name,
+      },
+      summary: `${actor.email} aplicou override ${effect} para ${permissionCode} no usuario ${user.email}`,
+      before: {
+        source: "override",
+        userId: user.id,
+        userRole: user.role,
+        permission: permissionCode,
+        effect: previousOverride?.effect ?? null,
+        effectivePermissions: beforeSummary.effectivePermissions,
+      },
+      after: {
+        source: "override",
+        userId: user.id,
+        userRole: user.role,
+        permission: permissionCode,
+        effect,
+        effectivePermissions: summary.effectivePermissions,
+      },
+      metadata: {
+        source: "override",
+        targetUserId: user.id,
+        targetUserRole: user.role,
+        targetUserEmail: user.email,
+        permission: permissionCode,
+        beforeEffect: previousOverride?.effect ?? null,
+        afterEffect: effect,
+        actorRole: actor.role,
+        isCriticalPermission: this.isCriticalPermission(permissionCode),
+      },
+    });
 
     return {
       message: `Override ${effect} aplicado com sucesso`,
@@ -341,12 +531,15 @@ export class PermissionsService {
         description: catalogItem.description,
         effect,
       },
-      summary: await this.getUserPermissionsAdministration(user.id),
+      summary,
     };
   }
 
-  async removeUserPermissionOverride(userId: string, permissionCode: Permission) {
+  async removeUserPermissionOverride(actor: PermissionActor, userId: string, permissionCode: Permission) {
+    this.assertPermissionCapability(actor, "permissions.manage_user_overrides");
     const user = await this.getManagedUserOrThrow(userId);
+    this.assertCanAdministrateUser(actor, user);
+    this.assertAdminForCriticalPermission(actor, permissionCode);
     const permission = await prisma.permission.findUnique({
       where: {
         code: permissionCode,
@@ -359,6 +552,8 @@ export class PermissionsService {
     if (!permission) {
       throw new AppError("Permissão não encontrada", 404);
     }
+
+    const beforeSummary = await this.getUserPermissionsAdministration(user.id);
 
     const override = await prisma.userPermissionOverride.findUnique({
       where: {
@@ -385,6 +580,46 @@ export class PermissionsService {
       },
     });
 
+    const summary = await this.getUserPermissionsAdministration(user.id);
+
+    await auditService.log({
+      entityType: "USER",
+      entityId: user.id,
+      action: "UPDATE",
+      actor: {
+        id: actor.id,
+        name: actor.name,
+      },
+      summary: `${actor.email} removeu override ${override.effect} de ${permissionCode} do usuario ${user.email}`,
+      before: {
+        source: "override",
+        userId: user.id,
+        userRole: user.role,
+        permission: permissionCode,
+        effect: override.effect,
+        effectivePermissions: beforeSummary.effectivePermissions,
+      },
+      after: {
+        source: "override",
+        userId: user.id,
+        userRole: user.role,
+        permission: permissionCode,
+        effect: null,
+        effectivePermissions: summary.effectivePermissions,
+      },
+      metadata: {
+        source: "override",
+        targetUserId: user.id,
+        targetUserRole: user.role,
+        targetUserEmail: user.email,
+        permission: permissionCode,
+        beforeEffect: override.effect,
+        afterEffect: null,
+        actorRole: actor.role,
+        isCriticalPermission: this.isCriticalPermission(permissionCode),
+      },
+    });
+
     return {
       message: "Override removido com sucesso",
       user,
@@ -392,7 +627,7 @@ export class PermissionsService {
         code: permissionCode,
         effect: override.effect,
       },
-      summary: await this.getUserPermissionsAdministration(user.id),
+      summary,
     };
   }
 

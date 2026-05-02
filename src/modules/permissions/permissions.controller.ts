@@ -25,7 +25,7 @@ export class PermissionsController {
   async updateRolePermissions(req: Request, res: Response) {
     const { role } = permissionRoleParamSchema.parse(req.params);
     const data = updateRolePermissionsSchema.parse(req.body);
-    const payload = await permissionsService.updateRolePermissions(role, data.permissions);
+    const payload = await permissionsService.updateRolePermissions(req.user!, role, data.permissions);
 
     return res.status(200).json(payload);
   }
@@ -48,6 +48,7 @@ export class PermissionsController {
     const { id } = permissionUserIdParamSchema.parse(req.params);
     const { permissionCode } = createUserPermissionOverrideSchema.parse(req.body);
     const payload = await permissionsService.upsertUserPermissionOverride(
+      req.user!,
       id,
       permissionCode,
       "ALLOW",
@@ -60,6 +61,7 @@ export class PermissionsController {
     const { id } = permissionUserIdParamSchema.parse(req.params);
     const { permissionCode } = createUserPermissionOverrideSchema.parse(req.body);
     const payload = await permissionsService.upsertUserPermissionOverride(
+      req.user!,
       id,
       permissionCode,
       "DENY",
@@ -71,7 +73,11 @@ export class PermissionsController {
   async removeUserOverride(req: Request, res: Response) {
     const { id } = permissionUserIdParamSchema.parse(req.params);
     const { permissionCode } = permissionCodeParamSchema.parse(req.params);
-    const payload = await permissionsService.removeUserPermissionOverride(id, permissionCode);
+    const payload = await permissionsService.removeUserPermissionOverride(
+      req.user!,
+      id,
+      permissionCode,
+    );
 
     return res.status(200).json(payload);
   }

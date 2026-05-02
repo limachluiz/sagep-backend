@@ -1,4 +1,7 @@
 export type Permission =
+  | "permissions.view"
+  | "permissions.manage_user_overrides"
+  | "permissions.manage_role_permissions"
   | "projects.view_all"
   | "projects.edit_own"
   | "projects.edit_all"
@@ -61,6 +64,9 @@ const estimatePermissions: Permission[] = [
 
 export const rolePermissions: Record<UserRole, Permission[]> = {
   ADMIN: [
+    "permissions.view",
+    "permissions.manage_user_overrides",
+    "permissions.manage_role_permissions",
     "projects.view_all",
     "projects.edit_own",
     "projects.edit_all",
@@ -86,6 +92,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "users.manage",
   ],
   GESTOR: [
+    "permissions.view",
     "projects.view_all",
     "projects.edit_own",
     "projects.edit_all",
@@ -130,6 +137,11 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
 };
 
 export const permissionDescriptions: Record<Permission, string> = {
+  "permissions.view": "Permite consultar a governanca administrativa de permissoes",
+  "permissions.manage_user_overrides":
+    "Permite administrar overrides de permissoes por usuario",
+  "permissions.manage_role_permissions":
+    "Permite administrar permissoes base das roles no banco",
   "projects.view_all": "Permite visualizar projetos de qualquer responsavel",
   "projects.edit_own": "Permite editar projetos proprios",
   "projects.edit_all": "Permite editar qualquer projeto",
@@ -178,6 +190,7 @@ const permissionGroupLabels: Record<string, string> = {
   atas: "Atas",
   military_organizations: "Organizacoes Militares",
   sessions: "Sessoes",
+  permissions: "Permissoes",
   dashboard: "Dashboards",
   reports: "Relatorios",
   users: "Usuarios",
@@ -190,7 +203,17 @@ export type PermissionCatalogItem = {
   action: string;
   description: string;
   defaultRoles: UserRole[];
+  critical: boolean;
 };
+
+export const criticalPermissions: Permission[] = [
+  "permissions.manage_role_permissions",
+  "permissions.manage_user_overrides",
+  "users.manage",
+  "sessions.manage_all",
+  "atas.manage",
+  "military_organizations.manage",
+];
 
 export const allRoles = [...roleValues];
 
@@ -208,6 +231,7 @@ export function getPermissionCatalogItem(code: Permission): PermissionCatalogIte
     action,
     description: permissionDescriptions[code],
     defaultRoles: getDefaultRolesForPermission(code),
+    critical: criticalPermissions.includes(code),
   };
 }
 

@@ -425,13 +425,14 @@ export const openApiDocument: OpenApiDocument = {
       },
       PermissionCatalogItem: {
         type: "object",
-        required: ["code", "module", "group", "action", "description", "defaultRoles"],
+        required: ["code", "module", "group", "action", "description", "defaultRoles", "critical"],
         properties: {
           code: { type: "string" },
           module: { type: "string" },
           group: { type: "string" },
           action: { type: "string" },
           description: { type: "string" },
+          critical: { type: "boolean" },
           defaultRoles: {
             type: "array",
             items: {
@@ -3179,12 +3180,13 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["permissions"],
         summary: "Listar catalogo administrativo de permissões",
         description:
-          "Retorna o catalogo RBAC com metadados de UI, incluindo modulo, grupo, descricao e roles padrao de origem da matriz historica.",
+          "Retorna o catalogo RBAC com metadados de UI, incluindo modulo, grupo, descricao, roles padrao e sinalizacao de permissao critica.",
         security: bearerSecurity,
         responses: {
           "200": okJson("#/components/schemas/PermissionCatalogResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["permissions.view"],
       },
     },
     "/permissions/roles/{role}": {
@@ -3199,12 +3201,13 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/RolePermissionsResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["permissions.view"],
       },
       put: {
         tags: ["permissions"],
         summary: "Atualizar permissões base de uma role",
         description:
-          "Substitui a base atual da role no banco. A role continua sendo a origem principal das permissões efetivas dos usuários.",
+          "Substitui a base atual da role no banco. O backend bloqueia autoedicao da propria role e restringe alteracoes de permissoes criticas a ADMIN.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/RoleName" }],
         requestBody: {
@@ -3215,6 +3218,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/RolePermissionsResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["permissions.manage_role_permissions"],
       },
     },
     "/permissions/users/{id}": {
@@ -3229,6 +3233,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserPermissionsResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["permissions.view"],
       },
     },
     "/permissions/users/{id}/overrides": {
@@ -3241,12 +3246,15 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserPermissionOverridesResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["permissions.view"],
       },
     },
     "/permissions/users/{id}/overrides/allow": {
       post: {
         tags: ["permissions"],
         summary: "Aplicar override ALLOW para um usuário",
+        description:
+          "Aplica override ALLOW respeitando bloqueios de autoedicao, hierarquia e protecao extra para permissoes criticas.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/UserId" }],
         requestBody: {
@@ -3257,12 +3265,15 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserPermissionOverrideMutationResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["permissions.manage_user_overrides"],
       },
     },
     "/permissions/users/{id}/overrides/deny": {
       post: {
         tags: ["permissions"],
         summary: "Aplicar override DENY para um usuário",
+        description:
+          "Aplica override DENY respeitando bloqueios de autoedicao, hierarquia e protecao extra para permissoes criticas.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/UserId" }],
         requestBody: {
@@ -3273,12 +3284,15 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserPermissionOverrideMutationResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["permissions.manage_user_overrides"],
       },
     },
     "/permissions/users/{id}/overrides/{permissionCode}": {
       delete: {
         tags: ["permissions"],
         summary: "Remover override de permissão de um usuário",
+        description:
+          "Remove override existente respeitando bloqueios de autoedicao, hierarquia e protecao extra para permissoes criticas.",
         security: bearerSecurity,
         parameters: [
           { $ref: "#/components/parameters/UserId" },
@@ -3288,6 +3302,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserPermissionOverrideMutationResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["permissions.manage_user_overrides"],
       },
     },
     "/atas": {
