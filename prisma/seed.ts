@@ -180,17 +180,29 @@ async function ensurePermissionCatalog() {
 }
 
 async function ensureRolePermissionMatrix() {
-  await prisma.$executeRawUnsafe(`DELETE FROM "RolePermission"`);
+  await prisma.rolePermission.deleteMany();
 
   for (const role of allRoles) {
     for (const code of rolePermissions[role]) {
-      await prisma.$executeRaw`
-        INSERT INTO "RolePermission" ("id", "role", "permissionId", "createdAt")
-        SELECT ${`role:${role}:${code}`}, ${role}::"UserRole", p."id", CURRENT_TIMESTAMP
-        FROM "Permission" p
-        WHERE p."code" = ${code}
-        ON CONFLICT ("role", "permissionId") DO NOTHING
-      `;
+      const permission = await prisma.permission.findUniqueOrThrow({
+        where: { code },
+        select: { id: true },
+      });
+
+      await prisma.rolePermission.upsert({
+        where: {
+          role_permissionId: {
+            role,
+            permissionId: permission.id,
+          },
+        },
+        update: {},
+        create: {
+          id: `role:${role}:${code}`,
+          role,
+          permissionId: permission.id,
+        },
+      });
     }
   }
 }

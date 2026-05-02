@@ -23,17 +23,22 @@ export class PermissionsService {
   private hasPersistedRoleMatrix = false;
 
   private async refreshRolePermissionsCache() {
-    const assignments = await prisma.$queryRaw<Array<{ role: string; code: string }>>`
-      SELECT rp."role", p."code"
-      FROM "RolePermission" rp
-      INNER JOIN "Permission" p ON p."id" = rp."permissionId"
-    `;
+    const assignments = await prisma.rolePermission.findMany({
+      select: {
+        role: true,
+        permission: {
+          select: {
+            code: true,
+          },
+        },
+      },
+    });
 
     const nextCache = new Map<string, Permission[]>();
 
     for (const assignment of assignments) {
       const currentPermissions = nextCache.get(assignment.role) ?? [];
-      currentPermissions.push(assignment.code as Permission);
+      currentPermissions.push(assignment.permission.code as Permission);
       nextCache.set(assignment.role, currentPermissions);
     }
 
@@ -80,20 +85,31 @@ export class PermissionsService {
   }
 
   async getPersistedPermissionOverridesForUser(userId: string) {
-    const assignments = await prisma.$queryRaw<
-      Array<{ effect: "ALLOW" | "DENY"; code: string }>
-    >`
-      SELECT upo."effect", p."code"
-      FROM "UserPermissionOverride" upo
-      INNER JOIN "Permission" p ON p."id" = upo."permissionId"
-      WHERE upo."userId" = ${userId}
-    `;
+    const user = await prisma.user.findUnique({
+      where: {
+        id: userId,
+      },
+      select: {
+        permissionOverrides: {
+          select: {
+            effect: true,
+            permission: {
+              select: {
+                code: true,
+              },
+            },
+          },
+        },
+      },
+    });
 
-    return assignments
-      .filter((assignment) => this.getAllPermissions().includes(assignment.code as Permission))
+    return (user?.permissionOverrides ?? [])
+      .filter((assignment) =>
+        this.getAllPermissions().includes(assignment.permission.code as Permission),
+      )
       .map((assignment) => ({
         effect: assignment.effect,
-        permission: assignment.code as Permission,
+        permission: assignment.permission.code as Permission,
       }));
   }
 

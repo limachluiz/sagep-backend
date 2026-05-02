@@ -31,7 +31,7 @@ async function resetDatabase() {
   // Keep reset sequential to avoid lock/ordering issues with the pg adapter.
   await prisma.auditLog.deleteMany();
   await prisma.refreshToken.deleteMany();
-  await prisma.$executeRawUnsafe(`DELETE FROM "UserPermissionOverride"`);
+  await prisma.userPermissionOverride.deleteMany();
   await prisma.serviceOrderDeliveredDocument.deleteMany();
   await prisma.serviceOrderScheduleItem.deleteMany();
   await prisma.serviceOrderItem.deleteMany();
@@ -43,7 +43,7 @@ async function resetDatabase() {
   await prisma.task.deleteMany();
   await prisma.projectMember.deleteMany();
   await prisma.project.deleteMany();
-  await prisma.$executeRawUnsafe(`DELETE FROM "RolePermission"`);
+  await prisma.rolePermission.deleteMany();
   await prisma.ataItem.deleteMany();
   await prisma.ataCoverageLocality.deleteMany();
   await prisma.ataCoverageGroup.deleteMany();
@@ -69,16 +69,20 @@ async function seedPermissionsMatrix() {
         select: { id: true },
       });
 
-      await prisma.$executeRaw`
-        INSERT INTO "RolePermission" ("id", "role", "permissionId", "createdAt")
-        VALUES (
-          ${`role:${role}:${code}`},
-          ${role}::"UserRole",
-          ${permission.id},
-          CURRENT_TIMESTAMP
-        )
-        ON CONFLICT ("role", "permissionId") DO NOTHING
-      `;
+      await prisma.rolePermission.upsert({
+        where: {
+          role_permissionId: {
+            role: role as "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA",
+            permissionId: permission.id,
+          },
+        },
+        update: {},
+        create: {
+          id: `role:${role}:${code}`,
+          role: role as "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA",
+          permissionId: permission.id,
+        },
+      });
     }
   }
 }
@@ -389,11 +393,14 @@ describe("critical flows", () => {
       select: { id: true },
     });
 
-    await prisma.$executeRaw`
-      DELETE FROM "RolePermission"
-      WHERE "role" = ${"CONSULTA"}::"UserRole"
-        AND "permissionId" = ${operationalPermission.id}
-    `;
+    await prisma.rolePermission.delete({
+      where: {
+        role_permissionId: {
+          role: "CONSULTA",
+          permissionId: operationalPermission.id,
+        },
+      },
+    });
 
     const consultaWithoutOperational = await login(consulta.email);
 
@@ -430,24 +437,23 @@ describe("critical flows", () => {
       },
     });
 
-    await prisma.$executeRaw`
-      INSERT INTO "UserPermissionOverride" (
-        "id",
-        "userId",
-        "permissionId",
-        "effect",
-        "createdAt",
-        "updatedAt"
-      )
-      VALUES (
-        ${`override:${consulta.id}:${permission.id}`},
-        ${consulta.id},
-        ${permission.id},
-        ${"ALLOW"}::"PermissionOverrideEffect",
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
-      )
-    `;
+    await prisma.userPermissionOverride.upsert({
+      where: {
+        userId_permissionId: {
+          userId: consulta.id,
+          permissionId: permission.id,
+        },
+      },
+      update: {
+        effect: "ALLOW",
+      },
+      create: {
+        id: `override:${consulta.id}:${permission.id}`,
+        userId: consulta.id,
+        permissionId: permission.id,
+        effect: "ALLOW",
+      },
+    });
 
     const consultaWithAllow = await login(consulta.email);
 
@@ -478,24 +484,23 @@ describe("critical flows", () => {
       },
     });
 
-    await prisma.$executeRaw`
-      INSERT INTO "UserPermissionOverride" (
-        "id",
-        "userId",
-        "permissionId",
-        "effect",
-        "createdAt",
-        "updatedAt"
-      )
-      VALUES (
-        ${`override:${consulta.id}:${permission.id}`},
-        ${consulta.id},
-        ${permission.id},
-        ${"DENY"}::"PermissionOverrideEffect",
-        CURRENT_TIMESTAMP,
-        CURRENT_TIMESTAMP
-      )
-    `;
+    await prisma.userPermissionOverride.upsert({
+      where: {
+        userId_permissionId: {
+          userId: consulta.id,
+          permissionId: permission.id,
+        },
+      },
+      update: {
+        effect: "DENY",
+      },
+      create: {
+        id: `override:${consulta.id}:${permission.id}`,
+        userId: consulta.id,
+        permissionId: permission.id,
+        effect: "DENY",
+      },
+    });
 
     const consultaWithDeny = await login(consulta.email);
 
