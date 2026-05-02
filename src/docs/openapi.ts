@@ -825,6 +825,32 @@ export const openApiDocument: OpenApiDocument = {
           serviceCompletedAt: { type: "string", format: "date-time", nullable: true },
         },
       },
+      ProjectCommitmentNoteCancelRequest: {
+        type: "object",
+        required: ["reason"],
+        properties: {
+          reason: { type: "string", minLength: 3 },
+        },
+        example: {
+          reason: "Empenho cancelado pelo setor financeiro",
+        },
+      },
+      ProjectCommitmentNoteCancelResponse: {
+        type: "object",
+        properties: {
+          message: { type: "string" },
+          project: { $ref: "#/components/schemas/Project" },
+          rollback: {
+            type: "object",
+            properties: {
+              estimateId: { type: "string" },
+              diexRequestId: { type: "string" },
+              serviceOrderId: { type: "string", nullable: true },
+              reason: { type: "string" },
+            },
+          },
+        },
+      },
       ProjectTimelineItem: {
         type: "object",
         properties: {
@@ -1462,6 +1488,39 @@ export const openApiDocument: OpenApiDocument = {
               additionalProperties: true,
             },
           },
+          inventoryAlerts: {
+            type: "object",
+            properties: {
+              lowStock: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+              insufficient: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+              staleReservations: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+              reversals: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
         },
       },
       PublicRegisterRequest: {
@@ -1674,8 +1733,29 @@ export const openApiDocument: OpenApiDocument = {
           description: { type: "string" },
           unit: { type: "string" },
           unitPrice: { type: "string", description: "Decimal serializado pelo Prisma." },
+          initialQuantity: {
+            type: "string",
+            description: "Saldo inicial configurado para o item da ATA.",
+          },
           notes: { type: "string", nullable: true },
           isActive: { type: "boolean" },
+          deletedAt: { type: "string", format: "date-time", nullable: true },
+          balance: {
+            type: "object",
+            properties: {
+              initialQuantity: { type: "string" },
+              reservedQuantity: { type: "string" },
+              consumedQuantity: { type: "string" },
+              availableQuantity: { type: "string" },
+              initialAmount: { type: "string" },
+              reservedAmount: { type: "string" },
+              consumedAmount: { type: "string" },
+              availableAmount: { type: "string" },
+              lowStock: { type: "boolean" },
+              insufficient: { type: "boolean" },
+              lastMovementAt: { type: "string", format: "date-time", nullable: true },
+            },
+          },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
           ata: {
@@ -1712,8 +1792,23 @@ export const openApiDocument: OpenApiDocument = {
           description: "Camera IP externa",
           unit: "UN",
           unitPrice: "1250.50",
+          initialQuantity: "1000.00",
           notes: "Modelo padrao",
           isActive: true,
+          deletedAt: null,
+          balance: {
+            initialQuantity: "1000.00",
+            reservedQuantity: "0.00",
+            consumedQuantity: "0.00",
+            availableQuantity: "1000.00",
+            initialAmount: "1250500.00",
+            reservedAmount: "0.00",
+            consumedAmount: "0.00",
+            availableAmount: "1250500.00",
+            lowStock: false,
+            insufficient: false,
+            lastMovementAt: null,
+          },
           createdAt: "2026-04-29T00:00:00.000Z",
           updatedAt: "2026-04-29T00:00:00.000Z",
           ata: {
@@ -1735,13 +1830,21 @@ export const openApiDocument: OpenApiDocument = {
       },
       AtaItemCreateRequest: {
         type: "object",
-        required: ["coverageGroupCode", "referenceCode", "description", "unit", "unitPrice"],
+        required: [
+          "coverageGroupCode",
+          "referenceCode",
+          "description",
+          "unit",
+          "unitPrice",
+          "initialQuantity",
+        ],
         properties: {
           coverageGroupCode: { type: "string", minLength: 2 },
           referenceCode: { type: "string", minLength: 1 },
           description: { type: "string", minLength: 3 },
           unit: { type: "string", minLength: 1 },
           unitPrice: { type: "number", exclusiveMinimum: 0 },
+          initialQuantity: { type: "number", exclusiveMinimum: 0 },
           notes: { type: "string", nullable: true },
         },
         example: {
@@ -1750,6 +1853,7 @@ export const openApiDocument: OpenApiDocument = {
           description: "Camera IP externa",
           unit: "un",
           unitPrice: 1250.5,
+          initialQuantity: 1000,
           notes: "Modelo padrao",
         },
       },
@@ -1761,12 +1865,14 @@ export const openApiDocument: OpenApiDocument = {
           description: { type: "string", minLength: 3 },
           unit: { type: "string", minLength: 1 },
           unitPrice: { type: "number", exclusiveMinimum: 0 },
+          initialQuantity: { type: "number", exclusiveMinimum: 0 },
           notes: { type: "string", nullable: true },
           isActive: { type: "boolean", nullable: true },
         },
         example: {
           coverageGroupCode: "INT",
           unitPrice: 1310,
+          initialQuantity: 750,
           isActive: false,
         },
       },
@@ -2195,6 +2301,22 @@ export const openApiDocument: OpenApiDocument = {
         },
         responses: {
           "200": okJson("#/components/schemas/Project"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/projects/{id}/commitment-note/cancel": {
+      post: {
+        tags: ["projects"],
+        summary: "Cancelar Nota de Empenho com rollback documental e financeiro",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ProjectCommitmentNoteCancelRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/ProjectCommitmentNoteCancelResponse"),
           ...defaultErrorResponses,
         },
       },

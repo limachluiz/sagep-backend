@@ -2,6 +2,7 @@ import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { type ProjectStageValue } from "../workflow/workflow.types.js";
+import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 
 type CurrentUser = {
   id: string;
@@ -425,6 +426,26 @@ export class OperationalAlertsService {
       byCategory[alert.category].push(alert);
     }
 
+    const balanceAlerts = await ataItemBalanceService.listBalanceAlerts();
+    const recentReversals = await prisma.ataItemBalanceMovement.findMany({
+      where: {
+        movementType: "REVERSE_CONSUME",
+      },
+      select: {
+        id: true,
+        ataItemId: true,
+        projectId: true,
+        quantity: true,
+        totalAmount: true,
+        summary: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+      take: 20,
+    });
+
     return {
       generatedAt: now,
       filters: {
@@ -445,6 +466,26 @@ export class OperationalAlertsService {
       groups: {
         bySeverity,
         byCategory,
+      },
+      inventoryAlerts: {
+        lowStock: balanceAlerts.lowStockItems.map(({ item, balance }) => ({
+          ataItemId: item.id,
+          ataItemCode: item.ataItemCode,
+          referenceCode: item.referenceCode,
+          description: item.description,
+          balance,
+        })),
+        insufficient: balanceAlerts.lowStockItems
+          .filter(({ balance }) => balance.insufficient)
+          .map(({ item, balance }) => ({
+            ataItemId: item.id,
+            ataItemCode: item.ataItemCode,
+            referenceCode: item.referenceCode,
+            description: item.description,
+            balance,
+          })),
+        staleReservations: balanceAlerts.staleReservations,
+        reversals: recentReversals,
       },
       alerts,
     };

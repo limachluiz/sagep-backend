@@ -6,6 +6,7 @@ import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
+import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 
 type CurrentUser = {
   id: string;
@@ -695,70 +696,79 @@ export class DiexService {
       throw new AppError("Já existe um DIEx vinculado a esta estimativa", 409);
     }
 
-    const diex = await prisma.diexRequest.create({
-      data: {
-        projectId: project.id,
-        estimateId: estimate.id,
-        diexNumber: data.diexNumber?.trim(),
-        issuedAt: data.issuedAt,
-        issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
-        commandName: data.commandName?.trim() || "COMANDO MILITAR DA AMAZÔNIA",
-        pregaoNumber: data.pregaoNumber?.trim() || "04/2025",
-        uasg: data.uasg?.trim() || "160016",
-        supplierName: estimate.ata.vendorName,
-        supplierCnpj: data.supplierCnpj.trim(),
-        requesterName: requester.requesterName,
-        requesterRank: requester.requesterRank,
-        requesterCpf: requester.requesterCpf,
-        requesterRole: data.requesterRole?.trim() || "Requisitante",
-        notes: data.notes?.trim(),
-        totalAmount: estimate.totalAmount,
-        items: {
-          create: estimate.items.map((item) => ({
-            estimateItemId: item.id,
-            itemCode: item.referenceCode,
-            description: item.description,
-            supplyUnit: item.unit,
-            quantityRequested: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.subtotal,
-            notes: item.notes,
-          })),
+    const { diex, updatedProject } = await prisma.$transaction(async (tx) => {
+      const createdDiex = await tx.diexRequest.create({
+        data: {
+          projectId: project.id,
+          estimateId: estimate.id,
+          diexNumber: data.diexNumber?.trim(),
+          issuedAt: data.issuedAt,
+          issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
+          commandName: data.commandName?.trim() || "COMANDO MILITAR DA AMAZÔNIA",
+          pregaoNumber: data.pregaoNumber?.trim() || "04/2025",
+          uasg: data.uasg?.trim() || "160016",
+          supplierName: estimate.ata.vendorName,
+          supplierCnpj: data.supplierCnpj.trim(),
+          requesterName: requester.requesterName,
+          requesterRank: requester.requesterRank,
+          requesterCpf: requester.requesterCpf,
+          requesterRole: data.requesterRole?.trim() || "Requisitante",
+          notes: data.notes?.trim(),
+          totalAmount: estimate.totalAmount,
+          items: {
+            create: estimate.items.map((item) => ({
+              estimateItemId: item.id,
+              itemCode: item.referenceCode,
+              description: item.description,
+              supplyUnit: item.unit,
+              quantityRequested: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.subtotal,
+              notes: item.notes,
+            })),
+          },
         },
-      },
-      include: diexInclude,
-    });
+        include: diexInclude,
+      });
 
-    const projectUpdateData: Prisma.ProjectUpdateInput =
-      workflowService.getProjectPatchAfterDiexCreated(
-        this.buildWorkflowSnapshot({
-          ...project,
-          diexNumber: diex.diexNumber,
-          diexIssuedAt: diex.issuedAt,
-        }),
-      );
+      await ataItemBalanceService.reserveForDiex(createdDiex.id, this.getAuditActor(user), tx);
 
-    const updatedProject = await prisma.project.update({
-      where: { id: project.id },
-      data: projectUpdateData,
-      select: {
-        id: true,
-        projectCode: true,
-        stage: true,
-        status: true,
-        diexNumber: true,
-        diexIssuedAt: true,
-        creditNoteNumber: true,
-        creditNoteReceivedAt: true,
-        commitmentNoteNumber: true,
-        commitmentNoteReceivedAt: true,
-        serviceOrderNumber: true,
-        serviceOrderIssuedAt: true,
-        executionStartedAt: true,
-        asBuiltReceivedAt: true,
-        invoiceAttestedAt: true,
-        serviceCompletedAt: true,
-      },
+      const projectUpdateData: Prisma.ProjectUpdateInput =
+        workflowService.getProjectPatchAfterDiexCreated(
+          this.buildWorkflowSnapshot({
+            ...project,
+            diexNumber: createdDiex.diexNumber,
+            diexIssuedAt: createdDiex.issuedAt,
+          }),
+        );
+
+      const syncedProject = await tx.project.update({
+        where: { id: project.id },
+        data: projectUpdateData,
+        select: {
+          id: true,
+          projectCode: true,
+          stage: true,
+          status: true,
+          diexNumber: true,
+          diexIssuedAt: true,
+          creditNoteNumber: true,
+          creditNoteReceivedAt: true,
+          commitmentNoteNumber: true,
+          commitmentNoteReceivedAt: true,
+          serviceOrderNumber: true,
+          serviceOrderIssuedAt: true,
+          executionStartedAt: true,
+          asBuiltReceivedAt: true,
+          invoiceAttestedAt: true,
+          serviceCompletedAt: true,
+        },
+      });
+
+      return {
+        diex: createdDiex,
+        updatedProject: syncedProject,
+      };
     });
 
     await auditService.log({
@@ -1214,34 +1224,43 @@ export class DiexService {
         before: this.buildDiexAuditSnapshot(diex),
       });
 
-      await prisma.diexRequest.update({
+    const updatedProject = await prisma.$transaction(async (tx) => {
+      await ataItemBalanceService.releaseForDiex(
+        diexId,
+        this.getAuditActor(user),
+        tx,
+      );
+
+      await tx.diexRequest.update({
         where: { id: diexId },
         data: {
           archivedAt: new Date(),
+          documentStatus: "CANCELADO",
         },
       });
-    
-      const updatedProject = await prisma.project.update({
-      where: { id: diex.projectId },
-      data: workflowService.getProjectPatchAfterDiexRemoved(),
-      select: {
-        id: true,
-        projectCode: true,
-        stage: true,
-        status: true,
-        diexNumber: true,
-        diexIssuedAt: true,
-        creditNoteNumber: true,
-        creditNoteReceivedAt: true,
-        commitmentNoteNumber: true,
-        commitmentNoteReceivedAt: true,
-        serviceOrderNumber: true,
-        serviceOrderIssuedAt: true,
-        executionStartedAt: true,
-        asBuiltReceivedAt: true,
-        invoiceAttestedAt: true,
-        serviceCompletedAt: true,
-      },
+
+      return tx.project.update({
+        where: { id: diex.projectId },
+        data: workflowService.getProjectPatchAfterDiexRemoved(),
+        select: {
+          id: true,
+          projectCode: true,
+          stage: true,
+          status: true,
+          diexNumber: true,
+          diexIssuedAt: true,
+          creditNoteNumber: true,
+          creditNoteReceivedAt: true,
+          commitmentNoteNumber: true,
+          commitmentNoteReceivedAt: true,
+          serviceOrderNumber: true,
+          serviceOrderIssuedAt: true,
+          executionStartedAt: true,
+          asBuiltReceivedAt: true,
+          invoiceAttestedAt: true,
+          serviceCompletedAt: true,
+        },
+      });
     });
 
     await auditService.log({

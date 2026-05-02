@@ -5,6 +5,7 @@ import { withArchiveContext } from "../../shared/archive-context.js";
 import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
+import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 
 type CurrentUser = {
   id: string;
@@ -126,7 +127,10 @@ const estimateInclude = {
           referenceCode: true,
           description: true,
           unit: true,
+          unitPrice: true,
+          initialQuantity: true,
           isActive: true,
+          deletedAt: true,
         },
       },
     },
@@ -607,6 +611,104 @@ export class EstimatesService {
     }
   }
 
+  private async enrichEstimateWithBalance<T extends {
+    items: Array<{
+      ataItem: {
+        id: string;
+        ataItemCode: number;
+        referenceCode: string;
+        description: string;
+        unit: string;
+        unitPrice: Prisma.Decimal;
+        initialQuantity: Prisma.Decimal;
+        isActive: boolean;
+        deletedAt: Date | null;
+      };
+    }>;
+  }>(estimate: T) {
+    const ataItems = Array.from(
+      new Map(estimate.items.map((item) => [item.ataItem.id, item.ataItem])).values(),
+    );
+    const balanceMap = await ataItemBalanceService.getBalanceMapForAtaItems(ataItems);
+
+    return {
+      ...estimate,
+      items: estimate.items.map((item) => ({
+        ...item,
+        ataItem: {
+          ...item.ataItem,
+          balance: balanceMap.get(item.ataItem.id) ?? null,
+        },
+      })),
+    };
+  }
+
+  private async enrichEstimateCollectionWithBalance<
+    T extends Array<{
+      items: Array<{
+        ataItem: {
+          id: string;
+          ataItemCode: number;
+          referenceCode: string;
+          description: string;
+          unit: string;
+          unitPrice: Prisma.Decimal;
+          initialQuantity: Prisma.Decimal;
+          isActive: boolean;
+          deletedAt: Date | null;
+        };
+      }>;
+    }>,
+  >(estimates: T) {
+    if (!estimates.length) {
+      return estimates;
+    }
+
+    const ataItems = Array.from(
+      new Map(
+        estimates
+          .flatMap((estimate) => estimate.items.map((item) => [item.ataItem.id, item.ataItem] as const)),
+      ).values(),
+    );
+    const balanceMap = await ataItemBalanceService.getBalanceMapForAtaItems(ataItems);
+
+    return estimates.map((estimate) => ({
+      ...estimate,
+      items: estimate.items.map((item) => ({
+        ...item,
+        ataItem: {
+          ...item.ataItem,
+          balance: balanceMap.get(item.ataItem.id) ?? null,
+        },
+      })),
+    })) as unknown as T;
+  }
+
+  private async assertEstimateItemsStillAvailable(
+    estimateId: string,
+    db: typeof prisma | Prisma.TransactionClient = prisma,
+  ) {
+    const estimate = await db.estimate.findUnique({
+      where: { id: estimateId },
+      select: {
+        items: {
+          select: {
+            ataItemId: true,
+            quantity: true,
+            referenceCode: true,
+            description: true,
+          },
+        },
+      },
+    });
+
+    if (!estimate) {
+      throw new AppError("Estimativa não encontrada", 404);
+    }
+
+    await ataItemBalanceService.assertCanAllocateEstimateItems(estimate.items, db);
+  }
+
   private async resolveEstimateItems(
     ataId: string,
     coverageGroupId: string,
@@ -624,7 +726,9 @@ export class EstimatesService {
               description: string;
               unit: string;
               unitPrice: Prisma.Decimal;
+              initialQuantity: Prisma.Decimal;
               isActive: boolean;
+              deletedAt: Date | null;
             }
           | null = null;
 
@@ -640,7 +744,9 @@ export class EstimatesService {
               description: true,
               unit: true,
               unitPrice: true,
+              initialQuantity: true,
               isActive: true,
+              deletedAt: true,
             },
           });
         } else if (item.ataItemCode) {
@@ -655,12 +761,14 @@ export class EstimatesService {
               description: true,
               unit: true,
               unitPrice: true,
+              initialQuantity: true,
               isActive: true,
+              deletedAt: true,
             },
           });
         }
 
-        if (!ataItem) {
+        if (!ataItem || ataItem.deletedAt) {
           throw new AppError("Item da ata não encontrado", 404);
         }
 
@@ -698,6 +806,8 @@ export class EstimatesService {
     if (duplicatedAtaItemIds.length > 0) {
       throw new AppError("A estimativa não pode repetir o mesmo item da ata", 409);
     }
+
+    await ataItemBalanceService.assertCanAllocateEstimateItems(resolvedItems);
 
     return resolvedItems;
   }
@@ -775,7 +885,7 @@ export class EstimatesService {
       include: estimateInclude,
     });
 
-    return estimate;
+    return this.enrichEstimateWithBalance(estimate);
   }
 
   async list(filters: ListEstimatesFilters, user: CurrentUser) {
@@ -929,11 +1039,13 @@ export class EstimatesService {
       },
     });
 
+    const enrichedEstimates = await this.enrichEstimateCollectionWithBalance(estimates);
+
     if (includeArchived || onlyArchived || hasArchivedPeriod) {
-      return withArchiveContext("ESTIMATE", estimates);
+      return withArchiveContext("ESTIMATE", enrichedEstimates);
     }
 
-    return estimates;
+    return enrichedEstimates;
   }
 
   async findById(
@@ -953,7 +1065,7 @@ export class EstimatesService {
       throw new AppError("Estimativa não encontrada", 404);
     }
 
-    return estimate;
+    return this.enrichEstimateWithBalance(estimate);
   }
 
   async findByCode(
@@ -981,7 +1093,7 @@ export class EstimatesService {
       throw new AppError("Estimativa não encontrada", 404);
     }
 
-    return estimate;
+    return this.enrichEstimateWithBalance(estimate);
   }
 
   async update(estimateId: string, data: UpdateEstimateInput, user: CurrentUser) {
@@ -1073,6 +1185,10 @@ export class EstimatesService {
         new Prisma.Decimal(0)
       ) ?? undefined;
 
+    if (data.status === "FINALIZADA" && !resolvedItems) {
+      await this.assertEstimateItemsStillAvailable(estimateId);
+    }
+
     const estimate = await prisma.estimate.update({
       where: { id: estimateId },
       data: {
@@ -1104,7 +1220,7 @@ export class EstimatesService {
       include: estimateInclude,
     });
 
-    return estimate;
+    return this.enrichEstimateWithBalance(estimate);
   }
 
   async updateStatus(estimateId: string, data: UpdateEstimateStatusInput, user: CurrentUser) {
@@ -1117,6 +1233,10 @@ export class EstimatesService {
 
     await this.ensureCanManage(estimateId, user);
 
+    if (data.status === "FINALIZADA") {
+      await this.assertEstimateItemsStillAvailable(estimateId);
+    }
+
     const estimate = await prisma.estimate.update({
       where: { id: estimateId },
       data: {
@@ -1125,7 +1245,7 @@ export class EstimatesService {
       include: estimateInclude,
     });
 
-    return estimate;
+    return this.enrichEstimateWithBalance(estimate);
   }
 
   async remove(estimateId: string, user: CurrentUser) {

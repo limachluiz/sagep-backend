@@ -21,6 +21,9 @@ projectsRoutes.delete("/:id/members/:memberId", (req, res) =>
 );
 
 projectsRoutes.patch("/:id/flow", (req, res) => controller.updateFlow(req, res));
+projectsRoutes.post("/:id/commitment-note/cancel", (req, res) =>
+  controller.cancelCommitmentNote(req, res)
+);
 projectsRoutes.use("/:id/service-order", serviceOrdersRoutes);
 projectsRoutes.get("/:id/details", (req, res) => controller.details(req, res));
 projectsRoutes.get("/:id/timeline", (req, res) => controller.timeline(req, res));

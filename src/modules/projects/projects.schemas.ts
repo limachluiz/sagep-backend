@@ -115,3 +115,7 @@ export const issueServiceOrderSchema = z.object({
   serviceOrderNumber: optionalString,
   serviceOrderIssuedAt: optionalDate,
 });
+
+export const cancelCommitmentNoteSchema = z.object({
+  reason: z.string().trim().min(3, "Motivo do cancelamento da NE é obrigatório"),
+});

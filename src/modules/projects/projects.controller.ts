@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   archivedQuerySchema,
+  cancelCommitmentNoteSchema,
   createProjectSchema,
   listProjectsQuerySchema,
   projectCodeParamSchema,
@@ -72,6 +73,13 @@ export class ProjectsController {
     const data = updateProjectFlowSchema.parse(req.body);
     const project = await projectsService.updateFlow(id, data, req.user!);
     return res.status(200).json(project);
+  }
+
+  async cancelCommitmentNote(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const data = cancelCommitmentNoteSchema.parse(req.body);
+    const result = await projectsService.cancelCommitmentNote(id, data, req.user!);
+    return res.status(200).json(result);
   }
 
   async remove(req: Request, res: Response) {

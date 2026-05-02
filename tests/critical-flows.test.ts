@@ -13,12 +13,23 @@ import { hashToken } from "../src/shared/auth-tokens.js";
 const password = "123456";
 let catalogSequence = 1;
 
-const binaryParser = (res: NodeJS.ReadableStream, callback: (error: Error | null, body: Buffer) => void) => {
+const binaryParser = (
+  res: any,
+  callback: (error: Error | null, body: any) => void,
+) => {
   const chunks: Buffer[] = [];
 
-  res.on("data", (chunk: Buffer) => chunks.push(Buffer.from(chunk)));
-  res.on("end", () => callback(null, Buffer.concat(chunks)));
-  res.on("error", (error: Error) => callback(error, Buffer.alloc(0)));
+  res.on("data", (chunk: Buffer | string) => {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk, "binary"));
+  });
+
+  res.on("end", () => {
+    callback(null, Buffer.concat(chunks));
+  });
+
+  res.on("error", (error: Error) => {
+    callback(error, null);
+  });
 };
 
 type TestUser = {
@@ -32,6 +43,7 @@ async function resetDatabase() {
   await prisma.auditLog.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.userPermissionOverride.deleteMany();
+  await prisma.ataItemBalanceMovement.deleteMany();
   await prisma.serviceOrderDeliveredDocument.deleteMany();
   await prisma.serviceOrderScheduleItem.deleteMany();
   await prisma.serviceOrderItem.deleteMany();
@@ -132,7 +144,7 @@ async function login(email: string, userAgent?: string) {
   };
 }
 
-async function createCatalog() {
+async function createCatalog(initialQuantity = "1000.00") {
   const sequence = catalogSequence++;
   const ata = await prisma.ata.create({
     data: {
@@ -163,6 +175,7 @@ async function createCatalog() {
       description: "Camera IP",
       unit: "UN",
       unitPrice: "100.00",
+      initialQuantity,
     },
   });
   const om = await prisma.militaryOrganization.create({
@@ -222,7 +235,47 @@ async function seedFinalizedEstimate(projectId: string) {
   return { estimate, ...catalog };
 }
 
-async function createProjectWithFinalizedEstimate(token: string) {
+async function seedFinalizedEstimateWithBalance(
+  projectId: string,
+  {
+    initialQuantity = "1000.00",
+    quantity = "2.00",
+  }: {
+    initialQuantity?: string;
+    quantity?: string;
+  } = {},
+) {
+  const catalog = await createCatalog(initialQuantity);
+  const totalAmount = (Number(quantity) * Number(catalog.ataItem.unitPrice)).toFixed(2);
+  const estimate = await prisma.estimate.create({
+    data: {
+      projectId,
+      ataId: catalog.ata.id,
+      coverageGroupId: catalog.coverageGroup.id,
+      omId: catalog.om.id,
+      status: "FINALIZADA",
+      omName: catalog.om.sigla,
+      destinationCityName: catalog.om.cityName,
+      destinationStateUf: catalog.om.stateUf,
+      totalAmount,
+      items: {
+        create: {
+          ataItemId: catalog.ataItem.id,
+          referenceCode: catalog.ataItem.referenceCode,
+          description: catalog.ataItem.description,
+          unit: catalog.ataItem.unit,
+          quantity,
+          unitPrice: catalog.ataItem.unitPrice,
+          subtotal: totalAmount,
+        },
+      },
+    },
+  });
+
+  return { estimate, ...catalog };
+}
+
+async function createProjectWithFinalizedEstimate(token: string, p0?: string) {
   const project = await createProject(token);
   const seeded = await seedFinalizedEstimate(project.id);
   return { project, ...seeded };
@@ -1079,6 +1132,41 @@ describe("critical flows", () => {
     ).toBe("EMITIR_OS");
   });
 
+  it("ata-items: exposes available balance for administrative and estimate selection flows", async () => {
+    const catalog = await createCatalog("5.00");
+
+    const response = await request(app)
+      .get("/api/ata-items")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    const item = response.body.items.find((entry: { id: string }) => entry.id === catalog.ataItem.id);
+    expect(item.balance.initialQuantity).toBe("5");
+    expect(item.balance.availableQuantity).toBe("5");
+    expect(item.balance.reservedQuantity).toBe("0");
+    expect(item.balance.consumedQuantity).toBe("0");
+  });
+
+  it("estimates: blocks quantity above ATA item available balance", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto sem saldo");
+    const catalog = await createCatalog("1.00");
+
+    await request(app)
+      .post("/api/estimates")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        ataId: catalog.ata.id,
+        coverageGroupId: catalog.coverageGroup.id,
+        omId: catalog.om.id,
+        items: [{ ataItemId: catalog.ataItem.id, quantity: 2 }],
+      })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.message).toContain("Saldo insuficiente");
+      });
+  });
+
   it("projects: rejects stage jumps", async () => {
     const { project } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 
@@ -1166,6 +1254,175 @@ describe("critical flows", () => {
       .expect(201);
 
     expect(serviceOrder.body.serviceOrderNumber).toBe("OS-001");
+  });
+
+  it("balance flow: reserves on DIEx, consumes on commitment note and emits low-stock alert", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto saldo");
+    const { estimate, ataItem } = await seedFinalizedEstimateWithBalance(project.id, {
+      initialQuantity: "3.00",
+      quantity: "2.00",
+    });
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    const reservedBalance = await request(app)
+      .get(`/api/ata-items/${ataItem.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(reservedBalance.body.balance.reservedQuantity).toBe("2");
+    expect(reservedBalance.body.balance.consumedQuantity).toBe("0");
+    expect(reservedBalance.body.balance.availableQuantity).toBe("1");
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const consumedBalance = await request(app)
+      .get(`/api/ata-items/${ataItem.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(consumedBalance.body.balance.reservedQuantity).toBe("0");
+    expect(consumedBalance.body.balance.consumedQuantity).toBe("2");
+    expect(consumedBalance.body.balance.availableQuantity).toBe("1");
+    expect(consumedBalance.body.balance.lowStock).toBe(true);
+
+    const alerts = await request(app)
+      .get("/api/operational-alerts")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(
+      alerts.body.inventoryAlerts.lowStock.some(
+        (item: { ataItemId: string; balance: { availableQuantity: string } }) =>
+          item.ataItemId === ataItem.id && item.balance.availableQuantity === "1",
+      ),
+    ).toBe(true);
+
+    const movements = await prisma.ataItemBalanceMovement.findMany({
+      where: { ataItemId: ataItem.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(movements.map((movement) => movement.movementType)).toEqual(["RESERVE", "CONSUME"]);
+  });
+
+  it("commitment note cancel: reverses balance and rolls project back to ESTIMATIVA_PRECO", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto rollback NE");
+    const { estimate, ataItem } = await seedFinalizedEstimateWithBalance(project.id, {
+      initialQuantity: "3.00",
+      quantity: "2.00",
+    });
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-ROLLBACK-001",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const serviceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        serviceOrderNumber: "OS-ROLLBACK-001",
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    const cancelResponse = await request(app)
+      .post(`/api/projects/${project.id}/commitment-note/cancel`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        reason: "Empenho cancelado pelo setor financeiro",
+      })
+      .expect(200);
+
+    expect(cancelResponse.body.project.stage).toBe("ESTIMATIVA_PRECO");
+    expect(cancelResponse.body.project.commitmentNoteNumber).toBeNull();
+    expect(cancelResponse.body.rollback.estimateId).toBe(estimate.id);
+
+    const [rolledProject, rolledEstimate, rolledDiex, rolledServiceOrder, rolledBalance, reverseMovement] =
+      await Promise.all([
+        prisma.project.findUniqueOrThrow({ where: { id: project.id } }),
+        prisma.estimate.findUniqueOrThrow({ where: { id: estimate.id } }),
+        prisma.diexRequest.findUniqueOrThrow({ where: { id: diex.id } }),
+        prisma.serviceOrder.findUniqueOrThrow({ where: { id: serviceOrder.body.id } }),
+        request(app)
+          .get(`/api/ata-items/${ataItem.id}`)
+          .set("Authorization", `Bearer ${adminAuth.accessToken}`),
+        prisma.ataItemBalanceMovement.findFirst({
+          where: {
+            ataItemId: ataItem.id,
+            movementType: "REVERSE_CONSUME",
+          },
+          orderBy: { createdAt: "desc" },
+        }),
+      ]);
+
+    expect(rolledProject.stage).toBe("ESTIMATIVA_PRECO");
+    expect(rolledProject.status).toBe("PLANEJAMENTO");
+    expect(rolledProject.diexNumber).toBeNull();
+    expect(rolledProject.commitmentNoteNumber).toBeNull();
+    expect(rolledProject.serviceOrderNumber).toBeNull();
+    expect(rolledEstimate.status).toBe("CANCELADA");
+    expect(rolledEstimate.archivedAt).toBeInstanceOf(Date);
+    expect(rolledDiex.documentStatus).toBe("CANCELADO");
+    expect(rolledDiex.archivedAt).toBeInstanceOf(Date);
+    expect(rolledServiceOrder.documentStatus).toBe("CANCELADO");
+    expect(rolledServiceOrder.archivedAt).toBeInstanceOf(Date);
+    expect(rolledBalance.body.balance.availableQuantity).toBe("3");
+    expect(rolledBalance.body.balance.consumedQuantity).toBe("0");
+    expect(reverseMovement?.summary).toContain("cancelamento da Nota de Empenho");
+
+    const rollbackAudit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        summary: {
+          contains: "retornou para ESTIMATIVA_PRECO",
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(rollbackAudit).toBeTruthy();
   });
 
   it("projects timeline: aggregates audit events from related modules", async () => {

@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { ataItemBalanceService } from "./ata-item-balance.service.js";
 
 type UfValue = "AM" | "RO" | "RR" | "AC";
 
@@ -10,6 +11,7 @@ type CreateAtaItemInput = {
   description: string;
   unit: string;
   unitPrice: number;
+  initialQuantity: number;
   notes?: string;
 };
 
@@ -19,6 +21,7 @@ type UpdateAtaItemInput = {
   description?: string;
   unit?: string;
   unitPrice?: number;
+  initialQuantity?: number;
   notes?: string;
   isActive?: boolean;
 };
@@ -107,6 +110,10 @@ export class AtaItemsService {
     return value.toFixed(2);
   }
 
+  private normalizeQuantity(value: number) {
+    return value.toFixed(2);
+  }
+
   async create(ataId: string, data: CreateAtaItemInput) {
     await this.ensureAtaExists(ataId);
     const coverageGroup = await this.resolveCoverageGroup(ataId, data.coverageGroupCode);
@@ -119,20 +126,19 @@ export class AtaItemsService {
         description: data.description.trim(),
         unit: data.unit.trim().toUpperCase(),
         unitPrice: this.normalizeMoney(data.unitPrice),
+        initialQuantity: this.normalizeQuantity(data.initialQuantity),
         notes: data.notes?.trim(),
       },
       include: ataItemInclude,
     });
 
-    return item;
+    return (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0];
   }
 
   async listByAta(ataId: string, filters: ListAtaItemsFilters) {
     await this.ensureAtaExists(ataId);
 
-    const andConditions: Prisma.AtaItemWhereInput[] = [
-      { ataId },
-    ];
+    const andConditions: Prisma.AtaItemWhereInput[] = [{ ataId }, { deletedAt: null }];
 
     if (filters.code) {
       andConditions.push({
@@ -219,11 +225,11 @@ export class AtaItemsService {
       ],
     });
 
-    return items;
+    return ataItemBalanceService.enrichAtaItemsWithBalance(items);
   }
 
   async list(filters: ListAtaItemsFilters) {
-    const andConditions: Prisma.AtaItemWhereInput[] = [];
+    const andConditions: Prisma.AtaItemWhereInput[] = [{ deletedAt: null }];
 
     if (filters.code) {
       andConditions.push({
@@ -320,7 +326,7 @@ export class AtaItemsService {
       ],
     });
 
-    return items;
+    return ataItemBalanceService.enrichAtaItemsWithBalance(items);
   }
 
   async findById(itemId: string) {
@@ -329,11 +335,11 @@ export class AtaItemsService {
       include: ataItemInclude,
     });
 
-    if (!item) {
+    if (!item || item.deletedAt) {
       throw new AppError("Item da ata não encontrado", 404);
     }
 
-    return item;
+    return (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0];
   }
 
   async findByCode(itemCode: number) {
@@ -342,11 +348,11 @@ export class AtaItemsService {
       include: ataItemInclude,
     });
 
-    if (!item) {
+    if (!item || item.deletedAt) {
       throw new AppError("Item da ata não encontrado", 404);
     }
 
-    return item;
+    return (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0];
   }
 
   async update(itemId: string, data: UpdateAtaItemInput) {
@@ -355,10 +361,11 @@ export class AtaItemsService {
       select: {
         id: true,
         ataId: true,
+        deletedAt: true,
       },
     });
 
-    if (!existingItem) {
+    if (!existingItem || existingItem.deletedAt) {
       throw new AppError("Item da ata não encontrado", 404);
     }
 
@@ -382,6 +389,9 @@ export class AtaItemsService {
         ...(data.unitPrice !== undefined && {
           unitPrice: this.normalizeMoney(data.unitPrice),
         }),
+        ...(data.initialQuantity !== undefined && {
+          initialQuantity: this.normalizeQuantity(data.initialQuantity),
+        }),
         ...(data.notes !== undefined && { notes: data.notes?.trim() }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
         ...(coverageGroupId !== undefined && { coverageGroupId }),
@@ -389,25 +399,29 @@ export class AtaItemsService {
       include: ataItemInclude,
     });
 
-    return item;
+    return (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0];
   }
 
   async remove(itemId: string) {
     const existingItem = await prisma.ataItem.findUnique({
       where: { id: itemId },
-      select: { id: true },
+      select: { id: true, deletedAt: true },
     });
 
-    if (!existingItem) {
+    if (!existingItem || existingItem.deletedAt) {
       throw new AppError("Item da ata não encontrado", 404);
     }
 
-    await prisma.ataItem.delete({
+    await prisma.ataItem.update({
       where: { id: itemId },
+      data: {
+        deletedAt: new Date(),
+        isActive: false,
+      },
     });
 
     return {
-      message: "Item da ata excluído com sucesso",
+      message: "Item da ata arquivado com sucesso",
     };
   }
 }
