@@ -1,5 +1,13 @@
 # SAGEP Backend
 
+![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
+![Express](https://img.shields.io/badge/Express-5.x-000000?logo=express&logoColor=white)
+![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-Containers-2496ED?logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/license-ISC-green)
+
 Backend do **SAGEP** — Sistema de Apoio à Gestão de Projetos.
 
 O projeto centraliza o fluxo operacional e documental da Seção de Projetos, cobrindo desde a estimativa de preço até a conclusão do serviço, com rastreabilidade, governança de permissões, dashboards e controle de saldo dos itens da ATA.
