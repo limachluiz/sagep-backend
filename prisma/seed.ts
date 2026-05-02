@@ -2,6 +2,12 @@ import "dotenv/config";
 import bcrypt from "bcryptjs";
 import { PrismaPg } from "@prisma/adapter-pg";
 import { PrismaClient, Prisma } from "../src/generated/prisma/client.js";
+import {
+  allPermissions,
+  allRoles,
+  permissionDescriptions,
+  rolePermissions,
+} from "../src/modules/permissions/permissions.catalog.js";
 
 const adapter = new PrismaPg({
   connectionString: process.env.DATABASE_URL!,
@@ -156,6 +162,49 @@ async function upsertUsers() {
   );
 
   return { admin, gestor, projetista, consulta };
+}
+
+async function ensurePermissionCatalog() {
+  for (const code of allPermissions) {
+    await prisma.permission.upsert({
+      where: { code },
+      update: {
+        description: permissionDescriptions[code],
+      },
+      create: {
+        code,
+        description: permissionDescriptions[code],
+      },
+    });
+  }
+}
+
+async function ensureRolePermissionMatrix() {
+  await prisma.rolePermission.deleteMany();
+
+  for (const role of allRoles) {
+    for (const code of rolePermissions[role]) {
+      const permission = await prisma.permission.findUniqueOrThrow({
+        where: { code },
+        select: { id: true },
+      });
+
+      await prisma.rolePermission.upsert({
+        where: {
+          role_permissionId: {
+            role,
+            permissionId: permission.id,
+          },
+        },
+        update: {},
+        create: {
+          id: `role:${role}:${code}`,
+          role,
+          permissionId: permission.id,
+        },
+      });
+    }
+  }
 }
 
 async function upsertOms() {
@@ -1217,6 +1266,8 @@ async function seedDemo(context: Awaited<ReturnType<typeof seedBase>>) {
 }
 
 async function seedBase() {
+  await ensurePermissionCatalog();
+  await ensureRolePermissionMatrix();
   const seededUsers = await upsertUsers();
   await upsertOms();
   const catalog = await seedCatalog();

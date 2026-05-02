@@ -32,6 +32,7 @@ type CurrentUser = {
   name?: string | null;
   email: string;
   role: string;
+  permissions?: string[];
 };
 
 type SessionStatus = "ACTIVE" | "REVOKED" | "EXPIRED";
@@ -466,6 +467,11 @@ export class AuthService {
       });
     });
 
+    const effectivePermissions = await permissionsService.getEffectivePermissionsForUser(
+      user.id,
+      user.role,
+    );
+
     await auditService.log({
       entityType: "AUTH",
       entityId: user.id,
@@ -497,10 +503,10 @@ export class AuthService {
         cpf: user.cpf,
         active: user.active,
         createdAt: user.createdAt,
-        permissions: permissionsService.getPermissionsForRole(user.role),
+        permissions: effectivePermissions,
         access: {
           role: user.role,
-          permissions: permissionsService.getPermissionsForRole(user.role),
+          permissions: effectivePermissions,
           isAdmin: user.role === "ADMIN",
         },
       },
@@ -670,12 +676,17 @@ export class AuthService {
       throw new AppError("Usu\u00e1rio n\u00e3o encontrado", 404);
     }
 
+    const effectivePermissions = await permissionsService.getEffectivePermissionsForUser(
+      user.id,
+      user.role,
+    );
+
     return {
       ...user,
-      permissions: permissionsService.getPermissionsForRole(user.role),
+      permissions: effectivePermissions,
       access: {
         role: user.role,
-        permissions: permissionsService.getPermissionsForRole(user.role),
+        permissions: effectivePermissions,
         isAdmin: user.role === "ADMIN",
       },
     };

@@ -18,6 +18,7 @@ export const createAtaItemSchema = z.object({
   description: z.string().trim().min(3, "Descrição deve ter pelo menos 3 caracteres"),
   unit: z.string().trim().min(1, "Unidade é obrigatória"),
   unitPrice: z.coerce.number().positive("Valor unitário deve ser maior que zero"),
+  initialQuantity: z.coerce.number().positive("Saldo inicial deve ser maior que zero"),
   notes: optionalString,
 });
 
@@ -28,6 +29,7 @@ export const updateAtaItemSchema = z
     description: z.string().trim().min(3, "Descrição deve ter pelo menos 3 caracteres").optional(),
     unit: z.string().trim().min(1, "Unidade é obrigatória").optional(),
     unitPrice: optionalPositiveNumber,
+    initialQuantity: optionalPositiveNumber,
     notes: optionalString,
     isActive: optionalBoolean,
   })

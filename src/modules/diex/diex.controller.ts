@@ -10,6 +10,7 @@ import {
 import { DiexService } from "./diex.service.js";
 import { DiexDocumentService } from "./diex-document.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
 
 const diexService = new DiexService();
 const diexDocumentService = new DiexDocumentService();
@@ -86,7 +87,8 @@ export class DiexController {
 
   async restore(req: Request, res: Response) {
     const { id } = diexIdParamSchema.parse(req.params);
-    const result = await diexService.restore(id, req.user!);
+    const options = restoreOptionsSchema.parse(req.body ?? {});
+    const result = await diexService.restore(id, req.user!, options);
     return res.status(200).json(result);
   }
 }

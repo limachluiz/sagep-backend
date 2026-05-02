@@ -106,6 +106,19 @@ enum RefreshTokenRevocationReason {
   SECURITY
 }
 
+enum PermissionOverrideEffect {
+  ALLOW
+  DENY
+}
+
+enum AtaItemBalanceMovementType {
+  RESERVE
+  RELEASE
+  CONSUME
+  REVERSE_CONSUME
+  ADJUSTMENT
+}
+
 model User {
   id            String          @id @default(cuid())
   userCode      Int             @unique @default(autoincrement())
@@ -121,9 +134,43 @@ model User {
   auditLogs AuditLog[]
   assignedTasks Task[]          @relation("TaskAssignee")
   refreshTokens RefreshToken[]
+  permissionOverrides UserPermissionOverride[]
   lastLoginAt   DateTime?
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  code        String           @unique
+  description String?
+  roleAssignments RolePermission[]
+  userOverrides UserPermissionOverride[]
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+}
+
+model RolePermission {
+  id           String     @id @default(cuid())
+  role         UserRole
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([role, permissionId])
+}
+
+model UserPermissionOverride {
+  id           String                   @id @default(cuid())
+  userId       String
+  permissionId String
+  effect       PermissionOverrideEffect
+  user         User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission               @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+
+  @@unique([userId, permissionId])
 }
 
 model Project {
@@ -139,6 +186,7 @@ model Project {
   diexRequests             DiexRequest[]
   tasks                    Task[]
   estimates                Estimate[]
+  ataItemBalanceMovements  AtaItemBalanceMovement[]
   serviceOrders            ServiceOrder[]
   startDate                DateTime?
   endDate                  DateTime?
@@ -235,23 +283,57 @@ model AtaCoverageLocality {
 }
 
 model AtaItem {
-  id              String           @id @default(cuid())
-  ataItemCode     Int              @unique @default(autoincrement())
-  ataId           String
-  coverageGroupId String
-  referenceCode   String
-  description     String
-  unit            String
-  estimateItems   EstimateItem[]
-  unitPrice       Decimal          @db.Decimal(14, 2)
-  notes           String?
-  isActive        Boolean          @default(true)
-  ata             Ata              @relation(fields: [ataId], references: [id], onDelete: Cascade)
-  coverageGroup   AtaCoverageGroup @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
-  createdAt       DateTime         @default(now())
-  updatedAt       DateTime         @updatedAt
+  id               String                  @id @default(cuid())
+  ataItemCode      Int                     @unique @default(autoincrement())
+  ataId            String
+  coverageGroupId  String
+  referenceCode    String
+  description      String
+  unit             String
+  estimateItems    EstimateItem[]
+  balanceMovements AtaItemBalanceMovement[]
+  unitPrice        Decimal                 @db.Decimal(14, 2)
+  initialQuantity  Decimal                 @default(1000) @db.Decimal(14, 2)
+  notes            String?
+  isActive         Boolean                 @default(true)
+  deletedAt        DateTime?
+  ata              Ata                     @relation(fields: [ataId], references: [id], onDelete: Cascade)
+  coverageGroup    AtaCoverageGroup        @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
+  createdAt        DateTime                @default(now())
+  updatedAt        DateTime                @updatedAt
 
   @@unique([ataId, coverageGroupId, referenceCode])
+}
+
+model AtaItemBalanceMovement {
+  id             String                     @id @default(cuid())
+  ataItemId      String
+  projectId      String?
+  estimateId     String?
+  estimateItemId String?
+  diexRequestId  String?
+  serviceOrderId String?
+  actorUserId    String?
+  actorName      String?
+  movementType   AtaItemBalanceMovementType
+  quantity       Decimal                    @db.Decimal(14, 2)
+  unitPrice      Decimal                    @db.Decimal(14, 2)
+  totalAmount    Decimal                    @db.Decimal(14, 2)
+  summary        String
+  metadata       Json?
+  ataItem        AtaItem                    @relation(fields: [ataItemId], references: [id], onDelete: Restrict)
+  project        Project?                   @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  estimate       Estimate?                  @relation(fields: [estimateId], references: [id], onDelete: SetNull)
+  estimateItem   EstimateItem?              @relation(fields: [estimateItemId], references: [id], onDelete: SetNull)
+  diexRequest    DiexRequest?               @relation(fields: [diexRequestId], references: [id], onDelete: SetNull)
+  serviceOrder   ServiceOrder?              @relation(fields: [serviceOrderId], references: [id], onDelete: SetNull)
+  createdAt      DateTime                   @default(now())
+
+  @@index([ataItemId, createdAt])
+  @@index([projectId, createdAt])
+  @@index([estimateId, createdAt])
+  @@index([diexRequestId, createdAt])
+  @@index([serviceOrderId, createdAt])
 }
 
 model Estimate {
@@ -272,6 +354,7 @@ model Estimate {
   coverageGroup       AtaCoverageGroup      @relation(fields: [coverageGroupId], references: [id], onDelete: Restrict)
   om                  MilitaryOrganization? @relation(fields: [omId], references: [id], onDelete: Restrict)
   items               EstimateItem[]
+  ataItemBalanceMovements AtaItemBalanceMovement[]
   diexRequests        DiexRequest[]
   serviceOrders       ServiceOrder[]
   archivedAt          DateTime?
@@ -294,6 +377,7 @@ model EstimateItem {
   notes             String?
   diexItems         DiexRequestItem[]
   serviceOrderItems ServiceOrderItem[]
+  balanceMovements  AtaItemBalanceMovement[]
   estimate          Estimate           @relation(fields: [estimateId], references: [id], onDelete: Cascade)
   ataItem           AtaItem            @relation(fields: [ataItemId], references: [id], onDelete: Restrict)
   createdAt         DateTime           @default(now())
@@ -340,6 +424,7 @@ model DiexRequest {
   project             Project           @relation(fields: [projectId], references: [id], onDelete: Restrict)
   estimate            Estimate          @relation(fields: [estimateId], references: [id], onDelete: Restrict)
   items               DiexRequestItem[]
+  ataItemBalanceMovements AtaItemBalanceMovement[]
   serviceOrders       ServiceOrder[]
   createdAt           DateTime          @default(now())
   updatedAt           DateTime          @updatedAt
@@ -391,6 +476,7 @@ model ServiceOrder {
   estimate                     Estimate                        @relation(fields: [estimateId], references: [id], onDelete: Restrict)
   diexRequest                  DiexRequest?                    @relation(fields: [diexRequestId], references: [id], onDelete: Restrict)
   items                        ServiceOrderItem[]
+  ataItemBalanceMovements      AtaItemBalanceMovement[]
   createdAt                    DateTime                        @default(now())
   updatedAt                    DateTime                        @updatedAt
   requestingArea               String                          @default("Seção de Projetos - Divisão Técnica 4º CTA")

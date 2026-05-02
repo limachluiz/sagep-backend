@@ -7,8 +7,10 @@ import { estimatesRoutes } from "./modules/estimates/estimates.routes.js";
 import { exportsRoutes } from "./modules/exports/exports.routes.js";
 import { globalSearchRoutes } from "./modules/global-search/global-search.routes.js";
 import { healthRoutes } from "./modules/health/health.routes.js";
+import { openApiRoutes } from "./modules/openapi/openapi.routes.js";
 import { operationalAlertsRoutes } from "./modules/operational-alerts/operational-alerts.routes.js";
 import { projectsRoutes } from "./modules/projects/projects.routes.js";
+import { permissionsRoutes } from "./modules/permissions/permissions.routes.js";
 import { reportsRoutes } from "./modules/reports/reports.routes.js";
 import { tasksRoutes } from "./modules/tasks/tasks.routes.js";
 import { usersRoutes } from "./modules/users/users.routes.js";
@@ -19,9 +21,11 @@ import { serviceOrdersRoutes } from "./modules/service-orders/service-orders.rou
 export const routes = Router();
 
 routes.use("/health", healthRoutes);
+routes.use("/docs", openApiRoutes);
 routes.use("/auth", authRoutes);
 routes.use("/users", usersRoutes);
 routes.use("/projects", projectsRoutes);
+routes.use("/permissions", permissionsRoutes);
 routes.use("/tasks", tasksRoutes);
 routes.use("/atas", atasRoutes);
 routes.use("/ata-items", ataItemsRoutes);

@@ -11,7 +11,8 @@ app.use(express.json());
 app.get("/", (_req, res) => {
   return res.status(200).json({
     message: "SAGEP backend online",
-    docs: "/api/health",
+    docs: "/api/docs",
+    health: "/api/health",
     timestamp: new Date().toISOString()
   });
 });

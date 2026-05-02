@@ -2,14 +2,20 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { withArchiveContext } from "../../shared/archive-context.js";
+import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import type { AuditEntityType, AuditSnapshot } from "../audit/audit.types.js";
+import { DiexService } from "../diex/diex.service.js";
+import { EstimatesService } from "../estimates/estimates.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
+import { ServiceOrdersService } from "../service-orders/service-orders.service.js";
+import { TasksService } from "../tasks/tasks.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
+import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 
 type CurrentUser = {
   id: string;
-  name: string;
+  name?: string;
   email: string;
   role: string;
   rank?: string | null;
@@ -60,6 +66,10 @@ type UpdateProjectFlowInput = {
   serviceCompletedAt?: Date;
 };
 
+type CancelCommitmentNoteInput = {
+  reason: string;
+};
+
 type ListProjectsFilters = {
   code?: number;
   status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
@@ -67,6 +77,8 @@ type ListProjectsFilters = {
   search?: string;
   includeArchived?: boolean;
   onlyArchived?: boolean;
+  includeDeleted?: boolean;
+  onlyDeleted?: boolean;
   archivedFrom?: Date;
   archivedUntil?: Date;
 };
@@ -97,20 +109,44 @@ const projectInclude = {
   _count: {
     select: {
       members: true,
-      tasks: true,
-      estimates: true,
+      tasks: {
+        where: {
+          deletedAt: null,
+        },
+      },
+      estimates: {
+        where: {
+          deletedAt: null,
+        },
+      },
     },
   },
 } satisfies Prisma.ProjectInclude;
+
+const tasksService = new TasksService();
+const estimatesService = new EstimatesService();
+const diexService = new DiexService();
+const serviceOrdersService = new ServiceOrdersService();
 
 export class ProjectsService {
   private isAdmin(role: string) {
     return role === "ADMIN";
   }
 
-  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ProjectWhereInput {
+  private buildLifecycleVisibilityWhere(
+    includeArchived = false,
+    includeDeleted = false,
+  ): Prisma.ProjectWhereInput {
+    if (includeArchived && includeDeleted) {
+      return {};
+    }
+
     if (includeArchived) {
       return { deletedAt: null };
+    }
+
+    if (includeDeleted) {
+      return { archivedAt: null };
     }
 
     return {
@@ -128,6 +164,8 @@ export class ProjectsService {
     filters: {
       includeArchived?: boolean;
       onlyArchived?: boolean;
+      includeDeleted?: boolean;
+      onlyDeleted?: boolean;
       archivedFrom?: Date;
       archivedUntil?: Date;
     },
@@ -135,6 +173,8 @@ export class ProjectsService {
     if (
       (filters.includeArchived ||
         filters.onlyArchived ||
+        filters.includeDeleted ||
+        filters.onlyDeleted ||
         filters.archivedFrom ||
         filters.archivedUntil) &&
       !this.isAdmin(user.role)
@@ -142,9 +182,15 @@ export class ProjectsService {
       throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
     }
 
+    if (filters.onlyArchived && filters.onlyDeleted) {
+      throw new AppError("Use onlyArchived ou onlyDeleted, não ambos", 400);
+    }
+
     return {
       includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
       onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
+      onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
   }
 
@@ -168,8 +214,16 @@ export class ProjectsService {
         _count: {
           select: {
             members: true,
-            tasks: true,
-            estimates: true,
+            tasks: {
+              where: {
+                deletedAt: null,
+              },
+            },
+            estimates: {
+              where: {
+                deletedAt: null,
+              },
+            },
           },
         },
         archivedAt: true,
@@ -798,12 +852,19 @@ export class ProjectsService {
   }
 
   async list(filters: ListProjectsFilters, user: CurrentUser) {
-    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
+    const { includeArchived, onlyArchived, includeDeleted, onlyDeleted } =
+      this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.ProjectWhereInput[] = [];
     const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
 
     andConditions.push(
-      onlyArchived || hasArchivedPeriod
+      onlyDeleted
+        ? {
+            deletedAt: {
+              not: null,
+            },
+          }
+        : onlyArchived || hasArchivedPeriod
         ? {
             archivedAt: {
               not: null,
@@ -812,7 +873,7 @@ export class ProjectsService {
             },
             deletedAt: null,
           }
-        : this.buildArchiveVisibilityWhere(includeArchived),
+        : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     );
 
     if (!this.isPrivileged(user.role)) {
@@ -1520,6 +1581,10 @@ export class ProjectsService {
       invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
       serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
     };
+    const isFirstCommitmentNoteRegistration =
+      !currentProject.commitmentNoteNumber &&
+      !currentProject.commitmentNoteReceivedAt &&
+      (!!nextSnapshot.commitmentNoteNumber || !!nextSnapshot.commitmentNoteReceivedAt);
 
     workflowService.assertStageTransition(currentProject.stage, data.stage);
     workflowService.validateStageRequirements(
@@ -1533,49 +1598,62 @@ export class ProjectsService {
       finalizedEstimateCount,
     );
 
-    const project = await prisma.project.update({
-      where: { id: projectId },
-      data: {
-        stage: data.stage,
-        status: workflowService.getMacroStatusFromStage(data.stage),
-        ...(data.creditNoteNumber !== undefined && {
-          creditNoteNumber: data.creditNoteNumber,
-        }),
-        ...(data.creditNoteReceivedAt !== undefined && {
-          creditNoteReceivedAt: data.creditNoteReceivedAt,
-        }),
-        ...(data.diexNumber !== undefined && {
-          diexNumber: data.diexNumber,
-        }),
-        ...(data.diexIssuedAt !== undefined && {
-          diexIssuedAt: data.diexIssuedAt,
-        }),
-        ...(data.commitmentNoteNumber !== undefined && {
-          commitmentNoteNumber: data.commitmentNoteNumber,
-        }),
-        ...(data.commitmentNoteReceivedAt !== undefined && {
-          commitmentNoteReceivedAt: data.commitmentNoteReceivedAt,
-        }),
-        ...(data.serviceOrderNumber !== undefined && {
-          serviceOrderNumber: data.serviceOrderNumber,
-        }),
-        ...(data.serviceOrderIssuedAt !== undefined && {
-          serviceOrderIssuedAt: data.serviceOrderIssuedAt,
-        }),
-        ...(data.executionStartedAt !== undefined && {
-          executionStartedAt: data.executionStartedAt,
-        }),
-        ...(data.asBuiltReceivedAt !== undefined && {
-          asBuiltReceivedAt: data.asBuiltReceivedAt,
-        }),
-        ...(data.invoiceAttestedAt !== undefined && {
-          invoiceAttestedAt: data.invoiceAttestedAt,
-        }),
-        ...(data.serviceCompletedAt !== undefined && {
-          serviceCompletedAt: data.serviceCompletedAt,
-        }),
-      },
-      include: projectInclude,
+    const project = await prisma.$transaction(async (tx) => {
+      const updatedProject = await tx.project.update({
+        where: { id: projectId },
+        data: {
+          stage: data.stage,
+          status: workflowService.getMacroStatusFromStage(data.stage),
+          ...(data.creditNoteNumber !== undefined && {
+            creditNoteNumber: data.creditNoteNumber,
+          }),
+          ...(data.creditNoteReceivedAt !== undefined && {
+            creditNoteReceivedAt: data.creditNoteReceivedAt,
+          }),
+          ...(data.diexNumber !== undefined && {
+            diexNumber: data.diexNumber,
+          }),
+          ...(data.diexIssuedAt !== undefined && {
+            diexIssuedAt: data.diexIssuedAt,
+          }),
+          ...(data.commitmentNoteNumber !== undefined && {
+            commitmentNoteNumber: data.commitmentNoteNumber,
+          }),
+          ...(data.commitmentNoteReceivedAt !== undefined && {
+            commitmentNoteReceivedAt: data.commitmentNoteReceivedAt,
+          }),
+          ...(data.serviceOrderNumber !== undefined && {
+            serviceOrderNumber: data.serviceOrderNumber,
+          }),
+          ...(data.serviceOrderIssuedAt !== undefined && {
+            serviceOrderIssuedAt: data.serviceOrderIssuedAt,
+          }),
+          ...(data.executionStartedAt !== undefined && {
+            executionStartedAt: data.executionStartedAt,
+          }),
+          ...(data.asBuiltReceivedAt !== undefined && {
+            asBuiltReceivedAt: data.asBuiltReceivedAt,
+          }),
+          ...(data.invoiceAttestedAt !== undefined && {
+            invoiceAttestedAt: data.invoiceAttestedAt,
+          }),
+          ...(data.serviceCompletedAt !== undefined && {
+            serviceCompletedAt: data.serviceCompletedAt,
+          }),
+        },
+        include: projectInclude,
+      });
+
+      if (isFirstCommitmentNoteRegistration) {
+        await ataItemBalanceService.consumeForProjectCommitmentNote(
+          projectId,
+          this.getAuditActor(user),
+          updatedProject.commitmentNoteNumber ?? "sem-numero",
+          tx,
+        );
+      }
+
+      return updatedProject;
     });
 
     const beforeSnapshot = this.buildProjectAuditSnapshot(currentProject);
@@ -1640,6 +1718,305 @@ export class ProjectsService {
     });
 
     return project;
+  }
+
+  async cancelCommitmentNote(projectId: string, data: CancelCommitmentNoteInput, user: CurrentUser) {
+    await this.ensureCanManage(projectId, user);
+
+    const currentProject = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        ownerId: true,
+        startDate: true,
+        endDate: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    if (!currentProject) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (!currentProject.commitmentNoteNumber && !currentProject.commitmentNoteReceivedAt) {
+      throw new AppError("O projeto não possui Nota de Empenho ativa para cancelamento", 409);
+    }
+
+    const reason = data.reason.trim();
+
+    const rollbackResult = await prisma.$transaction(async (tx) => {
+      const diex = await tx.diexRequest.findFirst({
+        where: {
+          projectId,
+          archivedAt: null,
+          deletedAt: null,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+          diexCode: true,
+          diexNumber: true,
+          issuedAt: true,
+          documentStatus: true,
+          estimateId: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+        },
+      });
+
+      if (!diex) {
+        throw new AppError("Nenhum DIEx ativo foi encontrado para rollback da NE", 409);
+      }
+
+      const estimate = await tx.estimate.findUnique({
+        where: { id: diex.estimateId },
+        select: {
+          id: true,
+          estimateCode: true,
+          status: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+        },
+      });
+
+      if (!estimate || estimate.deletedAt || estimate.archivedAt) {
+        throw new AppError("Nenhuma estimativa ativa foi encontrada para rollback da NE", 409);
+      }
+
+      const serviceOrder = await tx.serviceOrder.findFirst({
+        where: {
+          projectId,
+          archivedAt: null,
+          deletedAt: null,
+        },
+        orderBy: {
+          createdAt: "desc",
+        },
+        select: {
+          id: true,
+          serviceOrderCode: true,
+          serviceOrderNumber: true,
+          issuedAt: true,
+          documentStatus: true,
+          estimateId: true,
+          diexRequestId: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+        },
+      });
+
+      await ataItemBalanceService.reverseConsumedForProject(
+        projectId,
+        this.getAuditActor(user),
+        reason,
+        serviceOrder?.id,
+        tx,
+      );
+
+      const archivedAt = new Date();
+
+      const cancelledEstimate = await tx.estimate.update({
+        where: { id: estimate.id },
+        data: {
+          status: "CANCELADA",
+          archivedAt,
+        },
+        select: {
+          id: true,
+          estimateCode: true,
+          status: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+        },
+      });
+
+      const cancelledDiex = await tx.diexRequest.update({
+        where: { id: diex.id },
+        data: {
+          documentStatus: "CANCELADO",
+          archivedAt,
+        },
+        select: {
+          id: true,
+          diexCode: true,
+          diexNumber: true,
+          issuedAt: true,
+          documentStatus: true,
+          estimateId: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+        },
+      });
+
+      const cancelledServiceOrder = serviceOrder
+        ? await tx.serviceOrder.update({
+            where: { id: serviceOrder.id },
+            data: {
+              documentStatus: "CANCELADO",
+              archivedAt,
+            },
+            select: {
+              id: true,
+              serviceOrderCode: true,
+              serviceOrderNumber: true,
+              issuedAt: true,
+              documentStatus: true,
+              estimateId: true,
+              diexRequestId: true,
+              totalAmount: true,
+              archivedAt: true,
+              deletedAt: true,
+            },
+          })
+        : null;
+
+      const resetProject = await tx.project.update({
+        where: { id: projectId },
+        data: {
+          stage: "ESTIMATIVA_PRECO",
+          status: workflowService.getMacroStatusFromStage("ESTIMATIVA_PRECO"),
+          diexNumber: null,
+          diexIssuedAt: null,
+          commitmentNoteNumber: null,
+          commitmentNoteReceivedAt: null,
+          serviceOrderNumber: null,
+          serviceOrderIssuedAt: null,
+          executionStartedAt: null,
+          asBuiltReceivedAt: null,
+          invoiceAttestedAt: null,
+          serviceCompletedAt: null,
+        },
+        include: projectInclude,
+      });
+
+      return {
+        estimateBefore: estimate,
+        estimateAfter: cancelledEstimate,
+        diexBefore: diex,
+        diexAfter: cancelledDiex,
+        serviceOrderBefore: serviceOrder,
+        serviceOrderAfter: cancelledServiceOrder,
+        projectAfter: resetProject,
+      };
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: projectId,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${currentProject.projectCode} retornou para ESTIMATIVA_PRECO após cancelamento da Nota de Empenho`,
+      before: this.buildProjectAuditSnapshot(currentProject),
+      after: this.buildProjectAuditSnapshot(rollbackResult.projectAfter),
+      metadata: {
+        source: "project.commitment-note.cancel",
+        reason,
+        rollback: {
+          estimateId: rollbackResult.estimateAfter.id,
+          diexId: rollbackResult.diexAfter.id,
+          serviceOrderId: rollbackResult.serviceOrderAfter?.id ?? null,
+        },
+      },
+    });
+
+    await auditService.log({
+      entityType: "ESTIMATE",
+      entityId: rollbackResult.estimateAfter.id,
+      action: "ARCHIVE",
+      actor: this.getAuditActor(user),
+      summary: `Estimativa #${rollbackResult.estimateAfter.estimateCode} cancelada por rollback da Nota de Empenho`,
+      before: {
+        ...rollbackResult.estimateBefore,
+        totalAmount: rollbackResult.estimateBefore.totalAmount.toString(),
+      },
+      after: {
+        ...rollbackResult.estimateAfter,
+        totalAmount: rollbackResult.estimateAfter.totalAmount.toString(),
+      },
+      metadata: {
+        source: "project.commitment-note.cancel",
+        reason,
+        origin: "NE_ROLLBACK",
+      },
+    });
+
+    await auditService.log({
+      entityType: "DIEX_REQUEST",
+      entityId: rollbackResult.diexAfter.id,
+      action: "ARCHIVE",
+      actor: this.getAuditActor(user),
+      summary: `DIEx ${rollbackResult.diexAfter.diexNumber ?? `#${rollbackResult.diexAfter.diexCode}`} cancelado por rollback da Nota de Empenho`,
+      before: {
+        ...rollbackResult.diexBefore,
+        totalAmount: rollbackResult.diexBefore.totalAmount.toString(),
+      },
+      after: {
+        ...rollbackResult.diexAfter,
+        totalAmount: rollbackResult.diexAfter.totalAmount.toString(),
+      },
+      metadata: {
+        source: "project.commitment-note.cancel",
+        reason,
+        origin: "NE_ROLLBACK",
+      },
+    });
+
+    if (rollbackResult.serviceOrderAfter && rollbackResult.serviceOrderBefore) {
+      await auditService.log({
+        entityType: "SERVICE_ORDER",
+        entityId: rollbackResult.serviceOrderAfter.id,
+        action: "ARCHIVE",
+        actor: this.getAuditActor(user),
+        summary: `OS ${rollbackResult.serviceOrderAfter.serviceOrderNumber ?? `#${rollbackResult.serviceOrderAfter.serviceOrderCode}`} cancelada por rollback da Nota de Empenho`,
+        before: {
+          ...rollbackResult.serviceOrderBefore,
+          totalAmount: rollbackResult.serviceOrderBefore.totalAmount.toString(),
+        },
+        after: {
+          ...rollbackResult.serviceOrderAfter,
+          totalAmount: rollbackResult.serviceOrderAfter.totalAmount.toString(),
+        },
+        metadata: {
+          source: "project.commitment-note.cancel",
+          reason,
+          origin: "NE_ROLLBACK",
+        },
+      });
+    }
+
+    return {
+      message: "Nota de Empenho cancelada com rollback documental e financeiro",
+      project: rollbackResult.projectAfter,
+      rollback: {
+        estimateId: rollbackResult.estimateAfter.id,
+        diexRequestId: rollbackResult.diexAfter.id,
+        serviceOrderId: rollbackResult.serviceOrderAfter?.id ?? null,
+        reason,
+      },
+    };
   }
 
   async remove(projectId: string, user: CurrentUser) {
@@ -1714,7 +2091,7 @@ export class ProjectsService {
     };
   }
 
-  async restore(projectId: string, user: CurrentUser) {
+  async restore(projectId: string, user: CurrentUser, options: RestoreOptions = {}) {
     if (!permissionsService.hasPermission(user, "projects.restore")) {
       throw new AppError("Você não tem permissão para restaurar este projeto", 403);
     }
@@ -1756,13 +2133,22 @@ export class ProjectsService {
       throw new AppError("Projeto não está arquivado", 409);
     }
 
-    const project = await prisma.project.update({
+    await prisma.project.update({
       where: { id: projectId },
       data: {
         archivedAt: null,
       },
       include: projectInclude,
     });
+
+    let project = await prisma.project.findUnique({
+      where: { id: projectId },
+      include: projectInclude,
+    });
+
+    if (!project) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
 
     await auditService.log({
       entityType: "PROJECT",
@@ -1774,12 +2160,163 @@ export class ProjectsService {
       after: this.buildProjectAuditSnapshot(project),
       metadata: {
         permissionUsed: "projects.restore",
+        cascade: Boolean(options.cascade),
       },
     });
+
+    const cascade = {
+      restored: {
+        tasks: 0,
+        estimates: 0,
+        diexRequests: 0,
+        serviceOrders: 0,
+      },
+      skipped: {
+        tasksDeleted: 0,
+        estimatesDeleted: 0,
+        diexDeleted: 0,
+        serviceOrdersDeleted: 0,
+      },
+    };
+
+    if (options.cascade) {
+      const [archivedTasks, archivedEstimates, archivedDiex, archivedServiceOrders] =
+        await Promise.all([
+          prisma.task.findMany({
+            where: {
+              projectId,
+              archivedAt: {
+                not: null,
+              },
+            },
+            select: {
+              id: true,
+              deletedAt: true,
+            },
+            orderBy: {
+              taskCode: "asc",
+            },
+          }),
+          prisma.estimate.findMany({
+            where: {
+              projectId,
+              archivedAt: {
+                not: null,
+              },
+            },
+            select: {
+              id: true,
+              deletedAt: true,
+            },
+            orderBy: {
+              estimateCode: "asc",
+            },
+          }),
+          prisma.diexRequest.findMany({
+            where: {
+              projectId,
+              archivedAt: {
+                not: null,
+              },
+            },
+            select: {
+              id: true,
+              deletedAt: true,
+              estimate: {
+                select: {
+                  deletedAt: true,
+                },
+              },
+            },
+            orderBy: {
+              diexCode: "asc",
+            },
+          }),
+          prisma.serviceOrder.findMany({
+            where: {
+              projectId,
+              archivedAt: {
+                not: null,
+              },
+            },
+            select: {
+              id: true,
+              deletedAt: true,
+              estimate: {
+                select: {
+                  deletedAt: true,
+                },
+              },
+              diexRequest: {
+                select: {
+                  deletedAt: true,
+                },
+              },
+            },
+            orderBy: {
+              serviceOrderCode: "asc",
+            },
+          }),
+        ]);
+
+      const taskIds = archivedTasks.filter((item) => !item.deletedAt).map((item) => item.id);
+      const estimateIds = archivedEstimates
+        .filter((item) => !item.deletedAt)
+        .map((item) => item.id);
+      const diexIds = archivedDiex
+        .filter((item) => !item.deletedAt && !item.estimate.deletedAt)
+        .map((item) => item.id);
+      const serviceOrderIds = archivedServiceOrders
+        .filter(
+          (item) =>
+            !item.deletedAt &&
+            !item.estimate.deletedAt &&
+            (!item.diexRequest || !item.diexRequest.deletedAt),
+        )
+        .map((item) => item.id);
+
+      cascade.skipped.tasksDeleted = archivedTasks.length - taskIds.length;
+      cascade.skipped.estimatesDeleted = archivedEstimates.length - estimateIds.length;
+      cascade.skipped.diexDeleted =
+        archivedDiex.length - diexIds.length;
+      cascade.skipped.serviceOrdersDeleted =
+        archivedServiceOrders.length - serviceOrderIds.length;
+
+      for (const estimateId of estimateIds) {
+        await estimatesService.restore(estimateId, user);
+        cascade.restored.estimates += 1;
+      }
+
+      for (const taskId of taskIds) {
+        await tasksService.restore(taskId, user);
+        cascade.restored.tasks += 1;
+      }
+
+      for (const diexId of diexIds) {
+        await diexService.restore(diexId, user);
+        cascade.restored.diexRequests += 1;
+      }
+
+      for (const serviceOrderId of serviceOrderIds) {
+        await serviceOrdersService.restore(serviceOrderId, user);
+        cascade.restored.serviceOrders += 1;
+      }
+
+      project = await prisma.project.findUnique({
+        where: { id: projectId },
+        include: projectInclude,
+      });
+
+      if (!project) {
+        throw new AppError("Projeto não encontrado", 404);
+      }
+    }
 
     return {
       message: "Projeto restaurado com sucesso",
       permissionUsed: "projects.restore" as const,
+      cascadeApplied: Boolean(options.cascade),
+      ...(options.cascade && { cascade }),
       project,
     };
   }

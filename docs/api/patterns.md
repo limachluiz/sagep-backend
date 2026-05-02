@@ -79,6 +79,44 @@ Parametros:
 
 Por padrao, arquivados e deletados logicamente nao aparecem em listagens, detalhes, dashboards, exports e resumos operacionais/financeiros.
 
+## DeletedAt Como Segunda Camada
+
+Nas entidades principais abaixo, `deletedAt` passa a representar um descarte
+logico mais forte que `archivedAt`:
+
+- `Project`
+- `Task`
+- `Estimate`
+- `DiexRequest`
+- `ServiceOrder`
+
+Regras:
+
+- `archivedAt` continua sendo o mecanismo normal de arquivamento e restore.
+- `deletedAt != null` remove o registro das leituras normais e das leituras
+  administrativas de arquivados.
+- registros com `deletedAt != null` nao participam de dashboards, busca,
+  details, exports e summaries.
+- `POST .../restore` nao restaura registros logicamente deletados; a resposta
+  passa a ser `404` nesses casos.
+- quando um `Project` esta logicamente deletado, leituras operacionais de
+  `Task`, `Estimate`, `DIEx` e `ServiceOrder` vinculadas a ele tambem deixam de
+  aparecer.
+
+Filtros administrativos explicitos para os cinco modulos principais:
+
+| Param | Uso |
+|---|---|
+| `includeDeleted=true` | Inclui ativos e deletados logicamente. Apenas `ADMIN`. |
+| `onlyDeleted=true` | Retorna somente deletados logicamente. Apenas `ADMIN`. |
+
+Observacoes:
+
+- `onlyArchived=true` continua retornando apenas arquivados com `deletedAt = null`.
+- `onlyArchived=true` e `onlyDeleted=true` nao devem ser combinados.
+- nesta fase, nao existe endpoint publico dedicado para marcar `deletedAt`; a
+  base foi preparada para leitura, filtro e comportamento consistente.
+
 Quando uma listagem administrativa retorna itens arquivados, cada item arquivado
 pode trazer `archiveContext` com `archivedAt`, `auditLogId`, `summary`,
 `actorUserId`, `actorName` e `metadata`, derivado do evento real de auditoria

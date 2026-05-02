@@ -93,6 +93,8 @@ export const listProjectsQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().optional(),
   includeArchived: z.coerce.boolean().optional(),
   onlyArchived: z.coerce.boolean().optional(),
+  includeDeleted: z.coerce.boolean().optional(),
+  onlyDeleted: z.coerce.boolean().optional(),
   archivedFrom: optionalDate,
   archivedUntil: optionalDate,
 });
@@ -112,4 +114,8 @@ export const projectCodeParamSchema = z.object({
 export const issueServiceOrderSchema = z.object({
   serviceOrderNumber: optionalString,
   serviceOrderIssuedAt: optionalDate,
+});
+
+export const cancelCommitmentNoteSchema = z.object({
+  reason: z.string().trim().min(3, "Motivo do cancelamento da NE é obrigatório"),
 });

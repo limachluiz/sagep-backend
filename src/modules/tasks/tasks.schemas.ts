@@ -82,6 +82,8 @@ export const listTasksQuerySchema = paginationQuerySchema.extend({
   search: z.string().trim().optional(),
   includeArchived: z.coerce.boolean().optional(),
   onlyArchived: z.coerce.boolean().optional(),
+  includeDeleted: z.coerce.boolean().optional(),
+  onlyDeleted: z.coerce.boolean().optional(),
   archivedFrom: optionalDate,
   archivedUntil: optionalDate,
 });

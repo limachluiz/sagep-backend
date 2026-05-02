@@ -6,6 +6,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
+    "openapi:export": "npm run build && node dist/scripts/export-openapi.js",
+    "openapi:validate": "npm run build && node dist/scripts/validate-openapi.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "node dist/server.js",

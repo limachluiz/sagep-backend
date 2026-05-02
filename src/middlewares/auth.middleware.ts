@@ -47,12 +47,17 @@ export async function authMiddleware(
       return res.status(401).json({ message: "Usuário não encontrado ou inativo" });
     }
 
+    const effectivePermissions = await permissionsService.getEffectivePermissionsForUser(
+      user.id,
+      user.role,
+    );
+
     req.user = {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
-      permissions: permissionsService.getPermissionsForRole(user.role),
+      permissions: effectivePermissions,
       rank: user.rank,
       cpf: user.cpf,
     };

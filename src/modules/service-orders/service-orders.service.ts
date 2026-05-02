@@ -2,13 +2,14 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { withArchiveContext } from "../../shared/archive-context.js";
+import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
 type CurrentUser = {
   id: string;
-  name: string;
+  name?: string;
   email: string;
   role: string;
   rank?: string | null;
@@ -113,6 +114,8 @@ type ListServiceOrderFilters = {
   search?: string;
   includeArchived?: boolean;
   onlyArchived?: boolean;
+  includeDeleted?: boolean;
+  onlyDeleted?: boolean;
   archivedFrom?: Date;
   archivedUntil?: Date;
 };
@@ -215,9 +218,20 @@ export class ServiceOrdersService {
     return role === "ADMIN";
   }
 
-  private buildArchiveVisibilityWhere(includeArchived = false): Prisma.ServiceOrderWhereInput {
+  private buildLifecycleVisibilityWhere(
+    includeArchived = false,
+    includeDeleted = false,
+  ): Prisma.ServiceOrderWhereInput {
+    if (includeArchived && includeDeleted) {
+      return {};
+    }
+
     if (includeArchived) {
       return { deletedAt: null };
+    }
+
+    if (includeDeleted) {
+      return { archivedAt: null };
     }
 
     return {
@@ -235,6 +249,8 @@ export class ServiceOrdersService {
     filters: {
       includeArchived?: boolean;
       onlyArchived?: boolean;
+      includeDeleted?: boolean;
+      onlyDeleted?: boolean;
       archivedFrom?: Date;
       archivedUntil?: Date;
     },
@@ -242,6 +258,8 @@ export class ServiceOrdersService {
     if (
       (filters.includeArchived ||
         filters.onlyArchived ||
+        filters.includeDeleted ||
+        filters.onlyDeleted ||
         filters.archivedFrom ||
         filters.archivedUntil) &&
       !this.isAdmin(user.role)
@@ -249,9 +267,15 @@ export class ServiceOrdersService {
       throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
     }
 
+    if (filters.onlyArchived && filters.onlyDeleted) {
+      throw new AppError("Use onlyArchived ou onlyDeleted, não ambos", 400);
+    }
+
     return {
       includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
       onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
+      onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
   }
 
@@ -590,13 +614,31 @@ export class ServiceOrdersService {
             id: true,
             ownerId: true,
             stage: true,
+            deletedAt: true,
             members: { select: { userId: true } },
+          },
+        },
+        estimate: {
+          select: {
+            deletedAt: true,
+          },
+        },
+        diexRequest: {
+          select: {
+            deletedAt: true,
           },
         },
       },
     });
 
-    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+    if (
+      !serviceOrder ||
+      serviceOrder.deletedAt ||
+      serviceOrder.project.deletedAt ||
+      serviceOrder.estimate.deletedAt ||
+      serviceOrder.diexRequest?.deletedAt ||
+      (!includeArchived && serviceOrder.archivedAt)
+    ) {
       throw new AppError("OS não encontrada", 404);
     }
     return serviceOrder;
@@ -615,13 +657,31 @@ export class ServiceOrdersService {
             id: true,
             ownerId: true,
             stage: true,
+            deletedAt: true,
             members: { select: { userId: true } },
+          },
+        },
+        estimate: {
+          select: {
+            deletedAt: true,
+          },
+        },
+        diexRequest: {
+          select: {
+            deletedAt: true,
           },
         },
       },
     });
 
-    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+    if (
+      !serviceOrder ||
+      serviceOrder.deletedAt ||
+      serviceOrder.project.deletedAt ||
+      serviceOrder.estimate.deletedAt ||
+      serviceOrder.diexRequest?.deletedAt ||
+      (!includeArchived && serviceOrder.archivedAt)
+    ) {
       throw new AppError("OS não encontrada", 404);
     }
     return serviceOrder;
@@ -1011,10 +1071,17 @@ private buildWorkflowSnapshot(project: {
   }
 
   async list(filters: ListServiceOrderFilters, user: CurrentUser) {
-    const { includeArchived, onlyArchived } = this.resolveArchivedAccess(user, filters);
+    const { includeArchived, onlyArchived, includeDeleted, onlyDeleted } =
+      this.resolveArchivedAccess(user, filters);
     const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
     const andConditions: Prisma.ServiceOrderWhereInput[] = [
-      onlyArchived || hasArchivedPeriod
+      onlyDeleted
+        ? {
+            deletedAt: {
+              not: null,
+            },
+          }
+        : onlyArchived || hasArchivedPeriod
         ? {
             archivedAt: {
               not: null,
@@ -1023,8 +1090,35 @@ private buildWorkflowSnapshot(project: {
             },
             deletedAt: null,
           }
-        : this.buildArchiveVisibilityWhere(includeArchived),
+        : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     ];
+
+    if (!onlyDeleted) {
+      andConditions.push(
+        {
+          project: {
+            deletedAt: null,
+          },
+        },
+        {
+          estimate: {
+            deletedAt: null,
+          },
+        },
+        {
+          OR: [
+            {
+              diexRequestId: null,
+            },
+            {
+              diexRequest: {
+                deletedAt: null,
+              },
+            },
+          ],
+        },
+      );
+    }
 
     if (!this.isPrivileged(user.role)) {
       andConditions.push({
@@ -1527,12 +1621,16 @@ private buildWorkflowSnapshot(project: {
     };
   }
 
-  async restore(serviceOrderId: string, user: CurrentUser) {
+  async restore(
+    serviceOrderId: string,
+    user: CurrentUser,
+    options: RestoreOptions = {},
+  ) {
     if (!permissionsService.hasPermission(user, "service_orders.restore")) {
       throw new AppError("Você não tem permissão para restaurar Ordem de Serviço", 403);
     }
 
-    const serviceOrder = await prisma.serviceOrder.findUnique({
+    let serviceOrder = await prisma.serviceOrder.findUnique({
       where: { id: serviceOrderId },
       select: {
         id: true,
@@ -1592,6 +1690,13 @@ private buildWorkflowSnapshot(project: {
             serviceCompletedAt: true,
           },
         },
+        estimate: {
+          select: {
+            id: true,
+            archivedAt: true,
+            deletedAt: true,
+          },
+        },
         diexRequest: {
           select: {
             id: true,
@@ -1610,8 +1715,133 @@ private buildWorkflowSnapshot(project: {
       throw new AppError("OS não está arquivada", 409);
     }
 
-    if (serviceOrder.project.deletedAt || serviceOrder.project.archivedAt) {
+    if (serviceOrder.project.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar OS com o projeto pai removido logicamente",
+        409,
+      );
+    }
+
+    if (serviceOrder.estimate.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar OS com a estimativa vinculada removida logicamente",
+        409,
+      );
+    }
+
+    if (serviceOrder.diexRequest?.deletedAt) {
+      throw new AppError(
+        "Não é possível restaurar OS com o DIEx vinculado removido logicamente",
+        409,
+      );
+    }
+
+    if (options.cascade) {
+      if (serviceOrder.project.archivedAt) {
+        const { ProjectsService } = await import("../projects/projects.service.js");
+        const projectsService = new ProjectsService();
+
+        await projectsService.restore(serviceOrder.projectId, user);
+      }
+
+      if (serviceOrder.estimate.archivedAt) {
+        const { EstimatesService } = await import("../estimates/estimates.service.js");
+        const estimatesService = new EstimatesService();
+
+        await estimatesService.restore(serviceOrder.estimateId, user);
+      }
+
+      if (serviceOrder.diexRequest?.archivedAt) {
+        const { DiexService } = await import("../diex/diex.service.js");
+        const diexService = new DiexService();
+
+        await diexService.restore(serviceOrder.diexRequest.id, user);
+      }
+
+      serviceOrder = await prisma.serviceOrder.findUnique({
+        where: { id: serviceOrderId },
+        select: {
+          id: true,
+          serviceOrderCode: true,
+          projectId: true,
+          estimateId: true,
+          diexRequestId: true,
+          serviceOrderNumber: true,
+          issuedAt: true,
+          contractorName: true,
+          contractorCnpj: true,
+          commitmentNoteNumber: true,
+          requesterName: true,
+          requesterRank: true,
+          requesterCpf: true,
+          requesterRole: true,
+          issuingOrganization: true,
+          isEmergency: true,
+          plannedStartDate: true,
+          plannedEndDate: true,
+          requestingArea: true,
+          projectDisplayName: true,
+          projectAcronym: true,
+          contractNumber: true,
+          executionLocation: true,
+          executionHours: true,
+          contactName: true,
+          contactPhone: true,
+          contactExtension: true,
+          contractTotalTerm: true,
+          originProcess: true,
+          contractorRepresentativeName: true,
+          contractorRepresentativeRole: true,
+          notes: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+          project: {
+            select: {
+              id: true,
+              projectCode: true,
+              stage: true,
+              status: true,
+              archivedAt: true,
+              deletedAt: true,
+              creditNoteNumber: true,
+              creditNoteReceivedAt: true,
+              diexNumber: true,
+              diexIssuedAt: true,
+              commitmentNoteNumber: true,
+              commitmentNoteReceivedAt: true,
+              serviceOrderNumber: true,
+              serviceOrderIssuedAt: true,
+              executionStartedAt: true,
+              asBuiltReceivedAt: true,
+              invoiceAttestedAt: true,
+              serviceCompletedAt: true,
+            },
+          },
+          estimate: {
+            select: {
+              id: true,
+              archivedAt: true,
+              deletedAt: true,
+            },
+          },
+          diexRequest: {
+            select: {
+              id: true,
+              archivedAt: true,
+              deletedAt: true,
+            },
+          },
+        },
+      });
+    }
+
+    if (!serviceOrder || serviceOrder.project.deletedAt || serviceOrder.project.archivedAt) {
       throw new AppError("Não é possível restaurar OS com o projeto pai arquivado", 409);
+    }
+
+    if (serviceOrder.estimate.deletedAt || serviceOrder.estimate.archivedAt) {
+      throw new AppError("Não é possível restaurar OS com a estimativa vinculada arquivada", 409);
     }
 
     if (
@@ -1673,6 +1903,7 @@ private buildWorkflowSnapshot(project: {
       after: this.buildServiceOrderAuditSnapshot(restoredServiceOrder),
       metadata: {
         permissionUsed: "service_orders.restore",
+        cascade: Boolean(options.cascade),
       },
     });
 
@@ -1697,6 +1928,7 @@ private buildWorkflowSnapshot(project: {
     return {
       message: "OS restaurada com sucesso",
       permissionUsed: "service_orders.restore" as const,
+      cascadeApplied: Boolean(options.cascade),
       serviceOrder: restoredServiceOrder,
     };
   }

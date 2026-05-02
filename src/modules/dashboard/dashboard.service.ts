@@ -1,4 +1,5 @@
 import { prisma } from "../../config/prisma.js";
+import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 import { OperationalAlertsService } from "../operational-alerts/operational-alerts.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
@@ -48,6 +49,36 @@ type CountBreakdownItem = {
   label: string;
   count: number;
   percentage: number;
+};
+
+type DashboardAtaItemSnapshot = {
+  id: string;
+  ataItemCode: number;
+  referenceCode: string;
+  description: string;
+  unitPrice: { toString(): string };
+  initialQuantity: { toString(): string };
+  isActive: boolean;
+  deletedAt: Date | null;
+  ata: {
+    ataCode: number;
+    number: string;
+    type: string;
+    vendorName: string;
+  };
+  balance: {
+    initialQuantity: string;
+    reservedQuantity: string;
+    consumedQuantity: string;
+    availableQuantity: string;
+    initialAmount: string;
+    reservedAmount: string;
+    consumedAmount: string;
+    availableAmount: string;
+    lowStock: boolean;
+    insufficient: boolean;
+    lastMovementAt: Date | null;
+  };
 };
 
 type FilterContext =
@@ -379,6 +410,13 @@ function mapStatusFromStage(stage: ProjectStage) {
   return "PLANEJAMENTO";
 }
 
+function sumBalanceField(
+  items: DashboardAtaItemSnapshot[],
+  getValue: (item: DashboardAtaItemSnapshot) => string,
+) {
+  return items.reduce((sum, item) => sum + toNumber(getValue(item)), 0);
+}
+
 function getProjectSnapshotAsOf(
   project: {
     id: string;
@@ -464,6 +502,193 @@ export class DashboardService {
     };
   }
 
+  private async getAtaItemSnapshots() {
+    const ataItems = await prisma.ataItem.findMany({
+      where: {
+        deletedAt: null,
+      },
+      select: {
+        id: true,
+        ataItemCode: true,
+        referenceCode: true,
+        description: true,
+        unitPrice: true,
+        initialQuantity: true,
+        isActive: true,
+        deletedAt: true,
+        ata: {
+          select: {
+            ataCode: true,
+            number: true,
+            type: true,
+            vendorName: true,
+          },
+        },
+      },
+      orderBy: {
+        ataItemCode: "asc",
+      },
+    });
+
+    return ataItemBalanceService.enrichAtaItemsWithBalance(ataItems) as Promise<
+      DashboardAtaItemSnapshot[]
+    >;
+  }
+
+  private buildInventoryOperationalBlock(
+    ataItems: DashboardAtaItemSnapshot[],
+    alerts: Awaited<ReturnType<OperationalAlertsService["list"]>>,
+  ) {
+    const lowStockItems = ataItems.filter((item) => item.balance.lowStock);
+    const insufficientItems = ataItems.filter((item) => item.balance.insufficient);
+    const reservedItems = ataItems.filter(
+      (item) => toNumber(item.balance.reservedQuantity) > 0,
+    );
+    const consumedItems = ataItems.filter(
+      (item) => toNumber(item.balance.consumedQuantity) > 0,
+    );
+    const criticalItems = [...ataItems]
+      .filter(
+        (item) =>
+          item.balance.insufficient ||
+          item.balance.lowStock ||
+          toNumber(item.balance.reservedQuantity) > 0,
+      )
+      .sort((a, b) => {
+        const scoreA =
+          (a.balance.insufficient ? 100 : 0) +
+          (a.balance.lowStock ? 10 : 0) +
+          toNumber(a.balance.reservedQuantity);
+        const scoreB =
+          (b.balance.insufficient ? 100 : 0) +
+          (b.balance.lowStock ? 10 : 0) +
+          toNumber(b.balance.reservedQuantity);
+
+        if (scoreB !== scoreA) return scoreB - scoreA;
+
+        return toNumber(a.balance.availableQuantity) - toNumber(b.balance.availableQuantity);
+      })
+      .slice(0, 10)
+      .map((item) => ({
+        id: item.id,
+        ataItemCode: item.ataItemCode,
+        referenceCode: item.referenceCode,
+        description: item.description,
+        ata: item.ata,
+        balance: item.balance,
+      }));
+
+    return {
+      summary: {
+        totalItems: ataItems.length,
+        lowStockItems: lowStockItems.length,
+        insufficientItems: insufficientItems.length,
+        itemsWithActiveReserve: reservedItems.length,
+        itemsWithActiveConsumption: consumedItems.length,
+        recentReversals: alerts.inventoryAlerts.reversals.length,
+        staleReservations: alerts.inventoryAlerts.staleReservations.length,
+        totalReservedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.reservedAmount)),
+        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.consumedAmount)),
+        totalAvailableAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.availableAmount)),
+      },
+      criticalItems,
+      staleReservations: alerts.inventoryAlerts.staleReservations.slice(0, 10),
+      recentReversals: alerts.inventoryAlerts.reversals.slice(0, 10),
+    };
+  }
+
+  private buildInventoryExecutiveBlock(
+    ataItems: DashboardAtaItemSnapshot[],
+    movements: Array<{
+      movementType: string;
+      totalAmount: { toString(): string };
+      quantity: { toString(): string };
+      createdAt: Date;
+      ataItem: {
+        ata: {
+          type: string;
+          vendorName: string;
+        };
+      };
+    }>,
+    filterContext: FilterContext,
+  ) {
+    const scopedMovements = filterByScope(movements, (movement) => movement.createdAt, filterContext);
+    const lowStockItems = ataItems.filter((item) => item.balance.lowStock);
+    const insufficientItems = ataItems.filter((item) => item.balance.insufficient);
+    const reservedItems = ataItems.filter((item) => toNumber(item.balance.reservedQuantity) > 0);
+    const consumedItems = ataItems.filter((item) => toNumber(item.balance.consumedQuantity) > 0);
+    const reversalMovements = scopedMovements.filter(
+      (movement) => movement.movementType === "REVERSE_CONSUME",
+    );
+
+    const movementSummary = {
+      totalReservedAmount: formatAmount(
+        scopedMovements
+          .filter((movement) => movement.movementType === "RESERVE")
+          .reduce((sum, movement) => sum + toNumber(movement.totalAmount), 0),
+      ),
+      totalConsumedAmount: formatAmount(
+        scopedMovements
+          .filter((movement) => movement.movementType === "CONSUME")
+          .reduce((sum, movement) => sum + toNumber(movement.totalAmount), 0),
+      ),
+      totalReversedAmount: formatAmount(
+        reversalMovements.reduce((sum, movement) => sum + toNumber(movement.totalAmount), 0),
+      ),
+      totalReleasedAmount: formatAmount(
+        scopedMovements
+          .filter((movement) => movement.movementType === "RELEASE")
+          .reduce((sum, movement) => sum + toNumber(movement.totalAmount), 0),
+      ),
+      reserveMovements: scopedMovements.filter((movement) => movement.movementType === "RESERVE")
+        .length,
+      consumeMovements: scopedMovements.filter((movement) => movement.movementType === "CONSUME")
+        .length,
+      reverseMovements: reversalMovements.length,
+    };
+
+    return {
+      snapshot: {
+        itemsAtRisk: lowStockItems.length,
+        itemsInsufficient: insufficientItems.length,
+        itemsWithActiveReserve: reservedItems.length,
+        itemsWithActiveConsumption: consumedItems.length,
+        totalReservedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.reservedAmount)),
+        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.consumedAmount)),
+        totalAvailableAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.availableAmount)),
+      },
+      periodActivity: movementSummary,
+      distribution: {
+        byAtaType: aggregateAmounts(
+          scopedMovements,
+          (movement) => movement.ataItem.ata.type,
+          (movement) => toNumber(movement.totalAmount),
+        ),
+        byVendor: aggregateAmounts(
+          scopedMovements,
+          (movement) => movement.ataItem.ata.vendorName,
+          (movement) => toNumber(movement.totalAmount),
+        ).slice(0, 10),
+      },
+      criticalItems: [...ataItems]
+        .filter((item) => item.balance.lowStock || item.balance.insufficient)
+        .sort(
+          (a, b) =>
+            toNumber(a.balance.availableAmount) - toNumber(b.balance.availableAmount),
+        )
+        .slice(0, 10)
+        .map((item) => ({
+          id: item.id,
+          ataItemCode: item.ataItemCode,
+          referenceCode: item.referenceCode,
+          description: item.description,
+          ata: item.ata,
+          balance: item.balance,
+        })),
+    };
+  }
+
   async overview(filters: DashboardOverviewQuery = {}) {
     const filterContext = buildFilterContext(filters);
 
@@ -532,6 +757,9 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -543,6 +771,9 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -580,6 +811,12 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
+          estimate: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -606,6 +843,22 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
+          estimate: {
+            deletedAt: null,
+          },
+          OR: [
+            {
+              diexRequestId: null,
+            },
+            {
+              diexRequest: {
+                deletedAt: null,
+              },
+            },
+          ],
         },
         select: {
           id: true,
@@ -999,9 +1252,9 @@ export class DashboardService {
   async operational(filters: DashboardOperationalQuery = {}, user: CurrentUser) {
     const staleDays = filters.staleDays ?? 15;
     const limit = filters.limit ?? 100;
-    const alerts = await operationalAlertsService.list({ staleDays, limit }, user);
-
-    const [projects, latestMovements] = await Promise.all([
+    const [alerts, ataItems, projects, latestMovements] = await Promise.all([
+      operationalAlertsService.list({ staleDays, limit }, user),
+      this.getAtaItemSnapshots(),
       prisma.project.findMany({
         where: {
           AND: [
@@ -1050,7 +1303,7 @@ export class DashboardService {
       prisma.auditLog.findMany({
         where: {
           entityType: {
-            in: ["PROJECT", "DIEX_REQUEST", "SERVICE_ORDER"],
+            in: ["PROJECT", "DIEX_REQUEST", "SERVICE_ORDER", "ESTIMATE"],
           },
         },
         orderBy: {
@@ -1095,6 +1348,8 @@ export class DashboardService {
       };
     });
 
+    const inventory = this.buildInventoryOperationalBlock(ataItems, alerts);
+
     return {
       generatedAt: new Date().toISOString(),
       filters: {
@@ -1117,6 +1372,7 @@ export class DashboardService {
         awaitingAsBuilt: alerts.groups.byCategory.AGUARDANDO_AS_BUILT.length,
         awaitingInvoiceAttestation: alerts.groups.byCategory.AGUARDANDO_ATESTO_NF.length,
       },
+      inventory,
       operationalQueue: queue,
       frequentNextActions: mapCounts(nextActionCounts),
       latestMovements: latestMovements.map((item) => ({
@@ -1133,7 +1389,8 @@ export class DashboardService {
 
   async executive(filters: DashboardExecutiveQuery = {}) {
     const filterContext = buildFilterContext(filters);
-    const [projects, estimates, diexRequests, serviceOrders] = await Promise.all([
+    const [projects, estimates, diexRequests, serviceOrders, ataItems, ataItemMovements] =
+      await Promise.all([
       prisma.project.findMany({
         where: {
           archivedAt: null,
@@ -1156,6 +1413,9 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -1186,6 +1446,12 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
+          estimate: {
+            deletedAt: null,
+          },
         },
         select: {
           id: true,
@@ -1199,6 +1465,22 @@ export class DashboardService {
         where: {
           archivedAt: null,
           deletedAt: null,
+          project: {
+            deletedAt: null,
+          },
+          estimate: {
+            deletedAt: null,
+          },
+          OR: [
+            {
+              diexRequestId: null,
+            },
+            {
+              diexRequest: {
+                deletedAt: null,
+              },
+            },
+          ],
         },
         select: {
           id: true,
@@ -1206,6 +1488,30 @@ export class DashboardService {
           createdAt: true,
           issuedAt: true,
           serviceOrderNumber: true,
+        },
+      }),
+      this.getAtaItemSnapshots(),
+      prisma.ataItemBalanceMovement.findMany({
+        where: {
+          ataItem: {
+            deletedAt: null,
+          },
+        },
+        select: {
+          movementType: true,
+          totalAmount: true,
+          quantity: true,
+          createdAt: true,
+          ataItem: {
+            select: {
+              ata: {
+                select: {
+                  type: true,
+                  vendorName: true,
+                },
+              },
+            },
+          },
         },
       }),
     ]);
@@ -1242,6 +1548,7 @@ export class DashboardService {
     const finalizedEstimates = scopedEstimates.filter(
       (estimate) => estimate.status === "FINALIZADA",
     );
+    const inventory = this.buildInventoryExecutiveBlock(ataItems, ataItemMovements, filterContext);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -1278,6 +1585,8 @@ export class DashboardService {
         ),
         totalWithDiex: formatAmount(totalWithDiex),
         totalWithServiceOrder: formatAmount(totalWithServiceOrder),
+        ataItemsAtRisk: inventory.snapshot.itemsAtRisk,
+        ataItemsInsufficient: inventory.snapshot.itemsInsufficient,
       },
       projects: {
         byStatus: aggregateCounts(scopedProjects, (project) => project.status),
@@ -1294,6 +1603,10 @@ export class DashboardService {
         totalEstimatedAmount: formatAmount(totalEstimatedAmount),
         totalWithDiex: formatAmount(totalWithDiex),
         totalWithServiceOrder: formatAmount(totalWithServiceOrder),
+        inventoryCurrentReservedAmount: inventory.snapshot.totalReservedAmount,
+        inventoryCurrentConsumedAmount: inventory.snapshot.totalConsumedAmount,
+        inventoryCurrentAvailableAmount: inventory.snapshot.totalAvailableAmount,
+        inventoryReversedAmountInPeriod: inventory.periodActivity.totalReversedAmount,
         byEstimateStatus: aggregateAmounts(
           scopedEstimates,
           (estimate) => estimate.status,
@@ -1304,6 +1617,8 @@ export class DashboardService {
           (estimate) => estimate.ata.type,
           (estimate) => toNumber(estimate.totalAmount),
         ),
+        inventoryByAtaType: inventory.distribution.byAtaType,
+        inventoryByVendor: inventory.distribution.byVendor,
       },
       distribution: {
         byRegion: aggregateAmounts(
@@ -1337,6 +1652,7 @@ export class DashboardService {
             ? formatAmount(totalEstimatedAmount / scopedEstimates.length)
             : "0.00",
       },
+      inventory,
     };
   }
 }

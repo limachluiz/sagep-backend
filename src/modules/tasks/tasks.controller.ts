@@ -10,6 +10,7 @@ import {
 } from "./tasks.schemas.js";
 import { TasksService } from "./tasks.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
 
 const tasksService = new TasksService();
 
@@ -73,7 +74,8 @@ export class TasksController {
 
   async restore(req: Request, res: Response) {
     const { id } = taskIdParamSchema.parse(req.params);
-    const result = await tasksService.restore(id, req.user!);
+    const options = restoreOptionsSchema.parse(req.body ?? {});
+    const result = await tasksService.restore(id, req.user!, options);
     return res.status(200).json(result);
   }
 }
