@@ -545,7 +545,7 @@ export class ProjectsService {
       });
     }
 
-    if (project.stage === "OS_LIBERADA" && !project.executionStartedAt) {
+    if (project.stage === "OS_LIBERADA" && project.serviceOrders.length > 0 && !project.executionStartedAt) {
       pendingActions.push({
         code: "INICIAR_EXECUCAO",
         label: "Registrar início da execução",
@@ -1581,18 +1581,31 @@ export class ProjectsService {
       invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
       serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
     };
+    const effectiveCurrentStage =
+      currentProject.stage === "DIEX_REQUISITORIO" &&
+      (!!currentProject.diexNumber || !!currentProject.diexIssuedAt)
+        ? "AGUARDANDO_NOTA_EMPENHO"
+        : currentProject.stage;
+    const hasCommitmentNote =
+      !!nextSnapshot.commitmentNoteNumber || !!nextSnapshot.commitmentNoteReceivedAt;
+    const targetStage =
+      effectiveCurrentStage === "AGUARDANDO_NOTA_EMPENHO" &&
+      data.stage === "AGUARDANDO_NOTA_EMPENHO" &&
+      hasCommitmentNote
+        ? "OS_LIBERADA"
+        : data.stage;
     const isFirstCommitmentNoteRegistration =
       !currentProject.commitmentNoteNumber &&
       !currentProject.commitmentNoteReceivedAt &&
       (!!nextSnapshot.commitmentNoteNumber || !!nextSnapshot.commitmentNoteReceivedAt);
 
-    workflowService.assertStageTransition(currentProject.stage, data.stage);
+    workflowService.assertStageTransition(effectiveCurrentStage, targetStage);
     workflowService.validateStageRequirements(
-      data.stage,
+      targetStage,
       this.buildWorkflowSnapshot({
         id: currentProject.id,
         projectCode: currentProject.projectCode,
-        stage: data.stage,
+        stage: targetStage,
         ...nextSnapshot,
       }),
       finalizedEstimateCount,
@@ -1602,8 +1615,8 @@ export class ProjectsService {
       const updatedProject = await tx.project.update({
         where: { id: projectId },
         data: {
-          stage: data.stage,
-          status: workflowService.getMacroStatusFromStage(data.stage),
+          stage: targetStage,
+          status: workflowService.getMacroStatusFromStage(targetStage),
           ...(data.creditNoteNumber !== undefined && {
             creditNoteNumber: data.creditNoteNumber,
           }),

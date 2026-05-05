@@ -172,16 +172,16 @@ export class WorkflowService {
           409,
         );
       }
-
-      if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
-        throw new AppError(
-          "Para liberar a OS, informe o número ou a data da Ordem de Serviço",
-          409,
-        );
-      }
     }
 
     if (this.isStageAtOrBeyond(stage, "SERVICO_EM_EXECUCAO")) {
+      if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
+        throw new AppError(
+          "Para iniciar a execução, informe o número ou a data da Ordem de Serviço",
+          409,
+        );
+      }
+
       if (!snapshot.executionStartedAt) {
         throw new AppError(
           "Para colocar o serviço em execução, informe a data de início da execução",
@@ -218,10 +218,10 @@ export class WorkflowService {
 
   getProjectPatchAfterDiexCreated(project: WorkflowProjectSnapshot) {
     return {
-      ...(project.stage === "AGUARDANDO_NOTA_CREDITO"
+      ...(this.isStageBefore(project.stage, "AGUARDANDO_NOTA_EMPENHO")
         ? {
-            stage: "DIEX_REQUISITORIO" as const,
-            status: this.getMacroStatusFromStage("DIEX_REQUISITORIO"),
+            stage: "AGUARDANDO_NOTA_EMPENHO" as const,
+            status: this.getMacroStatusFromStage("AGUARDANDO_NOTA_EMPENHO"),
           }
         : {}),
       ...(project.diexNumber ? { diexNumber: project.diexNumber } : {}),
@@ -326,6 +326,15 @@ export class WorkflowService {
           targetStage: "OS_LIBERADA",
         };
       case "OS_LIBERADA":
+        if (!project.serviceOrderNumber && !project.serviceOrderIssuedAt) {
+          return {
+            code: "EMITIR_OS",
+            label: "Emitir Ordem de Serviço",
+            description: "Com o empenho lançado, a OS já pode ser emitida.",
+            targetStage: "OS_LIBERADA",
+          };
+        }
+
         return {
           code: "INICIAR_EXECUCAO",
           label: "Iniciar execução",

@@ -1095,6 +1095,88 @@ describe("critical flows", () => {
     );
   });
 
+  it("workflow: DIEx emission advances to commitment note and NE advances to OS queue", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-002",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    const afterDiex = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(afterDiex.body.workflow.stage).toBe("AGUARDANDO_NOTA_EMPENHO");
+    expect(afterDiex.body.workflow.milestones.diexNumber).toBe("DIEX-001");
+    expect(afterDiex.body.workflow.milestones.diexIssuedAt).toBeTruthy();
+    expect(afterDiex.body.workflow.nextAction.code).toBe("INFORMAR_NOTA_EMPENHO");
+
+    const afterCommitmentNote = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-002",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(afterCommitmentNote.body.stage).toBe("OS_LIBERADA");
+    expect(afterCommitmentNote.body.commitmentNoteNumber).toBe("NE-002");
+    expect(afterCommitmentNote.body.serviceOrderNumber).toBeNull();
+
+    const afterNeDetails = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(afterNeDetails.body.workflow.stage).toBe("OS_LIBERADA");
+    expect(afterNeDetails.body.workflow.nextAction.code).toBe("EMITIR_OS");
+    expect(afterNeDetails.body.timeline.some(
+      (item: { entityType: string; entityId: string; action: string }) =>
+        item.entityType === "PROJECT" &&
+        item.entityId === project.id &&
+        item.action === "STAGE_CHANGE",
+    )).toBe(true);
+
+    const projectStageAudits = await prisma.auditLog.findMany({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        action: "STAGE_CHANGE",
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    expect(
+      projectStageAudits.some(
+        (audit) =>
+          (audit.metadata as Record<string, unknown> | null)?.newStage ===
+            "AGUARDANDO_NOTA_EMPENHO" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
+            "INFORMAR_NOTA_EMPENHO",
+      ),
+    ).toBe(true);
+    expect(
+      projectStageAudits.some(
+        (audit) =>
+          (audit.metadata as Record<string, unknown> | null)?.newStage === "OS_LIBERADA" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode === "EMITIR_OS",
+      ),
+    ).toBe(true);
+  });
+
   it("estimates: finalizing an estimate advances the project workflow to awaiting credit note", async () => {
     const project = await createProject(adminAuth.accessToken, "Projeto Finalizacao Estimativa");
     const catalog = await createCatalog();
