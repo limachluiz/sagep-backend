@@ -1028,6 +1028,80 @@ describe("critical flows", () => {
     expect(Array.isArray(details.body.pendingActions)).toBe(true);
   });
 
+  it("estimates: finalizing an estimate advances the project workflow to awaiting credit note", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto Finalizacao Estimativa");
+    const catalog = await createCatalog();
+
+    const estimate = await request(app)
+      .post("/api/estimates")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        ataId: catalog.ata.id,
+        coverageGroupId: catalog.coverageGroup.id,
+        omId: catalog.om.id,
+        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
+      })
+      .expect(201);
+
+    const initialNextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(initialNextAction.body.code).toBe("FINALIZAR_ESTIMATIVA");
+
+    await request(app)
+      .patch(`/api/estimates/${estimate.body.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ status: "FINALIZADA" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.status).toBe("FINALIZADA");
+      });
+
+    const details = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(details.body.workflow.stage).toBe("AGUARDANDO_NOTA_CREDITO");
+    expect(details.body.workflow.status).toBe("PLANEJAMENTO");
+    expect(details.body.workflow.nextAction.code).toBe("EMITIR_DIEX");
+
+    const nextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextAction.body.code).toBe("EMITIR_DIEX");
+
+    const stageAudit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        action: "STAGE_CHANGE",
+        summary: {
+          contains: "após finalização da estimativa",
+        },
+      },
+    });
+
+    expect(stageAudit).toBeTruthy();
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await issueDiex(project.id, estimate.body.id, adminAuth.accessToken);
+  });
+
   it("workflow and alerts: keeps AGUARDANDO_NOTA_EMPENHO aligned with commitment note state", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 

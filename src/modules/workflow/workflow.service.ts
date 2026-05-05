@@ -227,6 +227,17 @@ export class WorkflowService {
     };
   }
 
+  getProjectPatchAfterEstimateFinalized(project: WorkflowProjectSnapshot) {
+    return {
+      ...(project.stage === "ESTIMATIVA_PRECO"
+        ? {
+            stage: "AGUARDANDO_NOTA_CREDITO" as const,
+            status: this.getMacroStatusFromStage("AGUARDANDO_NOTA_CREDITO"),
+          }
+        : {}),
+    };
+  }
+
   getProjectPatchAfterDiexRemoved() {
     return {
       diexNumber: null,
