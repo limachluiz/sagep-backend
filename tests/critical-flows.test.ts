@@ -1028,6 +1028,73 @@ describe("critical flows", () => {
     expect(Array.isArray(details.body.pendingActions)).toBe(true);
   });
 
+  it("projects: records credit note and advances to DIEX_REQUISITORIO without requiring DIEx data", async () => {
+    const { project } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    const updated = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(updated.body.stage).toBe("DIEX_REQUISITORIO");
+    expect(updated.body.creditNoteNumber).toBe("NC-001");
+    expect(updated.body.creditNoteReceivedAt).toBeTruthy();
+    expect(updated.body.diexNumber).toBeNull();
+    expect(updated.body.diexIssuedAt).toBeNull();
+
+    const details = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(details.body.workflow.stage).toBe("DIEX_REQUISITORIO");
+    expect(details.body.workflow.milestones.creditNoteNumber).toBe("NC-001");
+    expect(details.body.workflow.milestones.creditNoteReceivedAt).toBeTruthy();
+    expect(details.body.workflow.nextAction.code).toBe("EMITIR_DIEX");
+    expect(
+      details.body.pendingActions.some(
+        (action: { code: string; targetStage?: string }) =>
+          action.code === "EMITIR_DIEX" && action.targetStage === "DIEX_REQUISITORIO",
+      ),
+    ).toBe(true);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+      })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.message).toContain("DIEx");
+      });
+
+    const stageAudit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        action: "STAGE_CHANGE",
+        metadata: {
+          path: ["newStage"],
+          equals: "DIEX_REQUISITORIO",
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(stageAudit).toBeTruthy();
+    expect((stageAudit?.metadata as Record<string, unknown>)?.nextActionCode).toBe(
+      "EMITIR_DIEX",
+    );
+  });
+
   it("estimates: finalizing an estimate advances the project workflow to awaiting credit note", async () => {
     const project = await createProject(adminAuth.accessToken, "Projeto Finalizacao Estimativa");
     const catalog = await createCatalog();

@@ -1263,7 +1263,7 @@ export class ProjectsService {
     });
 
     if (!project) {
-      throw new AppError("Projeto nÃ£o encontrado", 404);
+      throw new AppError("Projeto não encontrado", 404);
     }
 
     const workflowSnapshot = this.buildWorkflowSnapshot(project);
@@ -2334,7 +2334,7 @@ export class ProjectsService {
     });
 
     if (!project) {
-      throw new AppError("Projeto nÃ£o encontrado", 404);
+      throw new AppError("Projeto não encontrado", 404);
     }
 
     return this.buildUnifiedTimeline(project);

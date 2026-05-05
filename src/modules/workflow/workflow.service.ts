@@ -100,7 +100,7 @@ export class WorkflowService {
   assertCanRemoveDiex(project: WorkflowProjectSnapshot) {
     if (!this.isStageBefore(project.stage, "AGUARDANDO_NOTA_EMPENHO")) {
       throw new AppError(
-        "NÃ£o Ã© possÃ­vel excluir o DIEx quando o projeto jÃ¡ avanÃ§ou alÃ©m da etapa de DIEx",
+        "Não é possível excluir o DIEx quando o projeto já avançou além da etapa de DIEx",
         409,
       );
     }
@@ -125,7 +125,7 @@ export class WorkflowService {
   assertCanRemoveServiceOrder(project: WorkflowProjectSnapshot) {
     if (!this.isStageBefore(project.stage, "SERVICO_EM_EXECUCAO")) {
       throw new AppError(
-        "NÃ£o Ã© possÃ­vel excluir a OS quando o projeto jÃ¡ entrou em execuÃ§Ã£o",
+        "Não é possível excluir a OS quando o projeto já entrou em execução",
         409,
       );
     }
@@ -142,7 +142,7 @@ export class WorkflowService {
       finalizedEstimateCount === 0
     ) {
       throw new AppError(
-        "Para avanÃ§ar o fluxo, o projeto precisa ter pelo menos uma estimativa finalizada",
+        "Para avançar o fluxo, o projeto precisa ter pelo menos uma estimativa finalizada",
         409,
       );
     }
@@ -150,14 +150,16 @@ export class WorkflowService {
     if (this.isStageAtOrBeyond(stage, "DIEX_REQUISITORIO")) {
       if (!snapshot.creditNoteNumber && !snapshot.creditNoteReceivedAt) {
         throw new AppError(
-          "Para avanÃ§ar atÃ© DIEx RequisitÃ³rio, informe o nÃºmero ou a data de recebimento da Nota de CrÃ©dito",
+          "Para avançar até DIEx Requisitório, informe o número ou a data de recebimento da Nota de Crédito",
           409,
         );
       }
+    }
 
+    if (this.isStageAtOrBeyond(stage, "AGUARDANDO_NOTA_EMPENHO")) {
       if (!snapshot.diexNumber && !snapshot.diexIssuedAt) {
         throw new AppError(
-          "Para avanÃ§ar atÃ© DIEx RequisitÃ³rio, informe o nÃºmero ou a data do DIEx",
+          "Para avançar após o DIEx Requisitório, informe o número ou a data do DIEx",
           409,
         );
       }
@@ -166,14 +168,14 @@ export class WorkflowService {
     if (this.isStageAtOrBeyond(stage, "OS_LIBERADA")) {
       if (!snapshot.commitmentNoteNumber && !snapshot.commitmentNoteReceivedAt) {
         throw new AppError(
-          "Para liberar a OS, informe o nÃºmero ou a data da Nota/Empenho",
+          "Para liberar a OS, informe o número ou a data da Nota/Empenho",
           409,
         );
       }
 
       if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
         throw new AppError(
-          "Para liberar a OS, informe o nÃºmero ou a data da Ordem de ServiÃ§o",
+          "Para liberar a OS, informe o número ou a data da Ordem de Serviço",
           409,
         );
       }
@@ -182,7 +184,7 @@ export class WorkflowService {
     if (this.isStageAtOrBeyond(stage, "SERVICO_EM_EXECUCAO")) {
       if (!snapshot.executionStartedAt) {
         throw new AppError(
-          "Para colocar o serviÃ§o em execuÃ§Ã£o, informe a data de inÃ­cio da execuÃ§Ã£o",
+          "Para colocar o serviço em execução, informe a data de início da execução",
           409,
         );
       }
@@ -191,7 +193,7 @@ export class WorkflowService {
     if (this.isStageAtOrBeyond(stage, "ANALISANDO_AS_BUILT")) {
       if (!snapshot.asBuiltReceivedAt) {
         throw new AppError(
-          "Para entrar na etapa de anÃ¡lise do As-Built, informe a data de recebimento do As-Built",
+          "Para entrar na etapa de análise do As-Built, informe a data de recebimento do As-Built",
           409,
         );
       }
@@ -200,14 +202,14 @@ export class WorkflowService {
     if (stage === "SERVICO_CONCLUIDO") {
       if (!snapshot.invoiceAttestedAt) {
         throw new AppError(
-          "Para concluir o serviÃ§o, informe a data de atesto da NF",
+          "Para concluir o serviço, informe a data de atesto da NF",
           409,
         );
       }
 
       if (!snapshot.serviceCompletedAt) {
         throw new AppError(
-          "Para concluir o serviÃ§o, informe a data de conclusÃ£o do serviÃ§o",
+          "Para concluir o serviço, informe a data de conclusão do serviço",
           409,
         );
       }
@@ -291,6 +293,16 @@ export class WorkflowService {
           targetStage: "DIEX_REQUISITORIO",
         };
       case "DIEX_REQUISITORIO":
+        if (!project.diexNumber && !project.diexIssuedAt) {
+          return {
+            code: "EMITIR_DIEX",
+            label: "Emitir DIEx requisitório",
+            description:
+              "Com a Nota de Crédito registrada, formalize o DIEx requisitório.",
+            targetStage: "DIEX_REQUISITORIO",
+          };
+        }
+
         return {
           code: "INFORMAR_NOTA_EMPENHO",
           label: "Informar Nota de Empenho",
