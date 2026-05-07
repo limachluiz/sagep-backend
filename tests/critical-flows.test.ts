@@ -1439,10 +1439,10 @@ describe("critical flows", () => {
       .expect(409);
   });
 
-  it("service-orders: creates OS when prerequisites are met", async () => {
-    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+  it("service-orders: generates annual sequential number and syncs project number", async () => {
+    const firstChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
     await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
+      .patch(`/api/projects/${firstChain.project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "AGUARDANDO_NOTA_CREDITO",
@@ -1450,9 +1450,9 @@ describe("critical flows", () => {
         creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
       })
       .expect(200);
-    await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+    await issueDiex(firstChain.project.id, firstChain.estimate.id, adminAuth.accessToken);
     await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
+      .patch(`/api/projects/${firstChain.project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "AGUARDANDO_NOTA_EMPENHO",
@@ -1461,13 +1461,12 @@ describe("critical flows", () => {
       })
       .expect(200);
 
-    const serviceOrder = await request(app)
+    const firstServiceOrder = await request(app)
       .post("/api/service-orders")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
-        projectId: project.id,
-        estimateId: estimate.id,
-        serviceOrderNumber: "OS-001",
+        projectId: firstChain.project.id,
+        estimateId: firstChain.estimate.id,
         issuedAt: "2026-04-03T00:00:00.000Z",
         contractorCnpj: "12345678000190",
         requesterName: "Fiscal Teste",
@@ -1476,7 +1475,104 @@ describe("critical flows", () => {
       })
       .expect(201);
 
-    expect(serviceOrder.body.serviceOrderNumber).toBe("OS-001");
+    expect(firstServiceOrder.body.serviceOrderNumber).toBe("OS-2026-001");
+
+    const firstProjectAfterServiceOrder = await prisma.project.findUniqueOrThrow({
+      where: { id: firstChain.project.id },
+      select: {
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+      },
+    });
+
+    expect(firstProjectAfterServiceOrder.serviceOrderNumber).toBe("OS-2026-001");
+    expect(firstProjectAfterServiceOrder.serviceOrderIssuedAt?.toISOString()).toBe(
+      "2026-04-03T00:00:00.000Z",
+    );
+
+    const secondChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${secondChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-002",
+        creditNoteReceivedAt: "2026-05-01T00:00:00.000Z",
+      })
+      .expect(200);
+    await issueDiex(secondChain.project.id, secondChain.estimate.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${secondChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-002",
+        commitmentNoteReceivedAt: "2026-05-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const secondServiceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: secondChain.project.id,
+        estimateId: secondChain.estimate.id,
+        serviceOrderNumber: "x",
+        issuedAt: "2026-05-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    expect(secondServiceOrder.body.serviceOrderNumber).toBe("OS-2026-002");
+
+    const secondProjectAfterServiceOrder = await prisma.project.findUniqueOrThrow({
+      where: { id: secondChain.project.id },
+      select: {
+        serviceOrderNumber: true,
+      },
+    });
+
+    expect(secondProjectAfterServiceOrder.serviceOrderNumber).toBe("OS-2026-002");
+
+    const thirdChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${thirdChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-003",
+        creditNoteReceivedAt: "2027-01-10T00:00:00.000Z",
+      })
+      .expect(200);
+    await issueDiex(thirdChain.project.id, thirdChain.estimate.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${thirdChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-003",
+        commitmentNoteReceivedAt: "2027-01-11T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const thirdServiceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: thirdChain.project.id,
+        estimateId: thirdChain.estimate.id,
+        issuedAt: "2027-01-12T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    expect(thirdServiceOrder.body.serviceOrderNumber).toBe("OS-2027-001");
   });
 
   it("balance flow: reserves on DIEx, consumes on commitment note and emits low-stock alert", async () => {

@@ -263,6 +263,11 @@ Componentes principais:
 - documentos entregues
 - preview/documento
 
+Observação de integração:
+
+- No `POST /service-orders`, o frontend deve enviar `issuedAt`, mas não precisa mais enviar `serviceOrderNumber`.
+- O backend retorna `serviceOrderNumber` já gerado no padrão `OS-YYYY-XXX`.
+
 ### 10. ATAs
 
 Perfis:

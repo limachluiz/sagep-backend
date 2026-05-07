@@ -7,6 +7,8 @@ import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 
+type DbClient = typeof prisma | Prisma.TransactionClient;
+
 type CurrentUser = {
   id: string;
   name?: string;
@@ -46,7 +48,7 @@ type CreateServiceOrderInput = {
   estimateCode?: number;
   diexId?: string;
   diexCode?: number;
-  serviceOrderNumber: string;
+  serviceOrderNumber?: string;
   issuedAt: Date;
   contractorCnpj: string;
   requesterName?: string;
@@ -214,6 +216,36 @@ const serviceOrderInclude = {
 } satisfies Prisma.ServiceOrderInclude;
 
 export class ServiceOrdersService {
+  private async generateServiceOrderNumber(issuedAt: Date, db: DbClient = prisma) {
+    const year = issuedAt.getUTCFullYear();
+    const prefix = `OS-${year}-`;
+    const latestServiceOrder = await db.serviceOrder.findFirst({
+      where: {
+        serviceOrderNumber: {
+          startsWith: prefix,
+        },
+      },
+      orderBy: [
+        {
+          serviceOrderNumber: "desc",
+        },
+        {
+          createdAt: "desc",
+        },
+      ],
+      select: {
+        serviceOrderNumber: true,
+      },
+    });
+
+    const currentSequence = latestServiceOrder?.serviceOrderNumber
+      ? Number.parseInt(latestServiceOrder.serviceOrderNumber.slice(prefix.length), 10)
+      : 0;
+    const nextSequence = Number.isNaN(currentSequence) ? 1 : currentSequence + 1;
+
+    return `${prefix}${String(nextSequence).padStart(3, "0")}`;
+  }
+
   private isAdmin(role: string) {
     return role === "ADMIN";
   }
@@ -895,105 +927,116 @@ private buildWorkflowSnapshot(project: {
       user,
     );
 
-    const serviceOrder = await prisma.serviceOrder.create({
-      data: {
-        projectId: project.id,
-        estimateId: estimate.id,
-        diexRequestId: diex.id,
-        serviceOrderNumber: data.serviceOrderNumber.trim(),
-        issuedAt: data.issuedAt,
-        contractorName: estimate.ata.vendorName,
-        contractorCnpj: data.contractorCnpj.trim(),
-        commitmentNoteNumber: project.commitmentNoteNumber || "",
-        requesterName: requester.requesterName,
-        requesterRank: requester.requesterRank,
-        requesterCpf: requester.requesterCpf,
-        requesterRole: data.requesterRole?.trim() || "Fiscal do Contrato",
-        issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
-        isEmergency: data.isEmergency ?? false,
-        plannedStartDate: data.plannedStartDate,
-        plannedEndDate: data.plannedEndDate,
-        requestingArea:
-          data.requestingArea?.trim() || "Seção de Projetos - Divisão Técnica 4º CTA",
-        projectDisplayName: data.projectDisplayName?.trim() || project.title,
-        projectAcronym: data.projectAcronym?.trim(),
-        contractNumber: data.contractNumber?.trim(),
-        executionLocation:
-          data.executionLocation?.trim() ||
-          `${estimate.destinationCityName}/${estimate.destinationStateUf}`,
-        executionHours:
-          data.executionHours?.trim() ||
-          "08:00h às 16:30h, iniciando a contar da O.S de acordo com o TR.",
-        contactName: data.contactName?.trim(),
-        contactPhone: data.contactPhone?.trim(),
-        contactExtension: data.contactExtension?.trim(),
-        contractTotalTerm: data.contractTotalTerm?.trim(),
-        originProcess: data.originProcess?.trim() || "Pregão nº 90004/2025-CMA",
-        contractorRepresentativeName: data.contractorRepresentativeName?.trim(),
-        contractorRepresentativeRole:
-          data.contractorRepresentativeRole?.trim() || "Responsável pela Contratada",
-        notes: data.notes?.trim(),
-        totalAmount: estimate.totalAmount,
-        items: {
-          create: estimate.items.map((item) => ({
-            itemCode: item.referenceCode,
-            description: item.description,
-            supplyUnit: item.unit,
-            quantityOrdered: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.subtotal,
-            notes: item.notes,
-            estimateItem: {
-              connect: {
-                id: item.id,
-              },
-            },
-          })),
-        },
-        scheduleItems: {
-          create: (data.scheduleItems ?? []).map((item) => ({
-            orderIndex: item.orderIndex,
-            taskStep: item.taskStep.trim(),
-            scheduleText: item.scheduleText.trim(),
-          })),
-        },
-        deliveredDocuments: {
-          create: (data.deliveredDocuments ?? []).map((doc) => ({
-            description: doc.description.trim(),
-            isChecked: doc.isChecked ?? false,
-          })),
-        },
-      },
-      include: serviceOrderInclude,
-    });
+    const { serviceOrder, updatedProject } = await prisma.$transaction(async (tx) => {
+      const generatedServiceOrderNumber = await this.generateServiceOrderNumber(data.issuedAt, tx);
 
-    const updatedProject = await prisma.project.update({
-      where: { id: project.id },
-      data: workflowService.getProjectPatchAfterServiceOrderCreated(
-        this.buildWorkflowSnapshot({
-          ...project,
-          serviceOrderNumber: serviceOrder.serviceOrderNumber,
-          serviceOrderIssuedAt: serviceOrder.issuedAt,
-        }),
-      ),
-      select: {
-        id: true,
-        projectCode: true,
-        stage: true,
-        status: true,
-        creditNoteNumber: true,
-        creditNoteReceivedAt: true,
-        diexNumber: true,
-        diexIssuedAt: true,
-        commitmentNoteNumber: true,
-        commitmentNoteReceivedAt: true,
-        serviceOrderNumber: true,
-        serviceOrderIssuedAt: true,
-        executionStartedAt: true,
-        asBuiltReceivedAt: true,
-        invoiceAttestedAt: true,
-        serviceCompletedAt: true,
-      },
+      const createdServiceOrder = await tx.serviceOrder.create({
+        data: {
+          projectId: project.id,
+          estimateId: estimate.id,
+          diexRequestId: diex.id,
+          serviceOrderNumber: generatedServiceOrderNumber,
+          issuedAt: data.issuedAt,
+          contractorName: estimate.ata.vendorName,
+          contractorCnpj: data.contractorCnpj.trim(),
+          commitmentNoteNumber: project.commitmentNoteNumber || "",
+          requesterName: requester.requesterName,
+          requesterRank: requester.requesterRank,
+          requesterCpf: requester.requesterCpf,
+          requesterRole: data.requesterRole?.trim() || "Fiscal do Contrato",
+          issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
+          isEmergency: data.isEmergency ?? false,
+          plannedStartDate: data.plannedStartDate,
+          plannedEndDate: data.plannedEndDate,
+          requestingArea:
+            data.requestingArea?.trim() || "Seção de Projetos - Divisão Técnica 4º CTA",
+          projectDisplayName: data.projectDisplayName?.trim() || project.title,
+          projectAcronym: data.projectAcronym?.trim(),
+          contractNumber: data.contractNumber?.trim(),
+          executionLocation:
+            data.executionLocation?.trim() ||
+            `${estimate.destinationCityName}/${estimate.destinationStateUf}`,
+          executionHours:
+            data.executionHours?.trim() ||
+            "08:00h às 16:30h, iniciando a contar da O.S de acordo com o TR.",
+          contactName: data.contactName?.trim(),
+          contactPhone: data.contactPhone?.trim(),
+          contactExtension: data.contactExtension?.trim(),
+          contractTotalTerm: data.contractTotalTerm?.trim(),
+          originProcess: data.originProcess?.trim() || "Pregão nº 90004/2025-CMA",
+          contractorRepresentativeName: data.contractorRepresentativeName?.trim(),
+          contractorRepresentativeRole:
+            data.contractorRepresentativeRole?.trim() || "Responsável pela Contratada",
+          notes: data.notes?.trim(),
+          totalAmount: estimate.totalAmount,
+          items: {
+            create: estimate.items.map((item) => ({
+              itemCode: item.referenceCode,
+              description: item.description,
+              supplyUnit: item.unit,
+              quantityOrdered: item.quantity,
+              unitPrice: item.unitPrice,
+              totalPrice: item.subtotal,
+              notes: item.notes,
+              estimateItem: {
+                connect: {
+                  id: item.id,
+                },
+              },
+            })),
+          },
+          scheduleItems: {
+            create: (data.scheduleItems ?? []).map((item) => ({
+              orderIndex: item.orderIndex,
+              taskStep: item.taskStep.trim(),
+              scheduleText: item.scheduleText.trim(),
+            })),
+          },
+          deliveredDocuments: {
+            create: (data.deliveredDocuments ?? []).map((doc) => ({
+              description: doc.description.trim(),
+              isChecked: doc.isChecked ?? false,
+            })),
+          },
+        },
+        include: serviceOrderInclude,
+      });
+
+      const nextProject = await tx.project.update({
+        where: { id: project.id },
+        data: workflowService.getProjectPatchAfterServiceOrderCreated(
+          this.buildWorkflowSnapshot({
+            ...project,
+            serviceOrderNumber: createdServiceOrder.serviceOrderNumber,
+            serviceOrderIssuedAt: createdServiceOrder.issuedAt,
+          }),
+        ),
+        select: {
+          id: true,
+          projectCode: true,
+          stage: true,
+          status: true,
+          creditNoteNumber: true,
+          creditNoteReceivedAt: true,
+          diexNumber: true,
+          diexIssuedAt: true,
+          commitmentNoteNumber: true,
+          commitmentNoteReceivedAt: true,
+          serviceOrderNumber: true,
+          serviceOrderIssuedAt: true,
+          executionStartedAt: true,
+          asBuiltReceivedAt: true,
+          invoiceAttestedAt: true,
+          serviceCompletedAt: true,
+        },
+      });
+
+      return {
+        serviceOrder: createdServiceOrder,
+        updatedProject: nextProject,
+      };
+    }, {
+      isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
     });
 
     await auditService.log({

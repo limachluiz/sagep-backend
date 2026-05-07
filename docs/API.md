@@ -787,13 +787,16 @@ Ordem de Serviço derivada do projeto com NE informada.
 {
   "projectId": "prj_123",
   "estimateId": "est_123",
-  "serviceOrderNumber": "OS-001",
   "issuedAt": "2026-05-02T00:00:00.000Z",
   "contractorCnpj": "12345678000190",
   "requesterName": "Fiscal",
   "requesterRank": "2 Ten"
 }
 ```
+
+- `serviceOrderNumber` não precisa mais ser enviado no `POST /service-orders`.
+- O backend gera automaticamente no formato `OS-YYYY-XXX` com sequencia anual baseada em `issuedAt`.
+- Se `serviceOrderNumber` vier no payload, ele é sobrescrito pelo valor gerado.
 
 #### `GET /service-orders`
 

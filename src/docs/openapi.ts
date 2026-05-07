@@ -1260,7 +1260,7 @@ export const openApiDocument: OpenApiDocument = {
       },
       ServiceOrderCreateRequest: {
         type: "object",
-        required: ["serviceOrderNumber", "issuedAt", "contractorCnpj"],
+        required: ["issuedAt", "contractorCnpj"],
         properties: {
           projectId: { type: "string" },
           projectCode: { type: "integer", minimum: 1 },
@@ -1268,7 +1268,10 @@ export const openApiDocument: OpenApiDocument = {
           estimateCode: { type: "integer", minimum: 1 },
           diexId: { type: "string" },
           diexCode: { type: "integer", minimum: 1 },
-          serviceOrderNumber: { type: "string", minLength: 3 },
+          serviceOrderNumber: {
+            type: "string",
+            description: "Opcional. Se informado, sera sobrescrito pelo numero gerado automaticamente.",
+          },
           issuedAt: { type: "string", format: "date-time" },
           contractorCnpj: { type: "string", minLength: 14 },
           requesterName: { type: "string", nullable: true },

@@ -1987,7 +1987,6 @@
       "ServiceOrderCreateRequest": {
         "type": "object",
         "required": [
-          "serviceOrderNumber",
           "issuedAt",
           "contractorCnpj"
         ],
@@ -2015,7 +2014,7 @@
           },
           "serviceOrderNumber": {
             "type": "string",
-            "minLength": 3
+            "description": "Opcional. Se informado, sera sobrescrito pelo numero gerado automaticamente."
           },
           "issuedAt": {
             "type": "string",
