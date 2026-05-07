@@ -6,6 +6,7 @@ import {
   listProjectsQuerySchema,
   projectCodeParamSchema,
   projectIdParamSchema,
+  reviewAsBuiltSchema,
   updateProjectFlowSchema,
   updateProjectSchema,
 } from "./projects.schemas.js";
@@ -80,6 +81,13 @@ export class ProjectsController {
     const data = cancelCommitmentNoteSchema.parse(req.body);
     const result = await projectsService.cancelCommitmentNote(id, data, req.user!);
     return res.status(200).json(result);
+  }
+
+  async reviewAsBuilt(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const data = reviewAsBuiltSchema.parse(req.body);
+    const project = await projectsService.reviewAsBuilt(id, data, req.user!);
+    return res.status(200).json(project);
   }
 
   async remove(req: Request, res: Response) {

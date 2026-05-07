@@ -13,7 +13,7 @@ const stageTransitions: Record<ProjectStageValue, ProjectStageValue[]> = {
   AGUARDANDO_NOTA_EMPENHO: ["OS_LIBERADA", "CANCELADO"],
   OS_LIBERADA: ["SERVICO_EM_EXECUCAO", "CANCELADO"],
   SERVICO_EM_EXECUCAO: ["ANALISANDO_AS_BUILT", "CANCELADO"],
-  ANALISANDO_AS_BUILT: ["ATESTAR_NF", "CANCELADO"],
+  ANALISANDO_AS_BUILT: ["ATESTAR_NF", "SERVICO_EM_EXECUCAO", "CANCELADO"],
   ATESTAR_NF: ["SERVICO_CONCLUIDO", "CANCELADO"],
   SERVICO_CONCLUIDO: [],
   CANCELADO: [],
@@ -199,6 +199,15 @@ export class WorkflowService {
       }
     }
 
+    if (this.isStageAtOrBeyond(stage, "ATESTAR_NF")) {
+      if (!snapshot.asBuiltApprovedAt) {
+        throw new AppError(
+          "Para avançar para o ateste da NF, o As-Built precisa estar aprovado",
+          409,
+        );
+      }
+    }
+
     if (stage === "SERVICO_CONCLUIDO") {
       if (!snapshot.invoiceAttestedAt) {
         throw new AppError(
@@ -350,9 +359,10 @@ export class WorkflowService {
         };
       case "ANALISANDO_AS_BUILT":
         return {
-          code: "ATESTAR_NF",
-          label: "Atestar NF",
-          description: "Conclua a análise técnica e faça o ateste da NF.",
+          code: "VALIDAR_AS_BUILT",
+          label: "Validar As-Built",
+          description:
+            "Analise o As-Built recebido para aprovar e seguir ao ateste da NF, ou reprovar para correção.",
           targetStage: "ATESTAR_NF",
         };
       case "ATESTAR_NF":

@@ -117,6 +117,14 @@
       }
     },
     {
+      "name": "permissions",
+      "description": "Modulo permissions do backend SAGEP",
+      "externalDocs": {
+        "description": "Documentacao Markdown complementar",
+        "url": "./insights-and-admin.md"
+      }
+    },
+    {
       "name": "atas",
       "description": "Modulo atas do backend SAGEP",
       "externalDocs": {
@@ -344,6 +352,30 @@
         "in": "path",
         "required": true,
         "description": "Identificador UUID do usuario.",
+        "schema": {
+          "type": "string"
+        }
+      },
+      "RoleName": {
+        "name": "role",
+        "in": "path",
+        "required": true,
+        "description": "Role do RBAC persistido.",
+        "schema": {
+          "type": "string",
+          "enum": [
+            "ADMIN",
+            "GESTOR",
+            "PROJETISTA",
+            "CONSULTA"
+          ]
+        }
+      },
+      "PermissionCode": {
+        "name": "permissionCode",
+        "in": "path",
+        "required": true,
+        "description": "Codigo da permissao no catalogo RBAC persistido.",
         "schema": {
           "type": "string"
         }
@@ -656,6 +688,383 @@
           },
           "access": {
             "$ref": "#/components/schemas/AccessProfile"
+          }
+        }
+      },
+      "PermissionCatalogItem": {
+        "type": "object",
+        "required": [
+          "code",
+          "module",
+          "group",
+          "action",
+          "description",
+          "defaultRoles",
+          "critical"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "critical": {
+            "type": "boolean"
+          },
+          "defaultRoles": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "ADMIN",
+                "GESTOR",
+                "PROJETISTA",
+                "CONSULTA"
+              ]
+            }
+          }
+        }
+      },
+      "PermissionCatalogResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionCatalogItem"
+            }
+          }
+        }
+      },
+      "RolePermissionItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PermissionCatalogItem"
+          },
+          {
+            "type": "object",
+            "required": [
+              "assigned"
+            ],
+            "properties": {
+              "assigned": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      "RolePermissionsRequest": {
+        "type": "object",
+        "required": [
+          "permissions"
+        ],
+        "properties": {
+          "permissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "RolePermissionsResponse": {
+        "type": "object",
+        "required": [
+          "role",
+          "source",
+          "basePermissions",
+          "items"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "GESTOR",
+              "PROJETISTA",
+              "CONSULTA"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "database",
+              "fallback"
+            ]
+          },
+          "basePermissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RolePermissionItem"
+            }
+          }
+        }
+      },
+      "UserPermissionOverrideItem": {
+        "type": "object",
+        "required": [
+          "code",
+          "module",
+          "group",
+          "action",
+          "description",
+          "effect",
+          "effective",
+          "grantedByRole"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "group": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "effect": {
+            "type": "string",
+            "enum": [
+              "ALLOW",
+              "DENY"
+            ]
+          },
+          "effective": {
+            "type": "boolean"
+          },
+          "grantedByRole": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "UserPermissionItem": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/PermissionCatalogItem"
+          },
+          {
+            "type": "object",
+            "required": [
+              "grantedByRole",
+              "overrideEffect",
+              "effective"
+            ],
+            "properties": {
+              "grantedByRole": {
+                "type": "boolean"
+              },
+              "overrideEffect": {
+                "type": "string",
+                "enum": [
+                  "ALLOW",
+                  "DENY"
+                ],
+                "nullable": true
+              },
+              "effective": {
+                "type": "boolean"
+              }
+            }
+          }
+        ]
+      },
+      "UserPermissionsResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "rolePermissionSource",
+          "roleBasePermissions",
+          "overrides",
+          "effectivePermissions",
+          "items"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "rolePermissionSource": {
+            "type": "string",
+            "enum": [
+              "database",
+              "fallback"
+            ]
+          },
+          "roleBasePermissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "permission",
+                "effect"
+              ],
+              "properties": {
+                "permission": {
+                  "type": "string"
+                },
+                "effect": {
+                  "type": "string",
+                  "enum": [
+                    "ALLOW",
+                    "DENY"
+                  ]
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                }
+              }
+            }
+          },
+          "effectivePermissions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserPermissionItem"
+            }
+          }
+        }
+      },
+      "UserPermissionOverridesResponse": {
+        "type": "object",
+        "required": [
+          "user",
+          "overrides"
+        ],
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "overrides": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserPermissionOverrideItem"
+            }
+          }
+        }
+      },
+      "UserPermissionOverrideRequest": {
+        "type": "object",
+        "required": [
+          "permissionCode"
+        ],
+        "properties": {
+          "permissionCode": {
+            "type": "string"
+          }
+        }
+      },
+      "UserPermissionOverrideMutationResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "user",
+          "summary"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserSummary"
+          },
+          "override": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "module": {
+                "type": "string"
+              },
+              "group": {
+                "type": "string"
+              },
+              "action": {
+                "type": "string"
+              },
+              "description": {
+                "type": "string"
+              },
+              "effect": {
+                "type": "string",
+                "enum": [
+                  "ALLOW",
+                  "DENY"
+                ]
+              }
+            }
+          },
+          "removedOverride": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "effect": {
+                "type": "string",
+                "enum": [
+                  "ALLOW",
+                  "DENY"
+                ]
+              }
+            }
+          },
+          "summary": {
+            "$ref": "#/components/schemas/UserPermissionsResponse"
           }
         }
       },
@@ -1061,6 +1470,25 @@
             "format": "date-time",
             "nullable": true
           },
+          "asBuiltReviewedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "asBuiltApprovedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "asBuiltRejectedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "asBuiltRejectionReason": {
+            "type": "string",
+            "nullable": true
+          },
           "invoiceAttestedAt": {
             "type": "string",
             "format": "date-time",
@@ -1070,6 +1498,93 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          }
+        }
+      },
+      "ProjectAsBuiltReviewRequest": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "approved",
+              "reviewedAt"
+            ],
+            "properties": {
+              "approved": {
+                "type": "boolean",
+                "const": true
+              },
+              "reviewedAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "approved",
+              "reviewedAt",
+              "rejectionReason"
+            ],
+            "properties": {
+              "approved": {
+                "type": "boolean",
+                "const": false
+              },
+              "reviewedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "rejectionReason": {
+                "type": "string",
+                "minLength": 3
+              }
+            }
+          }
+        ]
+      },
+      "ProjectCommitmentNoteCancelRequest": {
+        "type": "object",
+        "required": [
+          "reason"
+        ],
+        "properties": {
+          "reason": {
+            "type": "string",
+            "minLength": 3
+          }
+        },
+        "example": {
+          "reason": "Empenho cancelado pelo setor financeiro"
+        }
+      },
+      "ProjectCommitmentNoteCancelResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "project": {
+            "$ref": "#/components/schemas/Project"
+          },
+          "rollback": {
+            "type": "object",
+            "properties": {
+              "estimateId": {
+                "type": "string"
+              },
+              "diexRequestId": {
+                "type": "string"
+              },
+              "serviceOrderId": {
+                "type": "string",
+                "nullable": true
+              },
+              "reason": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -2279,6 +2794,12 @@
             "type": "string",
             "nullable": true
           },
+          "cascadeApplied": {
+            "type": "boolean"
+          },
+          "cascade": {
+            "$ref": "#/components/schemas/CascadeRestoreResult"
+          },
           "project": {
             "type": "object",
             "additionalProperties": true
@@ -2301,28 +2822,100 @@
           }
         }
       },
+      "RestoreRequest": {
+        "type": "object",
+        "properties": {
+          "cascade": {
+            "type": "boolean",
+            "description": "Quando true, restaura dependencias pai ou filhos elegiveis em cascata, sem incluir registros com deletedAt."
+          }
+        }
+      },
+      "CascadeRestoreResult": {
+        "type": "object",
+        "properties": {
+          "restored": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "skipped": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          }
+        }
+      },
       "DashboardOperationalResponse": {
         "type": "object",
         "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true
+          },
           "summary": {
             "type": "object",
             "additionalProperties": true
           },
-          "groups": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": true
-            }
-          },
           "alerts": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "pendingByStage": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "inventory": {
+            "type": "object",
+            "properties": {
+              "summary": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "criticalItems": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "staleReservations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "recentReversals": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "operationalQueue": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": true
             }
           },
-          "nextActions": {
+          "frequentNextActions": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "latestMovements": {
             "type": "array",
             "items": {
               "type": "object",
@@ -2333,7 +2926,56 @@
       },
       "DashboardExecutiveResponse": {
         "type": "object",
-        "additionalProperties": true
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "filter": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "financial": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "distribution": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "periodIndicators": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "inventory": {
+            "type": "object",
+            "properties": {
+              "snapshot": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "periodActivity": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "distribution": {
+                "type": "object",
+                "additionalProperties": true
+              },
+              "criticalItems": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
       },
       "DashboardOverviewResponse": {
         "type": "object",
@@ -2379,6 +3021,39 @@
             "items": {
               "type": "object",
               "additionalProperties": true
+            }
+          },
+          "inventoryAlerts": {
+            "type": "object",
+            "properties": {
+              "lowStock": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "insufficient": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "staleReservations": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              },
+              "reversals": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
             }
           }
         }
@@ -2802,12 +3477,61 @@
             "type": "string",
             "description": "Decimal serializado pelo Prisma."
           },
+          "initialQuantity": {
+            "type": "string",
+            "description": "Saldo inicial configurado para o item da ATA."
+          },
           "notes": {
             "type": "string",
             "nullable": true
           },
           "isActive": {
             "type": "boolean"
+          },
+          "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "balance": {
+            "type": "object",
+            "properties": {
+              "initialQuantity": {
+                "type": "string"
+              },
+              "reservedQuantity": {
+                "type": "string"
+              },
+              "consumedQuantity": {
+                "type": "string"
+              },
+              "availableQuantity": {
+                "type": "string"
+              },
+              "initialAmount": {
+                "type": "string"
+              },
+              "reservedAmount": {
+                "type": "string"
+              },
+              "consumedAmount": {
+                "type": "string"
+              },
+              "availableAmount": {
+                "type": "string"
+              },
+              "lowStock": {
+                "type": "boolean"
+              },
+              "insufficient": {
+                "type": "boolean"
+              },
+              "lastMovementAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              }
+            }
           },
           "createdAt": {
             "type": "string",
@@ -2878,8 +3602,23 @@
           "description": "Camera IP externa",
           "unit": "UN",
           "unitPrice": "1250.50",
+          "initialQuantity": "1000.00",
           "notes": "Modelo padrao",
           "isActive": true,
+          "deletedAt": null,
+          "balance": {
+            "initialQuantity": "1000.00",
+            "reservedQuantity": "0.00",
+            "consumedQuantity": "0.00",
+            "availableQuantity": "1000.00",
+            "initialAmount": "1250500.00",
+            "reservedAmount": "0.00",
+            "consumedAmount": "0.00",
+            "availableAmount": "1250500.00",
+            "lowStock": false,
+            "insufficient": false,
+            "lastMovementAt": null
+          },
           "createdAt": "2026-04-29T00:00:00.000Z",
           "updatedAt": "2026-04-29T00:00:00.000Z",
           "ata": {
@@ -2911,7 +3650,8 @@
           "referenceCode",
           "description",
           "unit",
-          "unitPrice"
+          "unitPrice",
+          "initialQuantity"
         ],
         "properties": {
           "coverageGroupCode": {
@@ -2934,6 +3674,10 @@
             "type": "number",
             "exclusiveMinimum": 0
           },
+          "initialQuantity": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -2945,6 +3689,7 @@
           "description": "Camera IP externa",
           "unit": "un",
           "unitPrice": 1250.5,
+          "initialQuantity": 1000,
           "notes": "Modelo padrao"
         }
       },
@@ -2971,6 +3716,10 @@
             "type": "number",
             "exclusiveMinimum": 0
           },
+          "initialQuantity": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
           "notes": {
             "type": "string",
             "nullable": true
@@ -2983,6 +3732,7 @@
         "example": {
           "coverageGroupCode": "INT",
           "unitPrice": 1310,
+          "initialQuantity": 750,
           "isActive": false
         }
       },
@@ -4173,6 +4923,110 @@
         }
       }
     },
+    "/projects/{id}/as-built/review": {
+      "patch": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Aprovar ou reprovar a análise do As-Built",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectAsBuiltReviewRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
+    "/projects/{id}/commitment-note/cancel": {
+      "post": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Cancelar Nota de Empenho com rollback documental e financeiro",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectCommitmentNoteCancelRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectCommitmentNoteCancelResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
+      }
+    },
     "/projects/{id}/restore": {
       "post": {
         "tags": [
@@ -4189,6 +5043,19 @@
             "$ref": "#/components/parameters/ProjectId"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRequest"
+              },
+              "example": {
+                "cascade": true
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Projeto restaurado",
@@ -4200,6 +5067,21 @@
                 "example": {
                   "message": "Projeto restaurado com sucesso",
                   "permissionUsed": "projects.restore",
+                  "cascadeApplied": true,
+                  "cascade": {
+                    "restored": {
+                      "tasks": 2,
+                      "estimates": 1,
+                      "diexRequests": 1,
+                      "serviceOrders": 1
+                    },
+                    "skipped": {
+                      "tasksDeleted": 0,
+                      "estimatesDeleted": 0,
+                      "diexDeleted": 0,
+                      "serviceOrdersDeleted": 0
+                    }
+                  },
                   "project": {
                     "id": "f4d9e8f8-4b26-4f9a-b1e2-a9913b77f69f",
                     "archivedAt": null
@@ -4932,6 +5814,19 @@
             "$ref": "#/components/parameters/TaskId"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRequest"
+              },
+              "example": {
+                "cascade": true
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Tarefa restaurada",
@@ -5416,6 +6311,19 @@
             "$ref": "#/components/parameters/EstimateId"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRequest"
+              },
+              "example": {
+                "cascade": true
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Estimativa restaurada",
@@ -5877,6 +6785,19 @@
             "$ref": "#/components/parameters/DiexId"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRequest"
+              },
+              "example": {
+                "cascade": true
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "DIEx restaurado",
@@ -6357,6 +7278,19 @@
             "$ref": "#/components/parameters/ServiceOrderId"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreRequest"
+              },
+              "example": {
+                "cascade": true
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "OS restaurada",
@@ -7235,6 +8169,399 @@
         },
         "x-permissions": [
           "users.manage"
+        ]
+      }
+    },
+    "/permissions/catalog": {
+      "get": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Listar catalogo administrativo de permissões",
+        "description": "Retorna o catalogo RBAC com metadados de UI, incluindo modulo, grupo, descricao, roles padrao e sinalizacao de permissao critica.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionCatalogResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "permissions.view"
+        ]
+      }
+    },
+    "/permissions/roles/{role}": {
+      "get": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Consultar permissões base de uma role",
+        "description": "Expõe a base persistida da role e um espelho do catalogo com flag `assigned` para facilitar checklists no frontend.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RoleName"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolePermissionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "permissions.view"
+        ]
+      },
+      "put": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Atualizar permissões base de uma role",
+        "description": "Substitui a base atual da role no banco. O backend bloqueia autoedicao da propria role e restringe alteracoes de permissoes criticas a ADMIN.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RoleName"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RolePermissionsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RolePermissionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "permissions.manage_role_permissions"
+        ]
+      }
+    },
+    "/permissions/users/{id}": {
+      "get": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Consultar permissões efetivas de um usuário",
+        "description": "Retorna lado a lado a base da role, os overrides aplicados e o resultado efetivo final para montagem de telas administrativas.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPermissionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "permissions.view"
+        ]
+      }
+    },
+    "/permissions/users/{id}/overrides": {
+      "get": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Listar overrides de permissões de um usuário",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPermissionOverridesResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "permissions.view"
+        ]
+      }
+    },
+    "/permissions/users/{id}/overrides/allow": {
+      "post": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Aplicar override ALLOW para um usuário",
+        "description": "Aplica override ALLOW respeitando bloqueios de autoedicao, hierarquia e protecao extra para permissoes criticas.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPermissionOverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPermissionOverrideMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "permissions.manage_user_overrides"
+        ]
+      }
+    },
+    "/permissions/users/{id}/overrides/deny": {
+      "post": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Aplicar override DENY para um usuário",
+        "description": "Aplica override DENY respeitando bloqueios de autoedicao, hierarquia e protecao extra para permissoes criticas.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserPermissionOverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPermissionOverrideMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "permissions.manage_user_overrides"
+        ]
+      }
+    },
+    "/permissions/users/{id}/overrides/{permissionCode}": {
+      "delete": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Remover override de permissão de um usuário",
+        "description": "Remove override existente respeitando bloqueios de autoedicao, hierarquia e protecao extra para permissoes criticas.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/PermissionCode"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserPermissionOverrideMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "permissions.manage_user_overrides"
         ]
       }
     },

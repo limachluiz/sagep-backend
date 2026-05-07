@@ -66,6 +66,17 @@ type UpdateProjectFlowInput = {
   serviceCompletedAt?: Date;
 };
 
+type ReviewAsBuiltInput =
+  | {
+      approved: true;
+      reviewedAt: Date;
+    }
+  | {
+      approved: false;
+      reviewedAt: Date;
+      rejectionReason: string;
+    };
+
 type CancelCommitmentNoteInput = {
   reason: string;
 };
@@ -348,6 +359,10 @@ export class ProjectsService {
     serviceOrderIssuedAt?: Date | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
+    asBuiltReviewedAt?: Date | null;
+    asBuiltApprovedAt?: Date | null;
+    asBuiltRejectedAt?: Date | null;
+    asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
   }) {
@@ -371,6 +386,10 @@ export class ProjectsService {
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
       executionStartedAt: project.executionStartedAt ?? null,
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
+      asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
+      asBuiltApprovedAt: project.asBuiltApprovedAt ?? null,
+      asBuiltRejectedAt: project.asBuiltRejectedAt ?? null,
+      asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
       serviceCompletedAt: project.serviceCompletedAt ?? null,
     };
@@ -390,6 +409,10 @@ export class ProjectsService {
     serviceOrderIssuedAt?: Date | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
+    asBuiltReviewedAt?: Date | null;
+    asBuiltApprovedAt?: Date | null;
+    asBuiltRejectedAt?: Date | null;
+    asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
   }) {
@@ -407,6 +430,10 @@ export class ProjectsService {
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
       executionStartedAt: project.executionStartedAt ?? null,
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
+      asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
+      asBuiltApprovedAt: project.asBuiltApprovedAt ?? null,
+      asBuiltRejectedAt: project.asBuiltRejectedAt ?? null,
+      asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
       serviceCompletedAt: project.serviceCompletedAt ?? null,
     };
@@ -440,6 +467,10 @@ export class ProjectsService {
     serviceOrderIssuedAt?: Date | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
+    asBuiltReviewedAt?: Date | null;
+    asBuiltApprovedAt?: Date | null;
+    asBuiltRejectedAt?: Date | null;
+    asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
     estimates: { status: string }[];
@@ -560,6 +591,15 @@ export class ProjectsService {
         label: "Registrar recebimento do As-Built",
         severity: "BLOCKER",
         targetStage: "ANALISANDO_AS_BUILT",
+      });
+    }
+
+    if (project.stage === "ANALISANDO_AS_BUILT") {
+      pendingActions.push({
+        code: "VALIDAR_AS_BUILT",
+        label: "Validar As-Built",
+        severity: "BLOCKER",
+        targetStage: "ATESTAR_NF",
       });
     }
 
@@ -1092,6 +1132,10 @@ export class ProjectsService {
         serviceOrderIssuedAt: true,
         executionStartedAt: true,
         asBuiltReceivedAt: true,
+        asBuiltReviewedAt: true,
+        asBuiltApprovedAt: true,
+        asBuiltRejectedAt: true,
+        asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
         archivedAt: true,
@@ -1306,6 +1350,10 @@ export class ProjectsService {
           serviceOrderIssuedAt: project.serviceOrderIssuedAt,
           executionStartedAt: project.executionStartedAt,
           asBuiltReceivedAt: project.asBuiltReceivedAt,
+          asBuiltReviewedAt: project.asBuiltReviewedAt,
+          asBuiltApprovedAt: project.asBuiltApprovedAt,
+          asBuiltRejectedAt: project.asBuiltRejectedAt,
+          asBuiltRejectionReason: project.asBuiltRejectionReason,
           invoiceAttestedAt: project.invoiceAttestedAt,
           serviceCompletedAt: project.serviceCompletedAt,
         },
@@ -1450,6 +1498,10 @@ export class ProjectsService {
         serviceOrderIssuedAt: true,
         executionStartedAt: true,
         asBuiltReceivedAt: true,
+        asBuiltReviewedAt: true,
+        asBuiltApprovedAt: true,
+        asBuiltRejectedAt: true,
+        asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
       },
@@ -1498,6 +1550,10 @@ export class ProjectsService {
         serviceOrderIssuedAt: project.serviceOrderIssuedAt,
         executionStartedAt: project.executionStartedAt,
         asBuiltReceivedAt: project.asBuiltReceivedAt,
+        asBuiltReviewedAt: project.asBuiltReviewedAt,
+        asBuiltApprovedAt: project.asBuiltApprovedAt,
+        asBuiltRejectedAt: project.asBuiltRejectedAt,
+        asBuiltRejectionReason: project.asBuiltRejectionReason,
         invoiceAttestedAt: project.invoiceAttestedAt,
         serviceCompletedAt: project.serviceCompletedAt,
       }),
@@ -1531,6 +1587,10 @@ export class ProjectsService {
         serviceOrderIssuedAt: true,
         executionStartedAt: true,
         asBuiltReceivedAt: true,
+        asBuiltReviewedAt: true,
+        asBuiltApprovedAt: true,
+        asBuiltRejectedAt: true,
+        asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
       },
@@ -1553,6 +1613,16 @@ export class ProjectsService {
       !permissionsService.hasPermission(user, "projects.reopen")
     ) {
       throw new AppError("Você não tem permissão para reabrir projetos", 403);
+    }
+
+    if (
+      currentProject.stage === "ANALISANDO_AS_BUILT" &&
+      (data.stage === "ATESTAR_NF" || data.stage === "SERVICO_EM_EXECUCAO")
+    ) {
+      throw new AppError(
+        "Use o endpoint de revisão do As-Built para aprovar ou reprovar esta etapa",
+        409,
+      );
     }
 
     const finalizedEstimateCount = await prisma.estimate.count({
@@ -1578,6 +1648,10 @@ export class ProjectsService {
         data.serviceOrderIssuedAt ?? currentProject.serviceOrderIssuedAt,
       executionStartedAt: data.executionStartedAt ?? currentProject.executionStartedAt,
       asBuiltReceivedAt: data.asBuiltReceivedAt ?? currentProject.asBuiltReceivedAt,
+      asBuiltReviewedAt: currentProject.asBuiltReviewedAt,
+      asBuiltApprovedAt: currentProject.asBuiltApprovedAt,
+      asBuiltRejectedAt: currentProject.asBuiltRejectedAt,
+      asBuiltRejectionReason: currentProject.asBuiltRejectionReason,
       invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
       serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
     };
@@ -1690,6 +1764,10 @@ export class ProjectsService {
       serviceOrderIssuedAt: project.serviceOrderIssuedAt,
       executionStartedAt: project.executionStartedAt,
       asBuiltReceivedAt: project.asBuiltReceivedAt,
+      asBuiltReviewedAt: project.asBuiltReviewedAt,
+      asBuiltApprovedAt: project.asBuiltApprovedAt,
+      asBuiltRejectedAt: project.asBuiltRejectedAt,
+      asBuiltRejectionReason: project.asBuiltRejectionReason,
       invoiceAttestedAt: project.invoiceAttestedAt,
       serviceCompletedAt: project.serviceCompletedAt,
     });
@@ -1723,6 +1801,213 @@ export class ProjectsService {
             serviceOrderIssuedAt: project.serviceOrderIssuedAt,
             executionStartedAt: project.executionStartedAt,
             asBuiltReceivedAt: project.asBuiltReceivedAt,
+            asBuiltReviewedAt: project.asBuiltReviewedAt,
+            asBuiltApprovedAt: project.asBuiltApprovedAt,
+            asBuiltRejectedAt: project.asBuiltRejectedAt,
+            asBuiltRejectionReason: project.asBuiltRejectionReason,
+            invoiceAttestedAt: project.invoiceAttestedAt,
+            serviceCompletedAt: project.serviceCompletedAt,
+          }),
+        ).code,
+      },
+    });
+
+    return project;
+  }
+
+  async reviewAsBuilt(projectId: string, data: ReviewAsBuiltInput, user: CurrentUser) {
+    await this.ensureCanManage(projectId, user);
+
+    const currentProject = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        ownerId: true,
+        startDate: true,
+        endDate: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        asBuiltReviewedAt: true,
+        asBuiltApprovedAt: true,
+        asBuiltRejectedAt: true,
+        asBuiltRejectionReason: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    if (!currentProject) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (currentProject.stage !== "ANALISANDO_AS_BUILT") {
+      throw new AppError(
+        "O As-Built só pode ser validado quando o projeto estiver em ANALISANDO_AS_BUILT",
+        409,
+      );
+    }
+
+    if (!currentProject.asBuiltReceivedAt) {
+      throw new AppError(
+        "O projeto não possui As-Built recebido para análise",
+        409,
+      );
+    }
+
+    const targetStage = data.approved ? "ATESTAR_NF" : "SERVICO_EM_EXECUCAO";
+    const reviewedAt = data.reviewedAt;
+    const rejectionReason = data.approved ? null : data.rejectionReason.trim();
+
+    const finalizedEstimateCount = await prisma.estimate.count({
+      where: {
+        projectId,
+        status: "FINALIZADA",
+        archivedAt: null,
+        deletedAt: null,
+      },
+    });
+
+    const nextSnapshot = {
+      creditNoteNumber: currentProject.creditNoteNumber,
+      creditNoteReceivedAt: currentProject.creditNoteReceivedAt,
+      diexNumber: currentProject.diexNumber,
+      diexIssuedAt: currentProject.diexIssuedAt,
+      commitmentNoteNumber: currentProject.commitmentNoteNumber,
+      commitmentNoteReceivedAt: currentProject.commitmentNoteReceivedAt,
+      serviceOrderNumber: currentProject.serviceOrderNumber,
+      serviceOrderIssuedAt: currentProject.serviceOrderIssuedAt,
+      executionStartedAt: currentProject.executionStartedAt,
+      asBuiltReceivedAt: data.approved ? currentProject.asBuiltReceivedAt : null,
+      asBuiltReviewedAt: reviewedAt,
+      asBuiltApprovedAt: data.approved ? reviewedAt : null,
+      asBuiltRejectedAt: data.approved ? null : reviewedAt,
+      asBuiltRejectionReason: rejectionReason,
+      invoiceAttestedAt: currentProject.invoiceAttestedAt,
+      serviceCompletedAt: currentProject.serviceCompletedAt,
+    };
+
+    workflowService.assertStageTransition(currentProject.stage, targetStage);
+    workflowService.validateStageRequirements(
+      targetStage,
+      this.buildWorkflowSnapshot({
+        id: currentProject.id,
+        projectCode: currentProject.projectCode,
+        stage: targetStage,
+        ...nextSnapshot,
+      }),
+      finalizedEstimateCount,
+    );
+
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        stage: targetStage,
+        status: workflowService.getMacroStatusFromStage(targetStage),
+        asBuiltReviewedAt: reviewedAt,
+        asBuiltApprovedAt: data.approved ? reviewedAt : null,
+        asBuiltRejectedAt: data.approved ? null : reviewedAt,
+        asBuiltRejectionReason: rejectionReason,
+        ...(data.approved ? {} : { asBuiltReceivedAt: null }),
+      },
+      include: projectInclude,
+    });
+
+    const beforeSnapshot = this.buildProjectAuditSnapshot(currentProject);
+    const afterSnapshot = this.buildProjectAuditSnapshot({
+      id: project.id,
+      projectCode: project.projectCode,
+      title: project.title,
+      description: project.description,
+      status: project.status,
+      stage: project.stage,
+      ownerId: project.ownerId,
+      startDate: project.startDate,
+      endDate: project.endDate,
+      creditNoteNumber: project.creditNoteNumber,
+      creditNoteReceivedAt: project.creditNoteReceivedAt,
+      diexNumber: project.diexNumber,
+      diexIssuedAt: project.diexIssuedAt,
+      commitmentNoteNumber: project.commitmentNoteNumber,
+      commitmentNoteReceivedAt: project.commitmentNoteReceivedAt,
+      serviceOrderNumber: project.serviceOrderNumber,
+      serviceOrderIssuedAt: project.serviceOrderIssuedAt,
+      executionStartedAt: project.executionStartedAt,
+      asBuiltReceivedAt: project.asBuiltReceivedAt,
+      asBuiltReviewedAt: project.asBuiltReviewedAt,
+      asBuiltApprovedAt: project.asBuiltApprovedAt,
+      asBuiltRejectedAt: project.asBuiltRejectedAt,
+      asBuiltRejectionReason: project.asBuiltRejectionReason,
+      invoiceAttestedAt: project.invoiceAttestedAt,
+      serviceCompletedAt: project.serviceCompletedAt,
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: project.id,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: data.approved
+        ? `As-Built do projeto PRJ-${project.projectCode} aprovado`
+        : `As-Built do projeto PRJ-${project.projectCode} reprovado`,
+      before: beforeSnapshot,
+      after: afterSnapshot,
+      metadata: {
+        source: "project.as-built.review",
+        approved: data.approved,
+        reviewedAt,
+        rejectionReason,
+      },
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: project.id,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: data.approved
+        ? `Projeto PRJ-${project.projectCode} avançou de ANALISANDO_AS_BUILT para ATESTAR_NF após aprovação do As-Built`
+        : `Projeto PRJ-${project.projectCode} retornou de ANALISANDO_AS_BUILT para SERVICO_EM_EXECUCAO após reprovação do As-Built`,
+      before: beforeSnapshot,
+      after: afterSnapshot,
+      metadata: {
+        source: "project.as-built.review",
+        approved: data.approved,
+        previousStage: currentProject.stage,
+        newStage: project.stage,
+        reviewedAt,
+        rejectionReason,
+        nextActionCode: workflowService.getNextAction(
+          this.buildWorkflowSnapshot({
+            id: project.id,
+            projectCode: project.projectCode,
+            stage: project.stage,
+            creditNoteNumber: project.creditNoteNumber,
+            creditNoteReceivedAt: project.creditNoteReceivedAt,
+            diexNumber: project.diexNumber,
+            diexIssuedAt: project.diexIssuedAt,
+            commitmentNoteNumber: project.commitmentNoteNumber,
+            commitmentNoteReceivedAt: project.commitmentNoteReceivedAt,
+            serviceOrderNumber: project.serviceOrderNumber,
+            serviceOrderIssuedAt: project.serviceOrderIssuedAt,
+            executionStartedAt: project.executionStartedAt,
+            asBuiltReceivedAt: project.asBuiltReceivedAt,
+            asBuiltReviewedAt: project.asBuiltReviewedAt,
+            asBuiltApprovedAt: project.asBuiltApprovedAt,
+            asBuiltRejectedAt: project.asBuiltRejectedAt,
+            asBuiltRejectionReason: project.asBuiltRejectionReason,
             invoiceAttestedAt: project.invoiceAttestedAt,
             serviceCompletedAt: project.serviceCompletedAt,
           }),

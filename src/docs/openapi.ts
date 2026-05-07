@@ -821,9 +821,34 @@ export const openApiDocument: OpenApiDocument = {
           serviceOrderIssuedAt: { type: "string", format: "date-time", nullable: true },
           executionStartedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltReceivedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltReviewedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltApprovedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltRejectedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltRejectionReason: { type: "string", nullable: true },
           invoiceAttestedAt: { type: "string", format: "date-time", nullable: true },
           serviceCompletedAt: { type: "string", format: "date-time", nullable: true },
         },
+      },
+      ProjectAsBuiltReviewRequest: {
+        oneOf: [
+          {
+            type: "object",
+            required: ["approved", "reviewedAt"],
+            properties: {
+              approved: { type: "boolean", const: true },
+              reviewedAt: { type: "string", format: "date-time" },
+            },
+          },
+          {
+            type: "object",
+            required: ["approved", "reviewedAt", "rejectionReason"],
+            properties: {
+              approved: { type: "boolean", const: false },
+              reviewedAt: { type: "string", format: "date-time" },
+              rejectionReason: { type: "string", minLength: 3 },
+            },
+          },
+        ],
       },
       ProjectCommitmentNoteCancelRequest: {
         type: "object",
@@ -2390,6 +2415,22 @@ export const openApiDocument: OpenApiDocument = {
         requestBody: {
           required: true,
           content: jsonContent("#/components/schemas/ProjectFlowUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/Project"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/projects/{id}/as-built/review": {
+      patch: {
+        tags: ["projects"],
+        summary: "Aprovar ou reprovar a análise do As-Built",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ProjectAsBuiltReviewRequest"),
         },
         responses: {
           "200": okJson("#/components/schemas/Project"),

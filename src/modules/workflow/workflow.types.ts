@@ -18,6 +18,7 @@ export type WorkflowActionCode =
   | "EMITIR_OS"
   | "INICIAR_EXECUCAO"
   | "ANEXAR_AS_BUILT"
+  | "VALIDAR_AS_BUILT"
   | "ATESTAR_NF"
   | "CONCLUIR_SERVICO"
   | "SEM_ACAO";
@@ -43,6 +44,10 @@ export type WorkflowProjectSnapshot = {
   serviceOrderIssuedAt?: Date | null;
   executionStartedAt?: Date | null;
   asBuiltReceivedAt?: Date | null;
+  asBuiltReviewedAt?: Date | null;
+  asBuiltApprovedAt?: Date | null;
+  asBuiltRejectedAt?: Date | null;
+  asBuiltRejectionReason?: string | null;
   invoiceAttestedAt?: Date | null;
   serviceCompletedAt?: Date | null;
 };

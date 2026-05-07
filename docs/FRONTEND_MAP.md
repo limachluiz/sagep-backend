@@ -123,6 +123,7 @@ Endpoints:
 - `GET /projects/:id/next-action`
 - `PATCH /projects/:id`
 - `PATCH /projects/:id/flow`
+- `PATCH /projects/:id/as-built/review`
 - `POST /projects/:id/commitment-note/cancel`
 
 Componentes principais:

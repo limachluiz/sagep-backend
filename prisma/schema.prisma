@@ -200,6 +200,10 @@ model Project {
   serviceOrderIssuedAt     DateTime?
   executionStartedAt       DateTime?
   asBuiltReceivedAt        DateTime?
+  asBuiltReviewedAt        DateTime?
+  asBuiltApprovedAt        DateTime?
+  asBuiltRejectedAt        DateTime?
+  asBuiltRejectionReason   String?
   invoiceAttestedAt        DateTime?
   serviceCompletedAt       DateTime?
   archivedAt               DateTime?

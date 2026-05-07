@@ -347,6 +347,33 @@ Entidade principal do sistema. Representa o ciclo de vida completo do projeto.
   - informar a NE pode consumir saldo da ATA;
   - avançar etapas depende de documentos e regras do workflow.
 
+#### `PATCH /projects/:id/as-built/review`
+
+- Autenticação: sim
+- Permissão: `projects.edit_own` ou `projects.edit_all`
+- Regras:
+  - somente disponível quando o projeto estiver em `ANALISANDO_AS_BUILT`;
+  - se aprovado, o projeto avança para `ATESTAR_NF`;
+  - se reprovado, exige motivo, limpa `asBuiltReceivedAt` e retorna para `SERVICO_EM_EXECUCAO`.
+- Body exemplo para aprovação:
+
+```json
+{
+  "approved": true,
+  "reviewedAt": "2026-05-06T10:00:00.000Z"
+}
+```
+
+- Body exemplo para reprovação:
+
+```json
+{
+  "approved": false,
+  "reviewedAt": "2026-05-06T10:00:00.000Z",
+  "rejectionReason": "Documento incompleto"
+}
+```
+
 #### `POST /projects/:id/commitment-note/cancel`
 
 - Autenticação: sim

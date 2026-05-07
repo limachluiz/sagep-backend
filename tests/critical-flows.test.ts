@@ -1177,6 +1177,178 @@ describe("critical flows", () => {
     ).toBe(true);
   });
 
+  it("workflow: As-Built review approves to ATESTAR_NF and rejects back to SERVICO_EM_EXECUCAO", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-010",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-010",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexId: diex.id,
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const nextActionBeforeReview = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextActionBeforeReview.body.code).toBe("VALIDAR_AS_BUILT");
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: false,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+      })
+      .expect(400);
+
+    const rejected = await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: false,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+        rejectionReason: "Documento incompleto",
+      })
+      .expect(200);
+
+    expect(rejected.body.stage).toBe("SERVICO_EM_EXECUCAO");
+    expect(rejected.body.asBuiltReceivedAt).toBeNull();
+    expect(rejected.body.asBuiltRejectedAt).toBeTruthy();
+    expect(rejected.body.asBuiltRejectionReason).toBe("Documento incompleto");
+
+    const nextActionAfterReject = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextActionAfterReject.body.code).toBe("ANEXAR_AS_BUILT");
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-07T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const approved = await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(approved.body.stage).toBe("ATESTAR_NF");
+    expect(approved.body.asBuiltReviewedAt).toBeTruthy();
+    expect(approved.body.asBuiltApprovedAt).toBeTruthy();
+    expect(approved.body.asBuiltRejectedAt).toBeNull();
+    expect(approved.body.asBuiltRejectionReason).toBeNull();
+
+    const detailsAfterApproval = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsAfterApproval.body.workflow.stage).toBe("ATESTAR_NF");
+    expect(detailsAfterApproval.body.workflow.nextAction.code).toBe("CONCLUIR_SERVICO");
+
+    const reviewAudits = await prisma.auditLog.findMany({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        metadata: {
+          path: ["source"],
+          equals: "project.as-built.review",
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "UPDATE" &&
+          (audit.metadata as Record<string, unknown> | null)?.approved === false &&
+          (audit.metadata as Record<string, unknown> | null)?.rejectionReason ===
+            "Documento incompleto",
+      ),
+    ).toBe(true);
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "STAGE_CHANGE" &&
+          (audit.metadata as Record<string, unknown> | null)?.newStage ===
+            "SERVICO_EM_EXECUCAO" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
+            "ANEXAR_AS_BUILT",
+      ),
+    ).toBe(true);
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "STAGE_CHANGE" &&
+          (audit.metadata as Record<string, unknown> | null)?.newStage === "ATESTAR_NF" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
+            "CONCLUIR_SERVICO",
+      ),
+    ).toBe(true);
+  });
+
   it("estimates: finalizing an estimate advances the project workflow to awaiting credit note", async () => {
     const project = await createProject(adminAuth.accessToken, "Projeto Finalizacao Estimativa");
     const catalog = await createCatalog();
@@ -1843,7 +2015,7 @@ describe("critical flows", () => {
       (item: { entityType: string; entityId: string }) =>
         item.entityType === "SERVICE_ORDER" && item.entityId === serviceOrder.body.id,
     );
-    expect(serviceOrderEvent.context.resourceCode).toBe("OS-TIMELINE");
+    expect(serviceOrderEvent.context.resourceCode).toBe(serviceOrder.body.serviceOrderNumber);
     expect(serviceOrderEvent.context.diexRequestId).toBe(diex.id);
 
     const timelineResponse = await request(app)
