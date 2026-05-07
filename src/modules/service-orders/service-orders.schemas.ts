@@ -148,3 +148,7 @@ export const serviceOrderIdParamSchema = z.object({
 export const serviceOrderCodeParamSchema = z.object({
   code: z.coerce.number().int().positive("Código da OS inválido"),
 });
+
+export const serviceOrderNumberParamSchema = z.object({
+  serviceOrderNumber: z.string().trim().min(1, "Número documental da OS é obrigatório"),
+});

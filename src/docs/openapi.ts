@@ -274,6 +274,11 @@ export const openApiDocument: OpenApiDocument = {
         type: "integer",
         minimum: 1,
       }),
+      ServiceOrderNumber: pathIdParameter(
+        "serviceOrderNumber",
+        "Numero documental da ordem de servico.",
+        { type: "string" },
+      ),
       UserId: pathIdParameter("id", "Identificador UUID do usuario."),
       RoleName: pathIdParameter("role", "Role do RBAC persistido.", {
         type: "string",
@@ -3063,6 +3068,18 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Buscar ordem de servico por codigo",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/ServiceOrderCode" }],
+        responses: {
+          "200": okJson("#/components/schemas/ServiceOrder"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/service-orders/number/{serviceOrderNumber}": {
+      get: {
+        tags: ["service-orders"],
+        summary: "Buscar ordem de servico por numero documental",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ServiceOrderNumber" }],
         responses: {
           "200": okJson("#/components/schemas/ServiceOrder"),
           ...defaultErrorResponses,

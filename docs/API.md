@@ -833,6 +833,10 @@ Ordem de Serviço derivada do projeto com NE informada.
 
 - Autenticação: sim
 
+#### `GET /service-orders/number/:serviceOrderNumber`
+
+- Autenticação: sim
+
 #### `GET /service-orders/:id`
 
 - Autenticação: sim

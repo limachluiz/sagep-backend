@@ -250,6 +250,7 @@ Perfis:
 Endpoints:
 
 - `GET /service-orders`
+- `GET /service-orders/number/:serviceOrderNumber`
 - `GET /service-orders/:id`
 - `POST /service-orders`
 - `PATCH /service-orders/:id`

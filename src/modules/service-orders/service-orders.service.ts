@@ -719,6 +719,54 @@ export class ServiceOrdersService {
     return serviceOrder;
   }
 
+  private async getServiceOrderAccessDataByNumber(
+    serviceOrderNumber: string,
+    includeArchived = false,
+  ) {
+    const normalizedNumber = serviceOrderNumber.trim();
+    const serviceOrder = await prisma.serviceOrder.findFirst({
+      where: { serviceOrderNumber: normalizedNumber },
+      select: {
+        id: true,
+        serviceOrderCode: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            id: true,
+            ownerId: true,
+            stage: true,
+            deletedAt: true,
+            members: { select: { userId: true } },
+          },
+        },
+        estimate: {
+          select: {
+            deletedAt: true,
+          },
+        },
+        diexRequest: {
+          select: {
+            deletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (
+      !serviceOrder ||
+      serviceOrder.deletedAt ||
+      serviceOrder.project.deletedAt ||
+      serviceOrder.estimate.deletedAt ||
+      serviceOrder.diexRequest?.deletedAt ||
+      (!includeArchived && serviceOrder.archivedAt)
+    ) {
+      throw new AppError("OS não encontrada", 404);
+    }
+
+    return serviceOrder;
+  }
+
   private async ensureCanView(serviceOrderId: string, user: CurrentUser, includeArchived = false) {
     const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId, includeArchived);
 
@@ -1258,6 +1306,33 @@ private buildWorkflowSnapshot(project: {
     if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
       throw new AppError("OS não encontrada", 404);
     }
+    return serviceOrder;
+  }
+
+  async findByNumber(
+    serviceOrderNumber: string,
+    user: CurrentUser,
+    filters: { includeArchived?: boolean } = {},
+  ) {
+    const { includeArchived } = this.resolveArchivedAccess(user, filters);
+    const accessData = await this.getServiceOrderAccessDataByNumber(
+      serviceOrderNumber,
+      includeArchived,
+    );
+
+    if (!this.canViewProject(accessData.project, user)) {
+      throw new AppError("Você não tem acesso a esta OS", 403);
+    }
+
+    const serviceOrder = await prisma.serviceOrder.findFirst({
+      where: { serviceOrderNumber: serviceOrderNumber.trim() },
+      include: serviceOrderInclude,
+    });
+
+    if (!serviceOrder || serviceOrder.deletedAt || (!includeArchived && serviceOrder.archivedAt)) {
+      throw new AppError("OS não encontrada", 404);
+    }
+
     return serviceOrder;
   }
 
