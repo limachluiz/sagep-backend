@@ -366,6 +366,15 @@ export class WorkflowService {
           targetStage: "ATESTAR_NF",
         };
       case "ATESTAR_NF":
+        if (!project.invoiceAttestedAt) {
+          return {
+            code: "ATESTAR_NF",
+            label: "Atestar NF",
+            description: "Conclua a análise técnica e faça o ateste da NF.",
+            targetStage: "ATESTAR_NF",
+          };
+        }
+
         return {
           code: "CONCLUIR_SERVICO",
           label: "Concluir serviço",

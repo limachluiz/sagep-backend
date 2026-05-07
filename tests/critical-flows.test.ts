@@ -1305,7 +1305,7 @@ describe("critical flows", () => {
       .expect(200);
 
     expect(detailsAfterApproval.body.workflow.stage).toBe("ATESTAR_NF");
-    expect(detailsAfterApproval.body.workflow.nextAction.code).toBe("CONCLUIR_SERVICO");
+    expect(detailsAfterApproval.body.workflow.nextAction.code).toBe("ATESTAR_NF");
 
     const reviewAudits = await prisma.auditLog.findMany({
       where: {
@@ -1344,9 +1344,191 @@ describe("critical flows", () => {
           audit.action === "STAGE_CHANGE" &&
           (audit.metadata as Record<string, unknown> | null)?.newStage === "ATESTAR_NF" &&
           (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
-            "CONCLUIR_SERVICO",
+            "ATESTAR_NF",
       ),
     ).toBe(true);
+  });
+
+  it("workflow: concludes service when invoice attestation is already persisted", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-020",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-020",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexId: diex.id,
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ATESTAR_NF",
+        invoiceAttestedAt: "2026-04-07T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const concluded = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_CONCLUIDO",
+        serviceCompletedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(concluded.body.status).toBe("CONCLUIDO");
+    expect(concluded.body.stage).toBe("SERVICO_CONCLUIDO");
+    expect(concluded.body.invoiceAttestedAt).toBeTruthy();
+    expect(concluded.body.serviceCompletedAt).toBeTruthy();
+
+    const nextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextAction.body.code).toBe("SEM_ACAO");
+  });
+
+  it("workflow: rejects service conclusion without persisted invoice attestation", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-021",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-021",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexId: diex.id,
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_CONCLUIDO",
+        serviceCompletedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.message).toContain("atesto da NF");
+      });
   });
 
   it("estimates: finalizing an estimate advances the project workflow to awaiting credit note", async () => {
