@@ -591,6 +591,13 @@ Itens precificáveis da ATA, agora com saldo inicial e saldo efetivo calculado p
 
 - Autenticação: sim
 
+#### `GET /ata-items/:id/movements`
+
+- Autenticacao: sim
+- Observacao:
+  - retorna historico de movimentacoes de saldo ordenado por `createdAt desc`
+  - inclui codigos amigaveis de projeto, estimativa, DIEx e ordem de servico quando existirem
+
 #### `PATCH /ata-items/:id`
 
 - Autenticação: sim

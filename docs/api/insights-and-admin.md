@@ -465,6 +465,7 @@ Exemplo de update com substituicao de grupos:
 | `GET` | `/ata-items` | Lista global de itens. | Autenticado |
 | `GET` | `/ata-items/:id` | Detalhe por id. | Autenticado |
 | `GET` | `/ata-items/code/:code` | Detalhe por codigo amigavel. | Autenticado |
+| `GET` | `/ata-items/:id/movements` | Historico de movimentacoes de saldo do item. | Autenticado |
 | `PATCH` | `/ata-items/:id` | Atualiza item. | `atas.manage` |
 | `DELETE` | `/ata-items/:id` | Remove item. | `atas.manage` |
 | `GET` | `/atas/:id/items` | Lista itens de uma ata. | Autenticado |
@@ -570,6 +571,22 @@ Observacoes:
 
 - se `coverageGroupCode` for enviado, ele precisa existir na mesma ata do item atual.
 - `DELETE /api/ata-items/:id` remove fisicamente o item e retorna apenas mensagem simples.
+
+### Movimentacoes De Saldo Do Item
+
+```http
+GET /api/ata-items/:id/movements
+```
+
+Retorna um array ordenado por `createdAt` decrescente. Cada item contem:
+
+- `id`, `movementType`, `quantity`, `unitPrice`, `totalAmount`, `summary`, `actorName`, `createdAt`;
+- `projectId` e `projectCode`, quando houver projeto associado;
+- `estimateId` e `estimateCode`, quando houver estimativa associada;
+- `diexRequestId` e `diexCode`, quando houver DIEx associado;
+- `serviceOrderId` e `serviceOrderCode`, quando houver ordem de servico associada.
+
+O endpoint e somente leitura e nao altera regra de saldo nem fluxo documental.
 
 ## Organizacoes Militares
 

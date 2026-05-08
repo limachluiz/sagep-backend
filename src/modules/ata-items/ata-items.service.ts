@@ -66,6 +66,44 @@ const ataItemInclude = {
 } satisfies Prisma.AtaItemInclude;
 
 export class AtaItemsService {
+  private serializeMovement(movement: {
+    id: string;
+    movementType: string;
+    quantity: Prisma.Decimal;
+    unitPrice: Prisma.Decimal;
+    totalAmount: Prisma.Decimal;
+    summary: string;
+    actorName: string | null;
+    projectId: string | null;
+    estimateId: string | null;
+    diexRequestId: string | null;
+    serviceOrderId: string | null;
+    createdAt: Date;
+    project: { projectCode: number } | null;
+    estimate: { estimateCode: number } | null;
+    diexRequest: { diexCode: number } | null;
+    serviceOrder: { serviceOrderCode: number } | null;
+  }) {
+    return {
+      id: movement.id,
+      movementType: movement.movementType,
+      quantity: movement.quantity.toString(),
+      unitPrice: movement.unitPrice.toString(),
+      totalAmount: movement.totalAmount.toString(),
+      summary: movement.summary,
+      actorName: movement.actorName,
+      projectId: movement.projectId,
+      projectCode: movement.project?.projectCode ?? null,
+      estimateId: movement.estimateId,
+      estimateCode: movement.estimate?.estimateCode ?? null,
+      diexRequestId: movement.diexRequestId,
+      diexCode: movement.diexRequest?.diexCode ?? null,
+      serviceOrderId: movement.serviceOrderId,
+      serviceOrderCode: movement.serviceOrder?.serviceOrderCode ?? null,
+      createdAt: movement.createdAt,
+    };
+  }
+
   private async ensureAtaExists(ataId: string) {
     const ata = await prisma.ata.findUnique({
       where: { id: ataId },
@@ -353,6 +391,60 @@ export class AtaItemsService {
     }
 
     return (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0];
+  }
+
+  async listMovements(itemId: string) {
+    const item = await prisma.ataItem.findUnique({
+      where: { id: itemId },
+      select: { id: true, deletedAt: true },
+    });
+
+    if (!item || item.deletedAt) {
+      throw new AppError("Item da ata nÃ£o encontrado", 404);
+    }
+
+    const movements = await prisma.ataItemBalanceMovement.findMany({
+      where: { ataItemId: itemId },
+      select: {
+        id: true,
+        movementType: true,
+        quantity: true,
+        unitPrice: true,
+        totalAmount: true,
+        summary: true,
+        actorName: true,
+        projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderId: true,
+        createdAt: true,
+        project: {
+          select: {
+            projectCode: true,
+          },
+        },
+        estimate: {
+          select: {
+            estimateCode: true,
+          },
+        },
+        diexRequest: {
+          select: {
+            diexCode: true,
+          },
+        },
+        serviceOrder: {
+          select: {
+            serviceOrderCode: true,
+          },
+        },
+      },
+      orderBy: {
+        createdAt: "desc",
+      },
+    });
+
+    return movements.map((movement) => this.serializeMovement(movement));
   }
 
   async update(itemId: string, data: UpdateAtaItemInput) {

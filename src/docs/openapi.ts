@@ -2013,6 +2013,54 @@ export const openApiDocument: OpenApiDocument = {
           links: { $ref: "#/components/schemas/ListLinks" },
         },
       },
+      AtaItemBalanceMovement: {
+        type: "object",
+        description:
+          "Movimentacao historica de saldo de um item de ATA. Leitura apenas; nao altera regra de saldo.",
+        properties: {
+          id: { type: "string" },
+          movementType: {
+            type: "string",
+            enum: ["RESERVE", "RELEASE", "CONSUME", "REVERSE_CONSUME", "ADJUSTMENT"],
+          },
+          quantity: { type: "string", description: "Decimal serializado pelo Prisma." },
+          unitPrice: { type: "string", description: "Decimal serializado pelo Prisma." },
+          totalAmount: { type: "string", description: "Decimal serializado pelo Prisma." },
+          summary: { type: "string" },
+          actorName: { type: "string", nullable: true },
+          projectId: { type: "string", nullable: true },
+          projectCode: { type: "integer", nullable: true },
+          estimateId: { type: "string", nullable: true },
+          estimateCode: { type: "integer", nullable: true },
+          diexRequestId: { type: "string", nullable: true },
+          diexCode: { type: "integer", nullable: true },
+          serviceOrderId: { type: "string", nullable: true },
+          serviceOrderCode: { type: "integer", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+        },
+        example: {
+          id: "cmmovement123",
+          movementType: "RESERVE",
+          quantity: "2",
+          unitPrice: "100",
+          totalAmount: "200",
+          summary: "Reserva de saldo para o DIEx #7",
+          actorName: "ADMIN",
+          projectId: "cmproject123",
+          projectCode: 15,
+          estimateId: "cmestimate123",
+          estimateCode: 21,
+          diexRequestId: "cmdiex123",
+          diexCode: 7,
+          serviceOrderId: null,
+          serviceOrderCode: null,
+          createdAt: "2026-04-29T00:00:00.000Z",
+        },
+      },
+      AtaItemBalanceMovementsResponse: {
+        type: "array",
+        items: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
+      },
       MilitaryOrganization: {
         type: "object",
         description:
@@ -3769,6 +3817,20 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [{ $ref: "#/components/parameters/AtaItemCode" }],
         responses: {
           "200": okJson("#/components/schemas/AtaItem"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/ata-items/{id}/movements": {
+      get: {
+        tags: ["ata-items"],
+        summary: "Listar movimentacoes de saldo do item de ata",
+        description:
+          "Retorna o historico de movimentacoes de saldo do item, ordenado por criacao desc. Endpoint de consulta; nao altera regra de saldo nem fluxo documental.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: {
+          "200": okJson("#/components/schemas/AtaItemBalanceMovementsResponse"),
           ...defaultErrorResponses,
         },
       },

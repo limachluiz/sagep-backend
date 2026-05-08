@@ -77,6 +77,14 @@ export class AtaItemsController {
     return res.status(200).json(item);
   }
 
+  async listMovements(req: Request, res: Response) {
+    const { id } = ataItemIdParamSchema.parse(req.params);
+
+    const movements = await ataItemsService.listMovements(id);
+
+    return res.status(200).json(movements);
+  }
+
   async update(req: Request, res: Response) {
     const { id } = ataItemIdParamSchema.parse(req.params);
     const data = updateAtaItemSchema.parse(req.body);

@@ -1724,6 +1724,75 @@ describe("critical flows", () => {
     expect(item.balance.consumedQuantity).toBe("0");
   });
 
+  it("ata-items: lists balance movements ordered by latest creation", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto historico saldo");
+    const { estimate, ataItem } = await seedFinalizedEstimateWithBalance(project.id, {
+      initialQuantity: "10.00",
+      quantity: "2.00",
+    });
+
+    const olderCreatedAt = new Date("2026-04-01T00:00:00.000Z");
+    const newerCreatedAt = new Date("2026-04-02T00:00:00.000Z");
+
+    await prisma.ataItemBalanceMovement.createMany({
+      data: [
+        {
+          ataItemId: ataItem.id,
+          projectId: project.id,
+          estimateId: estimate.id,
+          actorUserId: admin.id,
+          actorName: "ADMIN",
+          movementType: "RESERVE",
+          quantity: "2.00",
+          unitPrice: "100.00",
+          totalAmount: "200.00",
+          summary: "Reserva de teste",
+          createdAt: olderCreatedAt,
+        },
+        {
+          ataItemId: ataItem.id,
+          projectId: project.id,
+          estimateId: estimate.id,
+          actorUserId: admin.id,
+          actorName: "ADMIN",
+          movementType: "RELEASE",
+          quantity: "1.00",
+          unitPrice: "100.00",
+          totalAmount: "100.00",
+          summary: "Liberacao de teste",
+          createdAt: newerCreatedAt,
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/ata-items/${ataItem.id}/movements`)
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(200);
+
+    expect(response.body).toHaveLength(2);
+    expect(response.body.map((movement: { movementType: string }) => movement.movementType)).toEqual([
+      "RELEASE",
+      "RESERVE",
+    ]);
+    expect(response.body[0]).toMatchObject({
+      quantity: "1",
+      unitPrice: "100",
+      totalAmount: "100",
+      summary: "Liberacao de teste",
+      actorName: "ADMIN",
+      projectId: project.id,
+      projectCode: project.projectCode,
+      estimateId: estimate.id,
+      estimateCode: estimate.estimateCode,
+      diexRequestId: null,
+      diexCode: null,
+      serviceOrderId: null,
+      serviceOrderCode: null,
+    });
+    expect(response.body[0].createdAt).toBe(newerCreatedAt.toISOString());
+  });
+
   it("estimates: blocks quantity above ATA item available balance", async () => {
     const project = await createProject(adminAuth.accessToken, "Projeto sem saldo");
     const catalog = await createCatalog("1.00");
