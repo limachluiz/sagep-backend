@@ -4,6 +4,7 @@ const bearerSecurity = [{ bearerAuth: [] }];
 
 const tagExternalDocs = {
   auth: "./auth-and-permissions.md",
+  audits: "./insights-and-admin.md",
   projects: "./projects-and-operations.md",
   tasks: "./projects-and-operations.md",
   estimates: "./projects-and-operations.md",
@@ -166,6 +167,7 @@ export const openApiDocument: OpenApiDocument = {
   tags: [
     "health",
     "auth",
+    "audits",
     "projects",
     "tasks",
     "estimates",
@@ -388,6 +390,52 @@ export const openApiDocument: OpenApiDocument = {
             type: "object",
             additionalProperties: true,
           },
+        },
+      },
+      AuditLog: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          entityType: { type: "string" },
+          entityId: { type: "string" },
+          action: { type: "string" },
+          actorUserId: { type: "string", nullable: true },
+          actorName: { type: "string", nullable: true },
+          summary: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+          metadata: {
+            type: "object",
+            nullable: true,
+            additionalProperties: true,
+          },
+        },
+        example: {
+          id: "cmaudit123",
+          entityType: "PROJECT",
+          entityId: "cmproject123",
+          action: "UPDATE",
+          actorUserId: "cmuser123",
+          actorName: "Gestor SAGEP",
+          summary: "Projeto atualizado",
+          createdAt: "2026-05-08T12:00:00.000Z",
+          metadata: {
+            source: "projects.update",
+          },
+        },
+      },
+      AuditLogListEnvelope: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/AuditLog" },
+          },
+          meta: { $ref: "#/components/schemas/PaginationMeta" },
+          filters: {
+            type: "object",
+            additionalProperties: true,
+          },
+          links: { $ref: "#/components/schemas/ListLinks" },
         },
       },
       AccessProfile: {
@@ -2353,6 +2401,43 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
+      },
+    },
+    "/audits": {
+      get: {
+        tags: ["audits"],
+        summary: "Listar logs de auditoria",
+        description:
+          "Retorna AuditLog ordenado por createdAt desc. Acesso restrito a usuarios ADMIN e GESTOR.",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/Page" },
+          queryParameter("limit", "Quantidade por pagina.", {
+            type: "integer",
+            minimum: 1,
+            maximum: 100,
+            default: 50,
+          }),
+          queryParameter("entityType", "Tipo da entidade auditada.", { type: "string" }),
+          queryParameter("action", "Acao auditada.", { type: "string" }),
+          queryParameter("actor", "Busca por nome do ator ou id do usuario.", {
+            type: "string",
+          }),
+          queryParameter("search", "Busca em resumo, entidade e ator.", { type: "string" }),
+          queryParameter("startDate", "Inicio do periodo por createdAt.", {
+            type: "string",
+            format: "date-time",
+          }),
+          queryParameter("endDate", "Fim do periodo por createdAt.", {
+            type: "string",
+            format: "date-time",
+          }),
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/AuditLogListEnvelope"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN", "GESTOR"],
       },
     },
     "/projects": {

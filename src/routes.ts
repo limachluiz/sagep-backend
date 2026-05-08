@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { ataItemsRoutes } from "./modules/ata-items/ata-items.routes.js";
 import { atasRoutes } from "./modules/atas/atas.routes.js";
+import { auditRoutes } from "./modules/audit/audit.routes.js";
 import { authRoutes } from "./modules/auth/auth.routes.js";
 import { dashboardRoutes } from "./modules/dashboard/dashboard.routes.js";
 import { estimatesRoutes } from "./modules/estimates/estimates.routes.js";
@@ -23,6 +24,7 @@ export const routes = Router();
 routes.use("/health", healthRoutes);
 routes.use("/docs", openApiRoutes);
 routes.use("/auth", authRoutes);
+routes.use("/audits", auditRoutes);
 routes.use("/users", usersRoutes);
 routes.use("/projects", projectsRoutes);
 routes.use("/permissions", permissionsRoutes);

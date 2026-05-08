@@ -1,5 +1,36 @@
 # Dashboards, Busca, Alertas, Relatorios E Administracao
 
+## Auditoria
+
+Base:
+
+```text
+/api/audits
+```
+
+Leitura exige usuario autenticado com role `ADMIN` ou `GESTOR`.
+
+| Metodo | Rota | Uso | Acesso |
+|---|---|---|---|
+| `GET` | `/audits` | Lista AuditLog real. | `ADMIN`, `GESTOR` |
+
+Filtros opcionais:
+
+| Param | Tipo | Observacao |
+|---|---|---|
+| `entityType` | string | Filtra tipo da entidade auditada. |
+| `action` | string | Filtra acao auditada. |
+| `actor` | string | Busca por `actorName` ou `actorUserId`. |
+| `search` | string | Busca em resumo, entidade e ator. |
+| `startDate` | date-time | Inicio do periodo por `createdAt`. |
+| `endDate` | date-time | Fim do periodo por `createdAt`. |
+| `page` | number | Padrao `1`. |
+| `limit` | number | Padrao `50`, maximo `100`. |
+
+Resposta em envelope paginado com `items`, `meta`, `filters` e `links`.
+Cada item retorna `id`, `entityType`, `entityId`, `action`, `actorUserId`,
+`actorName`, `summary`, `createdAt` e `metadata`.
+
 ## Dashboards
 
 Base:

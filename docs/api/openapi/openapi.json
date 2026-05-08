@@ -29,6 +29,14 @@
       }
     },
     {
+      "name": "audits",
+      "description": "Modulo audits do backend SAGEP",
+      "externalDocs": {
+        "description": "Documentacao Markdown complementar",
+        "url": "./insights-and-admin.md"
+      }
+    },
+    {
       "name": "projects",
       "description": "Modulo projects do backend SAGEP",
       "externalDocs": {
@@ -609,6 +617,77 @@
           "metadata": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "AuditLog": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "entityType": {
+            "type": "string"
+          },
+          "entityId": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "actorUserId": {
+            "type": "string",
+            "nullable": true
+          },
+          "actorName": {
+            "type": "string",
+            "nullable": true
+          },
+          "summary": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          }
+        },
+        "example": {
+          "id": "cmaudit123",
+          "entityType": "PROJECT",
+          "entityId": "cmproject123",
+          "action": "UPDATE",
+          "actorUserId": "cmuser123",
+          "actorName": "Gestor SAGEP",
+          "summary": "Projeto atualizado",
+          "createdAt": "2026-05-08T12:00:00.000Z",
+          "metadata": {
+            "source": "projects.update"
+          }
+        }
+      },
+      "AuditLogListEnvelope": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AuditLog"
+            }
+          },
+          "meta": {
+            "$ref": "#/components/schemas/PaginationMeta"
+          },
+          "filters": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "links": {
+            "$ref": "#/components/schemas/ListLinks"
           }
         }
       },
@@ -4621,6 +4700,121 @@
         },
         "x-permissions": [
           "sessions.manage_all"
+        ]
+      }
+    },
+    "/audits": {
+      "get": {
+        "tags": [
+          "audits"
+        ],
+        "summary": "Listar logs de auditoria",
+        "description": "Retorna AuditLog ordenado por createdAt desc. Acesso restrito a usuarios ADMIN e GESTOR.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "description": "Quantidade por pagina.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100,
+              "default": 50
+            }
+          },
+          {
+            "name": "entityType",
+            "in": "query",
+            "required": false,
+            "description": "Tipo da entidade auditada.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "action",
+            "in": "query",
+            "required": false,
+            "description": "Acao auditada.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "actor",
+            "in": "query",
+            "required": false,
+            "description": "Busca por nome do ator ou id do usuario.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Busca em resumo, entidade e ator.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "description": "Inicio do periodo por createdAt.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "description": "Fim do periodo por createdAt.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuditLogListEnvelope"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN",
+          "GESTOR"
         ]
       }
     },

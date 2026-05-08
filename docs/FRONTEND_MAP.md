@@ -415,6 +415,28 @@ Endpoints:
 - `POST /auth/users/:userId/sessions/revoke-all`
 - `POST /auth/users/:userId/sessions/:sessionId/revoke`
 
+### 19. Auditoria administrativa
+
+Perfis:
+
+- ADMIN
+- GESTOR
+
+Endpoints:
+
+- `GET /audits`
+
+Filtros:
+
+- `entityType`
+- `action`
+- `actor`
+- `search`
+- `startDate`
+- `endDate`
+- `page`
+- `limit`
+
 ## Ordem sugerida de implementação
 
 ### Fase 1

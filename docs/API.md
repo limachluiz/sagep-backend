@@ -1003,6 +1003,41 @@ Fornecer visão geral, operacional e executiva para acompanhamento do sistema.
 
 ---
 
+## Auditoria
+
+### Objetivo
+
+Expor a listagem real de `AuditLog` para telas administrativas.
+
+### Endpoint
+
+#### `GET /audits`
+
+- Autenticacao: sim
+- Perfis: `ADMIN`, `GESTOR`
+- Ordenacao: `createdAt desc`
+- Query params opcionais:
+  - `entityType`
+  - `action`
+  - `actor`
+  - `search`
+  - `startDate`
+  - `endDate`
+  - `page`
+  - `limit`
+- Campos retornados por item:
+  - `id`
+  - `entityType`
+  - `entityId`
+  - `action`
+  - `actorUserId`
+  - `actorName`
+  - `summary`
+  - `createdAt`
+  - `metadata`
+
+---
+
 ## Principais erros transversais
 
 - `400` body, params ou query inválidos
