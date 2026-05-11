@@ -149,6 +149,14 @@
       }
     },
     {
+      "name": "integrations",
+      "description": "Modulo integrations do backend SAGEP",
+      "externalDocs": {
+        "description": "Documentacao Markdown complementar",
+        "url": "./insights-and-admin.md"
+      }
+    },
+    {
       "name": "military-organizations",
       "description": "Modulo military-organizations do backend SAGEP",
       "externalDocs": {
@@ -3459,6 +3467,31 @@
           "isActive": {
             "type": "boolean"
           },
+          "externalSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalUasg": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalPregaoNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalPregaoYear": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalAtaNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalLastSyncAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "coverageGroups": {
             "type": "array",
             "items": {
@@ -3616,6 +3649,185 @@
           }
         }
       },
+      "ComprasGovAtaPreviewItem": {
+        "type": "object",
+        "properties": {
+          "referenceCode": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "unitPrice": {
+            "type": "number"
+          },
+          "initialQuantity": {
+            "type": "number"
+          },
+          "externalItemId": {
+            "type": "string"
+          },
+          "externalItemNumber": {
+            "type": "string"
+          }
+        }
+      },
+      "ComprasGovAtaPreview": {
+        "type": "object",
+        "properties": {
+          "source": {
+            "type": "string",
+            "enum": [
+              "COMPRAS_GOV"
+            ]
+          },
+          "uasg": {
+            "type": "string"
+          },
+          "numeroPregao": {
+            "type": "string"
+          },
+          "anoPregao": {
+            "type": "string"
+          },
+          "ata": {
+            "type": "object",
+            "properties": {
+              "number": {
+                "type": "string"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "CFTV",
+                  "FIBRA_OPTICA"
+                ],
+                "nullable": true
+              },
+              "vendorName": {
+                "type": "string",
+                "nullable": true
+              },
+              "managingAgency": {
+                "type": "string",
+                "nullable": true
+              },
+              "validFrom": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "validUntil": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              }
+            }
+          },
+          "coverageGroups": {
+            "type": "array",
+            "items": {
+              "type": "object"
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ComprasGovAtaPreviewItem"
+            }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ComprasGovAtaImportRequest": {
+        "type": "object",
+        "required": [
+          "uasg",
+          "numeroPregao",
+          "anoPregao",
+          "ataType"
+        ],
+        "properties": {
+          "uasg": {
+            "type": "string"
+          },
+          "numeroPregao": {
+            "type": "string"
+          },
+          "anoPregao": {
+            "type": "string"
+          },
+          "numeroAta": {
+            "type": "string",
+            "nullable": true
+          },
+          "ataType": {
+            "type": "string",
+            "enum": [
+              "CFTV",
+              "FIBRA_OPTICA"
+            ]
+          },
+          "coverageGroupId": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverageGroupCode": {
+            "type": "string",
+            "nullable": true
+          },
+          "coverageGroupName": {
+            "type": "string",
+            "nullable": true
+          },
+          "dryRun": {
+            "type": "boolean",
+            "nullable": true
+          }
+        }
+      },
+      "ComprasGovAtaImportResponse": {
+        "type": "object",
+        "properties": {
+          "dryRun": {
+            "type": "boolean"
+          },
+          "preview": {
+            "$ref": "#/components/schemas/ComprasGovAtaPreview"
+          },
+          "imported": {
+            "type": "object",
+            "properties": {
+              "ataId": {
+                "type": "string",
+                "nullable": true
+              },
+              "coverageGroupId": {
+                "type": "string",
+                "nullable": true
+              },
+              "coverageGroupCode": {
+                "type": "string",
+                "nullable": true
+              },
+              "createdItems": {
+                "type": "integer"
+              },
+              "updatedItems": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
       "AtaItem": {
         "type": "object",
         "description": "Item precificavel de uma ATA, sempre associado a um grupo de cobertura especifico.",
@@ -3657,6 +3869,23 @@
             "type": "boolean"
           },
           "deletedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "externalSource": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalItemId": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalItemNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "externalLastSyncAt": {
             "type": "string",
             "format": "date-time",
             "nullable": true
@@ -9329,6 +9558,152 @@
             "$ref": "#/components/responses/NotFound"
           }
         },
+        "x-permissions": [
+          "atas.manage"
+        ]
+      }
+    },
+    "/integrations/compras-gov/atas/preview": {
+      "get": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Previsualizar importacao de ATA do Compras.gov.br",
+        "description": "Consulta a API publica do Compras.gov.br no backend e retorna uma previa normalizada da ARP e de seus itens. Usa os endpoints oficiais `/modulo-arp/1_consultarARP` e `/modulo-arp/2_consultarARPItem`.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "uasg",
+            "in": "query",
+            "required": false,
+            "description": "Codigo da UASG gerenciadora.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "numeroPregao",
+            "in": "query",
+            "required": false,
+            "description": "Numero do pregao/compra.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "anoPregao",
+            "in": "query",
+            "required": false,
+            "description": "Ano do pregao/compra.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "numeroAta",
+            "in": "query",
+            "required": false,
+            "description": "Numero da ata de registro de preco.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComprasGovAtaPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN"
+        ],
+        "x-permissions": [
+          "atas.manage"
+        ]
+      }
+    },
+    "/integrations/compras-gov/atas/import": {
+      "post": {
+        "tags": [
+          "integrations"
+        ],
+        "summary": "Importar ATA do Compras.gov.br",
+        "description": "Consulta a API publica do Compras.gov.br no backend e cria ou atualiza a ATA e seus itens sem duplicar registros. Nao altera movimentos de saldo local.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ComprasGovAtaImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComprasGovAtaImportResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComprasGovAtaImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN"
+        ],
         "x-permissions": [
           "atas.manage"
         ]

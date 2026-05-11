@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import ExcelJS from "exceljs";
 import request from "supertest";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/config/prisma.js";
 import {
@@ -2517,6 +2517,137 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
       .send({ name: "Tentativa Gestor" })
       .expect(403);
+  });
+
+  it("integrations: previews and imports Compras.gov.br ARP data without duplicating ATA items", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "0001",
+                codigoUnidadeGerenciadora: "120624",
+                nomeUnidadeGerenciadora: "Centro de Tecnologia",
+                numeroCompra: "90001",
+                anoCompra: "2026",
+                dataVigenciaInicial: "2026-01-01",
+                dataVigenciaFinal: "2026-12-31",
+                numeroControlePncpAta: "ATA-PNCP-1",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "0001",
+                codigoUnidadeGerenciadora: "120624",
+                numeroCompra: "90001",
+                anoCompra: "2026",
+                numeroItem: "1",
+                codigoItem: 123,
+                descricaoItem: "Camera IP 4MP",
+                tipoItem: "UN",
+                quantidadeHomologadaVencedor: 50,
+                valorUnitario: 250.75,
+                nomeRazaoSocialFornecedor: "Fornecedor Compras Gov",
+                numeroControlePncpAta: "ATA-PNCP-1",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ resultado: [], totalPaginas: 1 }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      const preview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "0001",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(preview.body.source).toBe("COMPRAS_GOV");
+      expect(preview.body.ata.vendorName).toBe("Fornecedor Compras Gov");
+      expect(preview.body.items).toHaveLength(1);
+      expect(preview.body.items[0].referenceCode).toBe("1");
+
+      await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "0001",
+        })
+        .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+        .expect(403);
+
+      const imported = await request(app)
+        .post("/api/integrations/compras-gov/atas/import")
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .send({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "0001",
+          ataType: "CFTV",
+          coverageGroupCode: "CGOV",
+          coverageGroupName: "Compras.gov.br",
+        })
+        .expect(201);
+
+      expect(imported.body.imported.createdItems).toBe(1);
+
+      const importedAgain = await request(app)
+        .post("/api/integrations/compras-gov/atas/import")
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .send({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "0001",
+          ataType: "CFTV",
+          coverageGroupCode: "CGOV",
+          coverageGroupName: "Compras.gov.br",
+        })
+        .expect(201);
+
+      expect(importedAgain.body.imported.createdItems).toBe(0);
+      expect(importedAgain.body.imported.updatedItems).toBe(1);
+
+      const atas = await prisma.ata.findMany({
+        where: { externalSource: "COMPRAS_GOV", externalUasg: "120624" },
+        include: { items: true },
+      });
+
+      expect(atas).toHaveLength(1);
+      expect(atas[0].externalPregaoNumber).toBe("90001");
+      expect(atas[0].items).toHaveLength(1);
+      expect(atas[0].items[0].externalItemNumber).toBe("1");
+    } finally {
+      fetchMock.mockRestore();
+    }
   });
 
   it("ergonomics: secondary modules expose paginated envelopes and legacy format", async () => {

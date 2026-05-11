@@ -289,6 +289,8 @@ Endpoints:
 - `POST /atas/:id/coverage-groups`
 - `PATCH /atas/:id/coverage-groups/:groupId`
 - `DELETE /atas/:id/coverage-groups/:groupId`
+- `GET /integrations/compras-gov/atas/preview`
+- `POST /integrations/compras-gov/atas/import`
 
 ### 11. Itens da ATA
 

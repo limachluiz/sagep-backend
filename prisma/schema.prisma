@@ -255,6 +255,12 @@ model Ata {
   validUntil     DateTime?
   notes          String?
   isActive       Boolean            @default(true)
+  externalSource String?
+  externalUasg   String?
+  externalPregaoNumber String?
+  externalPregaoYear   String?
+  externalAtaNumber    String?
+  externalLastSyncAt   DateTime?
   coverageGroups AtaCoverageGroup[]
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
@@ -301,6 +307,10 @@ model AtaItem {
   notes            String?
   isActive         Boolean                 @default(true)
   deletedAt        DateTime?
+  externalSource   String?
+  externalItemId   String?
+  externalItemNumber String?
+  externalLastSyncAt DateTime?
   ata              Ata                     @relation(fields: [ataId], references: [id], onDelete: Cascade)
   coverageGroup    AtaCoverageGroup        @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
   createdAt        DateTime                @default(now())

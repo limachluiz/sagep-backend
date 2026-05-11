@@ -594,6 +594,43 @@ Cadastro da ata e sua estrutura de cobertura.
 
 ---
 
+## Integrações Compras.gov.br
+
+### Objetivo
+
+Importar ATA de Registro de Preços e itens a partir da API pública do Compras.gov.br, sempre pelo backend.
+
+### Endpoints
+
+#### `GET /integrations/compras-gov/atas/preview`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Query: `uasg`, `numeroPregao`, `anoPregao`, `numeroAta` opcional
+
+#### `POST /integrations/compras-gov/atas/import`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Body: `uasg`, `numeroPregao`, `anoPregao`, `numeroAta` opcional, `ataType`, `coverageGroupId` opcional, `coverageGroupCode` opcional, `coverageGroupName` opcional, `dryRun` opcional
+- Cria ou atualiza a ATA e cria ou atualiza itens sem duplicar por `ataId`, grupo e `referenceCode`.
+
+```json
+{
+  "uasg": "120624",
+  "numeroPregao": "90001",
+  "anoPregao": "2026",
+  "numeroAta": "0001",
+  "ataType": "CFTV",
+  "coverageGroupCode": "CGOV",
+  "coverageGroupName": "Compras.gov.br"
+}
+```
+
+---
+
 ## ATA Items
 
 ### Objetivo

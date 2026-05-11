@@ -568,6 +568,50 @@ Observacoes:
 - em `PATCH`, `localities` substitui apenas as localidades do grupo editado.
 - como o modelo atual nao possui `active` no grupo, `DELETE` remove o registro e retorna `409` quando houver itens ou estimativas vinculadas.
 
+### Importar ATA Do Compras.gov.br
+
+A integracao externa fica no backend. O frontend informa UASG, pregao, ano e opcionalmente o numero da ATA; o backend consulta a API publica do Compras.gov.br e retorna uma previa ou importa a estrutura para o banco local.
+
+Endpoints usados na origem oficial:
+
+- `GET https://dadosabertos.compras.gov.br/modulo-arp/1_consultarARP`
+- `GET https://dadosabertos.compras.gov.br/modulo-arp/2_consultarARPItem`
+
+Endpoints do SAGEP:
+
+| Metodo | Rota | Uso | Permissao |
+|---|---|---|---|
+| `GET` | `/integrations/compras-gov/atas/preview` | Mostra previa normalizada sem gravar no banco. | `ADMIN` + `atas.manage` |
+| `POST` | `/integrations/compras-gov/atas/import` | Cria/atualiza ATA e itens a partir do Compras.gov.br. | `ADMIN` + `atas.manage` |
+
+Preview:
+
+```http
+GET /api/integrations/compras-gov/atas/preview?uasg=120624&numeroPregao=90001&anoPregao=2026&numeroAta=0001
+```
+
+Importacao:
+
+```json
+{
+  "uasg": "120624",
+  "numeroPregao": "90001",
+  "anoPregao": "2026",
+  "numeroAta": "0001",
+  "ataType": "CFTV",
+  "coverageGroupCode": "CGOV",
+  "coverageGroupName": "Compras.gov.br",
+  "dryRun": false
+}
+```
+
+Observacoes:
+
+- `dryRun: true` consulta a origem e retorna a previa sem gravar.
+- a importacao tenta localizar a ATA por vinculo externo (`externalSource`, UASG, pregao, ano e numero da ATA) para nao duplicar.
+- itens sao criados/atualizados por `ataId`, grupo e `referenceCode`.
+- a integracao grava os campos externos em `Ata` e `AtaItem`, mas nao altera movimentos de saldo local.
+
 Exemplo de update com substituicao de grupos:
 
 ```json

@@ -19,6 +19,7 @@ const tagExternalDocs = {
   permissions: "./insights-and-admin.md",
   atas: "./insights-and-admin.md",
   "ata-items": "./insights-and-admin.md",
+  integrations: "./insights-and-admin.md",
   "military-organizations": "./insights-and-admin.md",
   health: "./README.md",
 };
@@ -182,6 +183,7 @@ export const openApiDocument: OpenApiDocument = {
     "permissions",
     "atas",
     "ata-items",
+    "integrations",
     "military-organizations",
   ].map((name) => ({
     name,
@@ -1852,6 +1854,12 @@ export const openApiDocument: OpenApiDocument = {
           validUntil: { type: "string", format: "date-time", nullable: true },
           notes: { type: "string", nullable: true },
           isActive: { type: "boolean" },
+          externalSource: { type: "string", nullable: true },
+          externalUasg: { type: "string", nullable: true },
+          externalPregaoNumber: { type: "string", nullable: true },
+          externalPregaoYear: { type: "string", nullable: true },
+          externalAtaNumber: { type: "string", nullable: true },
+          externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
           coverageGroups: {
             type: "array",
             items: { $ref: "#/components/schemas/AtaCoverageGroup" },
@@ -1933,6 +1941,86 @@ export const openApiDocument: OpenApiDocument = {
           links: { $ref: "#/components/schemas/ListLinks" },
         },
       },
+      ComprasGovAtaPreviewItem: {
+        type: "object",
+        properties: {
+          referenceCode: { type: "string" },
+          description: { type: "string" },
+          unit: { type: "string" },
+          unitPrice: { type: "number" },
+          initialQuantity: { type: "number" },
+          externalItemId: { type: "string" },
+          externalItemNumber: { type: "string" },
+        },
+      },
+      ComprasGovAtaPreview: {
+        type: "object",
+        properties: {
+          source: { type: "string", enum: ["COMPRAS_GOV"] },
+          uasg: { type: "string" },
+          numeroPregao: { type: "string" },
+          anoPregao: { type: "string" },
+          ata: {
+            type: "object",
+            properties: {
+              number: { type: "string" },
+              type: {
+                type: "string",
+                enum: ["CFTV", "FIBRA_OPTICA"],
+                nullable: true,
+              },
+              vendorName: { type: "string", nullable: true },
+              managingAgency: { type: "string", nullable: true },
+              validFrom: { type: "string", format: "date-time", nullable: true },
+              validUntil: { type: "string", format: "date-time", nullable: true },
+            },
+          },
+          coverageGroups: {
+            type: "array",
+            items: { type: "object" },
+          },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ComprasGovAtaPreviewItem" },
+          },
+          warnings: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+      },
+      ComprasGovAtaImportRequest: {
+        type: "object",
+        required: ["uasg", "numeroPregao", "anoPregao", "ataType"],
+        properties: {
+          uasg: { type: "string" },
+          numeroPregao: { type: "string" },
+          anoPregao: { type: "string" },
+          numeroAta: { type: "string", nullable: true },
+          ataType: { type: "string", enum: ["CFTV", "FIBRA_OPTICA"] },
+          coverageGroupId: { type: "string", nullable: true },
+          coverageGroupCode: { type: "string", nullable: true },
+          coverageGroupName: { type: "string", nullable: true },
+          dryRun: { type: "boolean", nullable: true },
+        },
+      },
+      ComprasGovAtaImportResponse: {
+        type: "object",
+        properties: {
+          dryRun: { type: "boolean" },
+          preview: { $ref: "#/components/schemas/ComprasGovAtaPreview" },
+          imported: {
+            type: "object",
+            properties: {
+              ataId: { type: "string", nullable: true },
+              coverageGroupId: { type: "string", nullable: true },
+              coverageGroupCode: { type: "string", nullable: true },
+              createdItems: { type: "integer" },
+              updatedItems: { type: "integer" },
+            },
+          },
+        },
+      },
       AtaItem: {
         type: "object",
         description:
@@ -1953,6 +2041,10 @@ export const openApiDocument: OpenApiDocument = {
           notes: { type: "string", nullable: true },
           isActive: { type: "boolean" },
           deletedAt: { type: "string", format: "date-time", nullable: true },
+          externalSource: { type: "string", nullable: true },
+          externalItemId: { type: "string", nullable: true },
+          externalItemNumber: { type: "string", nullable: true },
+          externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
           balance: {
             type: "object",
             properties: {
@@ -3855,6 +3947,51 @@ export const openApiDocument: OpenApiDocument = {
           "201": createdJson("#/components/schemas/Ata"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["atas.manage"],
+      },
+    },
+    "/integrations/compras-gov/atas/preview": {
+      get: {
+        tags: ["integrations"],
+        summary: "Previsualizar importacao de ATA do Compras.gov.br",
+        description:
+          "Consulta a API publica do Compras.gov.br no backend e retorna uma previa normalizada da ARP e de seus itens. Usa os endpoints oficiais `/modulo-arp/1_consultarARP` e `/modulo-arp/2_consultarARPItem`.",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("uasg", "Codigo da UASG gerenciadora.", { type: "string" }),
+          queryParameter("numeroPregao", "Numero do pregao/compra.", {
+            type: "string",
+          }),
+          queryParameter("anoPregao", "Ano do pregao/compra.", { type: "string" }),
+          queryParameter("numeroAta", "Numero da ata de registro de preco.", {
+            type: "string",
+          }),
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovAtaPreview"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["atas.manage"],
+      },
+    },
+    "/integrations/compras-gov/atas/import": {
+      post: {
+        tags: ["integrations"],
+        summary: "Importar ATA do Compras.gov.br",
+        description:
+          "Consulta a API publica do Compras.gov.br no backend e cria ou atualiza a ATA e seus itens sem duplicar registros. Nao altera movimentos de saldo local.",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ComprasGovAtaImportRequest"),
+        },
+        responses: {
+          "201": createdJson("#/components/schemas/ComprasGovAtaImportResponse"),
+          "200": okJson("#/components/schemas/ComprasGovAtaImportResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
         "x-permissions": ["atas.manage"],
       },
     },
