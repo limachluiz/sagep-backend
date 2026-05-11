@@ -542,6 +542,28 @@ Cadastro da ata e sua estrutura de cobertura.
 - Autenticação: sim
 - Permissão: `atas.manage`
 
+#### `POST /atas/:id/coverage-groups`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Cria um grupo de cobertura sem substituir os demais grupos da ATA.
+- Body: `code`, `name`, `description` opcional e `localities`.
+
+#### `PATCH /atas/:id/coverage-groups/:groupId`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Atualiza parcialmente um grupo de cobertura. Quando `localities` for enviado, substitui apenas as localidades desse grupo.
+
+#### `DELETE /atas/:id/coverage-groups/:groupId`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Remove o grupo quando ele ainda não possui itens ou estimativas vinculadas.
+
 - Erros comuns:
   - `404` ata não encontrada
   - `409` vínculo ou regra de integridade

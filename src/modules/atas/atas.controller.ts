@@ -1,9 +1,12 @@
 import { Request, Response } from "express";
 import {
   ataCodeParamSchema,
+  ataCoverageGroupParamSchema,
   ataIdParamSchema,
+  createAtaCoverageGroupSchema,
   createAtaSchema,
   listAtasQuerySchema,
+  updateAtaCoverageGroupSchema,
   updateAtaSchema,
 } from "./atas.schemas.js";
 import { AtasService } from "./atas.service.js";
@@ -52,6 +55,26 @@ export class AtasController {
     const data = updateAtaSchema.parse(req.body);
     const ata = await atasService.update(id, data);
     return res.status(200).json(ata);
+  }
+
+  async createCoverageGroup(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    const data = createAtaCoverageGroupSchema.parse(req.body);
+    const coverageGroup = await atasService.createCoverageGroup(id, data);
+    return res.status(201).json(coverageGroup);
+  }
+
+  async updateCoverageGroup(req: Request, res: Response) {
+    const { id, groupId } = ataCoverageGroupParamSchema.parse(req.params);
+    const data = updateAtaCoverageGroupSchema.parse(req.body);
+    const coverageGroup = await atasService.updateCoverageGroup(id, groupId, data);
+    return res.status(200).json(coverageGroup);
+  }
+
+  async removeCoverageGroup(req: Request, res: Response) {
+    const { id, groupId } = ataCoverageGroupParamSchema.parse(req.params);
+    const result = await atasService.removeCoverageGroup(id, groupId);
+    return res.status(200).json(result);
   }
 
   async remove(req: Request, res: Response) {

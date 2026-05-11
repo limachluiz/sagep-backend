@@ -348,6 +348,9 @@ No fluxo de estimativas:
 | `GET` | `/atas/code/:code` | Detalhe por codigo amigavel. | Autenticado |
 | `PATCH` | `/atas/:id` | Atualiza cabecalho e, se enviado, substitui todos os grupos/localidades. | `atas.manage` |
 | `DELETE` | `/atas/:id` | Remove ata. | `atas.manage` |
+| `POST` | `/atas/:id/coverage-groups` | Cria grupo de cobertura sem substituir os demais. | `ADMIN` + `atas.manage` |
+| `PATCH` | `/atas/:id/coverage-groups/:groupId` | Atualiza um grupo de cobertura especifico. | `ADMIN` + `atas.manage` |
+| `DELETE` | `/atas/:id/coverage-groups/:groupId` | Remove um grupo de cobertura sem itens/estimativas vinculadas. | `ADMIN` + `atas.manage` |
 | `GET` | `/atas/:id/items` | Lista itens daquela ata. | Autenticado |
 | `POST` | `/atas/:id/items` | Cria item vinculado a um grupo da ata. | `atas.manage` |
 
@@ -462,7 +465,7 @@ PATCH /api/atas/:id
 Observacao crucial:
 
 - quando `coverageGroups` e enviado no update, o backend apaga todos os grupos/localidades anteriores da ata e recria a estrutura inteira com base no payload novo.
-- para o frontend, isso significa tratar a edicao de grupos como substituicao completa, nao patch incremental.
+- para editar grupos individualmente sem sobrescrever todos, use os endpoints `/atas/:id/coverage-groups`.
 
 Exemplo de update parcial:
 
@@ -472,6 +475,47 @@ Exemplo de update parcial:
   "isActive": false
 }
 ```
+
+### Gerenciar Grupos De Cobertura Da ATA
+
+Cria, edita ou remove um grupo especifico sem substituir todos os grupos da ATA.
+
+```http
+POST /api/atas/:id/coverage-groups
+PATCH /api/atas/:id/coverage-groups/:groupId
+DELETE /api/atas/:id/coverage-groups/:groupId
+```
+
+Payload de criacao:
+
+```json
+{
+  "code": "RR",
+  "name": "Roraima",
+  "description": "Capital e interior",
+  "localities": [
+    { "cityName": "Boa Vista", "stateUf": "RR" }
+  ]
+}
+```
+
+Payload de edicao parcial:
+
+```json
+{
+  "name": "Roraima atualizado",
+  "localities": [
+    { "cityName": "Boa Vista", "stateUf": "RR" },
+    { "cityName": "Pacaraima", "stateUf": "RR" }
+  ]
+}
+```
+
+Observacoes:
+
+- `code` e normalizado para maiusculo e deve ser unico dentro da ATA.
+- em `PATCH`, `localities` substitui apenas as localidades do grupo editado.
+- como o modelo atual nao possui `active` no grupo, `DELETE` remove o registro e retorna `409` quando houver itens ou estimativas vinculadas.
 
 Exemplo de update com substituicao de grupos:
 

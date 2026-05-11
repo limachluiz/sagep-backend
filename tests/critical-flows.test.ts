@@ -2437,6 +2437,58 @@ describe("critical flows", () => {
       .send({ notes: "tentativa gestor" })
       .expect(403);
 
+    await request(app)
+      .post(`/api/atas/${ata.body.id}/coverage-groups`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({
+        code: "RR",
+        name: "Roraima",
+        localities: [{ cityName: "Boa Vista", stateUf: "RR" }],
+      })
+      .expect(403);
+
+    const coverageGroup = await request(app)
+      .post(`/api/atas/${ata.body.id}/coverage-groups`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        code: "RR",
+        name: "Roraima",
+        description: "Interior e capital",
+        localities: [{ cityName: "Boa Vista", stateUf: "RR" }],
+      })
+      .expect(201);
+
+    expect(coverageGroup.body.code).toBe("RR");
+    expect(coverageGroup.body.localities).toHaveLength(1);
+
+    const updatedCoverageGroup = await request(app)
+      .patch(`/api/atas/${ata.body.id}/coverage-groups/${coverageGroup.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        name: "Roraima atualizado",
+        localities: [
+          { cityName: "Boa Vista", stateUf: "RR" },
+          { cityName: "Pacaraima", stateUf: "RR" },
+        ],
+      })
+      .expect(200);
+
+    expect(updatedCoverageGroup.body.name).toBe("Roraima atualizado");
+    expect(updatedCoverageGroup.body.localities).toHaveLength(2);
+
+    await request(app)
+      .delete(`/api/atas/${ata.body.id}/coverage-groups/${coverageGroup.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    const ataAfterCoverageGroupDelete = await request(app)
+      .get(`/api/atas/${ata.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(ataAfterCoverageGroupDelete.body.coverageGroups).toHaveLength(1);
+    expect(ataAfterCoverageGroupDelete.body.coverageGroups[0].code).toBe("AM");
+
     const om = await request(app)
       .post("/api/military-organizations")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)

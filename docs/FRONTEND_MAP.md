@@ -286,6 +286,9 @@ Endpoints:
 - `POST /atas`
 - `PATCH /atas/:id`
 - `DELETE /atas/:id`
+- `POST /atas/:id/coverage-groups`
+- `PATCH /atas/:id/coverage-groups/:groupId`
+- `DELETE /atas/:id/coverage-groups/:groupId`
 
 ### 11. Itens da ATA
 

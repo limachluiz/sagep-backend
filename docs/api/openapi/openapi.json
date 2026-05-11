@@ -415,6 +415,15 @@
           "type": "string"
         }
       },
+      "AtaCoverageGroupId": {
+        "name": "groupId",
+        "in": "path",
+        "required": true,
+        "description": "Identificador UUID do grupo de cobertura da ata.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "AtaCode": {
         "name": "code",
         "in": "path",
@@ -3331,6 +3340,44 @@
             {
               "cityName": "Iranduba",
               "stateUf": "AM"
+            }
+          ]
+        }
+      },
+      "AtaCoverageGroupUpdateRequest": {
+        "type": "object",
+        "description": "Update parcial de um grupo de cobertura. Quando `localities` e enviado, substitui apenas as localidades deste grupo.",
+        "properties": {
+          "code": {
+            "type": "string",
+            "minLength": 2
+          },
+          "name": {
+            "type": "string",
+            "minLength": 2
+          },
+          "description": {
+            "type": "string",
+            "nullable": true
+          },
+          "localities": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "$ref": "#/components/schemas/AtaCoverageLocality"
+            }
+          }
+        },
+        "example": {
+          "name": "Grupo Roraima atualizado",
+          "localities": [
+            {
+              "cityName": "Boa Vista",
+              "stateUf": "RR"
+            },
+            {
+              "cityName": "Pacaraima",
+              "stateUf": "RR"
             }
           ]
         }
@@ -9256,6 +9303,177 @@
             "$ref": "#/components/responses/NotFound"
           }
         },
+        "x-permissions": [
+          "atas.manage"
+        ]
+      }
+    },
+    "/atas/{id}/coverage-groups": {
+      "post": {
+        "tags": [
+          "atas"
+        ],
+        "summary": "Criar grupo de cobertura da ata",
+        "description": "Cria um grupo de cobertura em uma ATA existente sem substituir os demais grupos.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AtaId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtaCoverageGroup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtaCoverageGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN"
+        ],
+        "x-permissions": [
+          "atas.manage"
+        ]
+      }
+    },
+    "/atas/{id}/coverage-groups/{groupId}": {
+      "patch": {
+        "tags": [
+          "atas"
+        ],
+        "summary": "Atualizar grupo de cobertura da ata",
+        "description": "Atualiza um grupo de cobertura especifico. Se `localities` for enviado, substitui apenas as localidades deste grupo.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AtaId"
+          },
+          {
+            "$ref": "#/components/parameters/AtaCoverageGroupId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtaCoverageGroupUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtaCoverageGroup"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN"
+        ],
+        "x-permissions": [
+          "atas.manage"
+        ]
+      },
+      "delete": {
+        "tags": [
+          "atas"
+        ],
+        "summary": "Remover grupo de cobertura da ata",
+        "description": "Remove o grupo de cobertura quando ele nao possui itens ou estimativas vinculadas.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AtaId"
+          },
+          {
+            "$ref": "#/components/parameters/AtaCoverageGroupId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Grupo removido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN"
+        ],
         "x-permissions": [
           "atas.manage"
         ]

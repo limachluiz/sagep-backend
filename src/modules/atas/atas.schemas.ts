@@ -17,6 +17,15 @@ const coverageGroupSchema = z.object({
   localities: z.array(localitySchema).min(1, "Informe ao menos uma localidade"),
 });
 
+export const createAtaCoverageGroupSchema = coverageGroupSchema;
+
+export const updateAtaCoverageGroupSchema = coverageGroupSchema.partial().refine(
+  (data) => Object.keys(data).length > 0,
+  {
+    message: "Informe pelo menos um campo para atualizar",
+  }
+);
+
 export const createAtaSchema = z
   .object({
     number: z.string().trim().min(3, "Número da ata deve ter pelo menos 3 caracteres"),
@@ -81,6 +90,10 @@ export const listAtasQuerySchema = paginationQuerySchema.extend({
 
 export const ataIdParamSchema = z.object({
   id: z.string().min(1, "Id da ata é obrigatório"),
+});
+
+export const ataCoverageGroupParamSchema = ataIdParamSchema.extend({
+  groupId: z.string().min(1, "Id do grupo de cobertura e obrigatorio"),
 });
 
 export const ataCodeParamSchema = z.object({

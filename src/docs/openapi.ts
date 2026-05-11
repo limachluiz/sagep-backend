@@ -292,6 +292,10 @@ export const openApiDocument: OpenApiDocument = {
       ),
       SessionId: pathIdParameter("sessionId", "Identificador da sessao."),
       AtaId: pathIdParameter("id", "Identificador UUID da ata."),
+      AtaCoverageGroupId: pathIdParameter(
+        "groupId",
+        "Identificador UUID do grupo de cobertura da ata.",
+      ),
       AtaCode: pathIdParameter("code", "Codigo sequencial da ata.", {
         type: "integer",
         minimum: 1,
@@ -1791,6 +1795,28 @@ export const openApiDocument: OpenApiDocument = {
           localities: [
             { cityName: "Manaus", stateUf: "AM" },
             { cityName: "Iranduba", stateUf: "AM" },
+          ],
+        },
+      },
+      AtaCoverageGroupUpdateRequest: {
+        type: "object",
+        description:
+          "Update parcial de um grupo de cobertura. Quando `localities` e enviado, substitui apenas as localidades deste grupo.",
+        properties: {
+          code: { type: "string", minLength: 2 },
+          name: { type: "string", minLength: 2 },
+          description: { type: "string", nullable: true },
+          localities: {
+            type: "array",
+            minItems: 1,
+            items: { $ref: "#/components/schemas/AtaCoverageLocality" },
+          },
+        },
+        example: {
+          name: "Grupo Roraima atualizado",
+          localities: [
+            { cityName: "Boa Vista", stateUf: "RR" },
+            { cityName: "Pacaraima", stateUf: "RR" },
           ],
         },
       },
@@ -3809,6 +3835,66 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/ErrorResponse", "Ata removida"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["atas.manage"],
+      },
+    },
+    "/atas/{id}/coverage-groups": {
+      post: {
+        tags: ["atas"],
+        summary: "Criar grupo de cobertura da ata",
+        description:
+          "Cria um grupo de cobertura em uma ATA existente sem substituir os demais grupos.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/AtaCoverageGroup"),
+        },
+        responses: {
+          "201": createdJson("#/components/schemas/AtaCoverageGroup"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["atas.manage"],
+      },
+    },
+    "/atas/{id}/coverage-groups/{groupId}": {
+      patch: {
+        tags: ["atas"],
+        summary: "Atualizar grupo de cobertura da ata",
+        description:
+          "Atualiza um grupo de cobertura especifico. Se `localities` for enviado, substitui apenas as localidades deste grupo.",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/AtaId" },
+          { $ref: "#/components/parameters/AtaCoverageGroupId" },
+        ],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/AtaCoverageGroupUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/AtaCoverageGroup"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["atas.manage"],
+      },
+      delete: {
+        tags: ["atas"],
+        summary: "Remover grupo de cobertura da ata",
+        description:
+          "Remove o grupo de cobertura quando ele nao possui itens ou estimativas vinculadas.",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/AtaId" },
+          { $ref: "#/components/parameters/AtaCoverageGroupId" },
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/ErrorResponse", "Grupo removido"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
         "x-permissions": ["atas.manage"],
       },
     },
