@@ -381,7 +381,10 @@ Perfis:
 Endpoints:
 
 - `GET /users`
+- `GET /users/:id`
 - `POST /users`
+- `PATCH /users/:id`
+- `PATCH /users/:id/status`
 - `PATCH /users/:id/role`
 
 ### 17. Administração de permissões

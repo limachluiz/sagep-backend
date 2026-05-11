@@ -788,6 +788,39 @@
           }
         }
       },
+      "UserUpdateRequest": {
+        "type": "object",
+        "description": "Atualiza dados cadastrais do usuario. Somente ADMIN.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 3
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "rank": {
+            "type": "string",
+            "nullable": true
+          },
+          "cpf": {
+            "type": "string",
+            "nullable": true
+          }
+        }
+      },
+      "UserStatusUpdateRequest": {
+        "type": "object",
+        "required": [
+          "active"
+        ],
+        "properties": {
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
       "PermissionCatalogItem": {
         "type": "object",
         "required": [
@@ -8452,6 +8485,9 @@
             "$ref": "#/components/responses/NotFound"
           }
         },
+        "x-roles": [
+          "ADMIN"
+        ],
         "x-permissions": [
           "users.manage"
         ]
@@ -8501,6 +8537,174 @@
             "$ref": "#/components/responses/NotFound"
           }
         },
+        "x-roles": [
+          "ADMIN"
+        ],
+        "x-permissions": [
+          "users.manage"
+        ]
+      }
+    },
+    "/users/{id}": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Detalhar usuario",
+        "description": "Consulta administrativa de usuario por id. Somente ADMIN.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN"
+        ],
+        "x-permissions": [
+          "users.manage"
+        ]
+      },
+      "patch": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Atualizar dados cadastrais de usuario",
+        "description": "Atualiza name, email, rank e cpf. Somente ADMIN.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN"
+        ],
+        "x-permissions": [
+          "users.manage"
+        ]
+      }
+    },
+    "/users/{id}/status": {
+      "patch": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Atualizar status de usuario",
+        "description": "Ativa ou desativa usuario. Nao permite que o ADMIN autenticado desative a si mesmo quando isso deixaria o sistema sem ADMIN ativo.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/UserId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserStatusUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-roles": [
+          "ADMIN"
+        ],
         "x-permissions": [
           "users.manage"
         ]
@@ -8557,6 +8761,9 @@
             "$ref": "#/components/responses/NotFound"
           }
         },
+        "x-roles": [
+          "ADMIN"
+        ],
         "x-permissions": [
           "users.manage"
         ]

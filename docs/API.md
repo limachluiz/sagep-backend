@@ -244,6 +244,7 @@ Administração de usuários do sistema.
 #### `POST /users`
 
 - Autenticação: sim
+- Role: `ADMIN`
 - Permissão: `users.manage`
 - Body exemplo:
 
@@ -269,11 +270,34 @@ Administração de usuários do sistema.
 #### `GET /users`
 
 - Autenticação: sim
+- Role: `ADMIN`
 - Permissão: `users.manage`
+
+#### `GET /users/:id`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `users.manage`
+
+#### `PATCH /users/:id`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `users.manage`
+- Campos: `name`, `email`, `rank`, `cpf`
+
+#### `PATCH /users/:id/status`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `users.manage`
+- Campos: `active`
+- Bloqueia a auto-desativação quando isso deixaria o sistema sem ADMIN ativo.
 
 #### `PATCH /users/:id/role`
 
 - Autenticação: sim
+- Role: `ADMIN`
 - Permissão: `users.manage`
 - Body exemplo:
 

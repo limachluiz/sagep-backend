@@ -135,25 +135,28 @@ Base:
 /api/users
 ```
 
-Todas as rotas exigem `users.manage`.
+Todas as rotas exigem usuario `ADMIN` com `users.manage`.
 
 ### Leitura Vs Manutencao
 
 - Leitura/listagem: administrativa; nao ha rota publica nem rota autenticada de leitura parcial fora de `users.manage`.
-- Manutencao: administrativa; criar usuario e alterar role exigem `ADMIN`.
+- Manutencao: administrativa; criar usuario, editar cadastro, alterar status e alterar role exigem `ADMIN`.
 - O frontend operacional comum deve consumir dados do usuario atual por `GET /api/auth/me`; `users` fica para telas administrativas.
 
 ### Endpoints Implementados Hoje
 
 | Metodo | Rota | Uso | Permissao |
 |---|---|---|---|
-| `GET` | `/users` | Lista usuarios para administracao. | `users.manage` |
-| `POST` | `/users` | Cria usuario administrativo. | `users.manage` |
-| `PATCH` | `/users/:id/role` | Altera role do usuario. | `users.manage` |
+| `GET` | `/users` | Lista usuarios para administracao. | `ADMIN` + `users.manage` |
+| `POST` | `/users` | Cria usuario administrativo. | `ADMIN` + `users.manage` |
+| `GET` | `/users/:id` | Detalha usuario por id. | `ADMIN` + `users.manage` |
+| `PATCH` | `/users/:id` | Atualiza `name`, `email`, `rank` e `cpf`. | `ADMIN` + `users.manage` |
+| `PATCH` | `/users/:id/status` | Atualiza `active`. | `ADMIN` + `users.manage` |
+| `PATCH` | `/users/:id/role` | Altera role do usuario. | `ADMIN` + `users.manage` |
 
 Observacao importante:
 
-- endpoints como `GET /users/:id`, `GET /users/code/:code`, troca de senha e ativacao ainda nao estao expostos nas rotas atuais; portanto continuam fora da OpenAPI formal e desta documentacao detalhada.
+- endpoints como `GET /users/code/:code` e troca de senha administrativa ainda nao estao expostos nas rotas atuais; portanto continuam fora da OpenAPI formal e desta documentacao detalhada.
 
 ### Filtros E Paginacao
 
@@ -475,6 +478,54 @@ Exemplo de update parcial:
   "isActive": false
 }
 ```
+
+### Detalhar Usuario
+
+```http
+GET /api/users/:id
+```
+
+Retorna o resumo administrativo do usuario, incluindo `rank`, `cpf`, `active`, `createdAt` e `updatedAt`.
+
+### Atualizar Usuario
+
+```http
+PATCH /api/users/:id
+```
+
+Payload:
+
+```json
+{
+  "name": "1 Ten Maria Souza",
+  "email": "maria.souza.atualizada@sagep.mil.br",
+  "rank": "1 Ten",
+  "cpf": "12345678900"
+}
+```
+
+Observacoes:
+
+- todos os campos sao opcionais, mas ao menos um deve ser enviado.
+- `email` deve ser unico.
+
+### Alterar Status
+
+```http
+PATCH /api/users/:id/status
+```
+
+Payload:
+
+```json
+{
+  "active": false
+}
+```
+
+Regra de seguranca:
+
+- o usuario ADMIN autenticado nao pode desativar a si mesmo se isso deixar o sistema sem nenhum ADMIN ativo.
 
 ### Gerenciar Grupos De Cobertura Da ATA
 

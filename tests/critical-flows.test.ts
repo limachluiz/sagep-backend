@@ -2542,6 +2542,58 @@ describe("critical flows", () => {
 
     expect(Array.isArray(legacyUsers.body)).toBe(true);
 
+    await request(app)
+      .get(`/api/users/${gestor.id}`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .expect(403);
+
+    const userDetail = await request(app)
+      .get(`/api/users/${gestor.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(userDetail.body.id).toBe(gestor.id);
+    expect(userDetail.body.rank).toBe("2 Ten");
+    expect(userDetail.body.cpf).toBe("11122233344");
+
+    const updatedUser = await request(app)
+      .patch(`/api/users/${gestor.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        name: "Gestor Atualizado",
+        email: "gestor.atualizado@sagep.com",
+        rank: "1 Ten",
+        cpf: "99988877766",
+      })
+      .expect(200);
+
+    expect(updatedUser.body.name).toBe("Gestor Atualizado");
+    expect(updatedUser.body.email).toBe("gestor.atualizado@sagep.com");
+    expect(updatedUser.body.rank).toBe("1 Ten");
+    expect(updatedUser.body.cpf).toBe("99988877766");
+
+    const inactiveUser = await request(app)
+      .patch(`/api/users/${gestor.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ active: false })
+      .expect(200);
+
+    expect(inactiveUser.body.active).toBe(false);
+
+    const reactivatedUser = await request(app)
+      .patch(`/api/users/${gestor.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ active: true })
+      .expect(200);
+
+    expect(reactivatedUser.body.active).toBe(true);
+
+    await request(app)
+      .patch(`/api/users/${admin.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ active: false })
+      .expect(409);
+
     const atas = await request(app)
       .get("/api/atas")
       .query({ search: catalog.ata.number, pageSize: 1 })

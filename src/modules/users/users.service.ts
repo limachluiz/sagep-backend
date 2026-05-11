@@ -23,11 +23,35 @@ type UpdateUserRoleInput = {
   cpf?: string;
 };
 
+type UpdateUserInput = {
+  name?: string;
+  email?: string;
+  rank?: string;
+  cpf?: string;
+};
+
+type UpdateUserStatusInput = {
+  active?: boolean;
+};
+
 type ListUsersFilters = {
   role?: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
   active?: boolean;
   search?: string;
 };
+
+const adminUserSelect = {
+  id: true,
+  userCode: true,
+  name: true,
+  email: true,
+  role: true,
+  rank: true,
+  cpf: true,
+  active: true,
+  createdAt: true,
+  updatedAt: true,
+} as const;
 
 export class UsersService {
   async create(data: CreateUserByAdminInput) {
@@ -51,13 +75,7 @@ export class UsersService {
         cpf: data.cpf?.trim(),
       },
       select: {
-        id: true,
-        userCode: true,
-        name: true,
-        email: true,
-        role: true,
-        active: true,
-        createdAt: true,
+        ...adminUserSelect,
       },
     });
 
@@ -78,22 +96,102 @@ export class UsersService {
           ],
         }),
       },
-      select: {
-        id: true,
-        userCode: true,
-        name: true,
-        email: true,
-        role: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: adminUserSelect,
       orderBy: {
         userCode: "asc",
       },
     });
 
     return users;
+  }
+
+  async findById(userId: string) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: adminUserSelect,
+    });
+
+    if (!user) {
+      throw new AppError("Usuário não encontrado", 404);
+    }
+
+    return user;
+  }
+
+  async update(userId: string, data: UpdateUserInput) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true },
+    });
+
+    if (!user) {
+      throw new AppError("Usuário não encontrado", 404);
+    }
+
+    const normalizedEmail = data.email?.trim().toLowerCase();
+
+    if (normalizedEmail && normalizedEmail !== user.email.toLowerCase()) {
+      const emailInUse = await prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true },
+      });
+
+      if (emailInUse) {
+        throw new AppError("Já existe um usuário com este e-mail", 409);
+      }
+    }
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(data.name !== undefined && { name: data.name.trim() }),
+        ...(normalizedEmail !== undefined && { email: normalizedEmail }),
+        ...(data.rank !== undefined && { rank: data.rank?.trim() }),
+        ...(data.cpf !== undefined && { cpf: data.cpf?.trim() }),
+      },
+      select: adminUserSelect,
+    });
+  }
+
+  async updateStatus(
+    userId: string,
+    data: UpdateUserStatusInput,
+    currentUser: CurrentUser
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        id: true,
+        role: true,
+        active: true,
+      },
+    });
+
+    if (!user) {
+      throw new AppError("Usuário não encontrado", 404);
+    }
+
+    if (currentUser.id === userId && data.active === false && user.role === "ADMIN") {
+      const otherActiveAdmins = await prisma.user.count({
+        where: {
+          id: { not: userId },
+          role: "ADMIN",
+          active: true,
+        },
+      });
+
+      if (otherActiveAdmins === 0) {
+        throw new AppError("Você não pode desativar o último ADMIN ativo", 409);
+      }
+    }
+
+    return prisma.user.update({
+      where: { id: userId },
+      data: {
+        active: data.active,
+      },
+      select: adminUserSelect,
+    });
   }
 
   async updateRole(userId: string, data: UpdateUserRoleInput, currentUser: CurrentUser) {
@@ -121,16 +219,7 @@ export class UsersService {
       data: {
         role: data.role,
       },
-      select: {
-        id: true,
-        userCode: true,
-        name: true,
-        email: true,
-        role: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true,
-      },
+      select: adminUserSelect,
     });
 
     return updatedUser;

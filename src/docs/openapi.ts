@@ -480,6 +480,23 @@ export const openApiDocument: OpenApiDocument = {
           access: { $ref: "#/components/schemas/AccessProfile" },
         },
       },
+      UserUpdateRequest: {
+        type: "object",
+        description: "Atualiza dados cadastrais do usuario. Somente ADMIN.",
+        properties: {
+          name: { type: "string", minLength: 3 },
+          email: { type: "string", format: "email" },
+          rank: { type: "string", nullable: true },
+          cpf: { type: "string", nullable: true },
+        },
+      },
+      UserStatusUpdateRequest: {
+        type: "object",
+        required: ["active"],
+        properties: {
+          active: { type: "boolean" },
+        },
+      },
       PermissionCatalogItem: {
         type: "object",
         required: ["code", "module", "group", "action", "description", "defaultRoles", "critical"],
@@ -3568,6 +3585,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserListEnvelope"),
           ...defaultErrorResponses,
         },
+        "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
       post: {
@@ -3584,6 +3602,59 @@ export const openApiDocument: OpenApiDocument = {
           "201": createdJson("#/components/schemas/UserSummary"),
           ...defaultErrorResponses,
         },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["users.manage"],
+      },
+    },
+    "/users/{id}": {
+      get: {
+        tags: ["users"],
+        summary: "Detalhar usuario",
+        description: "Consulta administrativa de usuario por id. Somente ADMIN.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        responses: {
+          "200": okJson("#/components/schemas/UserSummary"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["users.manage"],
+      },
+      patch: {
+        tags: ["users"],
+        summary: "Atualizar dados cadastrais de usuario",
+        description: "Atualiza name, email, rank e cpf. Somente ADMIN.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/UserUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/UserSummary"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["users.manage"],
+      },
+    },
+    "/users/{id}/status": {
+      patch: {
+        tags: ["users"],
+        summary: "Atualizar status de usuario",
+        description:
+          "Ativa ou desativa usuario. Nao permite que o ADMIN autenticado desative a si mesmo quando isso deixaria o sistema sem ADMIN ativo.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/UserStatusUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/UserSummary"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
     },
@@ -3603,6 +3674,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserSummary"),
           ...defaultErrorResponses,
         },
+        "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
     },
