@@ -631,6 +631,15 @@ Importar ATA de Registro de Preços e itens a partir da API pública do Compras.
 }
 ```
 
+#### Saldos externos Compras.gov.br
+
+- `GET /atas/:id/external-balance`: compara saldo local da ATA com saldo externo.
+- `POST /atas/:id/sync-external-balance`: atualiza apenas snapshot/timestamp externo, sem alterar saldo local.
+- `GET /ata-items/:id/balance-comparison`: compara saldo de um item.
+- Status: `OK`, `DIVERGENTE`, `CONSUMO_EXTERNO_DETECTADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `SEM_EMPENHO_REGISTRADO`.
+- A consulta externa e feita por ATA no `4_consultarEmpenhosSaldoItem`; o casamento dos itens e local, normalizando zeros a esquerda.
+- Se a API retornar `200` sem registros, itens importados do Compras.gov.br exibem fallback baseado na quantidade registrada importada (`COMPRAS_GOV_IMPORT_FALLBACK`).
+
 ---
 
 ## ATA Items

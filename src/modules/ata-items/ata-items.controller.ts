@@ -9,6 +9,7 @@ import {
 } from "./ata-items.schemas.js";
 import { AtaItemsService } from "./ata-items.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import { comprasGovBalanceService } from "../compras-gov/compras-gov-balance.service.js";
 
 const ataItemsService = new AtaItemsService();
 
@@ -83,6 +84,12 @@ export class AtaItemsController {
     const movements = await ataItemsService.listMovements(id);
 
     return res.status(200).json(movements);
+  }
+
+  async balanceComparison(req: Request, res: Response) {
+    const { id } = ataItemIdParamSchema.parse(req.params);
+    const comparison = await comprasGovBalanceService.compareItem(id);
+    return res.status(200).json(comparison);
   }
 
   async update(req: Request, res: Response) {

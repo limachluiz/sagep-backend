@@ -2312,6 +2312,125 @@ export const openApiDocument: OpenApiDocument = {
         type: "array",
         items: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
       },
+      ComprasGovExternalBalanceComparisonItem: {
+        type: "object",
+        properties: {
+          item: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              ataItemCode: { type: "integer" },
+              referenceCode: { type: "string" },
+              description: { type: "string" },
+              externalItemId: { type: "string", nullable: true },
+              externalItemNumber: { type: "string", nullable: true },
+            },
+          },
+          localBalance: {
+            type: "object",
+            additionalProperties: true,
+          },
+          externalBalance: {
+            nullable: true,
+            type: "object",
+            properties: {
+              externalItemNumber: { type: "string" },
+              source: { type: "string", enum: ["COMPRAS_GOV", "COMPRAS_GOV_IMPORT_FALLBACK"] },
+              registeredQuantity: { type: "string" },
+              committedQuantity: { type: "string" },
+              availableQuantity: { type: "string" },
+              lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
+              rawRecords: { type: "integer" },
+            },
+          },
+          difference: { type: "string", nullable: true },
+          lastSyncAt: { type: "string", format: "date-time", nullable: true },
+          status: {
+            type: "string",
+            enum: [
+              "OK",
+              "DIVERGENTE",
+              "CONSUMO_EXTERNO_DETECTADO",
+              "NAO_ENCONTRADO",
+              "ERRO_CONSULTA_EXTERNA",
+              "SEM_EMPENHO_REGISTRADO",
+            ],
+          },
+          externalError: {
+            type: "object",
+            nullable: true,
+            properties: {
+              status: { type: "integer", nullable: true },
+              url: { type: "string", nullable: true },
+              body: { type: "string", nullable: true },
+            },
+          },
+        },
+      },
+      ComprasGovExternalBalanceComparison: {
+        type: "object",
+        properties: {
+          source: { type: "string", enum: ["COMPRAS_GOV"] },
+          ata: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              ataCode: { type: "integer" },
+              number: { type: "string" },
+              externalUasg: { type: "string", nullable: true },
+              externalPregaoNumber: { type: "string", nullable: true },
+              externalPregaoYear: { type: "string", nullable: true },
+              externalAtaNumber: { type: "string", nullable: true },
+              externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
+            },
+          },
+          comparedAt: { type: "string", format: "date-time" },
+          summary: {
+            type: "object",
+            properties: {
+              totalItems: { type: "integer" },
+              ok: { type: "integer" },
+              divergent: { type: "integer" },
+              externalConsumptionDetected: { type: "integer" },
+              notFound: { type: "integer" },
+              externalQueryErrors: { type: "integer" },
+              semEmpenhoRegistrado: { type: "integer" },
+            },
+          },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ComprasGovExternalBalanceComparisonItem" },
+          },
+          warnings: {
+            type: "array",
+            items: { type: "string" },
+          },
+          debug: {
+            type: "array",
+            nullable: true,
+            items: {
+              type: "object",
+              additionalProperties: true,
+            },
+          },
+        },
+      },
+      ComprasGovExternalBalanceSyncResponse: {
+        allOf: [
+          { $ref: "#/components/schemas/ComprasGovExternalBalanceComparison" },
+          {
+            type: "object",
+            properties: {
+              syncedAt: { type: "string", format: "date-time" },
+              updatedItems: { type: "integer" },
+              warnings: {
+                type: "array",
+                items: { type: "string" },
+              },
+            },
+          },
+        ],
+      },
       MilitaryOrganization: {
         type: "object",
         description:
@@ -4223,6 +4342,35 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["atas.manage"],
       },
     },
+    "/atas/{id}/external-balance": {
+      get: {
+        tags: ["atas"],
+        summary: "Comparar saldo externo Compras.gov.br da ATA",
+        description:
+          "Consulta o saldo externo da ARP no Compras.gov.br por ATA, usando apenas `numeroAta` e `unidadeGerenciadora`, e casa os itens localmente por numero do item normalizado. Nao altera saldo local.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparison"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/atas/{id}/sync-external-balance": {
+      post: {
+        tags: ["atas"],
+        summary: "Sincronizar snapshot externo de saldo Compras.gov.br",
+        description:
+          "Consulta e compara saldo externo por ATA, atualizando apenas timestamps/snapshot externo para itens encontrados. Nao altera movimentos nem saldo local.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovExternalBalanceSyncResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["atas.manage"],
+      },
+    },
     "/ata-items": {
       get: {
         tags: ["ata-items"],
@@ -4279,6 +4427,20 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
         responses: {
           "200": okJson("#/components/schemas/AtaItemBalanceMovementsResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/ata-items/{id}/balance-comparison": {
+      get: {
+        tags: ["ata-items"],
+        summary: "Comparar saldo externo Compras.gov.br do item",
+        description:
+          "Retorna a comparacao entre o saldo local do item e o saldo externo do Compras.gov.br. Endpoint de consulta; nao altera saldo local.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparisonItem"),
           ...defaultErrorResponses,
         },
       },

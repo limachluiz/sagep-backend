@@ -40,6 +40,12 @@ atasRoutes.post("/:id/items", requirePermission("atas.manage"), (req, res) =>
   ataItemsController.create(req, res)
 );
 atasRoutes.get("/:id/items", (req, res) => ataItemsController.listByAta(req, res));
+atasRoutes.get("/:id/external-balance", (req, res) => controller.externalBalance(req, res));
+atasRoutes.post(
+  "/:id/sync-external-balance",
+  requirePermission("atas.manage"),
+  (req, res) => controller.syncExternalBalance(req, res)
+);
 
 atasRoutes.get("/:id", (req, res) => controller.findById(req, res));
 atasRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) =>

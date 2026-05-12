@@ -2593,6 +2593,45 @@ describe("critical flows", () => {
         );
       }
 
+      if (url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem")) {
+        if (url.searchParams.get("numeroAta")?.includes("EMPTY")) {
+          return new Response(
+            JSON.stringify({
+              resultado: [],
+              totalPaginas: 0,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroItem: "00001",
+                unidade: "120624",
+                tipo: "saldo",
+                quantidadeRegistrada: 50,
+                quantidadeEmpenhada: 5,
+                saldoEmpenho: 45,
+                dataHoraAtualizacao: "2026-03-01T10:00:00.000Z",
+              },
+              {
+                numeroItem: "00002",
+                unidade: "120624",
+                tipo: "saldo",
+                quantidadeRegistrada: 10,
+                quantidadeEmpenhada: 0,
+                saldoEmpenho: 10,
+                dataHoraAtualizacao: "2026-03-01T10:00:00.000Z",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
       return new Response(JSON.stringify({ resultado: [], totalPaginas: 1 }), {
         status: 404,
         headers: { "content-type": "application/json" },
@@ -2736,6 +2775,110 @@ describe("critical flows", () => {
       expect(atas[0].coverageGroups[0].code).toBe("MAO");
       expect(atas[0].items[0].coverageGroupId).toBe(atas[0].coverageGroups[0].id);
       expect(atas[0].coverageGroups[0].localities).toHaveLength(2);
+
+      const secondExternalItem = await prisma.ataItem.create({
+        data: {
+          ataId: atas[0].id,
+          coverageGroupId: atas[0].coverageGroups[0].id,
+          referenceCode: "2",
+          description: "Item externo indisponivel",
+          unit: "UN",
+          unitPrice: "10",
+          initialQuantity: "10",
+          externalSource: "COMPRAS_GOV",
+          externalItemId: "ATA-PNCP-1:2",
+          externalItemNumber: "2",
+        },
+      });
+
+      const externalBalance = await request(app)
+        .get(`/api/atas/${atas[0].id}/external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      const balanceUrls = fetchMock.mock.calls
+        .map(([input]) => new URL(String(input)))
+        .filter((url) => url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"));
+      expect(balanceUrls.length).toBeGreaterThan(0);
+      expect(balanceUrls.some((url) => url.searchParams.has("numeroItem"))).toBe(false);
+
+      expect(externalBalance.body.summary.externalConsumptionDetected).toBe(1);
+      expect(externalBalance.body.items[0].localBalance.availableQuantity).toBe("50");
+      expect(externalBalance.body.items[0].externalBalance.availableQuantity).toBe("45");
+      expect(externalBalance.body.items[0].difference).toBe("5");
+      expect(externalBalance.body.items[0].status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(externalBalance.body.summary.externalQueryErrors).toBe(0);
+      expect(externalBalance.body.items[1].item.id).toBe(secondExternalItem.id);
+      expect(externalBalance.body.items[1].externalBalance.availableQuantity).toBe("10");
+      expect(externalBalance.body.items[1].status).toBe("OK");
+
+      const itemComparison = await request(app)
+        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(itemComparison.body.item.id).toBe(atas[0].items[0].id);
+      expect(itemComparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+
+      const synced = await request(app)
+        .post(`/api/atas/${atas[0].id}/sync-external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(synced.body.updatedItems).toBe(2);
+      expect(synced.body.warnings).toContain(
+        "Saldo local nao foi alterado automaticamente; apenas snapshot/timestamp externo foi atualizado.",
+      );
+
+      const itemAfterSync = await prisma.ataItem.findUniqueOrThrow({
+        where: { id: atas[0].items[0].id },
+        select: { initialQuantity: true, externalLastSyncAt: true },
+      });
+      expect(itemAfterSync.initialQuantity.toString()).toBe("50");
+      expect(itemAfterSync.externalLastSyncAt).not.toBeNull();
+
+      const secondItemAfterSync = await prisma.ataItem.findUniqueOrThrow({
+        where: { id: secondExternalItem.id },
+        select: { initialQuantity: true, externalLastSyncAt: true },
+      });
+      expect(secondItemAfterSync.initialQuantity.toString()).toBe("10");
+      expect(secondItemAfterSync.externalLastSyncAt).not.toBeNull();
+
+      await prisma.ata.update({
+        where: { id: atas[0].id },
+        data: { externalAtaNumber: "EMPTY" },
+      });
+
+      const fallbackBalance = await request(app)
+        .get(`/api/atas/${atas[0].id}/external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(fallbackBalance.body.summary.semEmpenhoRegistrado).toBe(2);
+      expect(fallbackBalance.body.summary.notFound).toBe(0);
+      expect(fallbackBalance.body.items[0].status).toBe("SEM_EMPENHO_REGISTRADO");
+      expect(fallbackBalance.body.items[0].externalBalance.source).toBe("COMPRAS_GOV_IMPORT_FALLBACK");
+      expect(fallbackBalance.body.items[0].externalBalance.registeredQuantity).toBe("50");
+      expect(fallbackBalance.body.items[0].externalBalance.committedQuantity).toBe("0");
+      expect(fallbackBalance.body.items[0].externalBalance.availableQuantity).toBe("50");
+      expect(fallbackBalance.body.warnings).toContain(
+        "Compras.gov.br não retornou empenhos para esta ATA. Saldo externo exibido com base na quantidade registrada importada.",
+      );
+
+      const fallbackItemComparison = await request(app)
+        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(fallbackItemComparison.body.status).toBe("SEM_EMPENHO_REGISTRADO");
+
+      const fallbackSync = await request(app)
+        .post(`/api/atas/${atas[0].id}/sync-external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(fallbackSync.body.updatedItems).toBe(2);
+      expect(fallbackSync.body.items[0].status).toBe("SEM_EMPENHO_REGISTRADO");
     } finally {
       fetchMock.mockRestore();
     }

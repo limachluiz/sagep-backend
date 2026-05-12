@@ -619,6 +619,16 @@ Observacoes:
 - itens sao criados/atualizados por `ataId`, grupo e `referenceCode`.
 - a integracao grava os campos externos em `Ata` e `AtaItem`, mas nao altera movimentos de saldo local.
 
+Comparacao de saldo externo:
+
+- `GET /api/atas/{id}/external-balance` compara todos os itens da ATA local com o saldo externo do Compras.gov.br.
+- `POST /api/atas/{id}/sync-external-balance` consulta o saldo externo e atualiza apenas timestamps/snapshot externo, sem alterar saldo local.
+- `GET /api/ata-items/{id}/balance-comparison` compara um item especifico.
+- Status possiveis: `OK`, `DIVERGENTE`, `CONSUMO_EXTERNO_DETECTADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `SEM_EMPENHO_REGISTRADO`.
+- O backend consulta `4_consultarEmpenhosSaldoItem` por ATA (`numeroAta` e `unidadeGerenciadora`) e casa os itens localmente por `numeroItem`, `externalItemNumber` e `referenceCode`, normalizando zeros a esquerda.
+- Se a API retornar `200` sem registros, itens importados do Compras.gov.br usam fallback com `externalBalance.source = COMPRAS_GOV_IMPORT_FALLBACK`, quantidade registrada importada, empenhado zero e status `SEM_EMPENHO_REGISTRADO`.
+- Em `development`, o retorno inclui `debug` com URLs chamadas, status HTTP, quantidade de registros, sample dos primeiros registros e itens locais sem match.
+
 Exemplo de update com substituicao de grupos:
 
 ```json
