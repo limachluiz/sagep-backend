@@ -1953,6 +1953,21 @@ export const openApiDocument: OpenApiDocument = {
           externalItemNumber: { type: "string" },
         },
       },
+      ComprasGovAtaFound: {
+        type: "object",
+        properties: {
+          ataNumber: { type: "string" },
+          vendorName: { type: "string", nullable: true },
+          itemCount: { type: "number" },
+          totalAmount: { type: "number", nullable: true },
+          validFrom: { type: "string", format: "date-time", nullable: true },
+          validUntil: { type: "string", format: "date-time", nullable: true },
+          sampleItems: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ComprasGovAtaPreviewItem" },
+          },
+        },
+      },
       ComprasGovAtaPreview: {
         type: "object",
         properties: {
@@ -1961,19 +1976,24 @@ export const openApiDocument: OpenApiDocument = {
           numeroPregao: { type: "string" },
           anoPregao: { type: "string" },
           ata: {
-            type: "object",
-            properties: {
-              number: { type: "string" },
-              type: {
-                type: "string",
-                enum: ["CFTV", "FIBRA_OPTICA"],
-                nullable: true,
+            nullable: true,
+            oneOf: [
+              {
+                type: "object",
+                properties: {
+                  number: { type: "string" },
+                  type: {
+                    type: "string",
+                    enum: ["CFTV", "FIBRA_OPTICA"],
+                    nullable: true,
+                  },
+                  vendorName: { type: "string", nullable: true },
+                  managingAgency: { type: "string", nullable: true },
+                  validFrom: { type: "string", format: "date-time", nullable: true },
+                  validUntil: { type: "string", format: "date-time", nullable: true },
+                },
               },
-              vendorName: { type: "string", nullable: true },
-              managingAgency: { type: "string", nullable: true },
-              validFrom: { type: "string", format: "date-time", nullable: true },
-              validUntil: { type: "string", format: "date-time", nullable: true },
-            },
+            ],
           },
           coverageGroups: {
             type: "array",
@@ -1982,6 +2002,14 @@ export const openApiDocument: OpenApiDocument = {
           items: {
             type: "array",
             items: { $ref: "#/components/schemas/ComprasGovAtaPreviewItem" },
+          },
+          atasFound: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ComprasGovAtaFound" },
+          },
+          selectedAta: {
+            nullable: true,
+            allOf: [{ $ref: "#/components/schemas/ComprasGovAtaFound" }],
           },
           warnings: {
             type: "array",

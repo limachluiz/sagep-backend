@@ -2537,6 +2537,16 @@ describe("critical flows", () => {
                 dataVigenciaFinal: "2026-12-31",
                 numeroControlePncpAta: "ATA-PNCP-1",
               },
+              {
+                numeroAtaRegistroPreco: "0002",
+                codigoUnidadeGerenciadora: "120624",
+                nomeUnidadeGerenciadora: "Centro de Tecnologia",
+                numeroCompra: "90001",
+                anoCompra: "2026",
+                dataVigenciaInicial: "2026-02-01",
+                dataVigenciaFinal: "2027-01-31",
+                numeroControlePncpAta: "ATA-PNCP-2",
+              },
             ],
             totalPaginas: 1,
           }),
@@ -2561,6 +2571,20 @@ describe("critical flows", () => {
                 valorUnitario: 250.75,
                 nomeRazaoSocialFornecedor: "Fornecedor Compras Gov",
                 numeroControlePncpAta: "ATA-PNCP-1",
+              },
+              {
+                numeroAtaRegistroPreco: "0002",
+                codigoUnidadeGerenciadora: "120624",
+                numeroCompra: "90001",
+                anoCompra: "2026",
+                numeroItem: "2",
+                codigoItem: 456,
+                descricaoItem: "Switch gerenciavel",
+                tipoItem: "UN",
+                quantidadeHomologadaVencedor: 10,
+                valorUnitario: 1000,
+                nomeRazaoSocialFornecedor: "Outro Fornecedor Compras Gov",
+                numeroControlePncpAta: "ATA-PNCP-2",
               },
             ],
             totalPaginas: 1,
@@ -2591,6 +2615,42 @@ describe("critical flows", () => {
       expect(preview.body.ata.vendorName).toBe("Fornecedor Compras Gov");
       expect(preview.body.items).toHaveLength(1);
       expect(preview.body.items[0].referenceCode).toBe("1");
+      expect(preview.body.atasFound).toHaveLength(1);
+      expect(preview.body.selectedAta.ataNumber).toBe("ARP 0001");
+
+      const groupedPreview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(groupedPreview.body.ata).toBeNull();
+      expect(groupedPreview.body.items).toHaveLength(0);
+      expect(groupedPreview.body.selectedAta).toBeUndefined();
+      expect(groupedPreview.body.atasFound).toHaveLength(2);
+      expect(groupedPreview.body.atasFound[0].itemCount).toBe(1);
+      expect(groupedPreview.body.atasFound[0].totalAmount).toBe(12537.5);
+      expect(groupedPreview.body.warnings).toContain(
+        "Foram encontradas várias ATAs. Selecione uma ATA para continuar.",
+      );
+
+      const partialPreview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "ARP 1/2026/2026",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(partialPreview.body.ata.number).toBe("ARP 0001/2026");
+      expect(partialPreview.body.items).toHaveLength(1);
 
       await request(app)
         .get("/api/integrations/compras-gov/atas/preview")
@@ -2645,6 +2705,203 @@ describe("critical flows", () => {
       expect(atas[0].externalPregaoNumber).toBe("90001");
       expect(atas[0].items).toHaveLength(1);
       expect(atas[0].items[0].externalItemNumber).toBe("1");
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("integrations: previews Compras.gov.br CFTV ATA when ATA year differs from purchase year", async () => {
+    const requestedUrls: URL[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      requestedUrls.push(url);
+
+      if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                nomeUnidadeGerenciadora: "Comando CFTV",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                dataVigenciaInicial: "2026-01-15",
+                dataVigenciaFinal: "2027-01-15",
+                numeroControlePncpAta: "ATA-CFTV-001-2026",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                numeroItem: "1",
+                codigoItem: 789,
+                descricaoItem: "Camera CFTV",
+                tipoItem: "UN",
+                quantidadeHomologadaVencedor: 20,
+                valorUnitario: 500,
+                nomeRazaoSocialFornecedor: "Fornecedor CFTV",
+                numeroControlePncpAta: "ATA-CFTV-001-2026",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ resultado: [], totalPaginas: 1 }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      for (const numeroAta of [
+        "1",
+        "001",
+        "001/2026",
+        "ATA DE REGISTRO DE PREÇOS Nº 001/2026",
+      ]) {
+        const preview = await request(app)
+          .get("/api/integrations/compras-gov/atas/preview")
+          .query({
+            uasg: "160016",
+            numeroPregao: "90012",
+            anoPregao: "2025",
+            numeroAta,
+          })
+          .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+          .expect(200);
+
+        expect(preview.body.ata.number).toBe("ARP 001/2026");
+        expect(preview.body.ata.vendorName).toBe("Fornecedor CFTV");
+        expect(preview.body.items).toHaveLength(1);
+        expect(preview.body.selectedAta.ataNumber).toBe("ARP 001/2026");
+      }
+
+      const groupedPreview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "160016",
+          numeroPregao: "90012",
+          anoPregao: "2025",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(groupedPreview.body.atasFound).toHaveLength(1);
+      expect(groupedPreview.body.selectedAta.ataNumber).toBe("ARP 001/2026");
+      expect(groupedPreview.body.items).toHaveLength(1);
+
+      expect(
+        requestedUrls.some(
+          (url) => url.searchParams.has("numeroAtaRegistroPreco") && url.searchParams.get("numeroAtaRegistroPreco"),
+        ),
+      ).toBe(false);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("integrations: falls back when Compras.gov.br rejects the documented broad ARP query", async () => {
+    const requestedUrls: URL[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      requestedUrls.push(url);
+
+      const isVigenciaQuery = url.searchParams.has("dataVigenciaInicialMin");
+
+      if (isVigenciaQuery) {
+        return new Response(JSON.stringify({ erro: "Parametro invalido" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                nomeUnidadeGerenciadora: "Comando CFTV",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                dataVigenciaInicial: "2026-01-15",
+                dataVigenciaFinal: "2027-01-15",
+                numeroControlePncpAta: "ATA-CFTV-FALLBACK",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                numeroItem: "1",
+                descricaoItem: "Camera CFTV",
+                tipoItem: "UN",
+                quantidadeHomologadaVencedor: 20,
+                valorUnitario: 500,
+                nomeRazaoSocialFornecedor: "Fornecedor CFTV",
+                numeroControlePncpAta: "ATA-CFTV-FALLBACK",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ resultado: [], totalPaginas: 1 }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      const preview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "160016",
+          numeroPregao: "90012",
+          anoPregao: "2025",
+          numeroAta: "001",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(preview.body.ata.number).toBe("ARP 001/2026");
+      expect(preview.body.items).toHaveLength(1);
+      expect(requestedUrls.some((url) => url.searchParams.get("anoCompra") === "2025")).toBe(true);
+      expect(
+        requestedUrls.some(
+          (url) => url.searchParams.has("numeroAtaRegistroPreco") && url.searchParams.get("numeroAtaRegistroPreco"),
+        ),
+      ).toBe(false);
     } finally {
       fetchMock.mockRestore();
     }
