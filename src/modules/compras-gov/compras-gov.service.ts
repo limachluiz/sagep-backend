@@ -22,6 +22,12 @@ type ImportInput = PreviewInput & {
   coverageGroupId?: string;
   coverageGroupCode?: string;
   coverageGroupName?: string;
+  coverageGroupStateUf?: "AM" | "RO" | "RR" | "AC";
+  coverageGroupCityName?: string;
+  coverageGroupLocalities?: Array<{
+    cityName: string;
+    stateUf: "AM" | "RO" | "RR" | "AC";
+  }>;
   dryRun?: boolean;
 };
 
@@ -47,6 +53,11 @@ type ComprasGovPreviewDebug = {
   externalStatus: number[];
   externalErrorBody: string[];
   filters: Record<string, string | null>;
+};
+
+type CoverageLocalityInput = {
+  cityName: string;
+  stateUf: "AM" | "RO" | "RR" | "AC";
 };
 
 class ComprasGovApiError extends Error {
@@ -300,6 +311,30 @@ export class ComprasGovService {
       dataVigenciaInicialMin: `${input.anoPregao.trim()}-01-01`,
       dataVigenciaInicialMax: `${input.anoPregao.trim()}-12-31`,
     };
+  }
+
+  private normalizeCoverageLocalities(data: ImportInput): CoverageLocalityInput[] {
+    const localities = [
+      ...(data.coverageGroupLocalities ?? []),
+      ...(data.coverageGroupCityName && data.coverageGroupStateUf
+        ? [{ cityName: data.coverageGroupCityName, stateUf: data.coverageGroupStateUf }]
+        : []),
+    ]
+      .map((locality) => ({
+        cityName: locality.cityName.trim(),
+        stateUf: locality.stateUf,
+      }))
+      .filter((locality) => locality.cityName);
+
+    return localities.filter(
+      (locality, index, array) =>
+        index ===
+        array.findIndex(
+          (item) =>
+            item.cityName.toLowerCase() === locality.cityName.toLowerCase() &&
+            item.stateUf === locality.stateUf
+        )
+    );
   }
 
   private toDate(value: string | null) {
@@ -782,23 +817,65 @@ export class ComprasGovService {
   }
 
   private async resolveCoverageGroup(ataId: string, data: ImportInput) {
+    const localities = this.normalizeCoverageLocalities(data);
+    const coverageGroupSelect = {
+      id: true,
+      code: true,
+      name: true,
+      localities: {
+        select: {
+          cityName: true,
+          stateUf: true,
+        },
+        orderBy: [{ stateUf: "asc" as const }, { cityName: "asc" as const }],
+      },
+    };
+
     if (data.coverageGroupId) {
       const group = await prisma.ataCoverageGroup.findFirst({
         where: { id: data.coverageGroupId, ataId },
-        select: { id: true, code: true },
+        select: { id: true },
       });
 
       if (!group) {
         throw new AppError("Grupo de cobertura nao encontrado para esta ata", 404);
       }
 
-      return group;
+      await prisma.ataCoverageGroup.update({
+        where: { id: group.id },
+        data: {
+          ...(data.coverageGroupName && { name: data.coverageGroupName.trim() }),
+        },
+      });
+
+      for (const locality of localities) {
+        await prisma.ataCoverageLocality.upsert({
+          where: {
+            coverageGroupId_cityName_stateUf: {
+              coverageGroupId: group.id,
+              cityName: locality.cityName,
+              stateUf: locality.stateUf,
+            },
+          },
+          update: {},
+          create: {
+            coverageGroupId: group.id,
+            cityName: locality.cityName,
+            stateUf: locality.stateUf,
+          },
+        });
+      }
+
+      return prisma.ataCoverageGroup.findUniqueOrThrow({
+        where: { id: group.id },
+        select: coverageGroupSelect,
+      });
     }
 
     const code = (data.coverageGroupCode ?? "COMPRAS").trim().toUpperCase();
     const name = (data.coverageGroupName ?? "Compras.gov.br").trim();
 
-    return prisma.ataCoverageGroup.upsert({
+    const group = await prisma.ataCoverageGroup.upsert({
       where: {
         ataId_code: {
           ataId,
@@ -806,17 +883,37 @@ export class ComprasGovService {
         },
       },
       update: {
-        name,
+        ...(data.coverageGroupName && { name }),
       },
       create: {
         ataId,
         code,
         name,
       },
-      select: {
-        id: true,
-        code: true,
-      },
+      select: { id: true },
+    });
+
+    for (const locality of localities) {
+      await prisma.ataCoverageLocality.upsert({
+        where: {
+          coverageGroupId_cityName_stateUf: {
+            coverageGroupId: group.id,
+            cityName: locality.cityName,
+            stateUf: locality.stateUf,
+          },
+        },
+        update: {},
+        create: {
+          coverageGroupId: group.id,
+          cityName: locality.cityName,
+          stateUf: locality.stateUf,
+        },
+      });
+    }
+
+    return prisma.ataCoverageGroup.findUniqueOrThrow({
+      where: { id: group.id },
+      select: coverageGroupSelect,
     });
   }
 
@@ -829,6 +926,11 @@ export class ComprasGovService {
       return {
         dryRun: true,
         preview,
+        ata: null,
+        coverageGroup: null,
+        itemsCreated: 0,
+        itemsUpdated: 0,
+        warnings: preview.warnings,
         imported: {
           ataId: null,
           createdItems: 0,
@@ -870,11 +972,29 @@ export class ComprasGovService {
       ? await prisma.ata.update({
           where: { id: existingAta.id },
           data: ataData,
-          select: { id: true },
+          select: {
+            id: true,
+            ataCode: true,
+            number: true,
+            type: true,
+            vendorName: true,
+            managingAgency: true,
+            validFrom: true,
+            validUntil: true,
+          },
         })
       : await prisma.ata.create({
           data: ataData as Prisma.AtaCreateInput,
-          select: { id: true },
+          select: {
+            id: true,
+            ataCode: true,
+            number: true,
+            type: true,
+            vendorName: true,
+            managingAgency: true,
+            validFrom: true,
+            validUntil: true,
+          },
         });
 
     const coverageGroup = await this.resolveCoverageGroup(ata.id, data);
@@ -937,6 +1057,11 @@ export class ComprasGovService {
     return {
       dryRun: false,
       preview,
+      ata,
+      coverageGroup,
+      itemsCreated: createdItems,
+      itemsUpdated: updatedItems,
+      warnings: preview.warnings,
       imported: {
         ataId: ata.id,
         coverageGroupId: coverageGroup.id,

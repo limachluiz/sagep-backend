@@ -2672,12 +2672,20 @@ describe("critical flows", () => {
           anoPregao: "2026",
           numeroAta: "0001",
           ataType: "CFTV",
-          coverageGroupCode: "CGOV",
-          coverageGroupName: "Compras.gov.br",
+          coverageGroupCode: "MAO",
+          coverageGroupName: "Manaus",
+          coverageGroupStateUf: "AM",
+          coverageGroupCityName: "Manaus",
         })
         .expect(201);
 
       expect(imported.body.imported.createdItems).toBe(1);
+      expect(imported.body.itemsCreated).toBe(1);
+      expect(imported.body.coverageGroup.code).toBe("MAO");
+      expect(imported.body.coverageGroup.name).toBe("Manaus");
+      expect(imported.body.coverageGroup.localities).toEqual([
+        { cityName: "Manaus", stateUf: "AM" },
+      ]);
 
       const importedAgain = await request(app)
         .post("/api/integrations/compras-gov/atas/import")
@@ -2688,23 +2696,46 @@ describe("critical flows", () => {
           anoPregao: "2026",
           numeroAta: "0001",
           ataType: "CFTV",
-          coverageGroupCode: "CGOV",
-          coverageGroupName: "Compras.gov.br",
+          coverageGroupCode: "MAO",
+          coverageGroupName: "Manaus",
+          coverageGroupLocalities: [
+            { cityName: "Manaus", stateUf: "AM" },
+            { cityName: "Iranduba", stateUf: "AM" },
+          ],
         })
         .expect(201);
 
       expect(importedAgain.body.imported.createdItems).toBe(0);
       expect(importedAgain.body.imported.updatedItems).toBe(1);
+      expect(importedAgain.body.itemsCreated).toBe(0);
+      expect(importedAgain.body.itemsUpdated).toBe(1);
+      expect(importedAgain.body.coverageGroup.localities).toEqual([
+        { cityName: "Iranduba", stateUf: "AM" },
+        { cityName: "Manaus", stateUf: "AM" },
+      ]);
 
       const atas = await prisma.ata.findMany({
         where: { externalSource: "COMPRAS_GOV", externalUasg: "120624" },
-        include: { items: true },
+        include: {
+          items: true,
+          coverageGroups: {
+            include: {
+              localities: {
+                orderBy: [{ stateUf: "asc" }, { cityName: "asc" }],
+              },
+            },
+          },
+        },
       });
 
       expect(atas).toHaveLength(1);
       expect(atas[0].externalPregaoNumber).toBe("90001");
       expect(atas[0].items).toHaveLength(1);
       expect(atas[0].items[0].externalItemNumber).toBe("1");
+      expect(atas[0].coverageGroups).toHaveLength(1);
+      expect(atas[0].coverageGroups[0].code).toBe("MAO");
+      expect(atas[0].items[0].coverageGroupId).toBe(atas[0].coverageGroups[0].id);
+      expect(atas[0].coverageGroups[0].localities).toHaveLength(2);
     } finally {
       fetchMock.mockRestore();
     }

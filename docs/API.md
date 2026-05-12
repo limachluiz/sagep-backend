@@ -614,7 +614,7 @@ Importar ATA de Registro de Preços e itens a partir da API pública do Compras.
 - Autenticação: sim
 - Role: `ADMIN`
 - Permissão: `atas.manage`
-- Body: `uasg`, `numeroPregao`, `anoPregao`, `numeroAta` opcional, `ataType`, `coverageGroupId` opcional, `coverageGroupCode` opcional, `coverageGroupName` opcional, `dryRun` opcional
+- Body: `uasg`, `numeroPregao`, `anoPregao`, `numeroAta` opcional, `ataType`, `coverageGroupId` opcional, `coverageGroupCode` opcional, `coverageGroupName` opcional, `coverageGroupStateUf` opcional, `coverageGroupCityName` opcional, `coverageGroupLocalities` opcional, `dryRun` opcional
 - Cria ou atualiza a ATA e cria ou atualiza itens sem duplicar por `ataId`, grupo e `referenceCode`.
 
 ```json
@@ -624,8 +624,10 @@ Importar ATA de Registro de Preços e itens a partir da API pública do Compras.
   "anoPregao": "2026",
   "numeroAta": "0001",
   "ataType": "CFTV",
-  "coverageGroupCode": "CGOV",
-  "coverageGroupName": "Compras.gov.br"
+  "coverageGroupCode": "MAO",
+  "coverageGroupName": "Manaus",
+  "coverageGroupStateUf": "AM",
+  "coverageGroupCityName": "Manaus"
 }
 ```
 

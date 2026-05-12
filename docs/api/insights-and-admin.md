@@ -599,8 +599,14 @@ Importacao:
   "anoPregao": "2026",
   "numeroAta": "0001",
   "ataType": "CFTV",
-  "coverageGroupCode": "CGOV",
-  "coverageGroupName": "Compras.gov.br",
+  "coverageGroupCode": "MAO",
+  "coverageGroupName": "Manaus",
+  "coverageGroupStateUf": "AM",
+  "coverageGroupCityName": "Manaus",
+  "coverageGroupLocalities": [
+    { "cityName": "Manaus", "stateUf": "AM" },
+    { "cityName": "Iranduba", "stateUf": "AM" }
+  ],
   "dryRun": false
 }
 ```
@@ -609,6 +615,7 @@ Observacoes:
 
 - `dryRun: true` consulta a origem e retorna a previa sem gravar.
 - a importacao tenta localizar a ATA por vinculo externo (`externalSource`, UASG, pregao, ano e numero da ATA) para nao duplicar.
+- `coverageGroupCode` e `coverageGroupName` continuam aceitos; `coverageGroupStateUf`, `coverageGroupCityName` e `coverageGroupLocalities` permitem criar/atualizar as localidades do grupo usado na importacao.
 - itens sao criados/atualizados por `ataId`, grupo e `referenceCode`.
 - a integracao grava os campos externos em `Ata` e `AtaItem`, mas nao altera movimentos de saldo local.
 

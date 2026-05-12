@@ -2029,6 +2029,13 @@ export const openApiDocument: OpenApiDocument = {
           coverageGroupId: { type: "string", nullable: true },
           coverageGroupCode: { type: "string", nullable: true },
           coverageGroupName: { type: "string", nullable: true },
+          coverageGroupStateUf: { type: "string", enum: ["AM", "RO", "RR", "AC"], nullable: true },
+          coverageGroupCityName: { type: "string", nullable: true },
+          coverageGroupLocalities: {
+            type: "array",
+            nullable: true,
+            items: { $ref: "#/components/schemas/AtaCoverageLocality" },
+          },
           dryRun: { type: "boolean", nullable: true },
         },
       },
@@ -2037,6 +2044,39 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           dryRun: { type: "boolean" },
           preview: { $ref: "#/components/schemas/ComprasGovAtaPreview" },
+          ata: {
+            nullable: true,
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              ataCode: { type: "integer" },
+              number: { type: "string" },
+              type: { type: "string", enum: ["CFTV", "FIBRA_OPTICA"] },
+              vendorName: { type: "string" },
+              managingAgency: { type: "string", nullable: true },
+              validFrom: { type: "string", format: "date-time", nullable: true },
+              validUntil: { type: "string", format: "date-time", nullable: true },
+            },
+          },
+          coverageGroup: {
+            nullable: true,
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              code: { type: "string" },
+              name: { type: "string" },
+              localities: {
+                type: "array",
+                items: { $ref: "#/components/schemas/AtaCoverageLocality" },
+              },
+            },
+          },
+          itemsCreated: { type: "integer" },
+          itemsUpdated: { type: "integer" },
+          warnings: {
+            type: "array",
+            items: { type: "string" },
+          },
           imported: {
             type: "object",
             properties: {
