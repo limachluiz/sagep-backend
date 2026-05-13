@@ -92,6 +92,12 @@ export class AtaItemsController {
     return res.status(200).json(comparison);
   }
 
+  async syncExternalBalance(req: Request, res: Response) {
+    const { id } = ataItemIdParamSchema.parse(req.params);
+    const comparison = await comprasGovBalanceService.syncItem(id);
+    return res.status(200).json(comparison);
+  }
+
   async update(req: Request, res: Response) {
     const { id } = ataItemIdParamSchema.parse(req.params);
     const data = updateAtaItemSchema.parse(req.body);

@@ -14,6 +14,9 @@ ataItemsRoutes.get("/:id/movements", (req, res) => controller.listMovements(req,
 ataItemsRoutes.get("/:id/balance-comparison", (req, res) =>
   controller.balanceComparison(req, res)
 );
+ataItemsRoutes.post("/:id/sync-external-balance", requirePermission("atas.manage"), (req, res) =>
+  controller.syncExternalBalance(req, res)
+);
 ataItemsRoutes.get("/:id", (req, res) => controller.findById(req, res));
 ataItemsRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.update(req, res)

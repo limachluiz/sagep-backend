@@ -4461,6 +4461,102 @@
               },
               "rawRecords": {
                 "type": "integer"
+              },
+              "commitments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "numeroEmpenho": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unidade": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tipoUnidade": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "fornecedor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "dataEmpenho": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "quantidadeIncluida": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "quantidadeEmpenhada": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "valor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "affectsManagedBalance": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "nonParticipantCommitments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "numeroEmpenho": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "unidade": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "tipoUnidade": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "fornecedor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "dataEmpenho": {
+                      "type": "string",
+                      "format": "date-time",
+                      "nullable": true
+                    },
+                    "quantidadeIncluida": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "quantidadeEmpenhada": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "valor": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "affectsManagedBalance": {
+                      "type": "boolean"
+                    }
+                  }
+                }
+              },
+              "adhesions": {
+                "type": "array",
+                "description": "Alias de nonParticipantCommitments para adesoes/nao participantes.",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
               }
             }
           },
@@ -4481,6 +4577,7 @@
               "CONSUMO_EXTERNO_DETECTADO",
               "NAO_ENCONTRADO",
               "ERRO_CONSULTA_EXTERNA",
+              "RATE_LIMIT_COMPRAS_GOV",
               "SEM_EMPENHO_REGISTRADO"
             ]
           },
@@ -4498,6 +4595,10 @@
               },
               "body": {
                 "type": "string",
+                "nullable": true
+              },
+              "retryAfterSeconds": {
+                "type": "integer",
                 "nullable": true
               }
             }
@@ -4573,6 +4674,9 @@
               "externalQueryErrors": {
                 "type": "integer"
               },
+              "rateLimitErrors": {
+                "type": "integer"
+              },
               "semEmpenhoRegistrado": {
                 "type": "integer"
               }
@@ -4589,6 +4693,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "retryAfterSeconds": {
+            "type": "integer",
+            "nullable": true
           },
           "debug": {
             "type": "array",
@@ -4610,7 +4718,8 @@
             "properties": {
               "syncedAt": {
                 "type": "string",
-                "format": "date-time"
+                "format": "date-time",
+                "nullable": true
               },
               "updatedItems": {
                 "type": "integer"
@@ -10936,6 +11045,52 @@
             "$ref": "#/components/responses/NotFound"
           }
         }
+      }
+    },
+    "/ata-items/{id}/sync-external-balance": {
+      "post": {
+        "tags": [
+          "ata-items"
+        ],
+        "summary": "Sincronizar snapshot externo de saldo Compras.gov.br do item",
+        "description": "Consulta e compara saldo externo apenas do item informado, atualizando somente o timestamp/snapshot externo desse item. Nao altera movimentos nem saldo local.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AtaItemId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ComprasGovExternalBalanceComparisonItem"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        },
+        "x-permissions": [
+          "atas.manage"
+        ]
       }
     },
     "/ata-items/{id}": {

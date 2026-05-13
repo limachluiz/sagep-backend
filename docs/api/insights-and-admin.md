@@ -624,8 +624,11 @@ Comparacao de saldo externo:
 - `GET /api/atas/{id}/external-balance` compara todos os itens da ATA local com o saldo externo do Compras.gov.br.
 - `POST /api/atas/{id}/sync-external-balance` consulta o saldo externo e atualiza apenas timestamps/snapshot externo, sem alterar saldo local.
 - `GET /api/ata-items/{id}/balance-comparison` compara um item especifico.
-- Status possiveis: `OK`, `DIVERGENTE`, `CONSUMO_EXTERNO_DETECTADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `SEM_EMPENHO_REGISTRADO`.
-- O backend consulta `4_consultarEmpenhosSaldoItem` por ATA (`numeroAta` e `unidadeGerenciadora`) e casa os itens localmente por `numeroItem`, `externalItemNumber` e `referenceCode`, normalizando zeros a esquerda.
+- `POST /api/ata-items/{id}/sync-external-balance` consulta o saldo externo apenas desse item e atualiza somente `externalLastSyncAt` do item informado.
+- Status possiveis: `OK`, `DIVERGENTE`, `CONSUMO_EXTERNO_DETECTADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`, `SEM_EMPENHO_REGISTRADO`.
+- HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado, nao marca `SEM_EMPENHO_REGISTRADO` e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
+- O backend consulta `4_consultarEmpenhosSaldoItem` por ATA (`numeroAta` e `unidadeGerenciadora`). Se esse endpoint retornar vazio, usa o `externalItemId` salvo no item para consultar `2.1_consultarARPItem_Id` e cruza os dados oficiais de `3_consultarUnidadesItem` e `5_consultarAdesoesItem` por `numeroItem`, `externalItemNumber` e `referenceCode`, normalizando zeros a esquerda.
+- `externalBalance.commitments` lista empenhos da unidade gerenciadora que afetam o saldo principal; `externalBalance.nonParticipantCommitments` e `externalBalance.adhesions` listam adesoes/nao participantes com `affectsManagedBalance = false`.
 - Se a API retornar `200` sem registros, itens importados do Compras.gov.br usam fallback com `externalBalance.source = COMPRAS_GOV_IMPORT_FALLBACK`, quantidade registrada importada, empenhado zero e status `SEM_EMPENHO_REGISTRADO`.
 - Em `development`, o retorno inclui `debug` com URLs chamadas, status HTTP, quantidade de registros, sample dos primeiros registros e itens locais sem match.
 
