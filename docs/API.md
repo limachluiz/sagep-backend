@@ -633,14 +633,22 @@ Importar ATA de Registro de Preços e itens a partir da API pública do Compras.
 
 #### Saldos externos Compras.gov.br
 
-- `GET /atas/:id/external-balance`: compara saldo local da ATA com saldo externo.
-- `POST /atas/:id/sync-external-balance`: atualiza apenas snapshot/timestamp externo, sem alterar saldo local.
-- `GET /ata-items/:id/balance-comparison`: compara saldo de um item.
-- `POST /ata-items/:id/sync-external-balance`: consulta e sincroniza apenas o snapshot/timestamp externo do item informado, sem sincronizar os demais itens da ATA.
-- Status: `OK`, `DIVERGENTE`, `CONSUMO_EXTERNO_DETECTADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`, `SEM_EMPENHO_REGISTRADO`.
+- `GET /atas/:id/external-balance`: le apenas snapshots externos persistidos no banco; nao consulta Compras.gov.br.
+- `POST /atas/:id/sync-external-balance`: consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
+- `GET /ata-items/:id/balance-comparison`: le apenas o ultimo snapshot persistido do item; se nao existir, retorna `NAO_SINCRONIZADO`.
+- `POST /ata-items/:id/sync-external-balance`: consulta Compras.gov.br e atualiza apenas o snapshot persistido do item informado, sem sincronizar os demais itens da ATA.
+- Status: `OK`, `DIVERGENTE`, `CONSUMO_EXTERNO_DETECTADO`, `NAO_SINCRONIZADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`, `SEM_EMPENHO_REGISTRADO`.
 - HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado, nao marca `SEM_EMPENHO_REGISTRADO` e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
 - A consulta externa da ATA tenta primeiro `4_consultarEmpenhosSaldoItem` por `numeroAta` e `unidadeGerenciadora`. Se o endpoint oficial retornar vazio, o backend usa o `externalItemId`/`externalItemNumber` do item para consultar `2.1_consultarARPItem_Id`, `3_consultarUnidadesItem` e `5_consultarAdesoesItem`, casando por `numeroItem` com zeros a esquerda normalizados.
-- `externalBalance.commitments` lista empenhos da unidade gerenciadora que afetam o saldo principal; `externalBalance.nonParticipantCommitments` e `externalBalance.adhesions` listam adesoes/nao participantes com `affectsManagedBalance = false`.
+- `externalBalance.managedBalance` usa apenas a UASG gerenciadora (`unitCode`, `unitName`, `registeredQuantity`, `committedQuantity`, `availableQuantity`, `commitments`).
+- `externalBalance.adhesionBalance` separa adesoes/caronas de orgaos nao participantes (`limitQuantity`, `approvedQuantity`, `committedQuantity`, `availableQuantity`, `adhesions`).
+- `externalBalance.nonParticipantCommitments` lista apenas empenhos efetivos de nao participantes.
+- `externalBalance.externalUsageStatus` resume o uso externo em `SEM_USO_EXTERNO`, `ADESAO_DETECTADA`, `CONSUMO_GERENCIADORA_DETECTADO` ou `CONSUMO_GERENCIADORA_E_ADESAO_DETECTADOS`.
+- Snapshot persistido por item: `AtaItemExternalBalanceSnapshot` com `source`, `status`, `externalUsageStatus`, `managedBalance`, `adhesionBalance`, `commitments`, `nonParticipantCommitments`, `difference`, `lastSyncAt` e `warnings`.
+- Adesao nao reduz o saldo principal da gerenciadora e nenhum valor externo cria movimentacao local.
+- Valores estimados de empenhos/adesoes saem apenas em `estimatedAmount`; o backend nao inventa `numeroEmpenho`.
+- Os aliases revisados cobrem `numeroEmpenho`, `fornecedor`, `dataEmpenho`, `quantidadeEmpenhada` e `estimatedAmount` a partir dos endpoints `3_consultarUnidadesItem`, `4_consultarEmpenhosSaldoItem`, `5_consultarAdesoesItem` e `2.1_consultarARPItem_Id`.
+- Em `development`, cada empenho/adesao pode incluir `rawKeyDebug` com chaves brutas disponiveis, endpoint de origem, item e unidade para facilitar diagnostico.
 - Se a API retornar `200` sem registros, itens importados do Compras.gov.br exibem fallback baseado na quantidade registrada importada (`COMPRAS_GOV_IMPORT_FALLBACK`).
 
 ---

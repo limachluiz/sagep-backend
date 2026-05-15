@@ -2336,25 +2336,82 @@ export const openApiDocument: OpenApiDocument = {
             properties: {
               externalItemNumber: { type: "string" },
               source: { type: "string", enum: ["COMPRAS_GOV", "COMPRAS_GOV_IMPORT_FALLBACK"] },
-              registeredQuantity: { type: "string" },
-              committedQuantity: { type: "string" },
-              availableQuantity: { type: "string" },
-              lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
-              rawRecords: { type: "integer" },
-              commitments: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    numeroEmpenho: { type: "string", nullable: true },
-                    unidade: { type: "string", nullable: true },
-                    tipoUnidade: { type: "string", nullable: true },
-                    fornecedor: { type: "string", nullable: true },
-                    dataEmpenho: { type: "string", format: "date-time", nullable: true },
-                    quantidadeIncluida: { type: "string", nullable: true },
-                    quantidadeEmpenhada: { type: "string", nullable: true },
-                    valor: { type: "string", nullable: true },
-                    affectsManagedBalance: { type: "boolean" },
+              managedBalance: {
+                type: "object",
+                properties: {
+                  unitCode: { type: "string", nullable: true },
+                  unitName: { type: "string", nullable: true },
+                  registeredQuantity: { type: "string" },
+                  committedQuantity: { type: "string" },
+                  availableQuantity: { type: "string" },
+                  commitments: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        numeroEmpenho: { type: "string", nullable: true },
+                        unidade: { type: "string", nullable: true },
+                        tipoUnidade: { type: "string", nullable: true },
+                        fornecedor: { type: "string", nullable: true },
+                        dataEmpenho: { type: "string", format: "date-time", nullable: true },
+                        quantidadeIncluida: { type: "string", nullable: true },
+                        quantidadeEmpenhada: { type: "string", nullable: true },
+                        estimatedAmount: { type: "string", nullable: true },
+                        affectsManagedBalance: { type: "boolean" },
+                        rawKeyDebug: {
+                          type: "object",
+                          nullable: true,
+                          properties: {
+                            availableKeys: {
+                              type: "array",
+                              items: { type: "string" },
+                            },
+                            sourceEndpoint: { type: "string" },
+                            item: { type: "string", nullable: true },
+                            unidade: { type: "string", nullable: true },
+                          },
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              adhesionBalance: {
+                type: "object",
+                properties: {
+                  limitQuantity: { type: "string" },
+                  approvedQuantity: { type: "string" },
+                  committedQuantity: { type: "string" },
+                  availableQuantity: { type: "string" },
+                  adhesions: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        numeroEmpenho: { type: "string", nullable: true },
+                        unidade: { type: "string", nullable: true },
+                        tipoUnidade: { type: "string", nullable: true },
+                        fornecedor: { type: "string", nullable: true },
+                        dataEmpenho: { type: "string", format: "date-time", nullable: true },
+                        quantidadeIncluida: { type: "string", nullable: true },
+                        quantidadeEmpenhada: { type: "string", nullable: true },
+                        estimatedAmount: { type: "string", nullable: true },
+                        affectsManagedBalance: { type: "boolean" },
+                        rawKeyDebug: {
+                          type: "object",
+                          nullable: true,
+                          properties: {
+                            availableKeys: {
+                              type: "array",
+                              items: { type: "string" },
+                            },
+                            sourceEndpoint: { type: "string" },
+                            item: { type: "string", nullable: true },
+                            unidade: { type: "string", nullable: true },
+                          },
+                        },
+                      },
+                    },
                   },
                 },
               },
@@ -2370,19 +2427,35 @@ export const openApiDocument: OpenApiDocument = {
                     dataEmpenho: { type: "string", format: "date-time", nullable: true },
                     quantidadeIncluida: { type: "string", nullable: true },
                     quantidadeEmpenhada: { type: "string", nullable: true },
-                    valor: { type: "string", nullable: true },
+                    estimatedAmount: { type: "string", nullable: true },
                     affectsManagedBalance: { type: "boolean" },
+                    rawKeyDebug: {
+                      type: "object",
+                      nullable: true,
+                      properties: {
+                        availableKeys: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                        sourceEndpoint: { type: "string" },
+                        item: { type: "string", nullable: true },
+                        unidade: { type: "string", nullable: true },
+                      },
+                    },
                   },
                 },
               },
-              adhesions: {
-                type: "array",
-                description: "Alias de nonParticipantCommitments para adesoes/nao participantes.",
-                items: {
-                  type: "object",
-                  additionalProperties: true,
-                },
+              externalUsageStatus: {
+                type: "string",
+                enum: [
+                  "SEM_USO_EXTERNO",
+                  "ADESAO_DETECTADA",
+                  "CONSUMO_GERENCIADORA_DETECTADO",
+                  "CONSUMO_GERENCIADORA_E_ADESAO_DETECTADOS",
+                ],
               },
+              lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
+              rawRecords: { type: "integer" },
             },
           },
           difference: { type: "string", nullable: true },
@@ -2393,6 +2466,7 @@ export const openApiDocument: OpenApiDocument = {
               "OK",
               "DIVERGENTE",
               "CONSUMO_EXTERNO_DETECTADO",
+              "NAO_SINCRONIZADO",
               "NAO_ENCONTRADO",
               "ERRO_CONSULTA_EXTERNA",
               "RATE_LIMIT_COMPRAS_GOV",
@@ -2436,6 +2510,7 @@ export const openApiDocument: OpenApiDocument = {
               ok: { type: "integer" },
               divergent: { type: "integer" },
               externalConsumptionDetected: { type: "integer" },
+              naoSincronizado: { type: "integer" },
               notFound: { type: "integer" },
               externalQueryErrors: { type: "integer" },
               rateLimitErrors: { type: "integer" },
@@ -4391,9 +4466,9 @@ export const openApiDocument: OpenApiDocument = {
     "/atas/{id}/external-balance": {
       get: {
         tags: ["atas"],
-        summary: "Comparar saldo externo Compras.gov.br da ATA",
+        summary: "Ler snapshot local de saldo externo da ATA",
         description:
-          "Consulta o saldo externo da ARP no Compras.gov.br por ATA, usando apenas `numeroAta` e `unidadeGerenciadora`, e casa os itens localmente por numero do item normalizado. Nao altera saldo local.",
+          "Retorna apenas snapshots externos persistidos localmente para os itens da ATA. Nao consulta o Compras.gov.br e nao altera saldo local.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
         responses: {
@@ -4407,7 +4482,7 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["atas"],
         summary: "Sincronizar snapshot externo de saldo Compras.gov.br",
         description:
-          "Consulta e compara saldo externo por ATA, atualizando apenas timestamps/snapshot externo para itens encontrados. Nao altera movimentos nem saldo local.",
+          "Consulta o Compras.gov.br somente neste POST e atualiza snapshots externos persistidos para os itens processados. Nao altera movimentos nem saldo local.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
         responses: {
@@ -4480,9 +4555,9 @@ export const openApiDocument: OpenApiDocument = {
     "/ata-items/{id}/balance-comparison": {
       get: {
         tags: ["ata-items"],
-        summary: "Comparar saldo externo Compras.gov.br do item",
+        summary: "Ler snapshot local de saldo externo do item",
         description:
-          "Retorna a comparacao entre o saldo local do item e o saldo externo do Compras.gov.br. Endpoint de consulta; nao altera saldo local.",
+          "Retorna a comparacao entre saldo local e o ultimo snapshot externo persistido do item. Se nao existir snapshot, retorna `NAO_SINCRONIZADO`. Nao consulta o Compras.gov.br.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
         responses: {
@@ -4496,7 +4571,7 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["ata-items"],
         summary: "Sincronizar snapshot externo de saldo Compras.gov.br do item",
         description:
-          "Consulta e compara saldo externo apenas do item informado, atualizando somente o timestamp/snapshot externo desse item. Nao altera movimentos nem saldo local.",
+          "Consulta o Compras.gov.br somente neste POST para o item informado e atualiza o snapshot persistido desse item. Nao altera movimentos nem saldo local.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
         responses: {

@@ -43,6 +43,7 @@ async function resetDatabase() {
   await prisma.auditLog.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.userPermissionOverride.deleteMany();
+  await prisma.ataItemExternalBalanceSnapshot.deleteMany();
   await prisma.ataItemBalanceMovement.deleteMany();
   await prisma.serviceOrderDeliveredDocument.deleteMany();
   await prisma.serviceOrderScheduleItem.deleteMany();
@@ -2799,18 +2800,17 @@ describe("critical flows", () => {
       const balanceUrls = fetchMock.mock.calls
         .map(([input]) => new URL(String(input)))
         .filter((url) => url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"));
-      expect(balanceUrls.length).toBeGreaterThan(0);
-      expect(balanceUrls.some((url) => url.searchParams.has("numeroItem"))).toBe(false);
+      expect(balanceUrls).toHaveLength(0);
 
-      expect(externalBalance.body.summary.externalConsumptionDetected).toBe(1);
+      expect(externalBalance.body.summary.naoSincronizado).toBe(2);
       expect(externalBalance.body.items[0].localBalance.availableQuantity).toBe("50");
-      expect(externalBalance.body.items[0].externalBalance.availableQuantity).toBe("45");
-      expect(externalBalance.body.items[0].difference).toBe("5");
-      expect(externalBalance.body.items[0].status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(externalBalance.body.items[0].externalBalance).toBeNull();
+      expect(externalBalance.body.items[0].difference).toBeNull();
+      expect(externalBalance.body.items[0].status).toBe("NAO_SINCRONIZADO");
       expect(externalBalance.body.summary.externalQueryErrors).toBe(0);
       expect(externalBalance.body.items[1].item.id).toBe(secondExternalItem.id);
-      expect(externalBalance.body.items[1].externalBalance.availableQuantity).toBe("10");
-      expect(externalBalance.body.items[1].status).toBe("OK");
+      expect(externalBalance.body.items[1].externalBalance).toBeNull();
+      expect(externalBalance.body.items[1].status).toBe("NAO_SINCRONIZADO");
 
       const itemComparison = await request(app)
         .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
@@ -2818,7 +2818,7 @@ describe("critical flows", () => {
         .expect(200);
 
       expect(itemComparison.body.item.id).toBe(atas[0].items[0].id);
-      expect(itemComparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(itemComparison.body.status).toBe("NAO_SINCRONIZADO");
 
       const movementsBeforeItemSync = await prisma.ataItemBalanceMovement.count({
         where: { ataItemId: atas[0].items[0].id },
@@ -2840,8 +2840,17 @@ describe("critical flows", () => {
       expect(itemSynced.body.item.id).toBe(atas[0].items[0].id);
       expect(itemSynced.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
       expect(itemSynced.body.localBalance.availableQuantity).toBe("50");
-      expect(itemSynced.body.externalBalance.availableQuantity).toBe("45");
+      expect(itemSynced.body.externalBalance.managedBalance.availableQuantity).toBe("45");
       expect(itemSynced.body.lastSyncAt).not.toBeNull();
+
+      fetchMock.mockClear();
+      const syncedItemComparison = await request(app)
+        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(syncedItemComparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(syncedItemComparison.body.externalBalance.managedBalance.availableQuantity).toBe("45");
 
       const firstItemAfterItemSync = await prisma.ataItem.findUniqueOrThrow({
         where: { id: atas[0].items[0].id },
@@ -2883,6 +2892,16 @@ describe("critical flows", () => {
       expect(secondItemAfterSync.initialQuantity.toString()).toBe("10");
       expect(secondItemAfterSync.externalLastSyncAt).not.toBeNull();
 
+      fetchMock.mockClear();
+      const syncedBalance = await request(app)
+        .get(`/api/atas/${atas[0].id}/external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(syncedBalance.body.summary.naoSincronizado).toBe(0);
+      expect(syncedBalance.body.items[0].status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(syncedBalance.body.items[1].status).toBe("OK");
+
       await prisma.ata.update({
         where: { id: atas[0].id },
         data: { externalAtaNumber: "EMPTY" },
@@ -2893,23 +2912,17 @@ describe("critical flows", () => {
         .set("Authorization", `Bearer ${adminAuth.accessToken}`)
         .expect(200);
 
-      expect(fallbackBalance.body.summary.semEmpenhoRegistrado).toBe(2);
+      expect(fallbackBalance.body.summary.semEmpenhoRegistrado).toBe(0);
       expect(fallbackBalance.body.summary.notFound).toBe(0);
-      expect(fallbackBalance.body.items[0].status).toBe("SEM_EMPENHO_REGISTRADO");
-      expect(fallbackBalance.body.items[0].externalBalance.source).toBe("COMPRAS_GOV_IMPORT_FALLBACK");
-      expect(fallbackBalance.body.items[0].externalBalance.registeredQuantity).toBe("50");
-      expect(fallbackBalance.body.items[0].externalBalance.committedQuantity).toBe("0");
-      expect(fallbackBalance.body.items[0].externalBalance.availableQuantity).toBe("50");
-      expect(fallbackBalance.body.warnings).toContain(
-        "Compras.gov.br não retornou empenhos para esta ATA. Saldo externo exibido com base na quantidade registrada importada.",
-      );
+      expect(fallbackBalance.body.items[0].status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(fallbackBalance.body.warnings).toHaveLength(0);
 
       const fallbackItemComparison = await request(app)
         .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
         .set("Authorization", `Bearer ${adminAuth.accessToken}`)
         .expect(200);
 
-      expect(fallbackItemComparison.body.status).toBe("SEM_EMPENHO_REGISTRADO");
+      expect(fallbackItemComparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
 
       const fallbackSync = await request(app)
         .post(`/api/atas/${atas[0].id}/sync-external-balance`)
@@ -3127,7 +3140,7 @@ describe("critical flows", () => {
                 numeroAta: "00001/2026",
                 unidadeGerenciadora: "160016",
                 numeroItem: "00014",
-                fornecedor: "26081987000100 - METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+                nomeFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
                 quantidadeRegistrada: 120,
                 quantidadeEmpenhada: 1,
                 saldoParaEmpenho: 119,
@@ -3135,20 +3148,24 @@ describe("critical flows", () => {
                 codigoUnidade: "160016",
                 nomeUnidade: "COMANDO DO COMANDO MILITAR DA AMAZONIA",
                 tipoUnidade: "GERENCIADORA",
+                valorDocumento: 2375,
+                dataDocumento: "2026-05-06T12:00:00.000Z",
                 dataHoraAtualizacao: "2026-05-06T12:00:00.000Z",
               },
               {
                 numeroAta: "00001/2026",
                 unidadeGerenciadora: "160016",
                 numeroItem: "00014",
-                fornecedor: "26081987000100 - METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+                fornecedorNome: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
                 quantidadeRegistrada: 1,
-                qtdEmpenhada: 1,
+                quantidade: 1,
                 saldoParaEmpenho: 0,
-                numeroDocumento: "2026NE000139",
+                documento: "2026NE000139",
                 codigoUnidade: "160120",
                 nomeUnidade: "4. DEPOSITO DE SUPRIMENTO",
                 tipoUnidade: "NAO_PARTICIPANTE",
+                valorTotal: 2375,
+                dataInclusao: "2026-05-06T14:48:33.000Z",
                 dataHoraAtualizacao: "2026-05-06T14:48:33.000Z",
               },
             ],
@@ -3162,7 +3179,17 @@ describe("critical flows", () => {
         expect(url.searchParams.get("numeroItem")).toBe("00014");
         return new Response(
           JSON.stringify({
-            resultado: [],
+            resultado: [
+              {
+                numeroAta: "00001/2026",
+                unidadeGerenciadora: "160016",
+                unidadeNaoParticipante: "160121 - 12 BATALHAO LOGISTICO",
+                quantidadeAprovadaAdesao: 2,
+                valor: 4750,
+                dataAprovacaoAnalise: "2026-05-07T10:00:00.000Z",
+                razaoSocialFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+              },
+            ],
             totalPaginas: 1,
           }),
           { status: 200, headers: { "content-type": "application/json" } },
@@ -3199,26 +3226,80 @@ describe("critical flows", () => {
         where: { ataItemId: item.id },
       });
 
-      const comparison = await request(app)
+      const comparisonBeforeSync = await request(app)
         .get(`/api/ata-items/${item.id}/balance-comparison`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(comparisonBeforeSync.body.status).toBe("NAO_SINCRONIZADO");
+
+      const comparison = await request(app)
+        .post(`/api/ata-items/${item.id}/sync-external-balance`)
         .set("Authorization", `Bearer ${adminAuth.accessToken}`)
         .expect(200);
 
       expect(comparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
       expect(comparison.body.externalBalance.source).toBe("COMPRAS_GOV");
       expect(comparison.body.difference).toBe("1");
-      expect(comparison.body.externalBalance.registeredQuantity).toBe("120");
-      expect(comparison.body.externalBalance.committedQuantity).toBe("1");
-      expect(comparison.body.externalBalance.availableQuantity).toBe("119");
-      expect(comparison.body.externalBalance.commitments).toHaveLength(1);
-      expect(comparison.body.externalBalance.commitments[0].numeroEmpenho).toBe("2026NE000567");
-      expect(comparison.body.externalBalance.commitments[0].affectsManagedBalance).toBe(true);
+      expect(comparison.body.externalBalance.managedBalance.unitCode).toBe("160016");
+      expect(comparison.body.externalBalance.managedBalance.registeredQuantity).toBe("120");
+      expect(comparison.body.externalBalance.managedBalance.committedQuantity).toBe("1");
+      expect(comparison.body.externalBalance.managedBalance.availableQuantity).toBe("119");
+      expect(comparison.body.externalBalance.managedBalance.commitments).toHaveLength(1);
+      expect(comparison.body.externalBalance.managedBalance.commitments[0].numeroEmpenho).toBe(
+        "2026NE000567",
+      );
+      expect(comparison.body.externalBalance.managedBalance.commitments[0].fornecedor).toBe(
+        "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+      );
+      expect(comparison.body.externalBalance.managedBalance.commitments[0].quantidadeEmpenhada).toBe(
+        "1",
+      );
+      expect(comparison.body.externalBalance.managedBalance.commitments[0].estimatedAmount).toBe(
+        "2375",
+      );
+      expect(comparison.body.externalBalance.managedBalance.commitments[0].dataEmpenho).toBe(
+        "2026-05-06T12:00:00.000Z",
+      );
+      expect(
+        comparison.body.externalBalance.managedBalance.commitments[0].affectsManagedBalance,
+      ).toBe(true);
       expect(comparison.body.externalBalance.nonParticipantCommitments).toHaveLength(1);
       expect(comparison.body.externalBalance.nonParticipantCommitments[0].numeroEmpenho).toBe(
         "2026NE000139",
       );
-      expect(comparison.body.externalBalance.nonParticipantCommitments[0].affectsManagedBalance).toBe(
-        false,
+      expect(comparison.body.externalBalance.nonParticipantCommitments[0].fornecedor).toBe(
+        "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+      );
+      expect(comparison.body.externalBalance.nonParticipantCommitments[0].quantidadeEmpenhada).toBe(
+        "1",
+      );
+      expect(comparison.body.externalBalance.nonParticipantCommitments[0].estimatedAmount).toBe(
+        "2375",
+      );
+      expect(comparison.body.externalBalance.nonParticipantCommitments[0].dataEmpenho).toBe(
+        "2026-05-06T14:48:33.000Z",
+      );
+      expect(comparison.body.externalBalance.adhesionBalance.limitQuantity).toBe("2");
+      expect(comparison.body.externalBalance.adhesionBalance.approvedQuantity).toBe("2");
+      expect(comparison.body.externalBalance.adhesionBalance.committedQuantity).toBe("0");
+      expect(comparison.body.externalBalance.adhesionBalance.availableQuantity).toBe("2");
+      expect(comparison.body.externalBalance.adhesionBalance.adhesions).toHaveLength(1);
+      expect(comparison.body.externalBalance.adhesionBalance.adhesions[0].numeroEmpenho).toBeNull();
+      expect(comparison.body.externalBalance.adhesionBalance.adhesions[0].fornecedor).toBe(
+        "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+      );
+      expect(comparison.body.externalBalance.adhesionBalance.adhesions[0].quantidadeIncluida).toBe(
+        "2",
+      );
+      expect(comparison.body.externalBalance.adhesionBalance.adhesions[0].estimatedAmount).toBe(
+        "4750",
+      );
+      expect(
+        comparison.body.externalBalance.adhesionBalance.adhesions[0].affectsManagedBalance,
+      ).toBe(false);
+      expect(comparison.body.externalBalance.externalUsageStatus).toBe(
+        "CONSUMO_GERENCIADORA_E_ADESAO_DETECTADOS",
       );
 
       const balanceUrls = requestedUrls.filter((url) =>

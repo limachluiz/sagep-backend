@@ -302,6 +302,7 @@ model AtaItem {
   unit             String
   estimateItems    EstimateItem[]
   balanceMovements AtaItemBalanceMovement[]
+  externalBalanceSnapshot AtaItemExternalBalanceSnapshot?
   unitPrice        Decimal                 @db.Decimal(14, 2)
   initialQuantity  Decimal                 @default(1000) @db.Decimal(14, 2)
   notes            String?
@@ -317,6 +318,26 @@ model AtaItem {
   updatedAt        DateTime                @updatedAt
 
   @@unique([ataId, coverageGroupId, referenceCode])
+}
+
+model AtaItemExternalBalanceSnapshot {
+  id                        String   @id @default(cuid())
+  ataItemId                 String   @unique
+  source                    String
+  status                    String
+  externalUsageStatus       String?
+  managedBalance            Json?
+  adhesionBalance           Json?
+  commitments               Json?
+  nonParticipantCommitments Json?
+  difference                String?
+  lastSyncAt                DateTime
+  warnings                  Json?
+  ataItem                   AtaItem  @relation(fields: [ataItemId], references: [id], onDelete: Cascade)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@index([lastSyncAt])
 }
 
 model AtaItemBalanceMovement {
