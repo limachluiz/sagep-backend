@@ -4077,6 +4077,48 @@
               }
             }
           },
+          "latestExternalBalanceSnapshot": {
+            "type": "object",
+            "nullable": true,
+            "properties": {
+              "source": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string"
+              },
+              "externalUsageStatus": {
+                "type": "string",
+                "nullable": true
+              },
+              "managedBalance": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": true
+              },
+              "adhesionBalance": {
+                "type": "object",
+                "nullable": true,
+                "additionalProperties": true
+              },
+              "difference": {
+                "type": "string",
+                "nullable": true
+              },
+              "rawRecords": {
+                "type": "integer"
+              },
+              "lastUpdatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "lastSyncAt": {
+                "type": "string",
+                "format": "date-time"
+              }
+            }
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -4280,6 +4322,56 @@
           "isActive": false
         }
       },
+      "AtaItemRegisterExternalConsumptionRequest": {
+        "type": "object",
+        "required": [
+          "quantity",
+          "reason",
+          "source",
+          "externalStatus",
+          "externalReference"
+        ],
+        "properties": {
+          "quantity": {
+            "type": "number",
+            "exclusiveMinimum": 0
+          },
+          "reason": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "externalStatus": {
+            "type": "string"
+          },
+          "externalReference": {
+            "type": "string"
+          },
+          "commitmentNumber": {
+            "type": "string",
+            "nullable": true
+          },
+          "unit": {
+            "type": "string",
+            "nullable": true
+          },
+          "notes": {
+            "type": "string",
+            "nullable": true
+          }
+        },
+        "example": {
+          "quantity": 2,
+          "reason": "Consumo externo confirmado manualmente apos conferencia do snapshot",
+          "source": "COMPRAS_GOV",
+          "externalStatus": "CONSUMO_GERENCIADORA_DETECTADO",
+          "externalReference": "SNAPSHOT-2026-05-15T10:30:00.000Z",
+          "commitmentNumber": "2026NE000567",
+          "unit": "160016",
+          "notes": "Conferencia manual aprovada pelo gestor"
+        }
+      },
       "AtaItemsEnvelope": {
         "type": "object",
         "properties": {
@@ -4314,6 +4406,7 @@
               "RESERVE",
               "RELEASE",
               "CONSUME",
+              "EXTERNAL_CONSUMPTION",
               "REVERSE_CONSUME",
               "ADJUSTMENT"
             ]
@@ -4399,6 +4492,24 @@
           "$ref": "#/components/schemas/AtaItemBalanceMovement"
         }
       },
+      "AtaItemRegisterExternalConsumptionResponse": {
+        "type": "object",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/AtaItem"
+          },
+          "movement": {
+            "$ref": "#/components/schemas/AtaItemBalanceMovement"
+          },
+          "localBalance": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
       "ComprasGovExternalBalanceComparisonItem": {
         "type": "object",
         "properties": {
@@ -4444,6 +4555,13 @@
                   "COMPRAS_GOV",
                   "COMPRAS_GOV_IMPORT_FALLBACK"
                 ]
+              },
+              "commitments": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
               },
               "managedBalance": {
                 "type": "object",
@@ -11239,6 +11357,59 @@
         "x-permissions": [
           "atas.manage"
         ]
+      }
+    },
+    "/ata-items/{id}/register-external-consumption": {
+      "post": {
+        "tags": [
+          "ata-items"
+        ],
+        "summary": "Registrar consumo externo manualmente",
+        "description": "Registra internamente um consumo externo confirmado manualmente pelo usuario, com justificativa obrigatoria e sem consultar o Compras.gov.br.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AtaItemId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtaItemRegisterExternalConsumptionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtaItemRegisterExternalConsumptionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          }
+        }
       }
     },
     "/ata-items/{id}": {

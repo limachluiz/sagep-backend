@@ -1,5 +1,5 @@
 import { prisma } from "../config/prisma.js";
-import type { AuditEntityType } from "../modules/audit/audit.types.js";
+import type { AuditEntityType } from "../generated/prisma/enums.js";
 
 type ArchivableItem = {
   id: string;

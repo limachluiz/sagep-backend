@@ -2129,6 +2129,29 @@ export const openApiDocument: OpenApiDocument = {
               lastMovementAt: { type: "string", format: "date-time", nullable: true },
             },
           },
+          latestExternalBalanceSnapshot: {
+            type: "object",
+            nullable: true,
+            properties: {
+              source: { type: "string" },
+              status: { type: "string" },
+              externalUsageStatus: { type: "string", nullable: true },
+              managedBalance: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+              adhesionBalance: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+              difference: { type: "string", nullable: true },
+              rawRecords: { type: "integer" },
+              lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
+              lastSyncAt: { type: "string", format: "date-time" },
+            },
+          },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
           ata: {
@@ -2249,6 +2272,30 @@ export const openApiDocument: OpenApiDocument = {
           isActive: false,
         },
       },
+      AtaItemRegisterExternalConsumptionRequest: {
+        type: "object",
+        required: ["quantity", "reason", "source", "externalStatus", "externalReference"],
+        properties: {
+          quantity: { type: "number", exclusiveMinimum: 0 },
+          reason: { type: "string" },
+          source: { type: "string" },
+          externalStatus: { type: "string" },
+          externalReference: { type: "string" },
+          commitmentNumber: { type: "string", nullable: true },
+          unit: { type: "string", nullable: true },
+          notes: { type: "string", nullable: true },
+        },
+        example: {
+          quantity: 2,
+          reason: "Consumo externo confirmado manualmente apos conferencia do snapshot",
+          source: "COMPRAS_GOV",
+          externalStatus: "CONSUMO_GERENCIADORA_DETECTADO",
+          externalReference: "SNAPSHOT-2026-05-15T10:30:00.000Z",
+          commitmentNumber: "2026NE000567",
+          unit: "160016",
+          notes: "Conferencia manual aprovada pelo gestor",
+        },
+      },
       AtaItemsEnvelope: {
         type: "object",
         properties: {
@@ -2272,7 +2319,14 @@ export const openApiDocument: OpenApiDocument = {
           id: { type: "string" },
           movementType: {
             type: "string",
-            enum: ["RESERVE", "RELEASE", "CONSUME", "REVERSE_CONSUME", "ADJUSTMENT"],
+            enum: [
+              "RESERVE",
+              "RELEASE",
+              "CONSUME",
+              "EXTERNAL_CONSUMPTION",
+              "REVERSE_CONSUME",
+              "ADJUSTMENT",
+            ],
           },
           quantity: { type: "string", description: "Decimal serializado pelo Prisma." },
           unitPrice: { type: "string", description: "Decimal serializado pelo Prisma." },
@@ -2312,6 +2366,18 @@ export const openApiDocument: OpenApiDocument = {
         type: "array",
         items: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
       },
+      AtaItemRegisterExternalConsumptionResponse: {
+        type: "object",
+        properties: {
+          item: { $ref: "#/components/schemas/AtaItem" },
+          movement: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
+          localBalance: {
+            type: "object",
+            additionalProperties: true,
+          },
+          message: { type: "string" },
+        },
+      },
       ComprasGovExternalBalanceComparisonItem: {
         type: "object",
         properties: {
@@ -2336,6 +2402,13 @@ export const openApiDocument: OpenApiDocument = {
             properties: {
               externalItemNumber: { type: "string" },
               source: { type: "string", enum: ["COMPRAS_GOV", "COMPRAS_GOV_IMPORT_FALLBACK"] },
+              commitments: {
+                type: "array",
+                items: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
               managedBalance: {
                 type: "object",
                 properties: {
@@ -4579,6 +4652,24 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["atas.manage"],
+      },
+    },
+    "/ata-items/{id}/register-external-consumption": {
+      post: {
+        tags: ["ata-items"],
+        summary: "Registrar consumo externo manualmente",
+        description:
+          "Registra internamente um consumo externo confirmado manualmente pelo usuario, com justificativa obrigatoria e sem consultar o Compras.gov.br.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/AtaItemRegisterExternalConsumptionRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/AtaItemRegisterExternalConsumptionResponse"),
+          ...defaultErrorResponses,
+        },
       },
     },
     "/ata-items/{id}": {

@@ -191,6 +191,7 @@ type LocalItem = {
 type SnapshotExternalBalance = {
   externalItemNumber: string;
   source: "COMPRAS_GOV" | "COMPRAS_GOV_IMPORT_FALLBACK";
+  commitments: ExternalCommitment[];
   managedBalance: {
     unitCode: string | null;
     unitName: string | null;
@@ -275,6 +276,38 @@ export class ComprasGovBalanceService {
     if (!text) return null;
     const date = new Date(text);
     return Number.isNaN(date.getTime()) ? null : date;
+  }
+
+  private normalizeJsonValue(value: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
+    if (value instanceof Date) {
+      return value.toISOString();
+    }
+
+    if (value === null) {
+      return Prisma.JsonNull;
+    }
+
+    if (
+      typeof value === "string" ||
+      typeof value === "number" ||
+      typeof value === "boolean"
+    ) {
+      return value;
+    }
+
+    if (Array.isArray(value)) {
+      return value.map((item) => this.normalizeJsonValue(item)) as Prisma.InputJsonArray;
+    }
+
+    if (value && typeof value === "object") {
+      const entries = Object.entries(value)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, this.normalizeJsonValue(item)]);
+
+      return Object.fromEntries(entries) as Prisma.InputJsonObject;
+    }
+
+    return Prisma.JsonNull;
   }
 
   private pickText(record: Record<string, unknown>, keys: string[]) {
@@ -1306,6 +1339,7 @@ export class ComprasGovBalanceService {
         ? {
             externalItemNumber: externalBalance.externalItemNumber,
             source: externalBalance.source,
+            commitments: externalBalance.managedBalance.commitments,
             managedBalance: {
               unitCode: externalBalance.managedBalance.unitCode,
               unitName: externalBalance.managedBalance.unitName,
@@ -1360,30 +1394,34 @@ export class ComprasGovBalanceService {
         source: comparison.externalBalance.source,
         status: comparison.status,
         externalUsageStatus: comparison.externalBalance.externalUsageStatus,
-        managedBalance: comparison.externalBalance.managedBalance as Prisma.InputJsonValue,
-        adhesionBalance: comparison.externalBalance.adhesionBalance as Prisma.InputJsonValue,
-        commitments:
-          comparison.externalBalance.managedBalance.commitments as Prisma.InputJsonValue,
-        nonParticipantCommitments:
-          comparison.externalBalance.nonParticipantCommitments as Prisma.InputJsonValue,
+        managedBalance: this.normalizeJsonValue(comparison.externalBalance.managedBalance),
+        adhesionBalance: this.normalizeJsonValue(comparison.externalBalance.adhesionBalance),
+        commitments: this.normalizeJsonValue(comparison.externalBalance.managedBalance.commitments),
+        nonParticipantCommitments: this.normalizeJsonValue(
+          comparison.externalBalance.nonParticipantCommitments,
+        ),
         difference: comparison.difference,
+        rawRecords: comparison.externalBalance.rawRecords,
+        lastUpdatedAt: comparison.externalBalance.lastUpdatedAt,
         lastSyncAt: comparison.lastSyncAt ?? new Date(),
-        warnings: warnings as Prisma.InputJsonValue,
+        warnings: this.normalizeJsonValue(warnings),
       },
       create: {
         ataItemId,
         source: comparison.externalBalance.source,
         status: comparison.status,
         externalUsageStatus: comparison.externalBalance.externalUsageStatus,
-        managedBalance: comparison.externalBalance.managedBalance as Prisma.InputJsonValue,
-        adhesionBalance: comparison.externalBalance.adhesionBalance as Prisma.InputJsonValue,
-        commitments:
-          comparison.externalBalance.managedBalance.commitments as Prisma.InputJsonValue,
-        nonParticipantCommitments:
-          comparison.externalBalance.nonParticipantCommitments as Prisma.InputJsonValue,
+        managedBalance: this.normalizeJsonValue(comparison.externalBalance.managedBalance),
+        adhesionBalance: this.normalizeJsonValue(comparison.externalBalance.adhesionBalance),
+        commitments: this.normalizeJsonValue(comparison.externalBalance.managedBalance.commitments),
+        nonParticipantCommitments: this.normalizeJsonValue(
+          comparison.externalBalance.nonParticipantCommitments,
+        ),
         difference: comparison.difference,
+        rawRecords: comparison.externalBalance.rawRecords,
+        lastUpdatedAt: comparison.externalBalance.lastUpdatedAt,
         lastSyncAt: comparison.lastSyncAt ?? new Date(),
-        warnings: warnings as Prisma.InputJsonValue,
+        warnings: this.normalizeJsonValue(warnings),
       },
     });
   }
@@ -1427,6 +1465,7 @@ export class ComprasGovBalanceService {
         ? ({
             externalItemNumber: item.externalItemNumber ?? item.referenceCode,
             source: snapshot.source as SnapshotExternalBalance["source"],
+            commitments: (snapshot.commitments as ExternalCommitment[] | null) ?? [],
             managedBalance: snapshot.managedBalance as SnapshotExternalBalance["managedBalance"],
             adhesionBalance:
               snapshot.adhesionBalance as SnapshotExternalBalance["adhesionBalance"],
@@ -1434,8 +1473,8 @@ export class ComprasGovBalanceService {
               (snapshot.nonParticipantCommitments as ExternalCommitment[] | null) ?? [],
             externalUsageStatus:
               (snapshot.externalUsageStatus as ExternalUsageStatus | null) ?? "SEM_USO_EXTERNO",
-            lastUpdatedAt: snapshot.lastSyncAt,
-            rawRecords: 0,
+            lastUpdatedAt: snapshot.lastUpdatedAt,
+            rawRecords: snapshot.rawRecords,
           } satisfies SnapshotExternalBalance)
         : null;
 

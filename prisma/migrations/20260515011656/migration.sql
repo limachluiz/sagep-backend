@@ -16,6 +16,8 @@ CREATE TABLE "AtaItemExternalBalanceSnapshot" (
     "commitments" JSONB,
     "nonParticipantCommitments" JSONB,
     "difference" TEXT,
+    "rawRecords" INTEGER NOT NULL DEFAULT 0,
+    "lastUpdatedAt" TIMESTAMP(3),
     "lastSyncAt" TIMESTAMP(3) NOT NULL,
     "warnings" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

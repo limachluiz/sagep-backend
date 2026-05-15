@@ -625,6 +625,9 @@ Comparacao de saldo externo:
 - `POST /api/atas/{id}/sync-external-balance` consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
 - `GET /api/ata-items/{id}/balance-comparison` le apenas o ultimo snapshot persistido do item; se nao existir, retorna `NAO_SINCRONIZADO`.
 - `POST /api/ata-items/{id}/sync-external-balance` consulta Compras.gov.br apenas para esse item e atualiza o snapshot persistido correspondente.
+- `GET /api/ata-items` pode retornar `latestExternalBalanceSnapshot` resumido por item para a tela reaproveitar o ultimo snapshot salvo sem nova consulta externa.
+- Quando houver snapshot salvo, os GET locais devolvem `externalBalance` completo com `source`, `managedBalance`, `adhesionBalance`, `externalUsageStatus`, `commitments`, `nonParticipantCommitments`, `lastUpdatedAt` e `rawRecords`.
+- `POST /api/ata-items/{id}/register-external-consumption` registra manualmente um consumo externo no saldo interno com justificativa obrigatoria, sem consultar Compras.gov.br nem alterar `initialQuantity`.
 - Status possiveis: `OK`, `DIVERGENTE`, `CONSUMO_EXTERNO_DETECTADO`, `NAO_SINCRONIZADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`, `SEM_EMPENHO_REGISTRADO`.
 - HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado, nao marca `SEM_EMPENHO_REGISTRADO` e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
 - O backend consulta `4_consultarEmpenhosSaldoItem` por ATA (`numeroAta` e `unidadeGerenciadora`). Se esse endpoint retornar vazio, usa o `externalItemId` salvo no item para consultar `2.1_consultarARPItem_Id` e cruza os dados oficiais de `3_consultarUnidadesItem` e `5_consultarAdesoesItem` por `numeroItem`, `externalItemNumber` e `referenceCode`, normalizando zeros a esquerda.
@@ -633,6 +636,7 @@ Comparacao de saldo externo:
 - `externalBalance.nonParticipantCommitments` lista empenhos de nao participantes quando a API externa expuser NE/documento.
 - `externalBalance.externalUsageStatus` sinaliza `SEM_USO_EXTERNO`, `ADESAO_DETECTADA`, `CONSUMO_GERENCIADORA_DETECTADO` ou `CONSUMO_GERENCIADORA_E_ADESAO_DETECTADOS`.
 - Snapshot persistido por item: tabela/model `AtaItemExternalBalanceSnapshot`, contendo status, blocos de saldo externo, empenhos/adesoes, diferenca, warnings e `lastSyncAt`.
+- O lançamento manual cria movimentação `EXTERNAL_CONSUMPTION`, reduz apenas o saldo disponível/eleva o consumido no cálculo local e gera audit log `REGISTER_EXTERNAL_CONSUMPTION`.
 - Adesoes nao reduzem `managedBalance.availableQuantity`; o backend nao altera saldo local nem cria movimentacao.
 - Valores estimados aparecem somente em `estimatedAmount`; `numeroEmpenho` permanece `null` quando a API externa nao informar.
 - A normalizacao revisada considera aliases de NE, fornecedor, data, quantidade e valor nos endpoints `3_consultarUnidadesItem`, `4_consultarEmpenhosSaldoItem`, `5_consultarAdesoesItem` e `2.1_consultarARPItem_Id`.

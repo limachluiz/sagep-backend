@@ -637,6 +637,8 @@ Importar ATA de Registro de Preços e itens a partir da API pública do Compras.
 - `POST /atas/:id/sync-external-balance`: consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
 - `GET /ata-items/:id/balance-comparison`: le apenas o ultimo snapshot persistido do item; se nao existir, retorna `NAO_SINCRONIZADO`.
 - `POST /ata-items/:id/sync-external-balance`: consulta Compras.gov.br e atualiza apenas o snapshot persistido do item informado, sem sincronizar os demais itens da ATA.
+- `GET /ata-items` e leituras de item podem expor `latestExternalBalanceSnapshot` com resumo local do ultimo snapshot salvo (`status`, `externalUsageStatus`, `managedBalance`, `adhesionBalance`, `difference`, `lastSyncAt`).
+- Quando existir snapshot salvo, os GET locais devolvem `externalBalance` completo com `source`, `managedBalance`, `adhesionBalance`, `externalUsageStatus`, `commitments`, `nonParticipantCommitments`, `lastUpdatedAt` e `rawRecords`.
 - Status: `OK`, `DIVERGENTE`, `CONSUMO_EXTERNO_DETECTADO`, `NAO_SINCRONIZADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`, `SEM_EMPENHO_REGISTRADO`.
 - HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado, nao marca `SEM_EMPENHO_REGISTRADO` e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
 - A consulta externa da ATA tenta primeiro `4_consultarEmpenhosSaldoItem` por `numeroAta` e `unidadeGerenciadora`. Se o endpoint oficial retornar vazio, o backend usa o `externalItemId`/`externalItemNumber` do item para consultar `2.1_consultarARPItem_Id`, `3_consultarUnidadesItem` e `5_consultarAdesoesItem`, casando por `numeroItem` com zeros a esquerda normalizados.
@@ -677,6 +679,17 @@ Itens precificáveis da ATA, agora com saldo inicial e saldo efetivo calculado p
   "initialQuantity": 1000
 }
 ```
+
+#### `POST /ata-items/:id/register-external-consumption`
+
+- Autenticação: sim
+- Acesso: `ADMIN`, `GESTOR` ou usuário com `atas.manage`
+- Uso: registra manualmente um consumo externo no saldo interno do SAGEP com justificativa obrigatória. Não consulta o Compras.gov.br e não altera `initialQuantity`.
+- Regras:
+  - `quantity` deve ser maior que zero
+  - `quantity` não pode ultrapassar o saldo disponível local
+  - cria movimentação `EXTERNAL_CONSUMPTION`
+  - grava audit log `REGISTER_EXTERNAL_CONSUMPTION`
 
 #### `GET /atas/:id/items`
 

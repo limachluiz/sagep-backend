@@ -4,6 +4,7 @@ export type AuditEntityType =
   | "DIEX_REQUEST"
   | "SERVICE_ORDER"
   | "TASK"
+  | "ATA_ITEM"
   | "USER"
   | "AUTH";
 
@@ -22,6 +23,7 @@ export type AuditActionType =
   | "LOGIN_FAILED"
   | "LOGOUT"
   | "TOKEN_REFRESH"
+  | "REGISTER_EXTERNAL_CONSUMPTION"
   | "SESSION_REVOKE"
   | "SESSION_REVOKE_ALL"
   | "SESSION_EXPIRE"

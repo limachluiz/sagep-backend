@@ -37,6 +37,17 @@ export const updateAtaItemSchema = z
     message: "Informe pelo menos um campo para atualizar",
   });
 
+export const registerExternalConsumptionSchema = z.object({
+  quantity: z.coerce.number().positive("Quantidade deve ser maior que zero"),
+  reason: z.string().trim().min(3, "Justificativa e obrigatoria"),
+  source: z.string().trim().min(1, "Fonte e obrigatoria"),
+  externalStatus: z.string().trim().min(1, "Status externo e obrigatorio"),
+  externalReference: z.string().trim().min(1, "Referencia externa e obrigatoria"),
+  commitmentNumber: optionalString,
+  unit: optionalString,
+  notes: optionalString,
+});
+
 export const listAtaItemsQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   ataCode: z.coerce.number().int().positive().optional(),

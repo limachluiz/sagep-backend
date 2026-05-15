@@ -1794,6 +1794,91 @@ describe("critical flows", () => {
     expect(response.body[0].createdAt).toBe(newerCreatedAt.toISOString());
   });
 
+  it("ata-items: registers external consumption manually with validation, balance update and audit log", async () => {
+    const catalog = await createCatalog("5.00");
+    const basePayload = {
+      quantity: 2,
+      reason: "Consumo externo confirmado manualmente",
+      source: "COMPRAS_GOV",
+      externalStatus: "CONSUMO_GERENCIADORA_DETECTADO",
+      externalReference: "SNAPSHOT-001",
+      commitmentNumber: "2026NE000567",
+      unit: "160016",
+      notes: "Conferencia manual",
+    };
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .send(basePayload)
+      .expect(403);
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ ...basePayload, reason: "" })
+      .expect(400);
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ ...basePayload, quantity: 6 })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.message).toContain("Saldo insuficiente");
+      });
+
+    const response = await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send(basePayload)
+      .expect(200);
+
+    expect(response.body.message).toBe("Consumo externo registrado manualmente com sucesso");
+    expect(response.body.movement.movementType).toBe("EXTERNAL_CONSUMPTION");
+    expect(response.body.movement.quantity).toBe("2");
+    expect(response.body.localBalance.consumedQuantity).toBe("2");
+    expect(response.body.localBalance.availableQuantity).toBe("3");
+    expect(response.body.item.balance.consumedQuantity).toBe("2");
+    expect(response.body.item.balance.availableQuantity).toBe("3");
+
+    const movement = await prisma.ataItemBalanceMovement.findFirstOrThrow({
+      where: {
+        ataItemId: catalog.ataItem.id,
+        movementType: "EXTERNAL_CONSUMPTION",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(movement.actorUserId).toBe(gestor.id);
+    expect(movement.summary).toContain("Consumo externo manual");
+    expect(movement.quantity.toString()).toBe("2");
+
+    const refreshedItem = await request(app)
+      .get(`/api/ata-items/${catalog.ataItem.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(refreshedItem.body.balance.consumedQuantity).toBe("2");
+    expect(refreshedItem.body.balance.availableQuantity).toBe("3");
+    expect(refreshedItem.body.initialQuantity).toBe("5");
+
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: {
+        entityType: "ATA_ITEM",
+        entityId: catalog.ataItem.id,
+        action: "REGISTER_EXTERNAL_CONSUMPTION",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const metadata = audit.metadata as Record<string, any>;
+    expect(audit.actorUserId).toBe(gestor.id);
+    expect(metadata.quantity).toBe("2");
+    expect(metadata.reason).toBe(basePayload.reason);
+    expect(metadata.source).toBe(basePayload.source);
+    expect(metadata.externalStatus).toBe(basePayload.externalStatus);
+    expect(metadata.commitmentNumber).toBe(basePayload.commitmentNumber);
+    expect(metadata.unit).toBe(basePayload.unit);
+  });
+
   it("estimates: blocks quantity above ATA item available balance", async () => {
     const project = await createProject(adminAuth.accessToken, "Projeto sem saldo");
     const catalog = await createCatalog("1.00");
@@ -2843,6 +2928,16 @@ describe("critical flows", () => {
       expect(itemSynced.body.externalBalance.managedBalance.availableQuantity).toBe("45");
       expect(itemSynced.body.lastSyncAt).not.toBeNull();
 
+      const savedSnapshot = await prisma.ataItemExternalBalanceSnapshot.findUniqueOrThrow({
+        where: { ataItemId: atas[0].items[0].id },
+      });
+      expect(savedSnapshot.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(savedSnapshot.managedBalance).not.toBeNull();
+      expect(savedSnapshot.adhesionBalance).not.toBeNull();
+      expect(savedSnapshot.difference).toBe("5");
+      expect(savedSnapshot.source).toBe("COMPRAS_GOV");
+      expect(savedSnapshot.rawRecords).toBeGreaterThanOrEqual(1);
+
       fetchMock.mockClear();
       const syncedItemComparison = await request(app)
         .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
@@ -2850,7 +2945,32 @@ describe("critical flows", () => {
         .expect(200);
       expect(fetchMock).not.toHaveBeenCalled();
       expect(syncedItemComparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(syncedItemComparison.body.externalBalance.source).toBe("COMPRAS_GOV");
+      expect(syncedItemComparison.body.externalBalance.managedBalance).not.toBeNull();
+      expect(syncedItemComparison.body.externalBalance.adhesionBalance).not.toBeNull();
+      expect(syncedItemComparison.body.externalBalance.externalUsageStatus).toBe(
+        "CONSUMO_GERENCIADORA_DETECTADO",
+      );
+      expect(syncedItemComparison.body.externalBalance.commitments).toHaveLength(1);
+      expect(syncedItemComparison.body.externalBalance.nonParticipantCommitments).toHaveLength(0);
+      expect(syncedItemComparison.body.externalBalance.rawRecords).toBeGreaterThanOrEqual(1);
+      expect(syncedItemComparison.body.externalBalance.lastUpdatedAt).not.toBeNull();
       expect(syncedItemComparison.body.externalBalance.managedBalance.availableQuantity).toBe("45");
+
+      const itemsAfterSync = await request(app)
+        .get("/api/ata-items")
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+      const syncedItemEntry = itemsAfterSync.body.items.find(
+        (entry: { id: string }) => entry.id === atas[0].items[0].id,
+      );
+      expect(syncedItemEntry.latestExternalBalanceSnapshot).not.toBeNull();
+      expect(syncedItemEntry.latestExternalBalanceSnapshot.status).toBe(
+        "CONSUMO_EXTERNO_DETECTADO",
+      );
+      expect(syncedItemEntry.latestExternalBalanceSnapshot.managedBalance.availableQuantity).toBe(
+        "45",
+      );
 
       const firstItemAfterItemSync = await prisma.ataItem.findUniqueOrThrow({
         where: { id: atas[0].items[0].id },

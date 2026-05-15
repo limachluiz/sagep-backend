@@ -73,6 +73,7 @@ enum AuditEntityType {
   DIEX_REQUEST
   SERVICE_ORDER
   TASK
+  ATA_ITEM
   USER
   AUTH
 }
@@ -92,6 +93,7 @@ enum AuditActionType {
   LOGIN_FAILED
   LOGOUT
   TOKEN_REFRESH
+  REGISTER_EXTERNAL_CONSUMPTION
   SESSION_REVOKE
   SESSION_REVOKE_ALL
   SESSION_EXPIRE
@@ -115,6 +117,7 @@ enum AtaItemBalanceMovementType {
   RESERVE
   RELEASE
   CONSUME
+  EXTERNAL_CONSUMPTION
   REVERSE_CONSUME
   ADJUSTMENT
 }
@@ -331,6 +334,8 @@ model AtaItemExternalBalanceSnapshot {
   commitments               Json?
   nonParticipantCommitments Json?
   difference                String?
+  rawRecords                Int      @default(0)
+  lastUpdatedAt             DateTime?
   lastSyncAt                DateTime
   warnings                  Json?
   ataItem                   AtaItem  @relation(fields: [ataItemId], references: [id], onDelete: Cascade)
