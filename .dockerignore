@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.env
+.env.*
+!.env.example
+npm-debug.log*
+coverage
+.vitest
+backup*.sql
+*.sql
+Dockerfile
+docker-compose*.yml
+compose*.yaml
+compose*.yml
+docs
+tests

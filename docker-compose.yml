@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: sagep_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sagep}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sagep123}
+      POSTGRES_DB: ${POSTGRES_DB:-sagep}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - sagep_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sagep_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${DOCKER_NODE_ENV:-production}
+      PORT: ${PORT:-3000}
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://sagep:sagep123@postgres:5432/sagep?schema=public}
+      JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-troque-este-refresh-secret}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      PDF_TIMEOUT_MS: ${PDF_TIMEOUT_MS:-60000}
+      PDF_RENDER_MODE: ${PDF_RENDER_MODE:-real}
+      COMPRAS_GOV_DEBUG: ${COMPRAS_GOV_DEBUG:-false}
+      PORTAL_TRANSPARENCIA_API_TOKEN: ${PORTAL_TRANSPARENCIA_API_TOKEN:-}
+    ports:
+      - "${PORT:-3000}:3000"
+
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: sagep_pgadmin
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@sagep.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-sagep123}
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+
+volumes:
+  sagep_postgres_data:
+    name: sagep_postgres_data
