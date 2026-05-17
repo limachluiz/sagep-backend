@@ -1796,11 +1796,15 @@ describe("critical flows", () => {
 
   it("ata-items: registers external consumption manually with validation, balance update and audit log", async () => {
     const catalog = await createCatalog("5.00");
+    await prisma.ata.update({
+      where: { id: catalog.ata.id },
+      data: { externalUasg: "160016" },
+    });
     const basePayload = {
       quantity: 2,
       reason: "Consumo externo confirmado manualmente",
       source: "COMPRAS_GOV",
-      externalStatus: "CONSUMO_GERENCIADORA_DETECTADO",
+      externalStatus: "CONSUMO_OFICIAL_DETECTADO",
       externalReference: "SNAPSHOT-001",
       commitmentNumber: "2026NE000567",
       unit: "160016",
@@ -1827,6 +1831,18 @@ describe("critical flows", () => {
       .expect((response) => {
         expect(response.body.message).toContain("Saldo insuficiente");
       });
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ ...basePayload, externalReference: "ADESAO-001" })
+      .expect(400);
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ ...basePayload, unit: "999999" })
+      .expect(400);
 
     const response = await request(app)
       .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
@@ -2923,20 +2939,19 @@ describe("critical flows", () => {
         true,
       );
       expect(itemSynced.body.item.id).toBe(atas[0].items[0].id);
-      expect(itemSynced.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(itemSynced.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
       expect(itemSynced.body.localBalance.availableQuantity).toBe("50");
-      expect(itemSynced.body.externalBalance.managedBalance.availableQuantity).toBe("45");
+      expect(itemSynced.body.externalBalance.availableQuantity).toBe("45");
       expect(itemSynced.body.lastSyncAt).not.toBeNull();
 
       const savedSnapshot = await prisma.ataItemExternalBalanceSnapshot.findUniqueOrThrow({
         where: { ataItemId: atas[0].items[0].id },
       });
-      expect(savedSnapshot.status).toBe("CONSUMO_EXTERNO_DETECTADO");
-      expect(savedSnapshot.managedBalance).not.toBeNull();
-      expect(savedSnapshot.adhesionBalance).not.toBeNull();
+      expect(savedSnapshot.status).toBe("CONSUMO_OFICIAL_DETECTADO");
+      expect(savedSnapshot.externalBalance).not.toBeNull();
       expect(savedSnapshot.difference).toBe("5");
       expect(savedSnapshot.source).toBe("COMPRAS_GOV");
-      expect(savedSnapshot.rawRecords).toBeGreaterThanOrEqual(1);
+      expect((savedSnapshot.externalBalance as Record<string, any>).rawRecords).toBeGreaterThanOrEqual(1);
 
       fetchMock.mockClear();
       const syncedItemComparison = await request(app)
@@ -2944,18 +2959,15 @@ describe("critical flows", () => {
         .set("Authorization", `Bearer ${adminAuth.accessToken}`)
         .expect(200);
       expect(fetchMock).not.toHaveBeenCalled();
-      expect(syncedItemComparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(syncedItemComparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
       expect(syncedItemComparison.body.externalBalance.source).toBe("COMPRAS_GOV");
-      expect(syncedItemComparison.body.externalBalance.managedBalance).not.toBeNull();
-      expect(syncedItemComparison.body.externalBalance.adhesionBalance).not.toBeNull();
-      expect(syncedItemComparison.body.externalBalance.externalUsageStatus).toBe(
-        "CONSUMO_GERENCIADORA_DETECTADO",
-      );
       expect(syncedItemComparison.body.externalBalance.commitments).toHaveLength(1);
-      expect(syncedItemComparison.body.externalBalance.nonParticipantCommitments).toHaveLength(0);
+      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("adhesionBalance");
+      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("externalUsageStatus");
+      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("nonParticipantCommitments");
       expect(syncedItemComparison.body.externalBalance.rawRecords).toBeGreaterThanOrEqual(1);
       expect(syncedItemComparison.body.externalBalance.lastUpdatedAt).not.toBeNull();
-      expect(syncedItemComparison.body.externalBalance.managedBalance.availableQuantity).toBe("45");
+      expect(syncedItemComparison.body.externalBalance.availableQuantity).toBe("45");
 
       const itemsAfterSync = await request(app)
         .get("/api/ata-items")
@@ -2966,9 +2978,9 @@ describe("critical flows", () => {
       );
       expect(syncedItemEntry.latestExternalBalanceSnapshot).not.toBeNull();
       expect(syncedItemEntry.latestExternalBalanceSnapshot.status).toBe(
-        "CONSUMO_EXTERNO_DETECTADO",
+        "CONSUMO_OFICIAL_DETECTADO",
       );
-      expect(syncedItemEntry.latestExternalBalanceSnapshot.managedBalance.availableQuantity).toBe(
+      expect(syncedItemEntry.latestExternalBalanceSnapshot.externalBalance.availableQuantity).toBe(
         "45",
       );
 
@@ -3019,7 +3031,7 @@ describe("critical flows", () => {
         .expect(200);
       expect(fetchMock).not.toHaveBeenCalled();
       expect(syncedBalance.body.summary.naoSincronizado).toBe(0);
-      expect(syncedBalance.body.items[0].status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(syncedBalance.body.items[0].status).toBe("CONSUMO_OFICIAL_DETECTADO");
       expect(syncedBalance.body.items[1].status).toBe("OK");
 
       await prisma.ata.update({
@@ -3032,9 +3044,8 @@ describe("critical flows", () => {
         .set("Authorization", `Bearer ${adminAuth.accessToken}`)
         .expect(200);
 
-      expect(fallbackBalance.body.summary.semEmpenhoRegistrado).toBe(0);
       expect(fallbackBalance.body.summary.notFound).toBe(0);
-      expect(fallbackBalance.body.items[0].status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(fallbackBalance.body.items[0].status).toBe("CONSUMO_OFICIAL_DETECTADO");
       expect(fallbackBalance.body.warnings).toHaveLength(0);
 
       const fallbackItemComparison = await request(app)
@@ -3042,7 +3053,7 @@ describe("critical flows", () => {
         .set("Authorization", `Bearer ${adminAuth.accessToken}`)
         .expect(200);
 
-      expect(fallbackItemComparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(fallbackItemComparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
 
       const fallbackSync = await request(app)
         .post(`/api/atas/${atas[0].id}/sync-external-balance`)
@@ -3050,7 +3061,7 @@ describe("critical flows", () => {
         .expect(200);
 
       expect(fallbackSync.body.updatedItems).toBe(2);
-      expect(fallbackSync.body.items[0].status).toBe("SEM_EMPENHO_REGISTRADO");
+      expect(fallbackSync.body.items[0].status).toBe("OK");
     } finally {
       fetchMock.mockRestore();
     }
@@ -3358,69 +3369,32 @@ describe("critical flows", () => {
         .set("Authorization", `Bearer ${adminAuth.accessToken}`)
         .expect(200);
 
-      expect(comparison.body.status).toBe("CONSUMO_EXTERNO_DETECTADO");
+      expect(comparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
       expect(comparison.body.externalBalance.source).toBe("COMPRAS_GOV");
       expect(comparison.body.difference).toBe("1");
-      expect(comparison.body.externalBalance.managedBalance.unitCode).toBe("160016");
-      expect(comparison.body.externalBalance.managedBalance.registeredQuantity).toBe("120");
-      expect(comparison.body.externalBalance.managedBalance.committedQuantity).toBe("1");
-      expect(comparison.body.externalBalance.managedBalance.availableQuantity).toBe("119");
-      expect(comparison.body.externalBalance.managedBalance.commitments).toHaveLength(1);
-      expect(comparison.body.externalBalance.managedBalance.commitments[0].numeroEmpenho).toBe(
+      expect(comparison.body.externalBalance.registeredQuantity).toBe("120");
+      expect(comparison.body.externalBalance.committedQuantity).toBe("1");
+      expect(comparison.body.externalBalance.availableQuantity).toBe("119");
+      expect(comparison.body.externalBalance.commitments).toHaveLength(1);
+      expect(comparison.body.externalBalance.commitments[0].numeroEmpenho).toBe(
         "2026NE000567",
       );
-      expect(comparison.body.externalBalance.managedBalance.commitments[0].fornecedor).toBe(
+      expect(comparison.body.externalBalance.commitments[0].fornecedor).toBe(
         "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
       );
-      expect(comparison.body.externalBalance.managedBalance.commitments[0].quantidadeEmpenhada).toBe(
+      expect(comparison.body.externalBalance.commitments[0].quantidadeEmpenhada).toBe(
         "1",
       );
-      expect(comparison.body.externalBalance.managedBalance.commitments[0].estimatedAmount).toBe(
+      expect(comparison.body.externalBalance.commitments[0].estimatedAmount).toBe(
         "2375",
       );
-      expect(comparison.body.externalBalance.managedBalance.commitments[0].dataEmpenho).toBe(
+      expect(comparison.body.externalBalance.commitments[0].dataEmpenho).toBe(
         "2026-05-06T12:00:00.000Z",
       );
-      expect(
-        comparison.body.externalBalance.managedBalance.commitments[0].affectsManagedBalance,
-      ).toBe(true);
-      expect(comparison.body.externalBalance.nonParticipantCommitments).toHaveLength(1);
-      expect(comparison.body.externalBalance.nonParticipantCommitments[0].numeroEmpenho).toBe(
-        "2026NE000139",
-      );
-      expect(comparison.body.externalBalance.nonParticipantCommitments[0].fornecedor).toBe(
-        "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
-      );
-      expect(comparison.body.externalBalance.nonParticipantCommitments[0].quantidadeEmpenhada).toBe(
-        "1",
-      );
-      expect(comparison.body.externalBalance.nonParticipantCommitments[0].estimatedAmount).toBe(
-        "2375",
-      );
-      expect(comparison.body.externalBalance.nonParticipantCommitments[0].dataEmpenho).toBe(
-        "2026-05-06T14:48:33.000Z",
-      );
-      expect(comparison.body.externalBalance.adhesionBalance.limitQuantity).toBe("2");
-      expect(comparison.body.externalBalance.adhesionBalance.approvedQuantity).toBe("2");
-      expect(comparison.body.externalBalance.adhesionBalance.committedQuantity).toBe("0");
-      expect(comparison.body.externalBalance.adhesionBalance.availableQuantity).toBe("2");
-      expect(comparison.body.externalBalance.adhesionBalance.adhesions).toHaveLength(1);
-      expect(comparison.body.externalBalance.adhesionBalance.adhesions[0].numeroEmpenho).toBeNull();
-      expect(comparison.body.externalBalance.adhesionBalance.adhesions[0].fornecedor).toBe(
-        "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
-      );
-      expect(comparison.body.externalBalance.adhesionBalance.adhesions[0].quantidadeIncluida).toBe(
-        "2",
-      );
-      expect(comparison.body.externalBalance.adhesionBalance.adhesions[0].estimatedAmount).toBe(
-        "4750",
-      );
-      expect(
-        comparison.body.externalBalance.adhesionBalance.adhesions[0].affectsManagedBalance,
-      ).toBe(false);
-      expect(comparison.body.externalBalance.externalUsageStatus).toBe(
-        "CONSUMO_GERENCIADORA_E_ADESAO_DETECTADOS",
-      );
+      expect(comparison.body.externalBalance.commitments[0].affectsManagedBalance).toBe(true);
+      expect(comparison.body.externalBalance).not.toHaveProperty("nonParticipantCommitments");
+      expect(comparison.body.externalBalance).not.toHaveProperty("adhesionBalance");
+      expect(comparison.body.externalBalance).not.toHaveProperty("externalUsageStatus");
 
       const balanceUrls = requestedUrls.filter((url) =>
         url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"),
@@ -3434,7 +3408,7 @@ describe("critical flows", () => {
       ).toBe(true);
       expect(
         requestedUrls.some((url) => url.pathname.endsWith("/modulo-arp/5_consultarAdesoesItem")),
-      ).toBe(true);
+      ).toBe(false);
 
       const after = await prisma.ataItem.findUniqueOrThrow({
         where: { id: item.id },
@@ -3495,7 +3469,6 @@ describe("critical flows", () => {
         .expect(200);
 
       expect(response.body.summary.rateLimitErrors).toBe(1);
-      expect(response.body.summary.semEmpenhoRegistrado).toBe(0);
       expect(response.body.items[0].status).toBe("RATE_LIMIT_COMPRAS_GOV");
       expect(response.body.items[0].externalBalance).toBeNull();
       expect(response.body.items[0].externalError.retryAfterSeconds).toBe(7);

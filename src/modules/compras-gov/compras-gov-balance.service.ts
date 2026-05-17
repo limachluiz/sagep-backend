@@ -62,17 +62,6 @@ type ComprasGovUnidadeItem = Record<string, unknown> & {
   dataHoraAtualizacao?: string;
 };
 
-type ComprasGovAdesaoItem = Record<string, unknown> & {
-  numeroAta?: string;
-  unidadeGerenciadora?: string;
-  unidadeNaoParticipante?: string;
-  numeroEmpenho?: string;
-  dataAprovacaoAnalise?: string;
-  quantidadeAprovadaAdesao?: number;
-  quantidadeEmpenhada?: number;
-  valor?: number;
-};
-
 type ExternalCommitment = {
   numeroEmpenho: string | null;
   unidade: string | null;
@@ -91,27 +80,16 @@ type ExternalCommitment = {
   };
 };
 
-type ExternalUsageStatus =
-  | "SEM_USO_EXTERNO"
-  | "ADESAO_DETECTADA"
-  | "CONSUMO_GERENCIADORA_DETECTADO"
-  | "CONSUMO_GERENCIADORA_E_ADESAO_DETECTADOS";
-
-type ManagedExternalBalance = {
-  unitCode: string | null;
-  unitName: string | null;
+type ExternalBalance = {
+  externalItemNumber: string;
+  source: "COMPRAS_GOV" | "COMPRAS_GOV_IMPORT_FALLBACK";
   registeredQuantity: Prisma.Decimal;
   committedQuantity: Prisma.Decimal;
   availableQuantity: Prisma.Decimal;
   commitments: ExternalCommitment[];
-};
-
-type AdhesionExternalBalance = {
-  limitQuantity: Prisma.Decimal;
-  approvedQuantity: Prisma.Decimal;
-  committedQuantity: Prisma.Decimal;
-  availableQuantity: Prisma.Decimal;
-  adhesions: ExternalCommitment[];
+  lastUpdatedAt: Date | null;
+  rawRecords: number;
+  matchKey?: string;
 };
 
 type ExternalRequestDebug = {
@@ -129,7 +107,6 @@ type ExternalRequestDebug = {
   empenhosNaoParticipantes?: ExternalCommitment[];
   rawUnidadesItem?: unknown[];
   rawEmpenhosSaldoItem?: unknown[];
-  rawAdesoesItem?: unknown[];
   unidadeGerenciadoraSelecionada?: unknown;
   saldoGerenciadoraCalculado?: {
     registeredQuantity: string;
@@ -137,7 +114,6 @@ type ExternalRequestDebug = {
     availableQuantity: string;
   };
   commitmentsGerenciadoraNormalizados?: ExternalCommitment[];
-  commitmentsNaoParticipantesNormalizados?: ExternalCommitment[];
   unmatchedLocalItems?: Array<{
     id: string;
     referenceCode: string;
@@ -156,24 +132,11 @@ type ExternalRequestError = Error & {
 type BalanceComparisonStatus =
   | "OK"
   | "DIVERGENTE"
-  | "CONSUMO_EXTERNO_DETECTADO"
+  | "CONSUMO_OFICIAL_DETECTADO"
   | "NAO_SINCRONIZADO"
   | "NAO_ENCONTRADO"
   | "ERRO_CONSULTA_EXTERNA"
-  | "RATE_LIMIT_COMPRAS_GOV"
-  | "SEM_EMPENHO_REGISTRADO";
-
-type ExternalBalance = {
-  externalItemNumber: string;
-  source: "COMPRAS_GOV" | "COMPRAS_GOV_IMPORT_FALLBACK";
-  managedBalance: ManagedExternalBalance;
-  adhesionBalance: AdhesionExternalBalance;
-  nonParticipantCommitments: ExternalCommitment[];
-  externalUsageStatus: ExternalUsageStatus;
-  lastUpdatedAt: Date | null;
-  rawRecords: number;
-  matchKey?: string;
-};
+  | "RATE_LIMIT_COMPRAS_GOV";
 
 type LocalItem = {
   id: string;
@@ -191,24 +154,10 @@ type LocalItem = {
 type SnapshotExternalBalance = {
   externalItemNumber: string;
   source: "COMPRAS_GOV" | "COMPRAS_GOV_IMPORT_FALLBACK";
+  registeredQuantity: string;
+  committedQuantity: string;
+  availableQuantity: string;
   commitments: ExternalCommitment[];
-  managedBalance: {
-    unitCode: string | null;
-    unitName: string | null;
-    registeredQuantity: string;
-    committedQuantity: string;
-    availableQuantity: string;
-    commitments: ExternalCommitment[];
-  };
-  adhesionBalance: {
-    limitQuantity: string;
-    approvedQuantity: string;
-    committedQuantity: string;
-    availableQuantity: string;
-    adhesions: ExternalCommitment[];
-  };
-  nonParticipantCommitments: ExternalCommitment[];
-  externalUsageStatus: ExternalUsageStatus;
   lastUpdatedAt: Date | null;
   rawRecords: number;
 };
@@ -281,6 +230,10 @@ export class ComprasGovBalanceService {
   private normalizeJsonValue(value: unknown): Prisma.InputJsonValue | Prisma.NullableJsonNullValueInput {
     if (value instanceof Date) {
       return value.toISOString();
+    }
+
+    if (value instanceof Prisma.Decimal) {
+      return value.toString();
     }
 
     if (value === null) {
@@ -437,60 +390,6 @@ export class ComprasGovBalanceService {
           }
         : {}),
     };
-  }
-
-  private buildEmptyManagedBalance(
-    overrides?: Partial<Pick<ManagedExternalBalance, "unitCode" | "unitName">>
-  ): ManagedExternalBalance {
-    return {
-      unitCode: overrides?.unitCode ?? null,
-      unitName: overrides?.unitName ?? null,
-      registeredQuantity: decimal(0),
-      committedQuantity: decimal(0),
-      availableQuantity: decimal(0),
-      commitments: [],
-    };
-  }
-
-  private buildEmptyAdhesionBalance(): AdhesionExternalBalance {
-    return {
-      limitQuantity: decimal(0),
-      approvedQuantity: decimal(0),
-      committedQuantity: decimal(0),
-      availableQuantity: decimal(0),
-      adhesions: [],
-    };
-  }
-
-  private getApprovedQuantityFromAdhesion(record: Record<string, unknown>) {
-    return this.pickNumber(record, [
-      "quantidadeAprovadaAdesao",
-      "quantidadeRegistrada",
-      "quantidadeIncluida",
-      "quantidade",
-    ]);
-  }
-
-  private resolveExternalUsageStatus(balance: {
-    managedBalance: ManagedExternalBalance;
-    adhesionBalance: AdhesionExternalBalance;
-  }): ExternalUsageStatus {
-    const hasManagedConsumption = balance.managedBalance.committedQuantity.greaterThan(0);
-    const hasAdhesionUsage =
-      balance.adhesionBalance.approvedQuantity.greaterThan(0) ||
-      balance.adhesionBalance.committedQuantity.greaterThan(0) ||
-      balance.adhesionBalance.adhesions.length > 0;
-
-    if (hasManagedConsumption && hasAdhesionUsage) {
-      return "CONSUMO_GERENCIADORA_E_ADESAO_DETECTADOS";
-    }
-    if (hasManagedConsumption) {
-      return "CONSUMO_GERENCIADORA_DETECTADO";
-    }
-    if (hasAdhesionUsage) {
-      return "ADESAO_DETECTADA";
-    }
-    return "SEM_USO_EXTERNO";
   }
 
   private getAvailableQuantityFromUnit(record: Record<string, unknown>) {
@@ -771,97 +670,53 @@ export class ComprasGovBalanceService {
       const externalItemNumber = this.normalizeText(record.numeroItem);
       const normalizedItemNumber = this.normalizeItemNumber(externalItemNumber);
       if (!normalizedItemNumber) continue;
+      const isManagedRecord = this.isManagedUnit(record, managedUasg);
+      if (!isManagedRecord) continue;
 
       const current =
         balances.get(normalizedItemNumber) ??
         {
           externalItemNumber,
           source: "COMPRAS_GOV",
-          managedBalance: this.buildEmptyManagedBalance({
-            unitCode: managedUasg,
-          }),
-          adhesionBalance: this.buildEmptyAdhesionBalance(),
-          nonParticipantCommitments: [] as ExternalCommitment[],
-          externalUsageStatus: "SEM_USO_EXTERNO" as ExternalUsageStatus,
+          registeredQuantity: decimal(0),
+          committedQuantity: decimal(0),
+          availableQuantity: decimal(0),
+          commitments: [] as ExternalCommitment[],
           lastUpdatedAt: null,
           rawRecords: 0,
         };
 
       const updatedAt = this.normalizeDate(record.dataHoraAtualizacao);
-      const isManagedRecord = this.isManagedUnit(record, managedUasg);
 
-      if (isManagedRecord) {
-        current.managedBalance.unitCode = this.getUnitCode(record) ?? current.managedBalance.unitCode;
-        current.managedBalance.unitName =
-          this.pickText(record, ["nomeUnidade", "unidade"]) ?? current.managedBalance.unitName;
-        current.managedBalance.registeredQuantity = current.managedBalance.registeredQuantity.add(
-          this.normalizeNumber(record.quantidadeRegistrada)
-        );
-        current.managedBalance.committedQuantity = current.managedBalance.committedQuantity.add(
-          this.normalizeNumber(record.quantidadeEmpenhada)
-        );
-        current.managedBalance.availableQuantity = current.managedBalance.availableQuantity.add(
-          this.normalizeNumber(record.saldoEmpenho)
-        );
-        const commitment = this.buildCommitment(record, {
-          unidade: [
-            this.getUnitCode(record),
-            this.pickText(record, ["nomeUnidade", "unidade"]),
-          ]
-            .filter(Boolean)
-            .join(" - ") || null,
-          tipoUnidade: this.pickText(record, ["tipo", "tipoUnidade"]) ?? "GERENCIADORA",
-          affectsManagedBalance: true,
-          sourceEndpoint: "4_consultarEmpenhosSaldoItem",
-          item: externalItemNumber,
-        });
-        if (commitment?.numeroEmpenho) {
-          current.managedBalance.commitments.push(commitment);
-        }
-      } else {
-        const approvedQuantity = this.getApprovedQuantityFromAdhesion(record) ?? decimal(0);
-        const committedQuantity =
-          this.pickNumber(record, [
-            "quantidadeEmpenhada",
-            "qtdEmpenhada",
-            "quantidade",
-            "quantidadeIncluida",
-          ]) ?? decimal(0);
-        const availableQuantity = this.pickNumber(record, ["saldoEmpenho", "saldoParaEmpenho"]) ?? decimal(0);
-
-        const commitment = this.buildCommitment(record, {
-          unidade: [
-            this.getUnitCode(record),
-            this.pickText(record, ["nomeUnidade", "unidade"]),
-          ]
-            .filter(Boolean)
-            .join(" - ") || null,
-          tipoUnidade: this.pickText(record, ["tipo", "tipoUnidade"]) ?? "NAO_PARTICIPANTE",
-          affectsManagedBalance: false,
-          sourceEndpoint: "4_consultarEmpenhosSaldoItem",
-          item: externalItemNumber,
-        });
-
-        if (commitment?.numeroEmpenho) {
-          current.nonParticipantCommitments.push(commitment);
-        } else if (commitment) {
-          current.adhesionBalance.limitQuantity =
-            current.adhesionBalance.limitQuantity.add(approvedQuantity);
-          current.adhesionBalance.approvedQuantity =
-            current.adhesionBalance.approvedQuantity.add(approvedQuantity);
-          current.adhesionBalance.committedQuantity =
-            current.adhesionBalance.committedQuantity.add(committedQuantity);
-          current.adhesionBalance.availableQuantity =
-            current.adhesionBalance.availableQuantity.add(availableQuantity);
-          current.adhesionBalance.adhesions.push(commitment);
-        }
+      current.registeredQuantity = current.registeredQuantity.add(
+        this.normalizeNumber(record.quantidadeRegistrada)
+      );
+      current.committedQuantity = current.committedQuantity.add(
+        this.normalizeNumber(record.quantidadeEmpenhada)
+      );
+      current.availableQuantity = current.availableQuantity.add(
+        this.normalizeNumber(record.saldoEmpenho)
+      );
+      const commitment = this.buildCommitment(record, {
+        unidade: [
+          this.getUnitCode(record),
+          this.pickText(record, ["nomeUnidade", "unidade"]),
+        ]
+          .filter(Boolean)
+          .join(" - ") || null,
+        tipoUnidade: this.pickText(record, ["tipo", "tipoUnidade"]) ?? "GERENCIADORA",
+        affectsManagedBalance: true,
+        sourceEndpoint: "4_consultarEmpenhosSaldoItem",
+        item: externalItemNumber,
+      });
+      if (commitment && (commitment.numeroEmpenho || current.committedQuantity.greaterThan(0))) {
+        current.commitments.push(commitment);
       }
       current.lastUpdatedAt =
         updatedAt && (!current.lastUpdatedAt || updatedAt > current.lastUpdatedAt)
           ? updatedAt
           : current.lastUpdatedAt;
       current.rawRecords += 1;
-      current.externalUsageStatus = this.resolveExternalUsageStatus(current);
       balances.set(normalizedItemNumber, current);
     }
 
@@ -1049,55 +904,37 @@ export class ComprasGovBalanceService {
     }
 
     let unidades: ComprasGovUnidadeItem[];
-    let adesoes: ComprasGovAdesaoItem[];
     try {
-      [unidades, adesoes] = await Promise.all([
-        this.requestAllPages<ComprasGovUnidadeItem>(
-          "/modulo-arp/3_consultarUnidadesItem",
-          {
-            numeroAta,
-            unidadeGerenciadora: ata.externalUasg ?? "",
-            numeroItem,
-          },
-          { ataNumberTried: numeroAta, matchKey: `numeroItem:${numeroItem}` }
-        ),
-        this.requestAllPages<ComprasGovAdesaoItem>(
-          "/modulo-arp/5_consultarAdesoesItem",
-          {
-            numeroAta,
-            unidadeGerenciadora: ata.externalUasg ?? "",
-            numeroItem,
-          },
-          { ataNumberTried: numeroAta, matchKey: `numeroItem:${numeroItem}` }
-        ),
-      ]);
+      unidades = await this.requestAllPages<ComprasGovUnidadeItem>(
+        "/modulo-arp/3_consultarUnidadesItem",
+        {
+          numeroAta,
+          unidadeGerenciadora: ata.externalUasg ?? "",
+          numeroItem,
+        },
+        { ataNumberTried: numeroAta, matchKey: `numeroItem:${numeroItem}` }
+      );
     } catch (error) {
       const requestError = error as ExternalRequestError;
       if (requestError.network || this.isRateLimitError(requestError)) throw error;
       return undefined;
     }
-    records.push(...unidades, ...adesoes);
+    records.push(...unidades);
 
     const matchingUnidades = unidades.filter(
       (candidate) => this.normalizeItemNumber(candidate.numeroItem) === normalizedNumeroItem
     );
-    const matchingAdesoes = adesoes.filter((candidate) =>
-      this.normalizeText(candidate.numeroAta) === numeroAta
-    );
 
-    if (!externalItem && matchingUnidades.length === 0 && matchingAdesoes.length === 0) {
+    if (!externalItem && matchingUnidades.length === 0) {
       return undefined;
     }
 
-    const managedUnit =
-      matchingUnidades.find((record) => this.isManagedUnit(record, ata.externalUasg)) ??
-      matchingUnidades[0];
+    const managedUnit = matchingUnidades.find((record) => this.isManagedUnit(record, ata.externalUasg));
 
     if (!managedUnit) {
       return undefined;
     }
 
-    const nonParticipantUnits = matchingUnidades.filter((record) => record !== managedUnit);
     const itemRegistered = decimal(
       externalItem?.quantidadeHomologadaVencedor ?? externalItem?.quantidadeHomologadaItem ?? 0
     );
@@ -1130,120 +967,26 @@ export class ComprasGovBalanceService {
         })
       )
       .filter((commitment): commitment is ExternalCommitment => Boolean(commitment));
-    const nonParticipantCommitments = nonParticipantUnits
-      .filter((record) => this.hasCommitmentNumber(record))
-      .map((record) =>
-        this.buildCommitment(record, {
-          unidade: [
-            this.getUnitCode(record),
-            this.normalizeText(record.nomeUnidade),
-          ].filter(Boolean).join(" - ") || this.pickText(record, ["unidade"]) || null,
-          tipoUnidade: this.normalizeText(record.tipoUnidade) || "NAO_PARTICIPANTE",
-          fornecedor:
-            this.normalizeText(record.fornecedor) ||
-            this.normalizeText(externalItem?.nomeRazaoSocialFornecedor) ||
-            null,
-          affectsManagedBalance: false,
-          quantidadeEmpenhada: this.getCommittedQuantityFromUnit(record),
-          sourceEndpoint: "3_consultarUnidadesItem",
-          item: numeroItem,
-        })
-      )
-      .filter((commitment): commitment is ExternalCommitment => Boolean(commitment));
-    const adhesions = [
-      ...nonParticipantUnits
-        .filter((record) => !this.hasCommitmentNumber(record))
-        .map((record) =>
-          this.buildCommitment(record, {
-            unidade: [
-              this.getUnitCode(record),
-              this.normalizeText(record.nomeUnidade),
-            ].filter(Boolean).join(" - ") || this.pickText(record, ["unidade"]) || null,
-            tipoUnidade: this.normalizeText(record.tipoUnidade) || "NAO_PARTICIPANTE",
-            fornecedor:
-              this.normalizeText(record.fornecedor) ||
-              this.normalizeText(externalItem?.nomeRazaoSocialFornecedor) ||
-              null,
-            affectsManagedBalance: false,
-            quantidadeEmpenhada: this.getCommittedQuantityFromUnit(record),
-            sourceEndpoint: "3_consultarUnidadesItem",
-            item: numeroItem,
-          })
-        ),
-      ...matchingAdesoes
-        .map((record) =>
-          this.buildCommitment(record, {
-            unidade: this.normalizeText(record.unidadeNaoParticipante) || null,
-            tipoUnidade: "NAO_PARTICIPANTE",
-            fornecedor:
-              this.normalizeText(externalItem?.nomeRazaoSocialFornecedor) || null,
-            affectsManagedBalance: false,
-            sourceEndpoint: "5_consultarAdesoesItem",
-            item: numeroItem,
-          })
-        )
-        .filter((commitment): commitment is ExternalCommitment => Boolean(commitment)),
-    ].filter((commitment): commitment is ExternalCommitment => Boolean(commitment));
-
     const balance: ExternalBalance = {
       externalItemNumber: this.normalizeText(externalItem?.numeroItem) || numeroItem,
       source: "COMPRAS_GOV",
-      managedBalance: {
-        unitCode: this.getUnitCode(managedUnit),
-        unitName: this.normalizeText(managedUnit.nomeUnidade) || null,
-        registeredQuantity,
-        committedQuantity,
-        availableQuantity,
-        commitments,
-      },
-      adhesionBalance: {
-        limitQuantity: adhesions.reduce(
-          (total, adhesion) => total.add(adhesion.quantidadeIncluida ?? 0),
-          decimal(0)
-        ),
-        approvedQuantity: adhesions.reduce(
-          (total, adhesion) => total.add(adhesion.quantidadeIncluida ?? 0),
-          decimal(0)
-        ),
-        committedQuantity: adhesions.reduce(
-          (total, adhesion) => total.add(adhesion.quantidadeEmpenhada ?? 0),
-          decimal(0)
-        ),
-        availableQuantity: adhesions.reduce(
-          (total, adhesion) =>
-            total.add(
-              Math.max(
-                Number(adhesion.quantidadeIncluida ?? 0) - Number(adhesion.quantidadeEmpenhada ?? 0),
-                0
-              )
-            ),
-          decimal(0)
-        ),
-        adhesions,
-      },
-      nonParticipantCommitments,
-      externalUsageStatus: "SEM_USO_EXTERNO",
+      registeredQuantity,
+      committedQuantity,
+      availableQuantity,
+      commitments,
       lastUpdatedAt,
-      rawRecords: records.length,
+      rawRecords: matchingUnidades.filter((record) => record === managedUnit).length,
       matchKey: pncpAta
         ? `numeroControlePncpAta:${pncpAta};numeroItem:${numeroItem}`
         : `numeroAta:${numeroAta};numeroItem:${numeroItem}`,
     };
-    balance.externalUsageStatus = this.resolveExternalUsageStatus(balance);
 
     if (this.requestDebug.length > 0) {
-      this.requestDebug[this.requestDebug.length - 1].sampleCommitments = [
-        ...commitments,
-        ...nonParticipantCommitments,
-        ...adhesions,
-      ].slice(0, 3);
+      this.requestDebug[this.requestDebug.length - 1].sampleCommitments = commitments.slice(0, 3);
       this.requestDebug[this.requestDebug.length - 1].unidadesEncontradas = matchingUnidades;
       this.requestDebug[this.requestDebug.length - 1].unidadePrincipalSelecionada = managedUnit;
       this.requestDebug[this.requestDebug.length - 1].empenhosGerenciadora = commitments;
-      this.requestDebug[this.requestDebug.length - 1].empenhosNaoParticipantes =
-        nonParticipantCommitments;
       this.requestDebug[this.requestDebug.length - 1].rawUnidadesItem = unidades;
-      this.requestDebug[this.requestDebug.length - 1].rawAdesoesItem = adesoes;
       this.requestDebug[this.requestDebug.length - 1].unidadeGerenciadoraSelecionada = managedUnit;
       this.requestDebug[this.requestDebug.length - 1].saldoGerenciadoraCalculado = {
         registeredQuantity: registeredQuantity.toString(),
@@ -1252,8 +995,6 @@ export class ComprasGovBalanceService {
       };
       this.requestDebug[this.requestDebug.length - 1].commitmentsGerenciadoraNormalizados =
         commitments;
-      this.requestDebug[this.requestDebug.length - 1].commitmentsNaoParticipantesNormalizados =
-        nonParticipantCommitments;
     }
 
     return { balance, records };
@@ -1279,17 +1020,10 @@ export class ComprasGovBalanceService {
     return {
       externalItemNumber: item.externalItemNumber ?? item.referenceCode,
       source: "COMPRAS_GOV_IMPORT_FALLBACK",
-      managedBalance: {
-        unitCode: null,
-        unitName: null,
-        registeredQuantity: initialQuantity,
-        committedQuantity: decimal(0),
-        availableQuantity: initialQuantity,
-        commitments: [],
-      },
-      adhesionBalance: this.buildEmptyAdhesionBalance(),
-      nonParticipantCommitments: [],
-      externalUsageStatus: "SEM_USO_EXTERNO",
+      registeredQuantity: initialQuantity,
+      committedQuantity: decimal(0),
+      availableQuantity: initialQuantity,
+      commitments: [],
       lastUpdatedAt: item.externalLastSyncAt,
       rawRecords: 0,
     };
@@ -1300,16 +1034,16 @@ export class ComprasGovBalanceService {
     externalBalance: ExternalBalance | undefined
   ) {
     const localAvailable = decimal(localBalance.availableQuantity);
-    const externalAvailable = externalBalance?.managedBalance.availableQuantity ?? null;
+    const externalAvailable = externalBalance?.availableQuantity ?? null;
     const localConsumed = decimal(localBalance.consumedQuantity);
 
     if (!externalAvailable) return "NAO_ENCONTRADO" satisfies BalanceComparisonStatus;
-    if (externalBalance?.managedBalance.committedQuantity.greaterThan(0) && localConsumed.equals(0)) {
-      return "CONSUMO_EXTERNO_DETECTADO" satisfies BalanceComparisonStatus;
+    if (externalBalance?.committedQuantity.greaterThan(localConsumed)) {
+      return "CONSUMO_OFICIAL_DETECTADO" satisfies BalanceComparisonStatus;
     }
     if (localAvailable.equals(externalAvailable)) return "OK" satisfies BalanceComparisonStatus;
     if (externalAvailable.lessThan(localAvailable)) {
-      return "CONSUMO_EXTERNO_DETECTADO" satisfies BalanceComparisonStatus;
+      return "CONSUMO_OFICIAL_DETECTADO" satisfies BalanceComparisonStatus;
     }
     return "DIVERGENTE" satisfies BalanceComparisonStatus;
   }
@@ -1319,10 +1053,10 @@ export class ComprasGovBalanceService {
     localBalance: Awaited<ReturnType<typeof ataItemBalanceService.getBalanceForAtaItem>>,
     externalBalance: ExternalBalance | undefined,
     externalError?: ExternalRequestError,
-    fallbackReason?: "SEM_EMPENHO_REGISTRADO"
+    _fallbackReason?: never
   ) {
     const localAvailable = decimal(localBalance.availableQuantity);
-    const externalAvailable = externalBalance?.managedBalance.availableQuantity ?? null;
+    const externalAvailable = externalBalance?.availableQuantity ?? null;
     const difference = externalAvailable ? localAvailable.sub(externalAvailable) : null;
 
     return {
@@ -1339,24 +1073,10 @@ export class ComprasGovBalanceService {
         ? {
             externalItemNumber: externalBalance.externalItemNumber,
             source: externalBalance.source,
-            commitments: externalBalance.managedBalance.commitments,
-            managedBalance: {
-              unitCode: externalBalance.managedBalance.unitCode,
-              unitName: externalBalance.managedBalance.unitName,
-              registeredQuantity: externalBalance.managedBalance.registeredQuantity.toString(),
-              committedQuantity: externalBalance.managedBalance.committedQuantity.toString(),
-              availableQuantity: externalBalance.managedBalance.availableQuantity.toString(),
-              commitments: externalBalance.managedBalance.commitments,
-            },
-            adhesionBalance: {
-              limitQuantity: externalBalance.adhesionBalance.limitQuantity.toString(),
-              approvedQuantity: externalBalance.adhesionBalance.approvedQuantity.toString(),
-              committedQuantity: externalBalance.adhesionBalance.committedQuantity.toString(),
-              availableQuantity: externalBalance.adhesionBalance.availableQuantity.toString(),
-              adhesions: externalBalance.adhesionBalance.adhesions,
-            },
-            nonParticipantCommitments: externalBalance.nonParticipantCommitments,
-            externalUsageStatus: externalBalance.externalUsageStatus,
+            registeredQuantity: externalBalance.registeredQuantity.toString(),
+            committedQuantity: externalBalance.committedQuantity.toString(),
+            availableQuantity: externalBalance.availableQuantity.toString(),
+            commitments: externalBalance.commitments,
             lastUpdatedAt: externalBalance.lastUpdatedAt,
             rawRecords: externalBalance.rawRecords,
           }
@@ -1367,8 +1087,6 @@ export class ComprasGovBalanceService {
         ? this.isRateLimitError(externalError)
           ? ("RATE_LIMIT_COMPRAS_GOV" satisfies BalanceComparisonStatus)
           : ("ERRO_CONSULTA_EXTERNA" satisfies BalanceComparisonStatus)
-        : fallbackReason
-          ? ("SEM_EMPENHO_REGISTRADO" satisfies BalanceComparisonStatus)
         : this.resolveStatus(localBalance, externalBalance),
       externalError: externalError
         ? {
@@ -1393,16 +1111,8 @@ export class ComprasGovBalanceService {
       update: {
         source: comparison.externalBalance.source,
         status: comparison.status,
-        externalUsageStatus: comparison.externalBalance.externalUsageStatus,
-        managedBalance: this.normalizeJsonValue(comparison.externalBalance.managedBalance),
-        adhesionBalance: this.normalizeJsonValue(comparison.externalBalance.adhesionBalance),
-        commitments: this.normalizeJsonValue(comparison.externalBalance.managedBalance.commitments),
-        nonParticipantCommitments: this.normalizeJsonValue(
-          comparison.externalBalance.nonParticipantCommitments,
-        ),
+        externalBalance: this.normalizeJsonValue(comparison.externalBalance),
         difference: comparison.difference,
-        rawRecords: comparison.externalBalance.rawRecords,
-        lastUpdatedAt: comparison.externalBalance.lastUpdatedAt,
         lastSyncAt: comparison.lastSyncAt ?? new Date(),
         warnings: this.normalizeJsonValue(warnings),
       },
@@ -1410,16 +1120,8 @@ export class ComprasGovBalanceService {
         ataItemId,
         source: comparison.externalBalance.source,
         status: comparison.status,
-        externalUsageStatus: comparison.externalBalance.externalUsageStatus,
-        managedBalance: this.normalizeJsonValue(comparison.externalBalance.managedBalance),
-        adhesionBalance: this.normalizeJsonValue(comparison.externalBalance.adhesionBalance),
-        commitments: this.normalizeJsonValue(comparison.externalBalance.managedBalance.commitments),
-        nonParticipantCommitments: this.normalizeJsonValue(
-          comparison.externalBalance.nonParticipantCommitments,
-        ),
+        externalBalance: this.normalizeJsonValue(comparison.externalBalance),
         difference: comparison.difference,
-        rawRecords: comparison.externalBalance.rawRecords,
-        lastUpdatedAt: comparison.externalBalance.lastUpdatedAt,
         lastSyncAt: comparison.lastSyncAt ?? new Date(),
         warnings: this.normalizeJsonValue(warnings),
       },
@@ -1461,21 +1163,8 @@ export class ComprasGovBalanceService {
     }
 
     const externalBalance =
-      snapshot.managedBalance && snapshot.adhesionBalance
-        ? ({
-            externalItemNumber: item.externalItemNumber ?? item.referenceCode,
-            source: snapshot.source as SnapshotExternalBalance["source"],
-            commitments: (snapshot.commitments as ExternalCommitment[] | null) ?? [],
-            managedBalance: snapshot.managedBalance as SnapshotExternalBalance["managedBalance"],
-            adhesionBalance:
-              snapshot.adhesionBalance as SnapshotExternalBalance["adhesionBalance"],
-            nonParticipantCommitments:
-              (snapshot.nonParticipantCommitments as ExternalCommitment[] | null) ?? [],
-            externalUsageStatus:
-              (snapshot.externalUsageStatus as ExternalUsageStatus | null) ?? "SEM_USO_EXTERNO",
-            lastUpdatedAt: snapshot.lastUpdatedAt,
-            rawRecords: snapshot.rawRecords,
-          } satisfies SnapshotExternalBalance)
+      snapshot.externalBalance
+        ? (snapshot.externalBalance as SnapshotExternalBalance)
         : null;
 
     return {
@@ -1505,13 +1194,12 @@ export class ComprasGovBalanceService {
       ok: items.filter((item) => item.status === "OK").length,
       divergent: items.filter((item) => item.status === "DIVERGENTE").length,
       externalConsumptionDetected: items.filter(
-        (item) => item.status === "CONSUMO_EXTERNO_DETECTADO"
+        (item) => item.status === "CONSUMO_OFICIAL_DETECTADO"
       ).length,
       naoSincronizado: items.filter((item) => item.status === "NAO_SINCRONIZADO").length,
       notFound: items.filter((item) => item.status === "NAO_ENCONTRADO").length,
       externalQueryErrors: items.filter((item) => item.status === "ERRO_CONSULTA_EXTERNA").length,
       rateLimitErrors: items.filter((item) => item.status === "RATE_LIMIT_COMPRAS_GOV").length,
-      semEmpenhoRegistrado: items.filter((item) => item.status === "SEM_EMPENHO_REGISTRADO").length,
     };
   }
 
@@ -1570,10 +1258,7 @@ export class ComprasGovBalanceService {
         item,
         localBalanceMap.get(item.id)!,
         externalBalance,
-        externalResult.error ?? detailFallbackError ?? undefined,
-        useImportFallback && externalBalance?.source === "COMPRAS_GOV_IMPORT_FALLBACK"
-          ? "SEM_EMPENHO_REGISTRADO"
-          : undefined
+        externalResult.error ?? detailFallbackError ?? undefined
       );
     });
 
@@ -1594,12 +1279,11 @@ export class ComprasGovBalanceService {
       ok: items.filter((item) => item.status === "OK").length,
       divergent: items.filter((item) => item.status === "DIVERGENTE").length,
       externalConsumptionDetected: items.filter(
-        (item) => item.status === "CONSUMO_EXTERNO_DETECTADO"
+        (item) => item.status === "CONSUMO_OFICIAL_DETECTADO"
       ).length,
       notFound: items.filter((item) => item.status === "NAO_ENCONTRADO").length,
       externalQueryErrors: items.filter((item) => item.status === "ERRO_CONSULTA_EXTERNA").length,
       rateLimitErrors: items.filter((item) => item.status === "RATE_LIMIT_COMPRAS_GOV").length,
-      semEmpenhoRegistrado: items.filter((item) => item.status === "SEM_EMPENHO_REGISTRADO").length,
     };
 
     return {
@@ -1725,18 +1409,13 @@ export class ComprasGovBalanceService {
       this.findExternalBalance(localItem, externalResult.balances) ??
       detailFallback?.balance ??
       (useImportFallback ? this.buildImportFallbackBalance(localItem) : undefined);
-    const fallbackReason =
-      useImportFallback && externalBalance?.source === "COMPRAS_GOV_IMPORT_FALLBACK"
-        ? "SEM_EMPENHO_REGISTRADO"
-        : undefined;
     const hasExternalError = Boolean(externalResult.error || detailFallbackError);
 
     const comparison = this.buildComparison(
       localItem,
       localBalance,
       externalBalance,
-      externalResult.error ?? detailFallbackError ?? undefined,
-      fallbackReason
+      externalResult.error ?? detailFallbackError ?? undefined
     );
 
     if (hasExternalError) {
@@ -1776,9 +1455,7 @@ export class ComprasGovBalanceService {
     const syncedComparison = this.buildComparison(
       { ...localItem, externalLastSyncAt: now },
       localBalance,
-      externalBalance,
-      undefined,
-      fallbackReason
+      externalBalance
     );
     await this.upsertSnapshot(localItem.id, syncedComparison);
 
@@ -1834,20 +1511,29 @@ export class ComprasGovBalanceService {
       });
     }
 
+    if (hasExternalError) {
+      return {
+        ...comparison,
+        syncedAt: null,
+        updatedItems,
+        warnings: [
+          ...comparison.warnings,
+          "Sincronizacao nao concluida; snapshot externo valido foi preservado.",
+        ],
+        retryAfterSeconds: comparison.retryAfterSeconds,
+        debug: comparison.debug,
+      };
+    }
+
     const storedComparison = await this.compareAta(ataId);
     return {
       ...storedComparison,
-      syncedAt: hasExternalError ? null : now,
+      syncedAt: now,
       updatedItems,
-      warnings: hasExternalError
-        ? [
-            ...comparison.warnings,
-            "Sincronizacao nao concluida; snapshot externo valido foi preservado.",
-          ]
-        : [
-            "Saldo local nao foi alterado automaticamente; apenas snapshot/timestamp externo foi atualizado.",
-            ...comparison.warnings,
-          ],
+      warnings: [
+        "Saldo local nao foi alterado automaticamente; apenas snapshot/timestamp externo foi atualizado.",
+        ...comparison.warnings,
+      ],
       retryAfterSeconds: comparison.retryAfterSeconds,
       debug: comparison.debug,
     };

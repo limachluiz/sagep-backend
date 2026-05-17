@@ -328,14 +328,8 @@ model AtaItemExternalBalanceSnapshot {
   ataItemId                 String   @unique
   source                    String
   status                    String
-  externalUsageStatus       String?
-  managedBalance            Json?
-  adhesionBalance           Json?
-  commitments               Json?
-  nonParticipantCommitments Json?
+  externalBalance           Json?
   difference                String?
-  rawRecords                Int      @default(0)
-  lastUpdatedAt             DateTime?
   lastSyncAt                DateTime
   warnings                  Json?
   ataItem                   AtaItem  @relation(fields: [ataItemId], references: [id], onDelete: Cascade)

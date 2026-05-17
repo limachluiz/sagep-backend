@@ -2135,21 +2135,18 @@ export const openApiDocument: OpenApiDocument = {
             properties: {
               source: { type: "string" },
               status: { type: "string" },
-              externalUsageStatus: { type: "string", nullable: true },
-              managedBalance: {
-                type: "object",
-                nullable: true,
-                additionalProperties: true,
-              },
-              adhesionBalance: {
+              externalBalance: {
                 type: "object",
                 nullable: true,
                 additionalProperties: true,
               },
               difference: { type: "string", nullable: true },
-              rawRecords: { type: "integer" },
-              lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
               lastSyncAt: { type: "string", format: "date-time" },
+              warnings: {
+                type: "array",
+                nullable: true,
+                items: { type: "string" },
+              },
             },
           },
           createdAt: { type: "string", format: "date-time" },
@@ -2279,7 +2276,10 @@ export const openApiDocument: OpenApiDocument = {
           quantity: { type: "number", exclusiveMinimum: 0 },
           reason: { type: "string" },
           source: { type: "string" },
-          externalStatus: { type: "string" },
+          externalStatus: {
+            type: "string",
+            description: "Status oficial da UASG principal; origens de adesao/carona nao sao aceitas.",
+          },
           externalReference: { type: "string" },
           commitmentNumber: { type: "string", nullable: true },
           unit: { type: "string", nullable: true },
@@ -2289,7 +2289,7 @@ export const openApiDocument: OpenApiDocument = {
           quantity: 2,
           reason: "Consumo externo confirmado manualmente apos conferencia do snapshot",
           source: "COMPRAS_GOV",
-          externalStatus: "CONSUMO_GERENCIADORA_DETECTADO",
+          externalStatus: "CONSUMO_OFICIAL_DETECTADO",
           externalReference: "SNAPSHOT-2026-05-15T10:30:00.000Z",
           commitmentNumber: "2026NE000567",
           unit: "160016",
@@ -2402,93 +2402,10 @@ export const openApiDocument: OpenApiDocument = {
             properties: {
               externalItemNumber: { type: "string" },
               source: { type: "string", enum: ["COMPRAS_GOV", "COMPRAS_GOV_IMPORT_FALLBACK"] },
+              registeredQuantity: { type: "string" },
+              committedQuantity: { type: "string" },
+              availableQuantity: { type: "string" },
               commitments: {
-                type: "array",
-                items: {
-                  type: "object",
-                  additionalProperties: true,
-                },
-              },
-              managedBalance: {
-                type: "object",
-                properties: {
-                  unitCode: { type: "string", nullable: true },
-                  unitName: { type: "string", nullable: true },
-                  registeredQuantity: { type: "string" },
-                  committedQuantity: { type: "string" },
-                  availableQuantity: { type: "string" },
-                  commitments: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        numeroEmpenho: { type: "string", nullable: true },
-                        unidade: { type: "string", nullable: true },
-                        tipoUnidade: { type: "string", nullable: true },
-                        fornecedor: { type: "string", nullable: true },
-                        dataEmpenho: { type: "string", format: "date-time", nullable: true },
-                        quantidadeIncluida: { type: "string", nullable: true },
-                        quantidadeEmpenhada: { type: "string", nullable: true },
-                        estimatedAmount: { type: "string", nullable: true },
-                        affectsManagedBalance: { type: "boolean" },
-                        rawKeyDebug: {
-                          type: "object",
-                          nullable: true,
-                          properties: {
-                            availableKeys: {
-                              type: "array",
-                              items: { type: "string" },
-                            },
-                            sourceEndpoint: { type: "string" },
-                            item: { type: "string", nullable: true },
-                            unidade: { type: "string", nullable: true },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              adhesionBalance: {
-                type: "object",
-                properties: {
-                  limitQuantity: { type: "string" },
-                  approvedQuantity: { type: "string" },
-                  committedQuantity: { type: "string" },
-                  availableQuantity: { type: "string" },
-                  adhesions: {
-                    type: "array",
-                    items: {
-                      type: "object",
-                      properties: {
-                        numeroEmpenho: { type: "string", nullable: true },
-                        unidade: { type: "string", nullable: true },
-                        tipoUnidade: { type: "string", nullable: true },
-                        fornecedor: { type: "string", nullable: true },
-                        dataEmpenho: { type: "string", format: "date-time", nullable: true },
-                        quantidadeIncluida: { type: "string", nullable: true },
-                        quantidadeEmpenhada: { type: "string", nullable: true },
-                        estimatedAmount: { type: "string", nullable: true },
-                        affectsManagedBalance: { type: "boolean" },
-                        rawKeyDebug: {
-                          type: "object",
-                          nullable: true,
-                          properties: {
-                            availableKeys: {
-                              type: "array",
-                              items: { type: "string" },
-                            },
-                            sourceEndpoint: { type: "string" },
-                            item: { type: "string", nullable: true },
-                            unidade: { type: "string", nullable: true },
-                          },
-                        },
-                      },
-                    },
-                  },
-                },
-              },
-              nonParticipantCommitments: {
                 type: "array",
                 items: {
                   type: "object",
@@ -2518,15 +2435,6 @@ export const openApiDocument: OpenApiDocument = {
                   },
                 },
               },
-              externalUsageStatus: {
-                type: "string",
-                enum: [
-                  "SEM_USO_EXTERNO",
-                  "ADESAO_DETECTADA",
-                  "CONSUMO_GERENCIADORA_DETECTADO",
-                  "CONSUMO_GERENCIADORA_E_ADESAO_DETECTADOS",
-                ],
-              },
               lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
               rawRecords: { type: "integer" },
             },
@@ -2538,12 +2446,11 @@ export const openApiDocument: OpenApiDocument = {
             enum: [
               "OK",
               "DIVERGENTE",
-              "CONSUMO_EXTERNO_DETECTADO",
+              "CONSUMO_OFICIAL_DETECTADO",
               "NAO_SINCRONIZADO",
               "NAO_ENCONTRADO",
               "ERRO_CONSULTA_EXTERNA",
               "RATE_LIMIT_COMPRAS_GOV",
-              "SEM_EMPENHO_REGISTRADO",
             ],
           },
           externalError: {

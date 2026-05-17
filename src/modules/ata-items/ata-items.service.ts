@@ -66,6 +66,7 @@ const ataItemInclude = {
       type: true,
       vendorName: true,
       isActive: true,
+      externalUasg: true,
     },
   },
   coverageGroup: {
@@ -90,26 +91,20 @@ export class AtaItemsService {
   private serializeLatestExternalBalanceSnapshot(snapshot: {
     source: string;
     status: string;
-    externalUsageStatus: string | null;
-    managedBalance: Prisma.JsonValue | null;
-    adhesionBalance: Prisma.JsonValue | null;
+    externalBalance: Prisma.JsonValue | null;
     difference: string | null;
-    rawRecords: number;
-    lastUpdatedAt: Date | null;
     lastSyncAt: Date;
+    warnings: Prisma.JsonValue | null;
   } | null) {
     if (!snapshot) return null;
 
     return {
       source: snapshot.source,
       status: snapshot.status,
-      externalUsageStatus: snapshot.externalUsageStatus,
-      managedBalance: snapshot.managedBalance,
-      adhesionBalance: snapshot.adhesionBalance,
+      externalBalance: snapshot.externalBalance,
       difference: snapshot.difference,
-      rawRecords: snapshot.rawRecords,
-      lastUpdatedAt: snapshot.lastUpdatedAt,
       lastSyncAt: snapshot.lastSyncAt,
+      warnings: snapshot.warnings,
     };
   }
 
@@ -126,13 +121,10 @@ export class AtaItemsService {
         ataItemId: true,
         source: true,
         status: true,
-        externalUsageStatus: true,
-        managedBalance: true,
-        adhesionBalance: true,
+        externalBalance: true,
         difference: true,
-        rawRecords: true,
-        lastUpdatedAt: true,
         lastSyncAt: true,
+        warnings: true,
       },
     });
 
@@ -629,6 +621,12 @@ export class AtaItemsService {
     const normalizedUnit = this.normalizeOptionalText(data.unit);
     const normalizedNotes = this.normalizeOptionalText(data.notes);
     const normalizedQuantity = new Prisma.Decimal(this.normalizeQuantity(data.quantity));
+    const externalOriginText = [
+      normalizedSource,
+      normalizedExternalStatus,
+      normalizedExternalReference,
+      normalizedUnit ?? "",
+    ].join(" ").toUpperCase();
 
     return prisma.$transaction(async (tx) => {
       const item = await tx.ataItem.findUnique({
@@ -638,6 +636,20 @@ export class AtaItemsService {
 
       if (!item || item.deletedAt) {
         throw new AppError("Item da ata não encontrado", 404);
+      }
+
+      if (
+        externalOriginText.includes("ADESAO") ||
+        externalOriginText.includes("ADESÃO") ||
+        externalOriginText.includes("CARONA") ||
+        externalOriginText.includes("NAO_PARTICIPANTE") ||
+        externalOriginText.includes("NÃO_PARTICIPANTE")
+      ) {
+        throw new AppError("Consumo de adesao/carona ou orgao nao participante deve ser ignorado", 400);
+      }
+
+      if (normalizedUnit && item.ata.externalUasg && normalizedUnit !== item.ata.externalUasg) {
+        throw new AppError("Consumo externo so pode ser registrado para a UASG principal da ATA", 400);
       }
 
       const localBalance = await ataItemBalanceService.getBalanceForAtaItem(itemId, tx);
@@ -666,7 +678,7 @@ export class AtaItemsService {
             externalStatus: normalizedExternalStatus,
             externalReference: normalizedExternalReference,
             commitmentNumber: normalizedCommitmentNumber,
-            unit: normalizedUnit,
+            unit: normalizedUnit ?? item.ata.externalUasg ?? null,
             reason: normalizedReason,
             notes: normalizedNotes,
           },
@@ -743,7 +755,7 @@ export class AtaItemsService {
           externalStatus: normalizedExternalStatus,
           externalReference: normalizedExternalReference,
           commitmentNumber: normalizedCommitmentNumber,
-          unit: normalizedUnit,
+          unit: normalizedUnit ?? item.ata.externalUasg ?? null,
           notes: normalizedNotes,
         },
       });
