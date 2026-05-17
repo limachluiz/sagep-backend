@@ -120,6 +120,12 @@ PORTAL_TRANSPARENCIA_API_TOKEN=
 
 O ambiente Docker sobe `api`, `postgres` e `pgadmin`. O PostgreSQL usa o volume nomeado `sagep_postgres_data`, montado em `/var/lib/postgresql/data`, para preservar ATAs importadas, usuarios, snapshots e demais dados entre reinicios.
 
+Dentro do Docker, a API sempre usa `DATABASE_URL=postgresql://sagep:sagep123@postgres:5432/sagep?schema=public`. Nao use `localhost` dentro do container da API: nesse contexto, `localhost` e o proprio container, nao o Postgres.
+
+Fora do Docker, para desenvolvimento local, use `DATABASE_URL=postgresql://sagep:sagep123@localhost:5432/sagep?schema=public`.
+
+No pgAdmin rodando no Docker, cadastre o servidor PostgreSQL com host `postgres`, porta `5432`, usuario `sagep`, senha `sagep123` e banco `sagep`.
+
 Subir tudo:
 
 ```bash
@@ -140,6 +146,8 @@ npm run start
 ```
 
 Isso aplica migrations pendentes sem resetar o banco. O startup nunca roda `prisma migrate reset`.
+
+Se quiser preservar dados, tambem nao rode `prisma migrate reset` manualmente: ele recria o banco e apaga registros importados.
 
 Servicos padrao:
 
@@ -170,6 +178,18 @@ Ou:
 
 ```bash
 npm run docker:logs
+```
+
+Conferir dados no banco persistente:
+
+```bash
+docker exec -it sagep_postgres psql -U sagep -d sagep
+```
+
+Dentro do `psql`:
+
+```sql
+SELECT COUNT(*) FROM "Ata";
 ```
 
 ### Backup do banco

@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 
 const COMPRAS_GOV_BASE_URL = "https://dadosabertos.compras.gov.br";
@@ -8,6 +9,31 @@ const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
 const REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGES = 20;
+const REGISTERED_QUANTITY_KEYS = [
+  "quantidadeAutorizada",
+  "qtdAutorizada",
+  "quantidadeRegistrada",
+  "qtdRegistrada",
+  "quantidadeHomologada",
+  "quantidade",
+];
+const AVAILABLE_QUANTITY_KEYS = [
+  "quantidadeSaldo",
+  "qtdSaldo",
+  "saldo",
+  "saldoEmpenho",
+  "saldoParaEmpenho",
+  "saldoParaEmpenhar",
+  "quantidadeDisponivel",
+  "quantidadeDisponivelEmpenho",
+  "quantidadeDisponivelParaRemanejamentoEmpenho",
+  "qtdDisponivel",
+  "qtdSaldoEmpenho",
+  "quantidadeSaldoEmpenho",
+  "saldoRemanejamentoEmpenho",
+  "quantidadeDisponivelRemanejamentoEmpenho",
+  "quantidadeSaldoRemanejamentoEmpenho",
+];
 const RATE_LIMIT_WARNING =
   "Limite de requisições do Compras.gov.br atingido. Tente novamente em alguns segundos.";
 
@@ -113,6 +139,14 @@ type ExternalRequestDebug = {
     committedQuantity: string;
     availableQuantity: string;
   };
+  saldoGerenciadoraExtracao?: {
+    rawKeys: string[];
+    registeredQuantity: string | null;
+    availableQuantity: string | null;
+    availableQuantityField: string | null;
+    explicitCommittedQuantity: string | null;
+    calculatedCommittedQuantity: string;
+  };
   commitmentsGerenciadoraNormalizados?: ExternalCommitment[];
   unmatchedLocalItems?: Array<{
     id: string;
@@ -170,7 +204,7 @@ export class ComprasGovBalanceService {
   private requestDebug: ExternalRequestDebug[] = [];
 
   private normalizeText(value: unknown) {
-    return String(value ?? "").trim();
+    return normalizeMojibakeText(value).trim();
   }
 
   private normalizeItemNumber(value: unknown) {
@@ -272,9 +306,13 @@ export class ComprasGovBalanceService {
   }
 
   private pickNumber(record: Record<string, unknown>, keys: string[]) {
+    return this.pickNumberEntry(record, keys)?.value ?? null;
+  }
+
+  private pickNumberEntry(record: Record<string, unknown>, keys: string[]) {
     for (const key of keys) {
       if (record[key] === null || record[key] === undefined || record[key] === "") continue;
-      return decimal(this.normalizeNumber(record[key]));
+      return { key, value: decimal(this.normalizeNumber(record[key])) };
     }
     return null;
   }
@@ -393,21 +431,19 @@ export class ComprasGovBalanceService {
   }
 
   private getAvailableQuantityFromUnit(record: Record<string, unknown>) {
-    return (
-      this.pickNumber(record, [
-        "saldoParaEmpenho",
-        "saldoParaEmpenhar",
-        "saldoEmpenho",
-        "saldoRemanejamentoEmpenho",
-        "saldo",
-        "quantidadeSaldo",
-      ]) ??
-      decimal(0)
-    );
+    return this.getAvailableQuantityFromUnitEntry(record)?.value ?? null;
   }
 
-  private getCommittedQuantityFromUnit(record: Record<string, unknown>) {
-    const committed = this.pickNumber(record, [
+  private getAvailableQuantityFromUnitEntry(record: Record<string, unknown>) {
+    return this.pickNumberEntry(record, AVAILABLE_QUANTITY_KEYS);
+  }
+
+  private getRegisteredQuantityFromUnit(record: Record<string, unknown>) {
+    return this.pickNumber(record, REGISTERED_QUANTITY_KEYS);
+  }
+
+  private getExplicitCommittedQuantityFromUnit(record: Record<string, unknown>) {
+    return this.pickNumber(record, [
       "quantidadeEmpenhada",
       "qtdEmpenhada",
       "quantidadeEmpenho",
@@ -415,16 +451,27 @@ export class ComprasGovBalanceService {
       "quantidadeUtilizada",
       "qtdUtilizada",
     ]);
+  }
+
+  private getCommittedQuantityFromUnit(record: Record<string, unknown>) {
+    const committed = this.getExplicitCommittedQuantityFromUnit(record);
     if (committed) return committed;
 
-    const registered = this.pickNumber(record, ["quantidadeRegistrada"]) ?? decimal(0);
-    const available = this.getAvailableQuantityFromUnit(record);
+    const registered = this.getRegisteredQuantityFromUnit(record) ?? decimal(0);
+    const available = this.getAvailableQuantityFromUnit(record) ?? decimal(0);
     const inferred = registered.sub(available);
     return inferred.greaterThan(0) ? inferred : decimal(0);
   }
 
   private getUnitCode(record: Record<string, unknown>) {
-    const code = this.pickText(record, ["codigoUnidade", "unidade"]);
+    const code = this.pickText(record, [
+      "codigoUnidade",
+      "unidade",
+      "unidadeParticipante",
+      "codigoUnidadeCompra",
+      "unidadeGerenciadora",
+      "codigoUnidadeGerenciadora",
+    ]);
     if (code) return code.split(/\s+-\s+/)[0]?.trim() ?? code;
 
     return null;
@@ -433,9 +480,10 @@ export class ComprasGovBalanceService {
   private isManagedUnit(record: Record<string, unknown>, managedUasg: string | null) {
     const unitCode = this.getUnitCode(record);
     const type = this.normalizeText(record.tipoUnidade).toUpperCase();
+    if (managedUasg) return unitCode === managedUasg;
+
     return Boolean(
-      (managedUasg && unitCode === managedUasg) ||
-        type.includes("GERENCIADORA") ||
+      type.includes("GERENCIADORA") ||
         type.includes("GERENCIADOR")
     );
   }
@@ -689,13 +737,13 @@ export class ComprasGovBalanceService {
       const updatedAt = this.normalizeDate(record.dataHoraAtualizacao);
 
       current.registeredQuantity = current.registeredQuantity.add(
-        this.normalizeNumber(record.quantidadeRegistrada)
+        this.getRegisteredQuantityFromUnit(record) ?? decimal(0)
       );
       current.committedQuantity = current.committedQuantity.add(
-        this.normalizeNumber(record.quantidadeEmpenhada)
+        this.getCommittedQuantityFromUnit(record)
       );
       current.availableQuantity = current.availableQuantity.add(
-        this.normalizeNumber(record.saldoEmpenho)
+        this.getAvailableQuantityFromUnit(record) ?? decimal(0)
       );
       const commitment = this.buildCommitment(record, {
         unidade: [
@@ -938,10 +986,15 @@ export class ComprasGovBalanceService {
     const itemRegistered = decimal(
       externalItem?.quantidadeHomologadaVencedor ?? externalItem?.quantidadeHomologadaItem ?? 0
     );
-    const unitRegistered = this.pickNumber(managedUnit, ["quantidadeRegistrada"]) ?? decimal(0);
+    const unitRegistered = this.getRegisteredQuantityFromUnit(managedUnit) ?? decimal(0);
     const registeredQuantity = unitRegistered.greaterThan(0) ? unitRegistered : itemRegistered;
-    const availableQuantity = this.getAvailableQuantityFromUnit(managedUnit);
-    const committedQuantity = this.getCommittedQuantityFromUnit(managedUnit);
+    const availableQuantityEntry = this.getAvailableQuantityFromUnitEntry(managedUnit);
+    const availableQuantity = availableQuantityEntry?.value ?? decimal(0);
+    const explicitCommittedQuantity = this.getExplicitCommittedQuantityFromUnit(managedUnit);
+    const inferredCommittedQuantity = registeredQuantity.sub(availableQuantity);
+    const committedQuantity =
+      explicitCommittedQuantity ??
+      (inferredCommittedQuantity.greaterThan(0) ? inferredCommittedQuantity : decimal(0));
     const lastUpdatedAt = [...matchingUnidades, externalItem]
       .map((record) => this.normalizeDate(record?.dataHoraAtualizacao))
       .filter((date): date is Date => Boolean(date))
@@ -961,7 +1014,7 @@ export class ComprasGovBalanceService {
             this.normalizeText(externalItem?.nomeRazaoSocialFornecedor) ||
             null,
           affectsManagedBalance: true,
-          quantidadeEmpenhada: this.getCommittedQuantityFromUnit(record),
+          quantidadeEmpenhada: committedQuantity,
           sourceEndpoint: "3_consultarUnidadesItem",
           item: numeroItem,
         })
@@ -992,6 +1045,18 @@ export class ComprasGovBalanceService {
         registeredQuantity: registeredQuantity.toString(),
         committedQuantity: committedQuantity.toString(),
         availableQuantity: availableQuantity.toString(),
+      };
+      this.requestDebug[this.requestDebug.length - 1].saldoGerenciadoraExtracao = {
+        rawKeys: Object.keys(managedUnit).sort(),
+        registeredQuantity: unitRegistered.greaterThan(0)
+          ? unitRegistered.toString()
+          : itemRegistered.greaterThan(0)
+            ? itemRegistered.toString()
+            : null,
+        availableQuantity: availableQuantity.toString(),
+        availableQuantityField: availableQuantityEntry?.key ?? null,
+        explicitCommittedQuantity: explicitCommittedQuantity?.toString() ?? null,
+        calculatedCommittedQuantity: committedQuantity.toString(),
       };
       this.requestDebug[this.requestDebug.length - 1].commitmentsGerenciadoraNormalizados =
         commitments;

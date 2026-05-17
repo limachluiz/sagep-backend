@@ -29,7 +29,7 @@ services:
     environment:
       NODE_ENV: ${DOCKER_NODE_ENV:-production}
       PORT: ${PORT:-3000}
-      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://sagep:sagep123@postgres:5432/sagep?schema=public}
+      DATABASE_URL: postgresql://sagep:sagep123@postgres:5432/sagep?schema=public
       JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-troque-este-refresh-secret}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
@@ -39,7 +39,7 @@ services:
       COMPRAS_GOV_DEBUG: ${COMPRAS_GOV_DEBUG:-false}
       PORTAL_TRANSPARENCIA_API_TOKEN: ${PORTAL_TRANSPARENCIA_API_TOKEN:-}
     ports:
-      - "${PORT:-3000}:3000"
+      - "${API_PORT:-3000}:${PORT:-3000}"
 
   pgadmin:
     image: dpage/pgadmin4:8
@@ -49,7 +49,7 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@sagep.local}
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@sagep.com}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-sagep123}
     ports:
       - "${PGADMIN_PORT:-5050}:80"

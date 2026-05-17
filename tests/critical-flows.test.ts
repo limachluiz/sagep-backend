@@ -3211,7 +3211,7 @@ describe("critical flows", () => {
                 codigoUnidadeGerenciadora: "160016",
                 numeroCompra: "90012",
                 anoCompra: "2025",
-                numeroItem: "00014",
+                numeroItem: "00013",
                 codigoItem: 13684,
                 descricaoItem: "ElaboraÃ§Ã£o de As-Built de projetos de CFTV.",
                 tipoItem: "ServiÃ§o",
@@ -3246,7 +3246,7 @@ describe("critical flows", () => {
                 codigoUnidadeGerenciadora: "160016",
                 numeroCompra: "90012",
                 anoCompra: "2025",
-                numeroItem: "00014",
+                numeroItem: "00013",
                 codigoItem: 13684,
                 descricaoItem: "ElaboraÃ§Ã£o de As-Built de projetos de CFTV.",
                 quantidadeHomologadaVencedor: 120,
@@ -3265,18 +3265,17 @@ describe("critical flows", () => {
       if (url.pathname.endsWith("/modulo-arp/3_consultarUnidadesItem")) {
         expect(url.searchParams.get("numeroAta")).toBe("00001/2026");
         expect(url.searchParams.get("unidadeGerenciadora")).toBe("160016");
-        expect(url.searchParams.get("numeroItem")).toBe("00014");
+        expect(url.searchParams.get("numeroItem")).toBe("00013");
         return new Response(
           JSON.stringify({
             resultado: [
               {
                 numeroAta: "00001/2026",
                 unidadeGerenciadora: "160016",
-                numeroItem: "00014",
+                numeroItem: "00013",
                 nomeFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
                 quantidadeRegistrada: 120,
-                quantidadeEmpenhada: 1,
-                saldoParaEmpenho: 119,
+                quantidadeSaldo: 119,
                 numeroNotaEmpenho: "2026NE000567",
                 codigoUnidade: "160016",
                 nomeUnidade: "COMANDO DO COMANDO MILITAR DA AMAZONIA",
@@ -3288,7 +3287,7 @@ describe("critical flows", () => {
               {
                 numeroAta: "00001/2026",
                 unidadeGerenciadora: "160016",
-                numeroItem: "00014",
+                numeroItem: "00013",
                 fornecedorNome: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
                 quantidadeRegistrada: 1,
                 quantidade: 1,
@@ -3309,7 +3308,7 @@ describe("critical flows", () => {
       }
 
       if (url.pathname.endsWith("/modulo-arp/5_consultarAdesoesItem")) {
-        expect(url.searchParams.get("numeroItem")).toBe("00014");
+        expect(url.searchParams.get("numeroItem")).toBe("00013");
         return new Response(
           JSON.stringify({
             resultado: [
@@ -3353,8 +3352,10 @@ describe("critical flows", () => {
         .expect(201);
 
       const item = await prisma.ataItem.findFirstOrThrow({
-        where: { ataId: imported.body.ata.id, referenceCode: "00014" },
+        where: { ataId: imported.body.ata.id, referenceCode: "00013" },
       });
+      expect(item.description).toContain("Elaboração");
+      expect(item.unit).toBe("SERVIÇO");
       const movementsBefore = await prisma.ataItemBalanceMovement.count({
         where: { ataItemId: item.id },
       });

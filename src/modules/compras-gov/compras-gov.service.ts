@@ -1,6 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 
 const COMPRAS_GOV_BASE_URL = "https://dadosabertos.compras.gov.br";
 const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
@@ -150,7 +151,7 @@ export class ComprasGovService {
   private requestDebug: ComprasGovRequestDebug[] = [];
 
   private normalizeText(value: unknown) {
-    return String(value ?? "").trim();
+    return normalizeMojibakeText(value).trim();
   }
 
   private uniqueBy<T>(items: T[], getKey: (item: T, index: number) => string) {
