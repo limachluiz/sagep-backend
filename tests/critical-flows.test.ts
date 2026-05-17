@@ -9,6 +9,7 @@ import {
   rolePermissions,
 } from "../src/modules/permissions/permissions.catalog.js";
 import { hashToken } from "../src/shared/auth-tokens.js";
+import { pdfService } from "../src/shared/pdf.service.js";
 
 const password = "123456";
 let catalogSequence = 1;
@@ -351,6 +352,7 @@ describe("critical flows", () => {
   });
 
   afterAll(async () => {
+    await pdfService.closeBrowser();
     await prisma.$disconnect();
   });
 

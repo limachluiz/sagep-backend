@@ -1,6 +1,6 @@
-import puppeteer from "puppeteer";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { pdfService } from "../../shared/pdf.service.js";
 import { renderDiexDocumentHtml } from "./diex-document.template.js";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -169,17 +169,10 @@ export class DiexDocumentService {
   }
 
   async generateDiexPdf(diexId: string, user: CurrentUser) {
-    const html = await this.generateDiexHtml(diexId, user);
-
-    const browser = await puppeteer.launch({
-      headless: true,
-    });
-
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
-
-      const pdf = await page.pdf({
+    return pdfService.renderPdf({
+      label: `diex:${diexId}`,
+      buildHtml: () => this.generateDiexHtml(diexId, user),
+      pdfOptions: {
         format: "A4",
         landscape: false,
         printBackground: true,
@@ -189,12 +182,8 @@ export class DiexDocumentService {
           bottom: "10mm",
           left: "8mm",
         },
-      });
-
-      return Buffer.from(pdf);
-    } finally {
-      await browser.close();
-    }
+      },
+    });
   }
 
   private async fileToDataUrl(relativePath: string) {

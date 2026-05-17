@@ -9,6 +9,7 @@ const envSchema = z.object({
   JWT_REFRESH_SECRET: z.string().min(1),
   JWT_ACCESS_EXPIRES_IN: z.string().min(1),
   JWT_REFRESH_EXPIRES_IN: z.string().min(1),
+  PDF_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
 });
 
 export const env = envSchema.parse(process.env);
