@@ -39,6 +39,17 @@ function decodeWindows1252AsUtf8(value: string) {
   return Buffer.from(encodeWindows1252(value)).toString("utf8");
 }
 
+function repairReplacementCharacters(value: string) {
+  return value
+    .replace(/\bSERVI�O\b/g, "SERVIÇO")
+    .replace(/\bServi�o\b/g, "Serviço")
+    .replace(/\bservi�o\b/g, "serviço")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])��o\b/g, "$1ção")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])��es\b/g, "$1ções")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])�o\b/g, "$1ço")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])�es\b/g, "$1ções");
+}
+
 export function normalizeMojibakeText(value: string): string;
 export function normalizeMojibakeText(value: null | undefined): "";
 export function normalizeMojibakeText(value: unknown): string;
@@ -51,5 +62,5 @@ export function normalizeMojibakeText(value: unknown): string {
     text = decoded;
   }
 
-  return text;
+  return repairReplacementCharacters(text);
 }

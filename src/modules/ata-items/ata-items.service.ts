@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import * as $Enums from "../../generated/prisma/enums.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { ataItemBalanceService } from "./ata-item-balance.service.js";
 import { auditService } from "../audit/audit.service.js";
 
@@ -88,6 +89,39 @@ const ataItemInclude = {
 } satisfies Prisma.AtaItemInclude;
 
 export class AtaItemsService {
+  private normalizeReturnedAtaItemText<T extends { id: string }>(item: T): T {
+    const normalized = { ...item } as T & {
+      description?: string | null;
+      unit?: string | null;
+      notes?: string | null;
+      ata?: {
+        number?: string | null;
+        vendorName?: string | null;
+      } | null;
+    };
+
+    if (normalized.description !== undefined) {
+      normalized.description = normalizeMojibakeText(normalized.description);
+    }
+    if (normalized.unit !== undefined) {
+      normalized.unit = normalizeMojibakeText(normalized.unit);
+    }
+    if (normalized.notes !== undefined) {
+      normalized.notes = normalized.notes === null ? null : normalizeMojibakeText(normalized.notes);
+    }
+    if (normalized.ata) {
+      normalized.ata = { ...normalized.ata };
+      if (normalized.ata.number !== undefined) {
+        normalized.ata.number = normalizeMojibakeText(normalized.ata.number);
+      }
+      if (normalized.ata.vendorName !== undefined) {
+        normalized.ata.vendorName = normalizeMojibakeText(normalized.ata.vendorName);
+      }
+    }
+
+    return normalized;
+  }
+
   private serializeLatestExternalBalanceSnapshot(snapshot: {
     source: string;
     status: string;
@@ -132,12 +166,15 @@ export class AtaItemsService {
       snapshots.map((snapshot) => [snapshot.ataItemId, snapshot]),
     );
 
-    return items.map((item) => ({
-      ...item,
-      latestExternalBalanceSnapshot: this.serializeLatestExternalBalanceSnapshot(
-        snapshotByItemId.get(item.id) ?? null,
-      ),
-    }));
+    return items.map((item) => {
+      const normalizedItem = this.normalizeReturnedAtaItemText(item);
+      return {
+        ...normalizedItem,
+        latestExternalBalanceSnapshot: this.serializeLatestExternalBalanceSnapshot(
+          snapshotByItemId.get(item.id) ?? null,
+        ),
+      };
+    });
   }
 
   private serializeMovement(movement: {

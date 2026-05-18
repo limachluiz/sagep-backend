@@ -116,6 +116,7 @@ type ExternalBalance = {
   lastUpdatedAt: Date | null;
   rawRecords: number;
   matchKey?: string;
+  warnings?: string[];
 };
 
 type ExternalRequestDebug = {
@@ -134,6 +135,7 @@ type ExternalRequestDebug = {
   rawUnidadesItem?: unknown[];
   rawEmpenhosSaldoItem?: unknown[];
   unidadeGerenciadoraSelecionada?: unknown;
+  selectedUnitMatchedBy?: string | null;
   saldoGerenciadoraCalculado?: {
     registeredQuantity: string;
     committedQuantity: string;
@@ -142,9 +144,11 @@ type ExternalRequestDebug = {
   saldoGerenciadoraExtracao?: {
     rawKeys: string[];
     registeredQuantity: string | null;
+    registeredQuantityField: string | null;
     availableQuantity: string | null;
     availableQuantityField: string | null;
     explicitCommittedQuantity: string | null;
+    explicitCommittedQuantityField: string | null;
     calculatedCommittedQuantity: string;
   };
   commitmentsGerenciadoraNormalizados?: ExternalCommitment[];
@@ -246,7 +250,25 @@ export class ComprasGovBalanceService {
   }
 
   private getDebug() {
-    return this.isDevelopment() ? this.requestDebug : undefined;
+    if (!this.isDevelopment() && process.env.COMPRAS_GOV_DEBUG !== "true") return undefined;
+
+    const selectedRequest = [...this.requestDebug]
+      .reverse()
+      .find((request) => request.saldoGerenciadoraExtracao || request.unidadePrincipalSelecionada);
+    const extraction = selectedRequest?.saldoGerenciadoraExtracao;
+
+    return {
+      requests: this.requestDebug,
+      selectedUnitRaw: selectedRequest?.unidadePrincipalSelecionada ?? null,
+      selectedUnitKeys: extraction?.rawKeys ?? [],
+      selectedUnitMatchedBy: selectedRequest?.selectedUnitMatchedBy ?? null,
+      registeredFieldUsed: extraction?.registeredQuantityField ?? null,
+      availableFieldUsed: extraction?.availableQuantityField ?? null,
+      committedFieldUsed: extraction?.explicitCommittedQuantityField ?? null,
+      registeredExtracted: extraction?.registeredQuantity ?? null,
+      availableExtracted: extraction?.availableQuantity ?? null,
+      committedCalculated: extraction?.calculatedCommittedQuantity ?? null,
+    };
   }
 
   private normalizeNumber(value: unknown) {
@@ -442,8 +464,16 @@ export class ComprasGovBalanceService {
     return this.pickNumber(record, REGISTERED_QUANTITY_KEYS);
   }
 
+  private getRegisteredQuantityFromUnitEntry(record: Record<string, unknown>) {
+    return this.pickNumberEntry(record, REGISTERED_QUANTITY_KEYS);
+  }
+
   private getExplicitCommittedQuantityFromUnit(record: Record<string, unknown>) {
-    return this.pickNumber(record, [
+    return this.getExplicitCommittedQuantityFromUnitEntry(record)?.value ?? null;
+  }
+
+  private getExplicitCommittedQuantityFromUnitEntry(record: Record<string, unknown>) {
+    return this.pickNumberEntry(record, [
       "quantidadeEmpenhada",
       "qtdEmpenhada",
       "quantidadeEmpenho",
@@ -464,15 +494,28 @@ export class ComprasGovBalanceService {
   }
 
   private getUnitCode(record: Record<string, unknown>) {
-    const code = this.pickText(record, [
+    const entry = this.getUnitCodeEntry(record);
+    return entry?.value ?? null;
+  }
+
+  private getUnitCodeEntry(record: Record<string, unknown>) {
+    const keys = [
       "codigoUnidade",
       "unidade",
       "unidadeParticipante",
       "codigoUnidadeCompra",
       "unidadeGerenciadora",
       "codigoUnidadeGerenciadora",
-    ]);
-    if (code) return code.split(/\s+-\s+/)[0]?.trim() ?? code;
+    ];
+
+    for (const key of keys) {
+      const code = this.normalizeText(record[key]);
+      if (!code) continue;
+      return {
+        key,
+        value: code.split(/\s+-\s+/)[0]?.trim() ?? code,
+      };
+    }
 
     return null;
   }
@@ -986,15 +1029,21 @@ export class ComprasGovBalanceService {
     const itemRegistered = decimal(
       externalItem?.quantidadeHomologadaVencedor ?? externalItem?.quantidadeHomologadaItem ?? 0
     );
-    const unitRegistered = this.getRegisteredQuantityFromUnit(managedUnit) ?? decimal(0);
+    const unitCodeEntry = this.getUnitCodeEntry(managedUnit);
+    const unitRegisteredEntry = this.getRegisteredQuantityFromUnitEntry(managedUnit);
+    const unitRegistered = unitRegisteredEntry?.value ?? decimal(0);
     const registeredQuantity = unitRegistered.greaterThan(0) ? unitRegistered : itemRegistered;
     const availableQuantityEntry = this.getAvailableQuantityFromUnitEntry(managedUnit);
     const availableQuantity = availableQuantityEntry?.value ?? decimal(0);
-    const explicitCommittedQuantity = this.getExplicitCommittedQuantityFromUnit(managedUnit);
+    const explicitCommittedQuantityEntry = this.getExplicitCommittedQuantityFromUnitEntry(managedUnit);
+    const explicitCommittedQuantity = explicitCommittedQuantityEntry?.value ?? null;
     const inferredCommittedQuantity = registeredQuantity.sub(availableQuantity);
     const committedQuantity =
       explicitCommittedQuantity ??
       (inferredCommittedQuantity.greaterThan(0) ? inferredCommittedQuantity : decimal(0));
+    const balanceWarnings = availableQuantityEntry
+      ? []
+      : ["Nao foi possivel identificar o campo de saldo oficial da UASG principal."];
     const lastUpdatedAt = [...matchingUnidades, externalItem]
       .map((record) => this.normalizeDate(record?.dataHoraAtualizacao))
       .filter((date): date is Date => Boolean(date))
@@ -1032,6 +1081,7 @@ export class ComprasGovBalanceService {
       matchKey: pncpAta
         ? `numeroControlePncpAta:${pncpAta};numeroItem:${numeroItem}`
         : `numeroAta:${numeroAta};numeroItem:${numeroItem}`,
+      warnings: balanceWarnings,
     };
 
     if (this.requestDebug.length > 0) {
@@ -1041,6 +1091,7 @@ export class ComprasGovBalanceService {
       this.requestDebug[this.requestDebug.length - 1].empenhosGerenciadora = commitments;
       this.requestDebug[this.requestDebug.length - 1].rawUnidadesItem = unidades;
       this.requestDebug[this.requestDebug.length - 1].unidadeGerenciadoraSelecionada = managedUnit;
+      this.requestDebug[this.requestDebug.length - 1].selectedUnitMatchedBy = unitCodeEntry?.key ?? null;
       this.requestDebug[this.requestDebug.length - 1].saldoGerenciadoraCalculado = {
         registeredQuantity: registeredQuantity.toString(),
         committedQuantity: committedQuantity.toString(),
@@ -1053,13 +1104,37 @@ export class ComprasGovBalanceService {
           : itemRegistered.greaterThan(0)
             ? itemRegistered.toString()
             : null,
+        registeredQuantityField: unitRegisteredEntry?.key ?? (
+          itemRegistered.greaterThan(0) ? "2.1_consultarARPItem_Id.quantidadeHomologada" : null
+        ),
         availableQuantity: availableQuantity.toString(),
         availableQuantityField: availableQuantityEntry?.key ?? null,
         explicitCommittedQuantity: explicitCommittedQuantity?.toString() ?? null,
+        explicitCommittedQuantityField: explicitCommittedQuantityEntry?.key ?? null,
         calculatedCommittedQuantity: committedQuantity.toString(),
       };
       this.requestDebug[this.requestDebug.length - 1].commitmentsGerenciadoraNormalizados =
         commitments;
+    }
+
+    if (this.isDevelopment()) {
+      console.info("compras.gov selected managed unit balance", {
+        endpoint: "/modulo-arp/3_consultarUnidadesItem",
+        item: numeroItem,
+        ata: numeroAta,
+        externalUasg: ata.externalUasg,
+        rawKeys: Object.keys(managedUnit).sort(),
+        rawRecordSelecionado: managedUnit,
+        selectedUnitMatchedBy: unitCodeEntry?.key ?? null,
+        registeredFieldUsed: unitRegisteredEntry?.key ?? (
+          itemRegistered.greaterThan(0) ? "2.1_consultarARPItem_Id.quantidadeHomologada" : null
+        ),
+        availableFieldUsed: availableQuantityEntry?.key ?? null,
+        committedFieldUsed: explicitCommittedQuantityEntry?.key ?? null,
+        registeredExtracted: registeredQuantity.toString(),
+        availableExtracted: availableQuantityEntry?.value.toString() ?? null,
+        committedCalculated: committedQuantity.toString(),
+      });
     }
 
     return { balance, records };
@@ -1102,6 +1177,9 @@ export class ComprasGovBalanceService {
     const externalAvailable = externalBalance?.availableQuantity ?? null;
     const localConsumed = decimal(localBalance.consumedQuantity);
 
+    if (externalBalance?.warnings?.length) {
+      return "ERRO_CONSULTA_EXTERNA" satisfies BalanceComparisonStatus;
+    }
     if (!externalAvailable) return "NAO_ENCONTRADO" satisfies BalanceComparisonStatus;
     if (externalBalance?.committedQuantity.greaterThan(localConsumed)) {
       return "CONSUMO_OFICIAL_DETECTADO" satisfies BalanceComparisonStatus;
@@ -1123,6 +1201,7 @@ export class ComprasGovBalanceService {
     const localAvailable = decimal(localBalance.availableQuantity);
     const externalAvailable = externalBalance?.availableQuantity ?? null;
     const difference = externalAvailable ? localAvailable.sub(externalAvailable) : null;
+    const warnings = externalBalance?.warnings ?? [];
 
     return {
       item: {
@@ -1159,15 +1238,16 @@ export class ComprasGovBalanceService {
             url: externalError.url ?? null,
             body: externalError.body ?? externalError.message,
             retryAfterSeconds: externalError.retryAfterSeconds ?? null,
-          }
+        }
         : null,
+      warnings,
     };
   }
 
   private async upsertSnapshot(
     ataItemId: string,
     comparison: ReturnType<ComprasGovBalanceService["buildComparison"]>,
-    warnings: string[] = []
+    warnings: string[] = comparison.warnings ?? []
   ) {
     if (!comparison.externalBalance) return null;
 
