@@ -1860,6 +1860,7 @@ export const openApiDocument: OpenApiDocument = {
           externalPregaoYear: { type: "string", nullable: true },
           externalAtaNumber: { type: "string", nullable: true },
           externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
+          archivedAt: { type: "string", format: "date-time", nullable: true },
           coverageGroups: {
             type: "array",
             items: { $ref: "#/components/schemas/AtaCoverageGroup" },
@@ -1925,6 +1926,34 @@ export const openApiDocument: OpenApiDocument = {
             items: { $ref: "#/components/schemas/AtaCoverageGroup" },
           },
         },
+      },
+      AtaDeleteRequest: {
+        type: "object",
+        properties: {
+          reason: {
+            type: "string",
+            maxLength: 500,
+            description: "Motivo opcional registrado na auditoria.",
+          },
+        },
+      },
+      AtaDeleteResponse: {
+        type: "object",
+        required: ["action", "message"],
+        properties: {
+          action: { type: "string", enum: ["DELETED", "ARCHIVED"] },
+          message: { type: "string" },
+        },
+        examples: [
+          {
+            action: "DELETED",
+            message: "ATA excluída com sucesso.",
+          },
+          {
+            action: "ARCHIVED",
+            message: "ATA possui vínculos e foi arquivada com segurança.",
+          },
+        ],
       },
       AtaListEnvelope: {
         type: "object",
@@ -4214,6 +4243,9 @@ export const openApiDocument: OpenApiDocument = {
             enum: ["AM", "RO", "RR", "AC"],
           }),
           queryParameter("active", "Filtrar atas ativas.", { type: "boolean" }),
+          queryParameter("includeArchived", "Incluir atas arquivadas na listagem.", {
+            type: "boolean",
+          }),
           queryParameter("search", "Busca textual.", { type: "string" }),
         ],
         responses: {
@@ -4325,13 +4357,20 @@ export const openApiDocument: OpenApiDocument = {
       },
       delete: {
         tags: ["atas"],
-        summary: "Remover ata",
+        summary: "Excluir ou arquivar ATA com segurança",
+        description:
+          "Exclui fisicamente a ATA apenas quando nao houver vinculos importantes. Quando houver itens, estimativas, movimentacoes, snapshots externos ou documentos vinculados, marca a ATA como arquivada/inativa e preserva o historico.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/AtaDeleteRequest"),
+        },
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Ata removida"),
+          "200": okJson("#/components/schemas/AtaDeleteResponse"),
           ...defaultErrorResponses,
         },
+        "x-roles": ["ADMIN", "GESTOR"],
         "x-permissions": ["atas.manage"],
       },
     },

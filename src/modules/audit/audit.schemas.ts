@@ -6,6 +6,8 @@ const auditEntityTypeEnum = z.enum([
   "DIEX_REQUEST",
   "SERVICE_ORDER",
   "TASK",
+  "ATA",
+  "ATA_ITEM",
   "USER",
   "AUTH",
 ]);
@@ -29,6 +31,8 @@ const auditActionTypeEnum = z.enum([
   "SESSION_REVOKE_ALL",
   "SESSION_EXPIRE",
   "SESSION_CLEANUP",
+  "ATA_DELETE",
+  "ATA_ARCHIVE",
 ]);
 
 const optionalDate = z.preprocess((value) => {

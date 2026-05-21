@@ -547,6 +547,8 @@ Cadastro da ata e sua estrutura de cobertura.
 #### `GET /atas`
 
 - Autenticação: sim
+- Por padrão omite ATAs arquivadas.
+- Use `includeArchived=true` para incluir ATAs arquivadas/inativas.
 
 #### `GET /atas/code/:code`
 
@@ -564,7 +566,29 @@ Cadastro da ata e sua estrutura de cobertura.
 #### `DELETE /atas/:id`
 
 - Autenticação: sim
-- Permissão: `atas.manage`
+- Permissão: `ADMIN`, ou `GESTOR` com `atas.manage`. `CONSULTA` não pode.
+- Exclusão segura: se a ATA não tiver vínculos importantes, exclui fisicamente; se houver itens, estimativas, movimentações de saldo, snapshots externos ou documentos vinculados, arquiva/inativa sem apagar histórico.
+- Body opcional:
+```json
+{
+  "reason": "texto opcional"
+}
+```
+- Resposta para exclusão física:
+```json
+{
+  "action": "DELETED",
+  "message": "ATA excluída com sucesso."
+}
+```
+- Resposta para arquivamento seguro:
+```json
+{
+  "action": "ARCHIVED",
+  "message": "ATA possui vínculos e foi arquivada com segurança."
+}
+```
+- Registra auditoria `ATA_DELETE` ou `ATA_ARCHIVE` com motivo, usuário e vínculos encontrados.
 
 #### `POST /atas/:id/coverage-groups`
 

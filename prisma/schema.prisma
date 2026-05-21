@@ -73,6 +73,7 @@ enum AuditEntityType {
   DIEX_REQUEST
   SERVICE_ORDER
   TASK
+  ATA
   ATA_ITEM
   USER
   AUTH
@@ -98,6 +99,8 @@ enum AuditActionType {
   SESSION_REVOKE_ALL
   SESSION_EXPIRE
   SESSION_CLEANUP
+  ATA_DELETE
+  ATA_ARCHIVE
 }
 
 enum RefreshTokenRevocationReason {
@@ -265,6 +268,7 @@ model Ata {
   externalAtaNumber    String?
   externalLastSyncAt   DateTime?
   coverageGroups AtaCoverageGroup[]
+  archivedAt      DateTime?
   createdAt      DateTime           @default(now())
   updatedAt      DateTime           @updatedAt
 }

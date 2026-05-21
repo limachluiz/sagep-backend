@@ -3492,6 +3492,11 @@
             "format": "date-time",
             "nullable": true
           },
+          "archivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "coverageGroups": {
             "type": "array",
             "items": {
@@ -3627,6 +3632,45 @@
             }
           }
         }
+      },
+      "AtaDeleteRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "Motivo opcional registrado na auditoria."
+          }
+        }
+      },
+      "AtaDeleteResponse": {
+        "type": "object",
+        "required": [
+          "action",
+          "message"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "DELETED",
+              "ARCHIVED"
+            ]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "examples": [
+          {
+            "action": "DELETED",
+            "message": "ATA excluída com sucesso."
+          },
+          {
+            "action": "ARCHIVED",
+            "message": "ATA possui vínculos e foi arquivada com segurança."
+          }
+        ]
       },
       "AtaListEnvelope": {
         "type": "object",
@@ -10037,6 +10081,15 @@
             }
           },
           {
+            "name": "includeArchived",
+            "in": "query",
+            "required": false,
+            "description": "Incluir atas arquivadas na listagem.",
+            "schema": {
+              "type": "boolean"
+            }
+          },
+          {
             "name": "search",
             "in": "query",
             "required": false,
@@ -10408,7 +10461,8 @@
         "tags": [
           "atas"
         ],
-        "summary": "Remover ata",
+        "summary": "Excluir ou arquivar ATA com segurança",
+        "description": "Exclui fisicamente a ATA apenas quando nao houver vinculos importantes. Quando houver itens, estimativas, movimentacoes, snapshots externos ou documentos vinculados, marca a ATA como arquivada/inativa e preserva o historico.",
         "security": [
           {
             "bearerAuth": []
@@ -10419,13 +10473,23 @@
             "$ref": "#/components/parameters/AtaId"
           }
         ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtaDeleteRequest"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
-            "description": "Ata removida",
+            "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/AtaDeleteResponse"
                 }
               }
             }
@@ -10443,6 +10507,10 @@
             "$ref": "#/components/responses/NotFound"
           }
         },
+        "x-roles": [
+          "ADMIN",
+          "GESTOR"
+        ],
         "x-permissions": [
           "atas.manage"
         ]

@@ -5034,6 +5034,95 @@ describe("critical flows", () => {
     expect((restoreAudit?.afterJson as Record<string, unknown>).archivedAt).toBeNull();
   });
 
+  it("atas: safe delete deletes without links, archives with links and audits the action", async () => {
+    const freeAta = await prisma.ata.create({
+      data: {
+        number: "ATA-LIVRE-001",
+        type: "CFTV",
+        vendorName: "Fornecedor Livre",
+        coverageGroups: {
+          create: {
+            code: "LVR",
+            name: "Livre",
+            localities: {
+              create: {
+                cityName: "Manaus",
+                stateUf: "AM",
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await request(app)
+      .delete(`/api/atas/${freeAta.id}`)
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .send({ reason: "tentativa sem permissao" })
+      .expect(403);
+
+    const deletedResponse = await request(app)
+      .delete(`/api/atas/${freeAta.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ reason: "cadastro duplicado" })
+      .expect(200);
+
+    expect(deletedResponse.body).toEqual({
+      action: "DELETED",
+      message: "ATA excluída com sucesso.",
+    });
+    await expect(prisma.ata.findUnique({ where: { id: freeAta.id } })).resolves.toBeNull();
+
+    const linkedCatalog = await createCatalog();
+
+    const archivedResponse = await request(app)
+      .delete(`/api/atas/${linkedCatalog.ata.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ reason: "encerramento operacional" })
+      .expect(200);
+
+    expect(archivedResponse.body).toEqual({
+      action: "ARCHIVED",
+      message: "ATA possui vínculos e foi arquivada com segurança.",
+    });
+
+    const archivedAta = await prisma.ata.findUniqueOrThrow({
+      where: { id: linkedCatalog.ata.id },
+      select: { archivedAt: true, isActive: true },
+    });
+    expect(archivedAta.archivedAt).toBeInstanceOf(Date);
+    expect(archivedAta.isActive).toBe(false);
+
+    const audit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "ATA",
+        entityId: linkedCatalog.ata.id,
+        action: "ATA_ARCHIVE",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit?.actorUserId).toBe(admin.id);
+    expect((audit?.metadata as Record<string, unknown>).reason).toBe(
+      "encerramento operacional",
+    );
+    expect(
+      ((audit?.metadata as Record<string, unknown>).links as Record<string, unknown>).items,
+    ).toBe(1);
+
+    const defaultList = await request(app)
+      .get("/api/atas")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(defaultList.body.items.some((item: { id: string }) => item.id === linkedCatalog.ata.id)).toBe(false);
+
+    const archivedList = await request(app)
+      .get("/api/atas")
+      .query({ includeArchived: true })
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(archivedList.body.items.some((item: { id: string }) => item.id === linkedCatalog.ata.id)).toBe(true);
+  });
+
   it("global search and dashboards return grouped operational data", async () => {
     await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 

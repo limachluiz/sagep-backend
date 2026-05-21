@@ -1,0 +1,6 @@
+-- Add archived ATA state and audit-specific ATA actions.
+ALTER TYPE "AuditEntityType" ADD VALUE IF NOT EXISTS 'ATA';
+ALTER TYPE "AuditActionType" ADD VALUE IF NOT EXISTS 'ATA_DELETE';
+ALTER TYPE "AuditActionType" ADD VALUE IF NOT EXISTS 'ATA_ARCHIVE';
+
+ALTER TABLE "Ata" ADD COLUMN IF NOT EXISTS "archivedAt" TIMESTAMP(3);

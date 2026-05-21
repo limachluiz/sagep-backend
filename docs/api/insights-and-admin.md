@@ -350,7 +350,7 @@ No fluxo de estimativas:
 | `GET` | `/atas/:id` | Detalhe por id. | Autenticado |
 | `GET` | `/atas/code/:code` | Detalhe por codigo amigavel. | Autenticado |
 | `PATCH` | `/atas/:id` | Atualiza cabecalho e, se enviado, substitui todos os grupos/localidades. | `atas.manage` |
-| `DELETE` | `/atas/:id` | Remove ata. | `atas.manage` |
+| `DELETE` | `/atas/:id` | Exclui fisicamente ATA sem vinculos ou arquiva/inativa quando houver historico. | `ADMIN` ou `GESTOR` + `atas.manage` |
 | `POST` | `/atas/:id/coverage-groups` | Cria grupo de cobertura sem substituir os demais. | `ADMIN` + `atas.manage` |
 | `PATCH` | `/atas/:id/coverage-groups/:groupId` | Atualiza um grupo de cobertura especifico. | `ADMIN` + `atas.manage` |
 | `DELETE` | `/atas/:id/coverage-groups/:groupId` | Remove um grupo de cobertura sem itens/estimativas vinculadas. | `ADMIN` + `atas.manage` |
@@ -372,6 +372,7 @@ No fluxo de estimativas:
 | `cityName` | string | Filtra por localidade coberta. |
 | `stateUf` | `AM`, `RO`, `RR`, `AC` | Filtra por UF coberta. |
 | `active` | boolean | Filtra por `isActive`. |
+| `includeArchived` | boolean | Quando `true`, inclui ATAs arquivadas. Padrao omite `archivedAt != null`. |
 | `search` | string | Busca em numero, fornecedor, orgao gerenciador, notas, grupos e cidades. |
 
 Exemplo:
@@ -476,6 +477,48 @@ Exemplo de update parcial:
 {
   "vendorName": "Empresa Alpha Norte Ltda",
   "isActive": false
+}
+```
+
+### Excluir Ou Arquivar ATA
+
+```http
+DELETE /api/atas/:id
+```
+
+Payload opcional:
+
+```json
+{
+  "reason": "texto opcional"
+}
+```
+
+Regras:
+
+- `CONSULTA` nao pode excluir ou arquivar ATA.
+- `ADMIN` pode executar a operacao.
+- `GESTOR` pode executar somente se tiver `atas.manage`.
+- se nao houver vinculos importantes, a ATA e excluida fisicamente.
+- se houver itens, estimativas, movimentacoes de saldo, snapshots externos ou documentos vinculados, a ATA e marcada com `archivedAt` e `isActive=false`.
+- estimativas, movimentacoes e historico nao sao apagados.
+- a auditoria registra `ATA_DELETE` ou `ATA_ARCHIVE` com `ataId`, `ataNumber`, `action`, `reason`, vinculos encontrados e `userId`.
+
+Resposta de exclusao fisica:
+
+```json
+{
+  "action": "DELETED",
+  "message": "ATA excluída com sucesso."
+}
+```
+
+Resposta de arquivamento:
+
+```json
+{
+  "action": "ARCHIVED",
+  "message": "ATA possui vínculos e foi arquivada com segurança."
 }
 ```
 

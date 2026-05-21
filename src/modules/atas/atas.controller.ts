@@ -5,6 +5,7 @@ import {
   ataIdParamSchema,
   createAtaCoverageGroupSchema,
   createAtaSchema,
+  deleteAtaSchema,
   listAtasQuerySchema,
   updateAtaCoverageGroupSchema,
   updateAtaSchema,
@@ -92,7 +93,8 @@ export class AtasController {
 
   async remove(req: Request, res: Response) {
     const { id } = ataIdParamSchema.parse(req.params);
-    const result = await atasService.remove(id);
+    const data = deleteAtaSchema.parse(req.body ?? {});
+    const result = await atasService.remove(id, req.user!, data);
     return res.status(200).json(result);
   }
 }

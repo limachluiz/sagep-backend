@@ -51,6 +51,4 @@ atasRoutes.get("/:id", (req, res) => controller.findById(req, res));
 atasRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.update(req, res)
 );
-atasRoutes.delete("/:id", requirePermission("atas.manage"), (req, res) =>
-  controller.remove(req, res)
-);
+atasRoutes.delete("/:id", (req, res) => controller.remove(req, res));

@@ -85,7 +85,12 @@ export const listAtasQuerySchema = paginationQuerySchema.extend({
   cityName: z.string().trim().optional(),
   stateUf: ufEnum.optional(),
   active: optionalBoolean,
+  includeArchived: optionalBoolean,
   search: z.string().trim().optional(),
+});
+
+export const deleteAtaSchema = z.object({
+  reason: z.string().trim().max(500, "Motivo deve ter no máximo 500 caracteres").optional(),
 });
 
 export const ataIdParamSchema = z.object({
