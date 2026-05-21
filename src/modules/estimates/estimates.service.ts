@@ -6,6 +6,8 @@ import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
+import { workflowService } from "../workflow/workflow.service.js";
+import type { ProjectStageValue } from "../workflow/workflow.types.js";
 
 type CurrentUser = {
   id: string;
@@ -60,6 +62,15 @@ type ListEstimatesFilters = {
   onlyDeleted?: boolean;
   archivedFrom?: Date;
   archivedUntil?: Date;
+};
+
+type ProjectWorkflowSyncAudit = {
+  before: ReturnType<EstimatesService["buildProjectAuditSnapshot"]>;
+  after: ReturnType<EstimatesService["buildProjectAuditSnapshot"]>;
+  projectId: string;
+  projectCode: number | null;
+  previousStage: ProjectStageValue;
+  newStage: ProjectStageValue;
 };
 
 const estimateInclude = {
@@ -236,6 +247,54 @@ export class EstimatesService {
       totalAmount: estimate.totalAmount?.toString() ?? null,
       archivedAt: estimate.archivedAt ?? null,
       deletedAt: estimate.deletedAt ?? null,
+    };
+  }
+
+  private buildProjectAuditSnapshot(project: {
+    id: string;
+    projectCode?: number | null;
+    title?: string | null;
+    description?: string | null;
+    status?: string | null;
+    stage?: ProjectStageValue | null;
+    ownerId?: string | null;
+    startDate?: Date | null;
+    endDate?: Date | null;
+    creditNoteNumber?: string | null;
+    creditNoteReceivedAt?: Date | null;
+    diexNumber?: string | null;
+    diexIssuedAt?: Date | null;
+    commitmentNoteNumber?: string | null;
+    commitmentNoteReceivedAt?: Date | null;
+    serviceOrderNumber?: string | null;
+    serviceOrderIssuedAt?: Date | null;
+    executionStartedAt?: Date | null;
+    asBuiltReceivedAt?: Date | null;
+    invoiceAttestedAt?: Date | null;
+    serviceCompletedAt?: Date | null;
+  }) {
+    return {
+      id: project.id,
+      projectCode: project.projectCode ?? null,
+      title: project.title ?? null,
+      description: project.description ?? null,
+      status: project.status ?? null,
+      stage: project.stage ?? null,
+      ownerId: project.ownerId ?? null,
+      startDate: project.startDate ?? null,
+      endDate: project.endDate ?? null,
+      creditNoteNumber: project.creditNoteNumber ?? null,
+      creditNoteReceivedAt: project.creditNoteReceivedAt ?? null,
+      diexNumber: project.diexNumber ?? null,
+      diexIssuedAt: project.diexIssuedAt ?? null,
+      commitmentNoteNumber: project.commitmentNoteNumber ?? null,
+      commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
+      serviceOrderNumber: project.serviceOrderNumber ?? null,
+      serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+      executionStartedAt: project.executionStartedAt ?? null,
+      asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
+      invoiceAttestedAt: project.invoiceAttestedAt ?? null,
+      serviceCompletedAt: project.serviceCompletedAt ?? null,
     };
   }
 
@@ -684,6 +743,98 @@ export class EstimatesService {
     })) as unknown as T;
   }
 
+  private async syncProjectWorkflowAfterEstimateFinalized(
+    estimate: {
+      id: string;
+      estimateCode: number;
+      project: {
+        id: string;
+        projectCode: number;
+        title: string;
+        description: string | null;
+        status: string;
+        stage: ProjectStageValue;
+        ownerId: string;
+        startDate: Date | null;
+        endDate: Date | null;
+        creditNoteNumber: string | null;
+        creditNoteReceivedAt: Date | null;
+        diexNumber: string | null;
+        diexIssuedAt: Date | null;
+        commitmentNoteNumber: string | null;
+        commitmentNoteReceivedAt: Date | null;
+        serviceOrderNumber: string | null;
+        serviceOrderIssuedAt: Date | null;
+        executionStartedAt: Date | null;
+        asBuiltReceivedAt: Date | null;
+        invoiceAttestedAt: Date | null;
+        serviceCompletedAt: Date | null;
+      };
+    },
+    db: Prisma.TransactionClient,
+  ): Promise<ProjectWorkflowSyncAudit | null> {
+    const projectPatch = workflowService.getProjectPatchAfterEstimateFinalized({
+      id: estimate.project.id,
+      projectCode: estimate.project.projectCode,
+      stage: estimate.project.stage,
+      creditNoteNumber: estimate.project.creditNoteNumber,
+      creditNoteReceivedAt: estimate.project.creditNoteReceivedAt,
+      diexNumber: estimate.project.diexNumber,
+      diexIssuedAt: estimate.project.diexIssuedAt,
+      commitmentNoteNumber: estimate.project.commitmentNoteNumber,
+      commitmentNoteReceivedAt: estimate.project.commitmentNoteReceivedAt,
+      serviceOrderNumber: estimate.project.serviceOrderNumber,
+      serviceOrderIssuedAt: estimate.project.serviceOrderIssuedAt,
+      executionStartedAt: estimate.project.executionStartedAt,
+      asBuiltReceivedAt: estimate.project.asBuiltReceivedAt,
+      invoiceAttestedAt: estimate.project.invoiceAttestedAt,
+      serviceCompletedAt: estimate.project.serviceCompletedAt,
+    });
+
+    if (!projectPatch.stage) {
+      return null;
+    }
+
+    workflowService.assertStageTransition(estimate.project.stage, projectPatch.stage);
+
+    const project = await db.project.update({
+      where: { id: estimate.project.id },
+      data: projectPatch,
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        ownerId: true,
+        startDate: true,
+        endDate: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+      },
+    });
+
+    return {
+      before: this.buildProjectAuditSnapshot(estimate.project),
+      after: this.buildProjectAuditSnapshot(project),
+      projectId: project.id,
+      projectCode: project.projectCode,
+      previousStage: estimate.project.stage,
+      newStage: project.stage,
+    };
+  }
+
   private async assertEstimateItemsStillAvailable(
     estimateId: string,
     db: typeof prisma | Prisma.TransactionClient = prisma,
@@ -1110,11 +1261,18 @@ export class EstimatesService {
       where: { id: estimateId },
       select: {
         id: true,
+        estimateCode: true,
+        projectId: true,
         ataId: true,
         coverageGroupId: true,
         omId: true,
+        status: true,
+        omName: true,
         destinationCityName: true,
         destinationStateUf: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
         coverageGroup: {
           select: {
             localities: {
@@ -1123,6 +1281,31 @@ export class EstimatesService {
                 stateUf: true,
               },
             },
+          },
+        },
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            title: true,
+            description: true,
+            status: true,
+            stage: true,
+            ownerId: true,
+            startDate: true,
+            endDate: true,
+            creditNoteNumber: true,
+            creditNoteReceivedAt: true,
+            diexNumber: true,
+            diexIssuedAt: true,
+            commitmentNoteNumber: true,
+            commitmentNoteReceivedAt: true,
+            serviceOrderNumber: true,
+            serviceOrderIssuedAt: true,
+            executionStartedAt: true,
+            asBuiltReceivedAt: true,
+            invoiceAttestedAt: true,
+            serviceCompletedAt: true,
           },
         },
       },
@@ -1189,36 +1372,85 @@ export class EstimatesService {
       await this.assertEstimateItemsStillAvailable(estimateId);
     }
 
-    const estimate = await prisma.estimate.update({
-      where: { id: estimateId },
-      data: {
-        ...(resolvedOm !== undefined && {
-          omId: resolvedOm.id,
-          omName: resolvedOm.sigla,
-          destinationCityName: resolvedOm.cityName,
-          destinationStateUf: resolvedOm.stateUf,
-        }),
-        ...(data.notes !== undefined && { notes: data.notes?.trim() }),
-        ...(data.status !== undefined && { status: data.status }),
-        ...(totalAmount !== undefined && { totalAmount }),
-        ...(resolvedItems !== undefined && {
-          items: {
-            deleteMany: {},
-            create: resolvedItems.map((item) => ({
-              ataItemId: item.ataItemId,
-              referenceCode: item.referenceCode,
-              description: item.description,
-              unit: item.unit,
-              quantity: item.quantity,
-              unitPrice: item.unitPrice,
-              subtotal: item.subtotal,
-              notes: item.notes,
-            })),
-          },
-        }),
-      },
-      include: estimateInclude,
+    const { estimate, projectWorkflowSync } = await prisma.$transaction(async (tx) => {
+      const estimate = await tx.estimate.update({
+        where: { id: estimateId },
+        data: {
+          ...(resolvedOm !== undefined && {
+            omId: resolvedOm.id,
+            omName: resolvedOm.sigla,
+            destinationCityName: resolvedOm.cityName,
+            destinationStateUf: resolvedOm.stateUf,
+          }),
+          ...(data.notes !== undefined && { notes: data.notes?.trim() }),
+          ...(data.status !== undefined && { status: data.status }),
+          ...(totalAmount !== undefined && { totalAmount }),
+          ...(resolvedItems !== undefined && {
+            items: {
+              deleteMany: {},
+              create: resolvedItems.map((item) => ({
+                ataItemId: item.ataItemId,
+                referenceCode: item.referenceCode,
+                description: item.description,
+                unit: item.unit,
+                quantity: item.quantity,
+                unitPrice: item.unitPrice,
+                subtotal: item.subtotal,
+                notes: item.notes,
+              })),
+            },
+          }),
+        },
+        include: estimateInclude,
+      });
+
+      const projectWorkflowSync =
+        data.status === "FINALIZADA"
+          ? await this.syncProjectWorkflowAfterEstimateFinalized(currentEstimate, tx)
+          : null;
+
+      return { estimate, projectWorkflowSync };
     });
+
+    if (data.status === "FINALIZADA" && currentEstimate.status !== "FINALIZADA") {
+      await auditService.log({
+        entityType: "ESTIMATE",
+        entityId: estimate.id,
+        action: "FINALIZE",
+        actor: this.getAuditActor(user),
+        summary: `Estimativa EST-${estimate.estimateCode} finalizada`,
+        before: this.buildEstimateAuditSnapshot(currentEstimate),
+        after: this.buildEstimateAuditSnapshot(estimate),
+        metadata: {
+          permissionUsed: "estimates.finalize",
+          projectWorkflowSynced: Boolean(projectWorkflowSync),
+        },
+      });
+    }
+
+    if (projectWorkflowSync) {
+      await auditService.log({
+        entityType: "PROJECT",
+        entityId: projectWorkflowSync.projectId,
+        action: "STAGE_CHANGE",
+        actor: this.getAuditActor(user),
+        summary: `Projeto PRJ-${projectWorkflowSync.projectCode} avançou de ${projectWorkflowSync.previousStage} para ${projectWorkflowSync.newStage} após finalização da estimativa EST-${estimate.estimateCode}`,
+        before: projectWorkflowSync.before,
+        after: projectWorkflowSync.after,
+        metadata: {
+          source: "ESTIMATE_FINALIZATION",
+          estimateId: estimate.id,
+          estimateCode: estimate.estimateCode,
+          previousStage: projectWorkflowSync.previousStage,
+          newStage: projectWorkflowSync.newStage,
+          nextActionCode: workflowService.getNextAction({
+            id: projectWorkflowSync.projectId,
+            projectCode: projectWorkflowSync.projectCode ?? undefined,
+            stage: projectWorkflowSync.newStage,
+          }).code,
+        },
+      });
+    }
 
     return this.enrichEstimateWithBalance(estimate);
   }
@@ -1233,17 +1465,111 @@ export class EstimatesService {
 
     await this.ensureCanManage(estimateId, user);
 
+    const currentEstimate = await prisma.estimate.findUnique({
+      where: { id: estimateId },
+      select: {
+        id: true,
+        estimateCode: true,
+        projectId: true,
+        status: true,
+        omName: true,
+        destinationCityName: true,
+        destinationStateUf: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            title: true,
+            description: true,
+            status: true,
+            stage: true,
+            ownerId: true,
+            startDate: true,
+            endDate: true,
+            creditNoteNumber: true,
+            creditNoteReceivedAt: true,
+            diexNumber: true,
+            diexIssuedAt: true,
+            commitmentNoteNumber: true,
+            commitmentNoteReceivedAt: true,
+            serviceOrderNumber: true,
+            serviceOrderIssuedAt: true,
+            executionStartedAt: true,
+            asBuiltReceivedAt: true,
+            invoiceAttestedAt: true,
+            serviceCompletedAt: true,
+          },
+        },
+      },
+    });
+
+    if (!currentEstimate) {
+      throw new AppError("Estimativa nÃ£o encontrada", 404);
+    }
+
     if (data.status === "FINALIZADA") {
       await this.assertEstimateItemsStillAvailable(estimateId);
     }
 
-    const estimate = await prisma.estimate.update({
-      where: { id: estimateId },
-      data: {
-        status: data.status,
-      },
-      include: estimateInclude,
+    const { estimate, projectWorkflowSync } = await prisma.$transaction(async (tx) => {
+      const estimate = await tx.estimate.update({
+        where: { id: estimateId },
+        data: {
+          status: data.status,
+        },
+        include: estimateInclude,
+      });
+
+      const projectWorkflowSync =
+        data.status === "FINALIZADA"
+          ? await this.syncProjectWorkflowAfterEstimateFinalized(currentEstimate, tx)
+          : null;
+
+      return { estimate, projectWorkflowSync };
     });
+
+    if (data.status === "FINALIZADA" && currentEstimate.status !== "FINALIZADA") {
+      await auditService.log({
+        entityType: "ESTIMATE",
+        entityId: estimate.id,
+        action: "FINALIZE",
+        actor: this.getAuditActor(user),
+        summary: `Estimativa EST-${estimate.estimateCode} finalizada`,
+        before: this.buildEstimateAuditSnapshot(currentEstimate),
+        after: this.buildEstimateAuditSnapshot(estimate),
+        metadata: {
+          permissionUsed: "estimates.finalize",
+          projectWorkflowSynced: Boolean(projectWorkflowSync),
+        },
+      });
+    }
+
+    if (projectWorkflowSync) {
+      await auditService.log({
+        entityType: "PROJECT",
+        entityId: projectWorkflowSync.projectId,
+        action: "STAGE_CHANGE",
+        actor: this.getAuditActor(user),
+        summary: `Projeto PRJ-${projectWorkflowSync.projectCode} avançou de ${projectWorkflowSync.previousStage} para ${projectWorkflowSync.newStage} após finalização da estimativa EST-${estimate.estimateCode}`,
+        before: projectWorkflowSync.before,
+        after: projectWorkflowSync.after,
+        metadata: {
+          source: "ESTIMATE_FINALIZATION",
+          estimateId: estimate.id,
+          estimateCode: estimate.estimateCode,
+          previousStage: projectWorkflowSync.previousStage,
+          newStage: projectWorkflowSync.newStage,
+          nextActionCode: workflowService.getNextAction({
+            id: projectWorkflowSync.projectId,
+            projectCode: projectWorkflowSync.projectCode ?? undefined,
+            stage: projectWorkflowSync.newStage,
+          }).code,
+        },
+      });
+    }
 
     return this.enrichEstimateWithBalance(estimate);
   }

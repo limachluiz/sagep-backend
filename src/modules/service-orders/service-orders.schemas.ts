@@ -24,7 +24,7 @@ export const createServiceOrderSchema = z.object({
   estimateCode: z.coerce.number().int().positive().optional(),
   diexId: z.string().min(1).optional(),
   diexCode: z.coerce.number().int().positive().optional(),
-  serviceOrderNumber: z.string().trim().min(3, "Número da OS é obrigatório"),
+  serviceOrderNumber: z.string().trim().optional(),
   issuedAt: z.coerce.date(),
   contractorCnpj: z.string().trim().min(14, "CNPJ da empresa é obrigatório"),
   requesterName: optionalString,
@@ -147,4 +147,8 @@ export const serviceOrderIdParamSchema = z.object({
 
 export const serviceOrderCodeParamSchema = z.object({
   code: z.coerce.number().int().positive("Código da OS inválido"),
+});
+
+export const serviceOrderNumberParamSchema = z.object({
+  serviceOrderNumber: z.string().trim().min(1, "Número documental da OS é obrigatório"),
 });

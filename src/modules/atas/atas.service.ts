@@ -39,6 +39,8 @@ type UpdateAtaInput = {
   coverageGroups?: CoverageGroupInput[];
 };
 
+type UpdateCoverageGroupInput = Partial<CoverageGroupInput>;
+
 type ListAtasFilters = {
   code?: number;
   type?: "CFTV" | "FIBRA_OPTICA";
@@ -73,9 +75,27 @@ const ataInclude = {
   },
 } satisfies Prisma.AtaInclude;
 
+const coverageGroupSelect = {
+  id: true,
+  ataId: true,
+  code: true,
+  name: true,
+  description: true,
+  createdAt: true,
+  localities: {
+    select: {
+      id: true,
+      cityName: true,
+      stateUf: true,
+      createdAt: true,
+    },
+    orderBy: [{ stateUf: "asc" }, { cityName: "asc" }],
+  },
+} satisfies Prisma.AtaCoverageGroupSelect;
+
 export class AtasService {
-  private normalizeCoverageGroups(groups: CoverageGroupInput[]) {
-    return groups.map((group) => ({
+  private normalizeCoverageGroup(group: CoverageGroupInput) {
+    return {
       code: group.code.trim().toUpperCase(),
       name: group.name.trim(),
       description: group.description?.trim(),
@@ -92,7 +112,45 @@ export class AtasService {
                 item.stateUf === locality.stateUf
             ) === index
         ),
-    }));
+    };
+  }
+
+  private normalizeCoverageGroupPatch(group: UpdateCoverageGroupInput) {
+    return {
+      ...(group.code !== undefined && { code: group.code.trim().toUpperCase() }),
+      ...(group.name !== undefined && { name: group.name.trim() }),
+      ...(group.description !== undefined && { description: group.description?.trim() }),
+      ...(group.localities !== undefined && {
+        localities: group.localities
+          .map((locality) => ({
+            cityName: locality.cityName.trim(),
+            stateUf: locality.stateUf,
+          }))
+          .filter(
+            (locality, index, array) =>
+              array.findIndex(
+                (item) =>
+                  item.cityName.toLowerCase() === locality.cityName.toLowerCase() &&
+                  item.stateUf === locality.stateUf
+              ) === index
+          ),
+      }),
+    };
+  }
+
+  private normalizeCoverageGroups(groups: CoverageGroupInput[]) {
+    return groups.map((group) => this.normalizeCoverageGroup(group));
+  }
+
+  private async ensureAtaExists(ataId: string) {
+    const ataExists = await prisma.ata.findUnique({
+      where: { id: ataId },
+      select: { id: true },
+    });
+
+    if (!ataExists) {
+      throw new AppError("Ata não encontrada", 404);
+    }
   }
 
   async create(data: CreateAtaInput) {
@@ -332,6 +390,130 @@ export class AtasService {
     });
 
     return ata;
+  }
+
+  async createCoverageGroup(ataId: string, data: CoverageGroupInput) {
+    await this.ensureAtaExists(ataId);
+
+    const coverageGroup = this.normalizeCoverageGroup(data);
+    const duplicateGroup = await prisma.ataCoverageGroup.findUnique({
+      where: {
+        ataId_code: {
+          ataId,
+          code: coverageGroup.code,
+        },
+      },
+      select: { id: true },
+    });
+
+    if (duplicateGroup) {
+      throw new AppError("Já existe um grupo de cobertura com este código nesta ata", 409);
+    }
+
+    return prisma.ataCoverageGroup.create({
+      data: {
+        ataId,
+        code: coverageGroup.code,
+        name: coverageGroup.name,
+        description: coverageGroup.description,
+        localities: {
+          create: coverageGroup.localities.map((locality) => ({
+            cityName: locality.cityName,
+            stateUf: locality.stateUf,
+          })),
+        },
+      },
+      select: coverageGroupSelect,
+    });
+  }
+
+  async updateCoverageGroup(
+    ataId: string,
+    groupId: string,
+    data: UpdateCoverageGroupInput
+  ) {
+    await this.ensureAtaExists(ataId);
+
+    const currentGroup = await prisma.ataCoverageGroup.findFirst({
+      where: { id: groupId, ataId },
+      select: { id: true },
+    });
+
+    if (!currentGroup) {
+      throw new AppError("Grupo de cobertura não encontrado para esta ata", 404);
+    }
+
+    const coverageGroup = this.normalizeCoverageGroupPatch(data);
+
+    if (coverageGroup.code !== undefined) {
+      const duplicateGroup = await prisma.ataCoverageGroup.findUnique({
+        where: {
+          ataId_code: {
+            ataId,
+            code: coverageGroup.code,
+          },
+        },
+        select: { id: true },
+      });
+
+      if (duplicateGroup && duplicateGroup.id !== groupId) {
+        throw new AppError("Já existe um grupo de cobertura com este código nesta ata", 409);
+      }
+    }
+
+    return prisma.ataCoverageGroup.update({
+      where: { id: groupId },
+      data: {
+        ...(coverageGroup.code !== undefined && { code: coverageGroup.code }),
+        ...(coverageGroup.name !== undefined && { name: coverageGroup.name }),
+        ...(coverageGroup.description !== undefined && {
+          description: coverageGroup.description,
+        }),
+        ...(coverageGroup.localities !== undefined && {
+          localities: {
+            deleteMany: {},
+            create: coverageGroup.localities.map((locality) => ({
+              cityName: locality.cityName,
+              stateUf: locality.stateUf,
+            })),
+          },
+        }),
+      },
+      select: coverageGroupSelect,
+    });
+  }
+
+  async removeCoverageGroup(ataId: string, groupId: string) {
+    await this.ensureAtaExists(ataId);
+
+    const coverageGroup = await prisma.ataCoverageGroup.findFirst({
+      where: { id: groupId, ataId },
+      select: {
+        id: true,
+        _count: {
+          select: {
+            items: true,
+            estimates: true,
+          },
+        },
+      },
+    });
+
+    if (!coverageGroup) {
+      throw new AppError("Grupo de cobertura não encontrado para esta ata", 404);
+    }
+
+    if (coverageGroup._count.items > 0 || coverageGroup._count.estimates > 0) {
+      throw new AppError("Grupo de cobertura em uso não pode ser removido", 409);
+    }
+
+    await prisma.ataCoverageGroup.delete({
+      where: { id: groupId },
+    });
+
+    return {
+      message: "Grupo de cobertura removido com sucesso",
+    };
   }
 
   async remove(ataId: string) {

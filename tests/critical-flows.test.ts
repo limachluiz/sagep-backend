@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import ExcelJS from "exceljs";
 import request from "supertest";
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { app } from "../src/app.js";
 import { prisma } from "../src/config/prisma.js";
 import {
@@ -9,6 +9,7 @@ import {
   rolePermissions,
 } from "../src/modules/permissions/permissions.catalog.js";
 import { hashToken } from "../src/shared/auth-tokens.js";
+import { pdfService } from "../src/shared/pdf.service.js";
 
 const password = "123456";
 let catalogSequence = 1;
@@ -43,6 +44,7 @@ async function resetDatabase() {
   await prisma.auditLog.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.userPermissionOverride.deleteMany();
+  await prisma.ataItemExternalBalanceSnapshot.deleteMany();
   await prisma.ataItemBalanceMovement.deleteMany();
   await prisma.serviceOrderDeliveredDocument.deleteMany();
   await prisma.serviceOrderScheduleItem.deleteMany();
@@ -350,6 +352,7 @@ describe("critical flows", () => {
   });
 
   afterAll(async () => {
+    await pdfService.closeBrowser();
     await prisma.$disconnect();
   });
 
@@ -1028,6 +1031,583 @@ describe("critical flows", () => {
     expect(Array.isArray(details.body.pendingActions)).toBe(true);
   });
 
+  it("projects: records credit note and advances to DIEX_REQUISITORIO without requiring DIEx data", async () => {
+    const { project } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    const updated = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(updated.body.stage).toBe("DIEX_REQUISITORIO");
+    expect(updated.body.creditNoteNumber).toBe("NC-001");
+    expect(updated.body.creditNoteReceivedAt).toBeTruthy();
+    expect(updated.body.diexNumber).toBeNull();
+    expect(updated.body.diexIssuedAt).toBeNull();
+
+    const details = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(details.body.workflow.stage).toBe("DIEX_REQUISITORIO");
+    expect(details.body.workflow.milestones.creditNoteNumber).toBe("NC-001");
+    expect(details.body.workflow.milestones.creditNoteReceivedAt).toBeTruthy();
+    expect(details.body.workflow.nextAction.code).toBe("EMITIR_DIEX");
+    expect(
+      details.body.pendingActions.some(
+        (action: { code: string; targetStage?: string }) =>
+          action.code === "EMITIR_DIEX" && action.targetStage === "DIEX_REQUISITORIO",
+      ),
+    ).toBe(true);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+      })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.message).toContain("DIEx");
+      });
+
+    const stageAudit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        action: "STAGE_CHANGE",
+        metadata: {
+          path: ["newStage"],
+          equals: "DIEX_REQUISITORIO",
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+
+    expect(stageAudit).toBeTruthy();
+    expect((stageAudit?.metadata as Record<string, unknown>)?.nextActionCode).toBe(
+      "EMITIR_DIEX",
+    );
+  });
+
+  it("workflow: DIEx emission advances to commitment note and NE advances to OS queue", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-002",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    const afterDiex = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(afterDiex.body.workflow.stage).toBe("AGUARDANDO_NOTA_EMPENHO");
+    expect(afterDiex.body.workflow.milestones.diexNumber).toBe("DIEX-001");
+    expect(afterDiex.body.workflow.milestones.diexIssuedAt).toBeTruthy();
+    expect(afterDiex.body.workflow.nextAction.code).toBe("INFORMAR_NOTA_EMPENHO");
+
+    const afterCommitmentNote = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-002",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(afterCommitmentNote.body.stage).toBe("OS_LIBERADA");
+    expect(afterCommitmentNote.body.commitmentNoteNumber).toBe("NE-002");
+    expect(afterCommitmentNote.body.serviceOrderNumber).toBeNull();
+
+    const afterNeDetails = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(afterNeDetails.body.workflow.stage).toBe("OS_LIBERADA");
+    expect(afterNeDetails.body.workflow.nextAction.code).toBe("EMITIR_OS");
+    expect(afterNeDetails.body.timeline.some(
+      (item: { entityType: string; entityId: string; action: string }) =>
+        item.entityType === "PROJECT" &&
+        item.entityId === project.id &&
+        item.action === "STAGE_CHANGE",
+    )).toBe(true);
+
+    const projectStageAudits = await prisma.auditLog.findMany({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        action: "STAGE_CHANGE",
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    expect(
+      projectStageAudits.some(
+        (audit) =>
+          (audit.metadata as Record<string, unknown> | null)?.newStage ===
+            "AGUARDANDO_NOTA_EMPENHO" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
+            "INFORMAR_NOTA_EMPENHO",
+      ),
+    ).toBe(true);
+    expect(
+      projectStageAudits.some(
+        (audit) =>
+          (audit.metadata as Record<string, unknown> | null)?.newStage === "OS_LIBERADA" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode === "EMITIR_OS",
+      ),
+    ).toBe(true);
+  });
+
+  it("workflow: As-Built review approves to ATESTAR_NF and rejects back to SERVICO_EM_EXECUCAO", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-010",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-010",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexId: diex.id,
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const nextActionBeforeReview = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextActionBeforeReview.body.code).toBe("VALIDAR_AS_BUILT");
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: false,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+      })
+      .expect(400);
+
+    const rejected = await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: false,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+        rejectionReason: "Documento incompleto",
+      })
+      .expect(200);
+
+    expect(rejected.body.stage).toBe("SERVICO_EM_EXECUCAO");
+    expect(rejected.body.asBuiltReceivedAt).toBeNull();
+    expect(rejected.body.asBuiltRejectedAt).toBeTruthy();
+    expect(rejected.body.asBuiltRejectionReason).toBe("Documento incompleto");
+
+    const nextActionAfterReject = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextActionAfterReject.body.code).toBe("ANEXAR_AS_BUILT");
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-07T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const approved = await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(approved.body.stage).toBe("ATESTAR_NF");
+    expect(approved.body.asBuiltReviewedAt).toBeTruthy();
+    expect(approved.body.asBuiltApprovedAt).toBeTruthy();
+    expect(approved.body.asBuiltRejectedAt).toBeNull();
+    expect(approved.body.asBuiltRejectionReason).toBeNull();
+
+    const detailsAfterApproval = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsAfterApproval.body.workflow.stage).toBe("ATESTAR_NF");
+    expect(detailsAfterApproval.body.workflow.nextAction.code).toBe("ATESTAR_NF");
+
+    const reviewAudits = await prisma.auditLog.findMany({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        metadata: {
+          path: ["source"],
+          equals: "project.as-built.review",
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "UPDATE" &&
+          (audit.metadata as Record<string, unknown> | null)?.approved === false &&
+          (audit.metadata as Record<string, unknown> | null)?.rejectionReason ===
+            "Documento incompleto",
+      ),
+    ).toBe(true);
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "STAGE_CHANGE" &&
+          (audit.metadata as Record<string, unknown> | null)?.newStage ===
+            "SERVICO_EM_EXECUCAO" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
+            "ANEXAR_AS_BUILT",
+      ),
+    ).toBe(true);
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "STAGE_CHANGE" &&
+          (audit.metadata as Record<string, unknown> | null)?.newStage === "ATESTAR_NF" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
+            "ATESTAR_NF",
+      ),
+    ).toBe(true);
+  });
+
+  it("workflow: concludes service when invoice attestation is already persisted", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-020",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-020",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexId: diex.id,
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ATESTAR_NF",
+        invoiceAttestedAt: "2026-04-07T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const concluded = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_CONCLUIDO",
+        serviceCompletedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(concluded.body.status).toBe("CONCLUIDO");
+    expect(concluded.body.stage).toBe("SERVICO_CONCLUIDO");
+    expect(concluded.body.invoiceAttestedAt).toBeTruthy();
+    expect(concluded.body.serviceCompletedAt).toBeTruthy();
+
+    const nextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextAction.body.code).toBe("SEM_ACAO");
+  });
+
+  it("workflow: rejects service conclusion without persisted invoice attestation", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-021",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-021",
+        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexId: diex.id,
+        issuedAt: "2026-04-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_CONCLUIDO",
+        serviceCompletedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.message).toContain("atesto da NF");
+      });
+  });
+
+  it("estimates: finalizing an estimate advances the project workflow to awaiting credit note", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto Finalizacao Estimativa");
+    const catalog = await createCatalog();
+
+    const estimate = await request(app)
+      .post("/api/estimates")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        ataId: catalog.ata.id,
+        coverageGroupId: catalog.coverageGroup.id,
+        omId: catalog.om.id,
+        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
+      })
+      .expect(201);
+
+    const initialNextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(initialNextAction.body.code).toBe("FINALIZAR_ESTIMATIVA");
+
+    await request(app)
+      .patch(`/api/estimates/${estimate.body.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ status: "FINALIZADA" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.status).toBe("FINALIZADA");
+      });
+
+    const details = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(details.body.workflow.stage).toBe("AGUARDANDO_NOTA_CREDITO");
+    expect(details.body.workflow.status).toBe("PLANEJAMENTO");
+    expect(details.body.workflow.nextAction.code).toBe("EMITIR_DIEX");
+
+    const nextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextAction.body.code).toBe("EMITIR_DIEX");
+
+    const stageAudit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        action: "STAGE_CHANGE",
+        summary: {
+          contains: "após finalização da estimativa",
+        },
+      },
+    });
+
+    expect(stageAudit).toBeTruthy();
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-001",
+        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await issueDiex(project.id, estimate.body.id, adminAuth.accessToken);
+  });
+
   it("workflow and alerts: keeps AGUARDANDO_NOTA_EMPENHO aligned with commitment note state", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 
@@ -1147,6 +1727,176 @@ describe("critical flows", () => {
     expect(item.balance.consumedQuantity).toBe("0");
   });
 
+  it("ata-items: lists balance movements ordered by latest creation", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto historico saldo");
+    const { estimate, ataItem } = await seedFinalizedEstimateWithBalance(project.id, {
+      initialQuantity: "10.00",
+      quantity: "2.00",
+    });
+
+    const olderCreatedAt = new Date("2026-04-01T00:00:00.000Z");
+    const newerCreatedAt = new Date("2026-04-02T00:00:00.000Z");
+
+    await prisma.ataItemBalanceMovement.createMany({
+      data: [
+        {
+          ataItemId: ataItem.id,
+          projectId: project.id,
+          estimateId: estimate.id,
+          actorUserId: admin.id,
+          actorName: "ADMIN",
+          movementType: "RESERVE",
+          quantity: "2.00",
+          unitPrice: "100.00",
+          totalAmount: "200.00",
+          summary: "Reserva de teste",
+          createdAt: olderCreatedAt,
+        },
+        {
+          ataItemId: ataItem.id,
+          projectId: project.id,
+          estimateId: estimate.id,
+          actorUserId: admin.id,
+          actorName: "ADMIN",
+          movementType: "RELEASE",
+          quantity: "1.00",
+          unitPrice: "100.00",
+          totalAmount: "100.00",
+          summary: "Liberacao de teste",
+          createdAt: newerCreatedAt,
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .get(`/api/ata-items/${ataItem.id}/movements`)
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(200);
+
+    expect(response.body).toHaveLength(2);
+    expect(response.body.map((movement: { movementType: string }) => movement.movementType)).toEqual([
+      "RELEASE",
+      "RESERVE",
+    ]);
+    expect(response.body[0]).toMatchObject({
+      quantity: "1",
+      unitPrice: "100",
+      totalAmount: "100",
+      summary: "Liberacao de teste",
+      actorName: "ADMIN",
+      projectId: project.id,
+      projectCode: project.projectCode,
+      estimateId: estimate.id,
+      estimateCode: estimate.estimateCode,
+      diexRequestId: null,
+      diexCode: null,
+      serviceOrderId: null,
+      serviceOrderCode: null,
+    });
+    expect(response.body[0].createdAt).toBe(newerCreatedAt.toISOString());
+  });
+
+  it("ata-items: registers external consumption manually with validation, balance update and audit log", async () => {
+    const catalog = await createCatalog("5.00");
+    await prisma.ata.update({
+      where: { id: catalog.ata.id },
+      data: { externalUasg: "160016" },
+    });
+    const basePayload = {
+      quantity: 2,
+      reason: "Consumo externo confirmado manualmente",
+      source: "COMPRAS_GOV",
+      externalStatus: "CONSUMO_OFICIAL_DETECTADO",
+      externalReference: "SNAPSHOT-001",
+      commitmentNumber: "2026NE000567",
+      unit: "160016",
+      notes: "Conferencia manual",
+    };
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .send(basePayload)
+      .expect(403);
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ ...basePayload, reason: "" })
+      .expect(400);
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ ...basePayload, quantity: 6 })
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.message).toContain("Saldo insuficiente");
+      });
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ ...basePayload, externalReference: "ADESAO-001" })
+      .expect(400);
+
+    await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({ ...basePayload, unit: "999999" })
+      .expect(400);
+
+    const response = await request(app)
+      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send(basePayload)
+      .expect(200);
+
+    expect(response.body.message).toBe("Consumo externo registrado manualmente com sucesso");
+    expect(response.body.movement.movementType).toBe("EXTERNAL_CONSUMPTION");
+    expect(response.body.movement.quantity).toBe("2");
+    expect(response.body.localBalance.consumedQuantity).toBe("2");
+    expect(response.body.localBalance.availableQuantity).toBe("3");
+    expect(response.body.item.balance.consumedQuantity).toBe("2");
+    expect(response.body.item.balance.availableQuantity).toBe("3");
+
+    const movement = await prisma.ataItemBalanceMovement.findFirstOrThrow({
+      where: {
+        ataItemId: catalog.ataItem.id,
+        movementType: "EXTERNAL_CONSUMPTION",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(movement.actorUserId).toBe(gestor.id);
+    expect(movement.summary).toContain("Consumo externo manual");
+    expect(movement.quantity.toString()).toBe("2");
+
+    const refreshedItem = await request(app)
+      .get(`/api/ata-items/${catalog.ataItem.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+    expect(refreshedItem.body.balance.consumedQuantity).toBe("2");
+    expect(refreshedItem.body.balance.availableQuantity).toBe("3");
+    expect(refreshedItem.body.initialQuantity).toBe("5");
+
+    const audit = await prisma.auditLog.findFirstOrThrow({
+      where: {
+        entityType: "ATA_ITEM",
+        entityId: catalog.ataItem.id,
+        action: "REGISTER_EXTERNAL_CONSUMPTION",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    const metadata = audit.metadata as Record<string, any>;
+    expect(audit.actorUserId).toBe(gestor.id);
+    expect(metadata.quantity).toBe("2");
+    expect(metadata.reason).toBe(basePayload.reason);
+    expect(metadata.source).toBe(basePayload.source);
+    expect(metadata.externalStatus).toBe(basePayload.externalStatus);
+    expect(metadata.commitmentNumber).toBe(basePayload.commitmentNumber);
+    expect(metadata.unit).toBe(basePayload.unit);
+  });
+
   it("estimates: blocks quantity above ATA item available balance", async () => {
     const project = await createProject(adminAuth.accessToken, "Projeto sem saldo");
     const catalog = await createCatalog("1.00");
@@ -1216,10 +1966,10 @@ describe("critical flows", () => {
       .expect(409);
   });
 
-  it("service-orders: creates OS when prerequisites are met", async () => {
-    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+  it("service-orders: generates annual sequential number and syncs project number", async () => {
+    const firstChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
     await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
+      .patch(`/api/projects/${firstChain.project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "AGUARDANDO_NOTA_CREDITO",
@@ -1227,9 +1977,9 @@ describe("critical flows", () => {
         creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
       })
       .expect(200);
-    await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+    await issueDiex(firstChain.project.id, firstChain.estimate.id, adminAuth.accessToken);
     await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
+      .patch(`/api/projects/${firstChain.project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "AGUARDANDO_NOTA_EMPENHO",
@@ -1238,13 +1988,12 @@ describe("critical flows", () => {
       })
       .expect(200);
 
-    const serviceOrder = await request(app)
+    const firstServiceOrder = await request(app)
       .post("/api/service-orders")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
-        projectId: project.id,
-        estimateId: estimate.id,
-        serviceOrderNumber: "OS-001",
+        projectId: firstChain.project.id,
+        estimateId: firstChain.estimate.id,
         issuedAt: "2026-04-03T00:00:00.000Z",
         contractorCnpj: "12345678000190",
         requesterName: "Fiscal Teste",
@@ -1253,7 +2002,104 @@ describe("critical flows", () => {
       })
       .expect(201);
 
-    expect(serviceOrder.body.serviceOrderNumber).toBe("OS-001");
+    expect(firstServiceOrder.body.serviceOrderNumber).toBe("OS-2026-001");
+
+    const firstProjectAfterServiceOrder = await prisma.project.findUniqueOrThrow({
+      where: { id: firstChain.project.id },
+      select: {
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+      },
+    });
+
+    expect(firstProjectAfterServiceOrder.serviceOrderNumber).toBe("OS-2026-001");
+    expect(firstProjectAfterServiceOrder.serviceOrderIssuedAt?.toISOString()).toBe(
+      "2026-04-03T00:00:00.000Z",
+    );
+
+    const secondChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${secondChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-002",
+        creditNoteReceivedAt: "2026-05-01T00:00:00.000Z",
+      })
+      .expect(200);
+    await issueDiex(secondChain.project.id, secondChain.estimate.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${secondChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-002",
+        commitmentNoteReceivedAt: "2026-05-02T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const secondServiceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: secondChain.project.id,
+        estimateId: secondChain.estimate.id,
+        serviceOrderNumber: "x",
+        issuedAt: "2026-05-03T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    expect(secondServiceOrder.body.serviceOrderNumber).toBe("OS-2026-002");
+
+    const secondProjectAfterServiceOrder = await prisma.project.findUniqueOrThrow({
+      where: { id: secondChain.project.id },
+      select: {
+        serviceOrderNumber: true,
+      },
+    });
+
+    expect(secondProjectAfterServiceOrder.serviceOrderNumber).toBe("OS-2026-002");
+
+    const thirdChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${thirdChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_CREDITO",
+        creditNoteNumber: "NC-003",
+        creditNoteReceivedAt: "2027-01-10T00:00:00.000Z",
+      })
+      .expect(200);
+    await issueDiex(thirdChain.project.id, thirdChain.estimate.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${thirdChain.project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: "NE-003",
+        commitmentNoteReceivedAt: "2027-01-11T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const thirdServiceOrder = await request(app)
+      .post("/api/service-orders")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: thirdChain.project.id,
+        estimateId: thirdChain.estimate.id,
+        issuedAt: "2027-01-12T00:00:00.000Z",
+        contractorCnpj: "12345678000190",
+        requesterName: "Fiscal Teste",
+        requesterRank: "2 Ten",
+        requesterCpf: "11122233344",
+      })
+      .expect(201);
+
+    expect(thirdServiceOrder.body.serviceOrderNumber).toBe("OS-2027-001");
   });
 
   it("balance flow: reserves on DIEx, consumes on commitment note and emits low-stock alert", async () => {
@@ -1524,7 +2370,7 @@ describe("critical flows", () => {
       (item: { entityType: string; entityId: string }) =>
         item.entityType === "SERVICE_ORDER" && item.entityId === serviceOrder.body.id,
     );
-    expect(serviceOrderEvent.context.resourceCode).toBe("OS-TIMELINE");
+    expect(serviceOrderEvent.context.resourceCode).toBe(serviceOrder.body.serviceOrderNumber);
     expect(serviceOrderEvent.context.diexRequestId).toBe(diex.id);
 
     const timelineResponse = await request(app)
@@ -1695,6 +2541,58 @@ describe("critical flows", () => {
       .send({ notes: "tentativa gestor" })
       .expect(403);
 
+    await request(app)
+      .post(`/api/atas/${ata.body.id}/coverage-groups`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .send({
+        code: "RR",
+        name: "Roraima",
+        localities: [{ cityName: "Boa Vista", stateUf: "RR" }],
+      })
+      .expect(403);
+
+    const coverageGroup = await request(app)
+      .post(`/api/atas/${ata.body.id}/coverage-groups`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        code: "RR",
+        name: "Roraima",
+        description: "Interior e capital",
+        localities: [{ cityName: "Boa Vista", stateUf: "RR" }],
+      })
+      .expect(201);
+
+    expect(coverageGroup.body.code).toBe("RR");
+    expect(coverageGroup.body.localities).toHaveLength(1);
+
+    const updatedCoverageGroup = await request(app)
+      .patch(`/api/atas/${ata.body.id}/coverage-groups/${coverageGroup.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        name: "Roraima atualizado",
+        localities: [
+          { cityName: "Boa Vista", stateUf: "RR" },
+          { cityName: "Pacaraima", stateUf: "RR" },
+        ],
+      })
+      .expect(200);
+
+    expect(updatedCoverageGroup.body.name).toBe("Roraima atualizado");
+    expect(updatedCoverageGroup.body.localities).toHaveLength(2);
+
+    await request(app)
+      .delete(`/api/atas/${ata.body.id}/coverage-groups/${coverageGroup.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    const ataAfterCoverageGroupDelete = await request(app)
+      .get(`/api/atas/${ata.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(ataAfterCoverageGroupDelete.body.coverageGroups).toHaveLength(1);
+    expect(ataAfterCoverageGroupDelete.body.coverageGroups[0].code).toBe("AM");
+
     const om = await request(app)
       .post("/api/military-organizations")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
@@ -1725,6 +2623,977 @@ describe("critical flows", () => {
       .expect(403);
   });
 
+  it("integrations: previews and imports Compras.gov.br ARP data without duplicating ATA items", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+
+      if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "0001",
+                codigoUnidadeGerenciadora: "120624",
+                nomeUnidadeGerenciadora: "Centro de Tecnologia",
+                numeroCompra: "90001",
+                anoCompra: "2026",
+                dataVigenciaInicial: "2026-01-01",
+                dataVigenciaFinal: "2026-12-31",
+                numeroControlePncpAta: "ATA-PNCP-1",
+              },
+              {
+                numeroAtaRegistroPreco: "0002",
+                codigoUnidadeGerenciadora: "120624",
+                nomeUnidadeGerenciadora: "Centro de Tecnologia",
+                numeroCompra: "90001",
+                anoCompra: "2026",
+                dataVigenciaInicial: "2026-02-01",
+                dataVigenciaFinal: "2027-01-31",
+                numeroControlePncpAta: "ATA-PNCP-2",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "0001",
+                codigoUnidadeGerenciadora: "120624",
+                numeroCompra: "90001",
+                anoCompra: "2026",
+                numeroItem: "1",
+                codigoItem: 123,
+                descricaoItem: "Camera IP 4MP",
+                tipoItem: "UN",
+                quantidadeHomologadaVencedor: 50,
+                valorUnitario: 250.75,
+                nomeRazaoSocialFornecedor: "Fornecedor Compras Gov",
+                numeroControlePncpAta: "ATA-PNCP-1",
+              },
+              {
+                numeroAtaRegistroPreco: "0002",
+                codigoUnidadeGerenciadora: "120624",
+                numeroCompra: "90001",
+                anoCompra: "2026",
+                numeroItem: "2",
+                codigoItem: 456,
+                descricaoItem: "Switch gerenciavel",
+                tipoItem: "UN",
+                quantidadeHomologadaVencedor: 10,
+                valorUnitario: 1000,
+                nomeRazaoSocialFornecedor: "Outro Fornecedor Compras Gov",
+                numeroControlePncpAta: "ATA-PNCP-2",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem")) {
+        if (url.searchParams.get("numeroAta")?.includes("EMPTY")) {
+          return new Response(
+            JSON.stringify({
+              resultado: [],
+              totalPaginas: 0,
+            }),
+            { status: 200, headers: { "content-type": "application/json" } },
+          );
+        }
+
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroItem: "00001",
+                unidade: "120624",
+                tipo: "saldo",
+                quantidadeRegistrada: 50,
+                quantidadeEmpenhada: 5,
+                saldoEmpenho: 45,
+                dataHoraAtualizacao: "2026-03-01T10:00:00.000Z",
+              },
+              {
+                numeroItem: "00002",
+                unidade: "120624",
+                tipo: "saldo",
+                quantidadeRegistrada: 10,
+                quantidadeEmpenhada: 0,
+                saldoEmpenho: 10,
+                dataHoraAtualizacao: "2026-03-01T10:00:00.000Z",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ resultado: [], totalPaginas: 1 }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      const preview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "0001",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(preview.body.source).toBe("COMPRAS_GOV");
+      expect(preview.body.ata.vendorName).toBe("Fornecedor Compras Gov");
+      expect(preview.body.items).toHaveLength(1);
+      expect(preview.body.items[0].referenceCode).toBe("1");
+      expect(preview.body.atasFound).toHaveLength(1);
+      expect(preview.body.selectedAta.ataNumber).toBe("ARP 0001");
+
+      const groupedPreview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(groupedPreview.body.ata).toBeNull();
+      expect(groupedPreview.body.items).toHaveLength(0);
+      expect(groupedPreview.body.selectedAta).toBeUndefined();
+      expect(groupedPreview.body.atasFound).toHaveLength(2);
+      expect(groupedPreview.body.atasFound[0].itemCount).toBe(1);
+      expect(groupedPreview.body.atasFound[0].totalAmount).toBe(12537.5);
+      expect(groupedPreview.body.warnings).toContain(
+        "Foram encontradas várias ATAs. Selecione uma ATA para continuar.",
+      );
+
+      const partialPreview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "ARP 1/2026/2026",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(partialPreview.body.ata.number).toBe("ARP 0001/2026");
+      expect(partialPreview.body.items).toHaveLength(1);
+
+      await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "0001",
+        })
+        .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+        .expect(403);
+
+      const imported = await request(app)
+        .post("/api/integrations/compras-gov/atas/import")
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .send({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "0001",
+          ataType: "CFTV",
+          coverageGroupCode: "MAO",
+          coverageGroupName: "Manaus",
+          coverageGroupStateUf: "AM",
+          coverageGroupCityName: "Manaus",
+        })
+        .expect(201);
+
+      expect(imported.body.imported.createdItems).toBe(1);
+      expect(imported.body.itemsCreated).toBe(1);
+      expect(imported.body.coverageGroup.code).toBe("MAO");
+      expect(imported.body.coverageGroup.name).toBe("Manaus");
+      expect(imported.body.coverageGroup.localities).toEqual([
+        { cityName: "Manaus", stateUf: "AM" },
+      ]);
+
+      const importedAgain = await request(app)
+        .post("/api/integrations/compras-gov/atas/import")
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .send({
+          uasg: "120624",
+          numeroPregao: "90001",
+          anoPregao: "2026",
+          numeroAta: "0001",
+          ataType: "CFTV",
+          coverageGroupCode: "MAO",
+          coverageGroupName: "Manaus",
+          coverageGroupLocalities: [
+            { cityName: "Manaus", stateUf: "AM" },
+            { cityName: "Iranduba", stateUf: "AM" },
+          ],
+        })
+        .expect(201);
+
+      expect(importedAgain.body.imported.createdItems).toBe(0);
+      expect(importedAgain.body.imported.updatedItems).toBe(1);
+      expect(importedAgain.body.itemsCreated).toBe(0);
+      expect(importedAgain.body.itemsUpdated).toBe(1);
+      expect(importedAgain.body.coverageGroup.localities).toEqual([
+        { cityName: "Iranduba", stateUf: "AM" },
+        { cityName: "Manaus", stateUf: "AM" },
+      ]);
+
+      const atas = await prisma.ata.findMany({
+        where: { externalSource: "COMPRAS_GOV", externalUasg: "120624" },
+        include: {
+          items: true,
+          coverageGroups: {
+            include: {
+              localities: {
+                orderBy: [{ stateUf: "asc" }, { cityName: "asc" }],
+              },
+            },
+          },
+        },
+      });
+
+      expect(atas).toHaveLength(1);
+      expect(atas[0].externalPregaoNumber).toBe("90001");
+      expect(atas[0].items).toHaveLength(1);
+      expect(atas[0].items[0].externalItemNumber).toBe("1");
+      expect(atas[0].coverageGroups).toHaveLength(1);
+      expect(atas[0].coverageGroups[0].code).toBe("MAO");
+      expect(atas[0].items[0].coverageGroupId).toBe(atas[0].coverageGroups[0].id);
+      expect(atas[0].coverageGroups[0].localities).toHaveLength(2);
+
+      const secondExternalItem = await prisma.ataItem.create({
+        data: {
+          ataId: atas[0].id,
+          coverageGroupId: atas[0].coverageGroups[0].id,
+          referenceCode: "2",
+          description: "Item externo indisponivel",
+          unit: "UN",
+          unitPrice: "10",
+          initialQuantity: "10",
+          externalSource: "COMPRAS_GOV",
+          externalItemId: "ATA-PNCP-1:2",
+          externalItemNumber: "2",
+        },
+      });
+
+      const externalBalance = await request(app)
+        .get(`/api/atas/${atas[0].id}/external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      const balanceUrls = fetchMock.mock.calls
+        .map(([input]) => new URL(String(input)))
+        .filter((url) => url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"));
+      expect(balanceUrls).toHaveLength(0);
+
+      expect(externalBalance.body.summary.naoSincronizado).toBe(2);
+      expect(externalBalance.body.items[0].localBalance.availableQuantity).toBe("50");
+      expect(externalBalance.body.items[0].externalBalance).toBeNull();
+      expect(externalBalance.body.items[0].difference).toBeNull();
+      expect(externalBalance.body.items[0].status).toBe("NAO_SINCRONIZADO");
+      expect(externalBalance.body.summary.externalQueryErrors).toBe(0);
+      expect(externalBalance.body.items[1].item.id).toBe(secondExternalItem.id);
+      expect(externalBalance.body.items[1].externalBalance).toBeNull();
+      expect(externalBalance.body.items[1].status).toBe("NAO_SINCRONIZADO");
+
+      const itemComparison = await request(app)
+        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(itemComparison.body.item.id).toBe(atas[0].items[0].id);
+      expect(itemComparison.body.status).toBe("NAO_SINCRONIZADO");
+
+      const movementsBeforeItemSync = await prisma.ataItemBalanceMovement.count({
+        where: { ataItemId: atas[0].items[0].id },
+      });
+
+      fetchMock.mockClear();
+      const itemSynced = await request(app)
+        .post(`/api/ata-items/${atas[0].items[0].id}/sync-external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      const itemSyncBalanceUrls = fetchMock.mock.calls
+        .map(([input]) => new URL(String(input)))
+        .filter((url) => url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"));
+      expect(itemSyncBalanceUrls.length).toBeGreaterThan(0);
+      expect(itemSyncBalanceUrls.every((url) => url.searchParams.get("numeroItem") === "1")).toBe(
+        true,
+      );
+      expect(itemSynced.body.item.id).toBe(atas[0].items[0].id);
+      expect(itemSynced.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
+      expect(itemSynced.body.localBalance.availableQuantity).toBe("50");
+      expect(itemSynced.body.externalBalance.availableQuantity).toBe("45");
+      expect(itemSynced.body.lastSyncAt).not.toBeNull();
+
+      const savedSnapshot = await prisma.ataItemExternalBalanceSnapshot.findUniqueOrThrow({
+        where: { ataItemId: atas[0].items[0].id },
+      });
+      expect(savedSnapshot.status).toBe("CONSUMO_OFICIAL_DETECTADO");
+      expect(savedSnapshot.externalBalance).not.toBeNull();
+      expect(savedSnapshot.difference).toBe("5");
+      expect(savedSnapshot.source).toBe("COMPRAS_GOV");
+      expect((savedSnapshot.externalBalance as Record<string, any>).rawRecords).toBeGreaterThanOrEqual(1);
+
+      fetchMock.mockClear();
+      const syncedItemComparison = await request(app)
+        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(syncedItemComparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
+      expect(syncedItemComparison.body.externalBalance.source).toBe("COMPRAS_GOV");
+      expect(syncedItemComparison.body.externalBalance.commitments).toHaveLength(1);
+      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("adhesionBalance");
+      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("externalUsageStatus");
+      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("nonParticipantCommitments");
+      expect(syncedItemComparison.body.externalBalance.rawRecords).toBeGreaterThanOrEqual(1);
+      expect(syncedItemComparison.body.externalBalance.lastUpdatedAt).not.toBeNull();
+      expect(syncedItemComparison.body.externalBalance.availableQuantity).toBe("45");
+
+      const itemsAfterSync = await request(app)
+        .get("/api/ata-items")
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+      const syncedItemEntry = itemsAfterSync.body.items.find(
+        (entry: { id: string }) => entry.id === atas[0].items[0].id,
+      );
+      expect(syncedItemEntry.latestExternalBalanceSnapshot).not.toBeNull();
+      expect(syncedItemEntry.latestExternalBalanceSnapshot.status).toBe(
+        "CONSUMO_OFICIAL_DETECTADO",
+      );
+      expect(syncedItemEntry.latestExternalBalanceSnapshot.externalBalance.availableQuantity).toBe(
+        "45",
+      );
+
+      const firstItemAfterItemSync = await prisma.ataItem.findUniqueOrThrow({
+        where: { id: atas[0].items[0].id },
+        select: { initialQuantity: true, externalLastSyncAt: true },
+      });
+      const secondItemAfterItemSync = await prisma.ataItem.findUniqueOrThrow({
+        where: { id: secondExternalItem.id },
+        select: { initialQuantity: true, externalLastSyncAt: true },
+      });
+      expect(firstItemAfterItemSync.initialQuantity.toString()).toBe("50");
+      expect(firstItemAfterItemSync.externalLastSyncAt).not.toBeNull();
+      expect(secondItemAfterItemSync.initialQuantity.toString()).toBe("10");
+      expect(secondItemAfterItemSync.externalLastSyncAt).toBeNull();
+      await expect(
+        prisma.ataItemBalanceMovement.count({ where: { ataItemId: atas[0].items[0].id } }),
+      ).resolves.toBe(movementsBeforeItemSync);
+
+      const synced = await request(app)
+        .post(`/api/atas/${atas[0].id}/sync-external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(synced.body.updatedItems).toBe(2);
+      expect(synced.body.warnings).toContain(
+        "Saldo local nao foi alterado automaticamente; apenas snapshot/timestamp externo foi atualizado.",
+      );
+
+      const itemAfterSync = await prisma.ataItem.findUniqueOrThrow({
+        where: { id: atas[0].items[0].id },
+        select: { initialQuantity: true, externalLastSyncAt: true },
+      });
+      expect(itemAfterSync.initialQuantity.toString()).toBe("50");
+      expect(itemAfterSync.externalLastSyncAt).not.toBeNull();
+
+      const secondItemAfterSync = await prisma.ataItem.findUniqueOrThrow({
+        where: { id: secondExternalItem.id },
+        select: { initialQuantity: true, externalLastSyncAt: true },
+      });
+      expect(secondItemAfterSync.initialQuantity.toString()).toBe("10");
+      expect(secondItemAfterSync.externalLastSyncAt).not.toBeNull();
+
+      fetchMock.mockClear();
+      const syncedBalance = await request(app)
+        .get(`/api/atas/${atas[0].id}/external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(syncedBalance.body.summary.naoSincronizado).toBe(0);
+      expect(syncedBalance.body.items[0].status).toBe("CONSUMO_OFICIAL_DETECTADO");
+      expect(syncedBalance.body.items[1].status).toBe("OK");
+
+      await prisma.ata.update({
+        where: { id: atas[0].id },
+        data: { externalAtaNumber: "EMPTY" },
+      });
+
+      const fallbackBalance = await request(app)
+        .get(`/api/atas/${atas[0].id}/external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(fallbackBalance.body.summary.notFound).toBe(0);
+      expect(fallbackBalance.body.items[0].status).toBe("CONSUMO_OFICIAL_DETECTADO");
+      expect(fallbackBalance.body.warnings).toHaveLength(0);
+
+      const fallbackItemComparison = await request(app)
+        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(fallbackItemComparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
+
+      const fallbackSync = await request(app)
+        .post(`/api/atas/${atas[0].id}/sync-external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(fallbackSync.body.updatedItems).toBe(2);
+      expect(fallbackSync.body.items[0].status).toBe("OK");
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("integrations: previews Compras.gov.br CFTV ATA when ATA year differs from purchase year", async () => {
+    const requestedUrls: URL[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      requestedUrls.push(url);
+
+      if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                nomeUnidadeGerenciadora: "Comando CFTV",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                dataVigenciaInicial: "2026-01-15",
+                dataVigenciaFinal: "2027-01-15",
+                numeroControlePncpAta: "ATA-CFTV-001-2026",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                numeroItem: "1",
+                codigoItem: 789,
+                descricaoItem: "Camera CFTV",
+                tipoItem: "UN",
+                quantidadeHomologadaVencedor: 20,
+                valorUnitario: 500,
+                nomeRazaoSocialFornecedor: "Fornecedor CFTV",
+                numeroControlePncpAta: "ATA-CFTV-001-2026",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ resultado: [], totalPaginas: 1 }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      for (const numeroAta of [
+        "1",
+        "001",
+        "001/2026",
+        "ATA DE REGISTRO DE PREÇOS Nº 001/2026",
+      ]) {
+        const preview = await request(app)
+          .get("/api/integrations/compras-gov/atas/preview")
+          .query({
+            uasg: "160016",
+            numeroPregao: "90012",
+            anoPregao: "2025",
+            numeroAta,
+          })
+          .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+          .expect(200);
+
+        expect(preview.body.ata.number).toBe("ARP 001/2026");
+        expect(preview.body.ata.vendorName).toBe("Fornecedor CFTV");
+        expect(preview.body.items).toHaveLength(1);
+        expect(preview.body.selectedAta.ataNumber).toBe("ARP 001/2026");
+      }
+
+      const groupedPreview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "160016",
+          numeroPregao: "90012",
+          anoPregao: "2025",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(groupedPreview.body.atasFound).toHaveLength(1);
+      expect(groupedPreview.body.selectedAta.ataNumber).toBe("ARP 001/2026");
+      expect(groupedPreview.body.items).toHaveLength(1);
+
+      expect(
+        requestedUrls.some(
+          (url) => url.searchParams.has("numeroAtaRegistroPreco") && url.searchParams.get("numeroAtaRegistroPreco"),
+        ),
+      ).toBe(false);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("integrations: resolves Compras.gov.br CFTV external balance from ARP item details when saldo endpoint is empty", async () => {
+    const requestedUrls: URL[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      requestedUrls.push(url);
+
+      if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "00001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                nomeUnidadeGerenciadora: "COMANDO DO COMANDO MILITAR DA AMAZONIA",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                dataVigenciaInicial: "2026-02-16",
+                dataVigenciaFinal: "2027-02-15",
+                numeroControlePncpAta: "00394452000103-1-022869/2025-000001",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "00001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                numeroItem: "00013",
+                codigoItem: 13684,
+                descricaoItem: "ElaboraÃ§Ã£o de As-Built de projetos de CFTV.",
+                tipoItem: "ServiÃ§o",
+                quantidadeHomologadaVencedor: 120,
+                valorUnitario: 2375,
+                nomeRazaoSocialFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+                numeroControlePncpAta: "00394452000103-1-022869/2025-000001",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem")) {
+        return new Response(JSON.stringify({ resultado: [], totalPaginas: 0 }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/2.1_consultarARPItem_Id")) {
+        expect(url.searchParams.get("numeroControlePncpAta")).toBe(
+          "00394452000103-1-022869/2025-000001",
+        );
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "00001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                numeroItem: "00013",
+                codigoItem: 13684,
+                descricaoItem: "ElaboraÃ§Ã£o de As-Built de projetos de CFTV.",
+                quantidadeHomologadaVencedor: 120,
+                valorUnitario: 2375,
+                nomeRazaoSocialFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+                numeroControlePncpAta: "00394452000103-1-022869/2025-000001",
+                dataHoraAtualizacao: "2026-05-06T12:00:00.000Z",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/3_consultarUnidadesItem")) {
+        expect(url.searchParams.get("numeroAta")).toBe("00001/2026");
+        expect(url.searchParams.get("unidadeGerenciadora")).toBe("160016");
+        expect(url.searchParams.get("numeroItem")).toBe("00013");
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAta: "00001/2026",
+                unidadeGerenciadora: "160016",
+                numeroItem: "00013",
+                nomeFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+                quantidadeRegistrada: 120,
+                quantidadeSaldo: 119,
+                numeroNotaEmpenho: "2026NE000567",
+                codigoUnidade: "160016",
+                nomeUnidade: "COMANDO DO COMANDO MILITAR DA AMAZONIA",
+                tipoUnidade: "GERENCIADORA",
+                valorDocumento: 2375,
+                dataDocumento: "2026-05-06T12:00:00.000Z",
+                dataHoraAtualizacao: "2026-05-06T12:00:00.000Z",
+              },
+              {
+                numeroAta: "00001/2026",
+                unidadeGerenciadora: "160016",
+                numeroItem: "00013",
+                fornecedorNome: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+                quantidadeRegistrada: 1,
+                quantidade: 1,
+                saldoParaEmpenho: 0,
+                documento: "2026NE000139",
+                codigoUnidade: "160120",
+                nomeUnidade: "4. DEPOSITO DE SUPRIMENTO",
+                tipoUnidade: "NAO_PARTICIPANTE",
+                valorTotal: 2375,
+                dataInclusao: "2026-05-06T14:48:33.000Z",
+                dataHoraAtualizacao: "2026-05-06T14:48:33.000Z",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/5_consultarAdesoesItem")) {
+        expect(url.searchParams.get("numeroItem")).toBe("00013");
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAta: "00001/2026",
+                unidadeGerenciadora: "160016",
+                unidadeNaoParticipante: "160121 - 12 BATALHAO LOGISTICO",
+                quantidadeAprovadaAdesao: 2,
+                valor: 4750,
+                dataAprovacaoAnalise: "2026-05-07T10:00:00.000Z",
+                razaoSocialFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ resultado: [], totalPaginas: 0 }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      const imported = await request(app)
+        .post("/api/integrations/compras-gov/atas/import")
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .send({
+          uasg: "160016",
+          numeroPregao: "90012",
+          anoPregao: "2025",
+          numeroAta: "00001/2026",
+          ataType: "CFTV",
+          coverageGroupCode: "CFTV",
+          coverageGroupName: "Manaus",
+          coverageGroupStateUf: "AM",
+          coverageGroupCityName: "Manaus",
+        })
+        .expect(201);
+
+      const item = await prisma.ataItem.findFirstOrThrow({
+        where: { ataId: imported.body.ata.id, referenceCode: "00013" },
+      });
+      expect(item.description).toContain("Elaboração");
+      expect(item.unit).toBe("SERVIÇO");
+      const movementsBefore = await prisma.ataItemBalanceMovement.count({
+        where: { ataItemId: item.id },
+      });
+
+      const comparisonBeforeSync = await request(app)
+        .get(`/api/ata-items/${item.id}/balance-comparison`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(comparisonBeforeSync.body.status).toBe("NAO_SINCRONIZADO");
+
+      const comparison = await request(app)
+        .post(`/api/ata-items/${item.id}/sync-external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(comparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
+      expect(comparison.body.externalBalance.source).toBe("COMPRAS_GOV");
+      expect(comparison.body.difference).toBe("1");
+      expect(comparison.body.externalBalance.registeredQuantity).toBe("120");
+      expect(comparison.body.externalBalance.committedQuantity).toBe("1");
+      expect(comparison.body.externalBalance.availableQuantity).toBe("119");
+      expect(comparison.body.externalBalance.commitments).toHaveLength(1);
+      expect(comparison.body.externalBalance.commitments[0].numeroEmpenho).toBe(
+        "2026NE000567",
+      );
+      expect(comparison.body.externalBalance.commitments[0].fornecedor).toBe(
+        "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
+      );
+      expect(comparison.body.externalBalance.commitments[0].quantidadeEmpenhada).toBe(
+        "1",
+      );
+      expect(comparison.body.externalBalance.commitments[0].estimatedAmount).toBe(
+        "2375",
+      );
+      expect(comparison.body.externalBalance.commitments[0].dataEmpenho).toBe(
+        "2026-05-06T12:00:00.000Z",
+      );
+      expect(comparison.body.externalBalance.commitments[0].affectsManagedBalance).toBe(true);
+      expect(comparison.body.externalBalance).not.toHaveProperty("nonParticipantCommitments");
+      expect(comparison.body.externalBalance).not.toHaveProperty("adhesionBalance");
+      expect(comparison.body.externalBalance).not.toHaveProperty("externalUsageStatus");
+
+      const balanceUrls = requestedUrls.filter((url) =>
+        url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"),
+      );
+      expect(balanceUrls.length).toBeGreaterThan(0);
+      expect(
+        requestedUrls.some((url) => url.pathname.endsWith("/modulo-arp/2.1_consultarARPItem_Id")),
+      ).toBe(true);
+      expect(
+        requestedUrls.some((url) => url.pathname.endsWith("/modulo-arp/3_consultarUnidadesItem")),
+      ).toBe(true);
+      expect(
+        requestedUrls.some((url) => url.pathname.endsWith("/modulo-arp/5_consultarAdesoesItem")),
+      ).toBe(false);
+
+      const after = await prisma.ataItem.findUniqueOrThrow({
+        where: { id: item.id },
+        select: { initialQuantity: true },
+      });
+      expect(after.initialQuantity.toString()).toBe("120");
+      await expect(
+        prisma.ataItemBalanceMovement.count({ where: { ataItemId: item.id } }),
+      ).resolves.toBe(movementsBefore);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("integrations: does not fallback or update sync timestamp when Compras.gov.br rate limits external balance", async () => {
+    const catalog = await createCatalog("50.00");
+    const previousSyncAt = new Date("2026-03-01T10:00:00.000Z");
+
+    await prisma.ata.update({
+      where: { id: catalog.ata.id },
+      data: {
+        externalSource: "COMPRAS_GOV",
+        externalUasg: "160016",
+        externalPregaoNumber: "90012",
+        externalPregaoYear: "2025",
+        externalAtaNumber: "00001/2026",
+        externalLastSyncAt: previousSyncAt,
+      },
+    });
+    await prisma.ataItem.update({
+      where: { id: catalog.ataItem.id },
+      data: {
+        referenceCode: "00014",
+        externalSource: "COMPRAS_GOV",
+        externalItemId: "00394452000103-1-022869/2025-000001:00014",
+        externalItemNumber: "00014",
+        externalLastSyncAt: previousSyncAt,
+      },
+    });
+
+    const movementsBefore = await prisma.ataItemBalanceMovement.count({
+      where: { ataItemId: catalog.ataItem.id },
+    });
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({ message: "Rate limit is exceeded. Try again in 7 seconds." }),
+        {
+          status: 429,
+          headers: { "content-type": "application/json" },
+        },
+      ),
+    );
+
+    try {
+      const response = await request(app)
+        .post(`/api/atas/${catalog.ata.id}/sync-external-balance`)
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(response.body.summary.rateLimitErrors).toBe(1);
+      expect(response.body.items[0].status).toBe("RATE_LIMIT_COMPRAS_GOV");
+      expect(response.body.items[0].externalBalance).toBeNull();
+      expect(response.body.items[0].externalError.retryAfterSeconds).toBe(7);
+      expect(response.body.retryAfterSeconds).toBe(7);
+      expect(response.body.updatedItems).toBe(0);
+      expect(response.body.syncedAt).toBeNull();
+      expect(
+        response.body.warnings.some((warning: string) =>
+          warning.includes("Limite de requisi") && warning.includes("Compras.gov.br"),
+        ),
+      ).toBe(true);
+
+      const ataAfter = await prisma.ata.findUniqueOrThrow({
+        where: { id: catalog.ata.id },
+        select: { externalLastSyncAt: true },
+      });
+      const itemAfter = await prisma.ataItem.findUniqueOrThrow({
+        where: { id: catalog.ataItem.id },
+        select: { externalLastSyncAt: true },
+      });
+      expect(ataAfter.externalLastSyncAt?.toISOString()).toBe(previousSyncAt.toISOString());
+      expect(itemAfter.externalLastSyncAt?.toISOString()).toBe(previousSyncAt.toISOString());
+      await expect(
+        prisma.ataItemBalanceMovement.count({ where: { ataItemId: catalog.ataItem.id } }),
+      ).resolves.toBe(movementsBefore);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
+  it("integrations: falls back when Compras.gov.br rejects the documented broad ARP query", async () => {
+    const requestedUrls: URL[] = [];
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = new URL(String(input));
+      requestedUrls.push(url);
+
+      const isVigenciaQuery = url.searchParams.has("dataVigenciaInicialMin");
+
+      if (isVigenciaQuery) {
+        return new Response(JSON.stringify({ erro: "Parametro invalido" }), {
+          status: 500,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                nomeUnidadeGerenciadora: "Comando CFTV",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                dataVigenciaInicial: "2026-01-15",
+                dataVigenciaFinal: "2027-01-15",
+                numeroControlePncpAta: "ATA-CFTV-FALLBACK",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
+        return new Response(
+          JSON.stringify({
+            resultado: [
+              {
+                numeroAtaRegistroPreco: "001/2026",
+                codigoUnidadeGerenciadora: "160016",
+                numeroCompra: "90012",
+                anoCompra: "2025",
+                numeroItem: "1",
+                descricaoItem: "Camera CFTV",
+                tipoItem: "UN",
+                quantidadeHomologadaVencedor: 20,
+                valorUnitario: 500,
+                nomeRazaoSocialFornecedor: "Fornecedor CFTV",
+                numeroControlePncpAta: "ATA-CFTV-FALLBACK",
+              },
+            ],
+            totalPaginas: 1,
+          }),
+          { status: 200, headers: { "content-type": "application/json" } },
+        );
+      }
+
+      return new Response(JSON.stringify({ resultado: [], totalPaginas: 1 }), {
+        status: 404,
+        headers: { "content-type": "application/json" },
+      });
+    });
+
+    try {
+      const preview = await request(app)
+        .get("/api/integrations/compras-gov/atas/preview")
+        .query({
+          uasg: "160016",
+          numeroPregao: "90012",
+          anoPregao: "2025",
+          numeroAta: "001",
+        })
+        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+        .expect(200);
+
+      expect(preview.body.ata.number).toBe("ARP 001/2026");
+      expect(preview.body.items).toHaveLength(1);
+      expect(requestedUrls.some((url) => url.searchParams.get("anoCompra") === "2025")).toBe(true);
+      expect(
+        requestedUrls.some(
+          (url) => url.searchParams.has("numeroAtaRegistroPreco") && url.searchParams.get("numeroAtaRegistroPreco"),
+        ),
+      ).toBe(false);
+    } finally {
+      fetchMock.mockRestore();
+    }
+  });
+
   it("ergonomics: secondary modules expose paginated envelopes and legacy format", async () => {
     const catalog = await createCatalog();
 
@@ -1747,6 +3616,58 @@ describe("critical flows", () => {
       .expect(200);
 
     expect(Array.isArray(legacyUsers.body)).toBe(true);
+
+    await request(app)
+      .get(`/api/users/${gestor.id}`)
+      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+      .expect(403);
+
+    const userDetail = await request(app)
+      .get(`/api/users/${gestor.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(userDetail.body.id).toBe(gestor.id);
+    expect(userDetail.body.rank).toBe("2 Ten");
+    expect(userDetail.body.cpf).toBe("11122233344");
+
+    const updatedUser = await request(app)
+      .patch(`/api/users/${gestor.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        name: "Gestor Atualizado",
+        email: "gestor.atualizado@sagep.com",
+        rank: "1 Ten",
+        cpf: "99988877766",
+      })
+      .expect(200);
+
+    expect(updatedUser.body.name).toBe("Gestor Atualizado");
+    expect(updatedUser.body.email).toBe("gestor.atualizado@sagep.com");
+    expect(updatedUser.body.rank).toBe("1 Ten");
+    expect(updatedUser.body.cpf).toBe("99988877766");
+
+    const inactiveUser = await request(app)
+      .patch(`/api/users/${gestor.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ active: false })
+      .expect(200);
+
+    expect(inactiveUser.body.active).toBe(false);
+
+    const reactivatedUser = await request(app)
+      .patch(`/api/users/${gestor.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ active: true })
+      .expect(200);
+
+    expect(reactivatedUser.body.active).toBe(true);
+
+    await request(app)
+      .patch(`/api/users/${admin.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ active: false })
+      .expect(409);
 
     const atas = await request(app)
       .get("/api/atas")

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../../shared/pagination.js";
-import { optionalString } from "../../shared/zod-helpers.js";
+import { optionalBoolean, optionalString } from "../../shared/zod-helpers.js";
 
 export const createUserByAdminSchema = z.object({
   name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres"),
@@ -16,6 +16,26 @@ export const updateUserRoleSchema = z.object({
   rank: optionalString,
   cpf: optionalString,
 });
+
+export const updateUserSchema = z
+  .object({
+    name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").optional(),
+    email: z.email("E-mail invalido").optional(),
+    rank: optionalString,
+    cpf: optionalString,
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Informe pelo menos um campo para atualizar",
+  });
+
+export const updateUserStatusSchema = z
+  .object({
+    active: optionalBoolean,
+  })
+  .refine((data) => data.active !== undefined, {
+    message: "Informe active para atualizar o status",
+    path: ["active"],
+  });
 
 export const listUsersQuerySchema = paginationQuerySchema.extend({
   role: z.enum(["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"]).optional(),

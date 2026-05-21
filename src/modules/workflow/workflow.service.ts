@@ -13,7 +13,7 @@ const stageTransitions: Record<ProjectStageValue, ProjectStageValue[]> = {
   AGUARDANDO_NOTA_EMPENHO: ["OS_LIBERADA", "CANCELADO"],
   OS_LIBERADA: ["SERVICO_EM_EXECUCAO", "CANCELADO"],
   SERVICO_EM_EXECUCAO: ["ANALISANDO_AS_BUILT", "CANCELADO"],
-  ANALISANDO_AS_BUILT: ["ATESTAR_NF", "CANCELADO"],
+  ANALISANDO_AS_BUILT: ["ATESTAR_NF", "SERVICO_EM_EXECUCAO", "CANCELADO"],
   ATESTAR_NF: ["SERVICO_CONCLUIDO", "CANCELADO"],
   SERVICO_CONCLUIDO: [],
   CANCELADO: [],
@@ -100,7 +100,7 @@ export class WorkflowService {
   assertCanRemoveDiex(project: WorkflowProjectSnapshot) {
     if (!this.isStageBefore(project.stage, "AGUARDANDO_NOTA_EMPENHO")) {
       throw new AppError(
-        "NÃ£o Ã© possÃ­vel excluir o DIEx quando o projeto jÃ¡ avanÃ§ou alÃ©m da etapa de DIEx",
+        "Não é possível excluir o DIEx quando o projeto já avançou além da etapa de DIEx",
         409,
       );
     }
@@ -125,7 +125,7 @@ export class WorkflowService {
   assertCanRemoveServiceOrder(project: WorkflowProjectSnapshot) {
     if (!this.isStageBefore(project.stage, "SERVICO_EM_EXECUCAO")) {
       throw new AppError(
-        "NÃ£o Ã© possÃ­vel excluir a OS quando o projeto jÃ¡ entrou em execuÃ§Ã£o",
+        "Não é possível excluir a OS quando o projeto já entrou em execução",
         409,
       );
     }
@@ -142,7 +142,7 @@ export class WorkflowService {
       finalizedEstimateCount === 0
     ) {
       throw new AppError(
-        "Para avanÃ§ar o fluxo, o projeto precisa ter pelo menos uma estimativa finalizada",
+        "Para avançar o fluxo, o projeto precisa ter pelo menos uma estimativa finalizada",
         409,
       );
     }
@@ -150,14 +150,16 @@ export class WorkflowService {
     if (this.isStageAtOrBeyond(stage, "DIEX_REQUISITORIO")) {
       if (!snapshot.creditNoteNumber && !snapshot.creditNoteReceivedAt) {
         throw new AppError(
-          "Para avanÃ§ar atÃ© DIEx RequisitÃ³rio, informe o nÃºmero ou a data de recebimento da Nota de CrÃ©dito",
+          "Para avançar até DIEx Requisitório, informe o número ou a data de recebimento da Nota de Crédito",
           409,
         );
       }
+    }
 
+    if (this.isStageAtOrBeyond(stage, "AGUARDANDO_NOTA_EMPENHO")) {
       if (!snapshot.diexNumber && !snapshot.diexIssuedAt) {
         throw new AppError(
-          "Para avanÃ§ar atÃ© DIEx RequisitÃ³rio, informe o nÃºmero ou a data do DIEx",
+          "Para avançar após o DIEx Requisitório, informe o número ou a data do DIEx",
           409,
         );
       }
@@ -166,23 +168,23 @@ export class WorkflowService {
     if (this.isStageAtOrBeyond(stage, "OS_LIBERADA")) {
       if (!snapshot.commitmentNoteNumber && !snapshot.commitmentNoteReceivedAt) {
         throw new AppError(
-          "Para liberar a OS, informe o nÃºmero ou a data da Nota/Empenho",
-          409,
-        );
-      }
-
-      if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
-        throw new AppError(
-          "Para liberar a OS, informe o nÃºmero ou a data da Ordem de ServiÃ§o",
+          "Para liberar a OS, informe o número ou a data da Nota/Empenho",
           409,
         );
       }
     }
 
     if (this.isStageAtOrBeyond(stage, "SERVICO_EM_EXECUCAO")) {
+      if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
+        throw new AppError(
+          "Para iniciar a execução, informe o número ou a data da Ordem de Serviço",
+          409,
+        );
+      }
+
       if (!snapshot.executionStartedAt) {
         throw new AppError(
-          "Para colocar o serviÃ§o em execuÃ§Ã£o, informe a data de inÃ­cio da execuÃ§Ã£o",
+          "Para colocar o serviço em execução, informe a data de início da execução",
           409,
         );
       }
@@ -191,7 +193,16 @@ export class WorkflowService {
     if (this.isStageAtOrBeyond(stage, "ANALISANDO_AS_BUILT")) {
       if (!snapshot.asBuiltReceivedAt) {
         throw new AppError(
-          "Para entrar na etapa de anÃ¡lise do As-Built, informe a data de recebimento do As-Built",
+          "Para entrar na etapa de análise do As-Built, informe a data de recebimento do As-Built",
+          409,
+        );
+      }
+    }
+
+    if (this.isStageAtOrBeyond(stage, "ATESTAR_NF")) {
+      if (!snapshot.asBuiltApprovedAt) {
+        throw new AppError(
+          "Para avançar para o ateste da NF, o As-Built precisa estar aprovado",
           409,
         );
       }
@@ -200,14 +211,14 @@ export class WorkflowService {
     if (stage === "SERVICO_CONCLUIDO") {
       if (!snapshot.invoiceAttestedAt) {
         throw new AppError(
-          "Para concluir o serviÃ§o, informe a data de atesto da NF",
+          "Para concluir o serviço, informe a data de atesto da NF",
           409,
         );
       }
 
       if (!snapshot.serviceCompletedAt) {
         throw new AppError(
-          "Para concluir o serviÃ§o, informe a data de conclusÃ£o do serviÃ§o",
+          "Para concluir o serviço, informe a data de conclusão do serviço",
           409,
         );
       }
@@ -216,14 +227,25 @@ export class WorkflowService {
 
   getProjectPatchAfterDiexCreated(project: WorkflowProjectSnapshot) {
     return {
-      ...(project.stage === "AGUARDANDO_NOTA_CREDITO"
+      ...(this.isStageBefore(project.stage, "AGUARDANDO_NOTA_EMPENHO")
         ? {
-            stage: "DIEX_REQUISITORIO" as const,
-            status: this.getMacroStatusFromStage("DIEX_REQUISITORIO"),
+            stage: "AGUARDANDO_NOTA_EMPENHO" as const,
+            status: this.getMacroStatusFromStage("AGUARDANDO_NOTA_EMPENHO"),
           }
         : {}),
       ...(project.diexNumber ? { diexNumber: project.diexNumber } : {}),
       ...(project.diexIssuedAt ? { diexIssuedAt: project.diexIssuedAt } : {}),
+    };
+  }
+
+  getProjectPatchAfterEstimateFinalized(project: WorkflowProjectSnapshot) {
+    return {
+      ...(project.stage === "ESTIMATIVA_PRECO"
+        ? {
+            stage: "AGUARDANDO_NOTA_CREDITO" as const,
+            status: this.getMacroStatusFromStage("AGUARDANDO_NOTA_CREDITO"),
+          }
+        : {}),
     };
   }
 
@@ -280,6 +302,16 @@ export class WorkflowService {
           targetStage: "DIEX_REQUISITORIO",
         };
       case "DIEX_REQUISITORIO":
+        if (!project.diexNumber && !project.diexIssuedAt) {
+          return {
+            code: "EMITIR_DIEX",
+            label: "Emitir DIEx requisitório",
+            description:
+              "Com a Nota de Crédito registrada, formalize o DIEx requisitório.",
+            targetStage: "DIEX_REQUISITORIO",
+          };
+        }
+
         return {
           code: "INFORMAR_NOTA_EMPENHO",
           label: "Informar Nota de Empenho",
@@ -303,6 +335,15 @@ export class WorkflowService {
           targetStage: "OS_LIBERADA",
         };
       case "OS_LIBERADA":
+        if (!project.serviceOrderNumber && !project.serviceOrderIssuedAt) {
+          return {
+            code: "EMITIR_OS",
+            label: "Emitir Ordem de Serviço",
+            description: "Com o empenho lançado, a OS já pode ser emitida.",
+            targetStage: "OS_LIBERADA",
+          };
+        }
+
         return {
           code: "INICIAR_EXECUCAO",
           label: "Iniciar execução",
@@ -318,12 +359,22 @@ export class WorkflowService {
         };
       case "ANALISANDO_AS_BUILT":
         return {
-          code: "ATESTAR_NF",
-          label: "Atestar NF",
-          description: "Conclua a análise técnica e faça o ateste da NF.",
+          code: "VALIDAR_AS_BUILT",
+          label: "Validar As-Built",
+          description:
+            "Analise o As-Built recebido para aprovar e seguir ao ateste da NF, ou reprovar para correção.",
           targetStage: "ATESTAR_NF",
         };
       case "ATESTAR_NF":
+        if (!project.invoiceAttestedAt) {
+          return {
+            code: "ATESTAR_NF",
+            label: "Atestar NF",
+            description: "Conclua a análise técnica e faça o ateste da NF.",
+            targetStage: "ATESTAR_NF",
+          };
+        }
+
         return {
           code: "CONCLUIR_SERVICO",
           label: "Concluir serviço",

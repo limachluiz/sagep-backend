@@ -324,7 +324,11 @@ export class OperationalAlertsService {
         });
       }
 
-      if (project.stage === "AGUARDANDO_NOTA_EMPENHO" && hasCommitmentNote && !latestServiceOrder) {
+      if (
+        (project.stage === "AGUARDANDO_NOTA_EMPENHO" || project.stage === "OS_LIBERADA") &&
+        hasCommitmentNote &&
+        !latestServiceOrder
+      ) {
         alerts.push({
           id: `${project.id}:AGUARDANDO_ORDEM_SERVICO`,
           category: "AGUARDANDO_ORDEM_SERVICO",
@@ -337,7 +341,7 @@ export class OperationalAlertsService {
         });
       }
 
-      if (project.stage === "OS_LIBERADA" && !project.executionStartedAt) {
+      if (project.stage === "OS_LIBERADA" && latestServiceOrder && !project.executionStartedAt) {
         alerts.push({
           id: `${project.id}:AGUARDANDO_INICIO_EXECUCAO`,
           category: "AGUARDANDO_INICIO_EXECUCAO",

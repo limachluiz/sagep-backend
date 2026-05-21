@@ -134,7 +134,13 @@ Significa:
 
 O que destrava a próxima etapa:
 
-- validação e posterior `invoiceAttestedAt`.
+- validação do As-Built.
+
+Regras:
+
+- se aprovado, o projeto avança para `ATESTAR_NF`;
+- se reprovado, exige motivo e o projeto retorna para `SERVICO_EM_EXECUCAO`;
+- na reprovação, `asBuiltReceivedAt` é limpo para permitir novo recebimento.
 
 ### 8. Atestar NF
 
@@ -144,6 +150,7 @@ Significa:
 
 O que destrava a próxima etapa:
 
+- aprovação prévia do As-Built;
 - `invoiceAttestedAt`;
 - `serviceCompletedAt`.
 

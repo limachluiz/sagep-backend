@@ -90,7 +90,12 @@ Variáveis usadas atualmente:
 | `PORT` | sim | Porta HTTP da aplicação |
 | `NODE_ENV` | sim | Ambiente de execução |
 | `DATABASE_URL` | sim | String de conexão PostgreSQL |
-| `JWT_ACCESS_SECRET` | sim | Segredo do access token |
+| `JWT_SECRET` | sim | Segredo do access token |
+| `JWT_ACCESS_SECRET` | nao | Alias antigo ainda aceito para o segredo do access token |
+| `PDF_TIMEOUT_MS` | nao | Timeout da geracao de PDF com Puppeteer |
+| `PDF_RENDER_MODE` | nao | `real` para gerar PDF com Chromium; em testes pode ser `mock` |
+| `COMPRAS_GOV_DEBUG` | nao | Flag de diagnostico para integracoes Compras.gov.br |
+| `PORTAL_TRANSPARENCIA_API_TOKEN` | nao | Token da API do Portal da Transparencia, se usado |
 | `JWT_REFRESH_SECRET` | sim | Segredo do refresh token |
 | `JWT_ACCESS_EXPIRES_IN` | sim | Expiração do access token |
 | `JWT_REFRESH_EXPIRES_IN` | sim | Expiração do refresh token |
@@ -101,10 +106,122 @@ Exemplo:
 PORT=3000
 NODE_ENV=development
 DATABASE_URL="postgresql://sagep:sagep123@localhost:5432/sagep?schema=public"
-JWT_ACCESS_SECRET="Senha forte aqui"
+JWT_SECRET="Senha forte aqui"
 JWT_REFRESH_SECRET="Outra senha forte aqui"
 JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
+PDF_TIMEOUT_MS=60000
+PDF_RENDER_MODE=real
+COMPRAS_GOV_DEBUG=false
+PORTAL_TRANSPARENCIA_API_TOKEN=
+```
+
+## Docker com banco persistente
+
+O ambiente Docker sobe `api`, `postgres` e `pgadmin`. O PostgreSQL usa o volume nomeado `sagep_postgres_data`, montado em `/var/lib/postgresql/data`, para preservar ATAs importadas, usuarios, snapshots e demais dados entre reinicios.
+
+Dentro do Docker, a API sempre usa `DATABASE_URL=postgresql://sagep:sagep123@postgres:5432/sagep?schema=public`. Nao use `localhost` dentro do container da API: nesse contexto, `localhost` e o proprio container, nao o Postgres.
+
+Fora do Docker, para desenvolvimento local, use `DATABASE_URL=postgresql://sagep:sagep123@localhost:5432/sagep?schema=public`.
+
+No pgAdmin rodando no Docker, cadastre o servidor PostgreSQL com host `postgres`, porta `5432`, usuario `sagep`, senha `sagep123` e banco `sagep`.
+
+Subir tudo:
+
+```bash
+docker compose up -d --build
+```
+
+Ou via npm:
+
+```bash
+npm run docker:up
+```
+
+A API executa automaticamente no startup:
+
+```bash
+npx prisma migrate deploy
+npm run start
+```
+
+Isso aplica migrations pendentes sem resetar o banco. O startup nunca roda `prisma migrate reset`.
+
+Se quiser preservar dados, tambem nao rode `prisma migrate reset` manualmente: ele recria o banco e apaga registros importados.
+
+Servicos padrao:
+
+- API: `http://localhost:3000/api`
+- OpenAPI: `http://localhost:3000/api/docs`
+- pgAdmin: `http://localhost:5050`
+- PostgreSQL: `localhost:5432`
+
+Parar sem perder dados:
+
+```bash
+docker compose down
+```
+
+Ou:
+
+```bash
+npm run docker:down
+```
+
+Ver logs da API:
+
+```bash
+docker compose logs -f api
+```
+
+Ou:
+
+```bash
+npm run docker:logs
+```
+
+Conferir dados no banco persistente:
+
+```bash
+docker exec -it sagep_postgres psql -U sagep -d sagep
+```
+
+Dentro do `psql`:
+
+```sql
+SELECT COUNT(*) FROM "Ata";
+```
+
+### Backup do banco
+
+```bash
+docker exec -t sagep_postgres pg_dump -U sagep -d sagep > backup_sagep.sql
+```
+
+### Restore do banco
+
+Com os containers de pe:
+
+```bash
+cat backup_sagep.sql | docker exec -i sagep_postgres psql -U sagep -d sagep
+```
+
+No PowerShell:
+
+```powershell
+Get-Content backup_sagep.sql | docker exec -i sagep_postgres psql -U sagep -d sagep
+```
+
+### Apagar tudo conscientemente
+
+Para preservar dados, use apenas `docker compose down`.
+
+Nao use `docker compose down -v` no dia a dia: o `-v` apaga o volume `sagep_postgres_data` e remove o banco.
+
+Use somente quando quiser destruir todo o ambiente, incluindo dados persistidos:
+
+```bash
+docker compose down -v
 ```
 
 ## Como rodar
@@ -115,10 +232,10 @@ JWT_REFRESH_EXPIRES_IN="7d"
 npm install
 ```
 
-2. Suba o banco:
+2. Suba apenas o banco, se for rodar a API fora do Docker:
 
 ```bash
-docker compose up -d
+docker compose up -d postgres
 ```
 
 3. Rode as migrations e gere o client:

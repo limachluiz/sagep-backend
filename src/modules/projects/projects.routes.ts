@@ -21,6 +21,7 @@ projectsRoutes.delete("/:id/members/:memberId", (req, res) =>
 );
 
 projectsRoutes.patch("/:id/flow", (req, res) => controller.updateFlow(req, res));
+projectsRoutes.patch("/:id/as-built/review", (req, res) => controller.reviewAsBuilt(req, res));
 projectsRoutes.post("/:id/commitment-note/cancel", (req, res) =>
   controller.cancelCommitmentNote(req, res)
 );

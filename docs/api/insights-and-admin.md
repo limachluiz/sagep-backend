@@ -1,5 +1,36 @@
 # Dashboards, Busca, Alertas, Relatorios E Administracao
 
+## Auditoria
+
+Base:
+
+```text
+/api/audits
+```
+
+Leitura exige usuario autenticado com role `ADMIN` ou `GESTOR`.
+
+| Metodo | Rota | Uso | Acesso |
+|---|---|---|---|
+| `GET` | `/audits` | Lista AuditLog real. | `ADMIN`, `GESTOR` |
+
+Filtros opcionais:
+
+| Param | Tipo | Observacao |
+|---|---|---|
+| `entityType` | string | Filtra tipo da entidade auditada. |
+| `action` | string | Filtra acao auditada. |
+| `actor` | string | Busca por `actorName` ou `actorUserId`. |
+| `search` | string | Busca em resumo, entidade e ator. |
+| `startDate` | date-time | Inicio do periodo por `createdAt`. |
+| `endDate` | date-time | Fim do periodo por `createdAt`. |
+| `page` | number | Padrao `1`. |
+| `limit` | number | Padrao `50`, maximo `100`. |
+
+Resposta em envelope paginado com `items`, `meta`, `filters` e `links`.
+Cada item retorna `id`, `entityType`, `entityId`, `action`, `actorUserId`,
+`actorName`, `summary`, `createdAt` e `metadata`.
+
 ## Dashboards
 
 Base:
@@ -104,25 +135,28 @@ Base:
 /api/users
 ```
 
-Todas as rotas exigem `users.manage`.
+Todas as rotas exigem usuario `ADMIN` com `users.manage`.
 
 ### Leitura Vs Manutencao
 
 - Leitura/listagem: administrativa; nao ha rota publica nem rota autenticada de leitura parcial fora de `users.manage`.
-- Manutencao: administrativa; criar usuario e alterar role exigem `ADMIN`.
+- Manutencao: administrativa; criar usuario, editar cadastro, alterar status e alterar role exigem `ADMIN`.
 - O frontend operacional comum deve consumir dados do usuario atual por `GET /api/auth/me`; `users` fica para telas administrativas.
 
 ### Endpoints Implementados Hoje
 
 | Metodo | Rota | Uso | Permissao |
 |---|---|---|---|
-| `GET` | `/users` | Lista usuarios para administracao. | `users.manage` |
-| `POST` | `/users` | Cria usuario administrativo. | `users.manage` |
-| `PATCH` | `/users/:id/role` | Altera role do usuario. | `users.manage` |
+| `GET` | `/users` | Lista usuarios para administracao. | `ADMIN` + `users.manage` |
+| `POST` | `/users` | Cria usuario administrativo. | `ADMIN` + `users.manage` |
+| `GET` | `/users/:id` | Detalha usuario por id. | `ADMIN` + `users.manage` |
+| `PATCH` | `/users/:id` | Atualiza `name`, `email`, `rank` e `cpf`. | `ADMIN` + `users.manage` |
+| `PATCH` | `/users/:id/status` | Atualiza `active`. | `ADMIN` + `users.manage` |
+| `PATCH` | `/users/:id/role` | Altera role do usuario. | `ADMIN` + `users.manage` |
 
 Observacao importante:
 
-- endpoints como `GET /users/:id`, `GET /users/code/:code`, troca de senha e ativacao ainda nao estao expostos nas rotas atuais; portanto continuam fora da OpenAPI formal e desta documentacao detalhada.
+- endpoints como `GET /users/code/:code` e troca de senha administrativa ainda nao estao expostos nas rotas atuais; portanto continuam fora da OpenAPI formal e desta documentacao detalhada.
 
 ### Filtros E Paginacao
 
@@ -317,6 +351,9 @@ No fluxo de estimativas:
 | `GET` | `/atas/code/:code` | Detalhe por codigo amigavel. | Autenticado |
 | `PATCH` | `/atas/:id` | Atualiza cabecalho e, se enviado, substitui todos os grupos/localidades. | `atas.manage` |
 | `DELETE` | `/atas/:id` | Remove ata. | `atas.manage` |
+| `POST` | `/atas/:id/coverage-groups` | Cria grupo de cobertura sem substituir os demais. | `ADMIN` + `atas.manage` |
+| `PATCH` | `/atas/:id/coverage-groups/:groupId` | Atualiza um grupo de cobertura especifico. | `ADMIN` + `atas.manage` |
+| `DELETE` | `/atas/:id/coverage-groups/:groupId` | Remove um grupo de cobertura sem itens/estimativas vinculadas. | `ADMIN` + `atas.manage` |
 | `GET` | `/atas/:id/items` | Lista itens daquela ata. | Autenticado |
 | `POST` | `/atas/:id/items` | Cria item vinculado a um grupo da ata. | `atas.manage` |
 
@@ -431,7 +468,7 @@ PATCH /api/atas/:id
 Observacao crucial:
 
 - quando `coverageGroups` e enviado no update, o backend apaga todos os grupos/localidades anteriores da ata e recria a estrutura inteira com base no payload novo.
-- para o frontend, isso significa tratar a edicao de grupos como substituicao completa, nao patch incremental.
+- para editar grupos individualmente sem sobrescrever todos, use os endpoints `/atas/:id/coverage-groups`.
 
 Exemplo de update parcial:
 
@@ -441,6 +478,168 @@ Exemplo de update parcial:
   "isActive": false
 }
 ```
+
+### Detalhar Usuario
+
+```http
+GET /api/users/:id
+```
+
+Retorna o resumo administrativo do usuario, incluindo `rank`, `cpf`, `active`, `createdAt` e `updatedAt`.
+
+### Atualizar Usuario
+
+```http
+PATCH /api/users/:id
+```
+
+Payload:
+
+```json
+{
+  "name": "1 Ten Maria Souza",
+  "email": "maria.souza.atualizada@sagep.mil.br",
+  "rank": "1 Ten",
+  "cpf": "12345678900"
+}
+```
+
+Observacoes:
+
+- todos os campos sao opcionais, mas ao menos um deve ser enviado.
+- `email` deve ser unico.
+
+### Alterar Status
+
+```http
+PATCH /api/users/:id/status
+```
+
+Payload:
+
+```json
+{
+  "active": false
+}
+```
+
+Regra de seguranca:
+
+- o usuario ADMIN autenticado nao pode desativar a si mesmo se isso deixar o sistema sem nenhum ADMIN ativo.
+
+### Gerenciar Grupos De Cobertura Da ATA
+
+Cria, edita ou remove um grupo especifico sem substituir todos os grupos da ATA.
+
+```http
+POST /api/atas/:id/coverage-groups
+PATCH /api/atas/:id/coverage-groups/:groupId
+DELETE /api/atas/:id/coverage-groups/:groupId
+```
+
+Payload de criacao:
+
+```json
+{
+  "code": "RR",
+  "name": "Roraima",
+  "description": "Capital e interior",
+  "localities": [
+    { "cityName": "Boa Vista", "stateUf": "RR" }
+  ]
+}
+```
+
+Payload de edicao parcial:
+
+```json
+{
+  "name": "Roraima atualizado",
+  "localities": [
+    { "cityName": "Boa Vista", "stateUf": "RR" },
+    { "cityName": "Pacaraima", "stateUf": "RR" }
+  ]
+}
+```
+
+Observacoes:
+
+- `code` e normalizado para maiusculo e deve ser unico dentro da ATA.
+- em `PATCH`, `localities` substitui apenas as localidades do grupo editado.
+- como o modelo atual nao possui `active` no grupo, `DELETE` remove o registro e retorna `409` quando houver itens ou estimativas vinculadas.
+
+### Importar ATA Do Compras.gov.br
+
+A integracao externa fica no backend. O frontend informa UASG, pregao, ano e opcionalmente o numero da ATA; o backend consulta a API publica do Compras.gov.br e retorna uma previa ou importa a estrutura para o banco local.
+
+Endpoints usados na origem oficial:
+
+- `GET https://dadosabertos.compras.gov.br/modulo-arp/1_consultarARP`
+- `GET https://dadosabertos.compras.gov.br/modulo-arp/2_consultarARPItem`
+
+Endpoints do SAGEP:
+
+| Metodo | Rota | Uso | Permissao |
+|---|---|---|---|
+| `GET` | `/integrations/compras-gov/atas/preview` | Mostra previa normalizada sem gravar no banco. | `ADMIN` + `atas.manage` |
+| `POST` | `/integrations/compras-gov/atas/import` | Cria/atualiza ATA e itens a partir do Compras.gov.br. | `ADMIN` + `atas.manage` |
+
+Preview:
+
+```http
+GET /api/integrations/compras-gov/atas/preview?uasg=120624&numeroPregao=90001&anoPregao=2026&numeroAta=0001
+```
+
+Importacao:
+
+```json
+{
+  "uasg": "120624",
+  "numeroPregao": "90001",
+  "anoPregao": "2026",
+  "numeroAta": "0001",
+  "ataType": "CFTV",
+  "coverageGroupCode": "MAO",
+  "coverageGroupName": "Manaus",
+  "coverageGroupStateUf": "AM",
+  "coverageGroupCityName": "Manaus",
+  "coverageGroupLocalities": [
+    { "cityName": "Manaus", "stateUf": "AM" },
+    { "cityName": "Iranduba", "stateUf": "AM" }
+  ],
+  "dryRun": false
+}
+```
+
+Observacoes:
+
+- `dryRun: true` consulta a origem e retorna a previa sem gravar.
+- a importacao tenta localizar a ATA por vinculo externo (`externalSource`, UASG, pregao, ano e numero da ATA) para nao duplicar.
+- `coverageGroupCode` e `coverageGroupName` continuam aceitos; `coverageGroupStateUf`, `coverageGroupCityName` e `coverageGroupLocalities` permitem criar/atualizar as localidades do grupo usado na importacao.
+- itens sao criados/atualizados por `ataId`, grupo e `referenceCode`.
+- a integracao grava os campos externos em `Ata` e `AtaItem`, mas nao altera movimentos de saldo local.
+
+Comparacao de saldo externo:
+
+- `GET /api/atas/{id}/external-balance` le apenas snapshots externos persistidos localmente para os itens da ATA; nao consulta Compras.gov.br.
+- `POST /api/atas/{id}/sync-external-balance` consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
+- `GET /api/ata-items/{id}/balance-comparison` le apenas o ultimo snapshot persistido do item; se nao existir, retorna `NAO_SINCRONIZADO`.
+- `POST /api/ata-items/{id}/sync-external-balance` consulta Compras.gov.br apenas para esse item e atualiza o snapshot persistido correspondente.
+- `GET /api/ata-items` pode retornar `latestExternalBalanceSnapshot` resumido por item para a tela reaproveitar o ultimo snapshot salvo sem nova consulta externa.
+- Quando houver snapshot salvo, os GET locais devolvem `externalBalance` completo com `source`, `externalItemNumber`, `registeredQuantity`, `committedQuantity`, `availableQuantity`, `commitments`, `lastUpdatedAt` e `rawRecords`.
+- `POST /api/ata-items/{id}/register-external-consumption` registra manualmente um consumo externo no saldo interno com justificativa obrigatoria, sem consultar Compras.gov.br nem alterar `initialQuantity`.
+- Status possiveis: `OK`, `DIVERGENTE`, `CONSUMO_OFICIAL_DETECTADO`, `NAO_SINCRONIZADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`.
+- HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
+- O backend consulta `4_consultarEmpenhosSaldoItem` por ATA (`numeroAta` e `unidadeGerenciadora`). Se esse endpoint retornar vazio, usa o `externalItemId` salvo no item para consultar `2.1_consultarARPItem_Id` e cruza os dados oficiais de `3_consultarUnidadesItem` por `numeroItem`, `externalItemNumber` e `referenceCode`, normalizando zeros a esquerda.
+- `Ata.externalUasg` e a UASG principal. O backend so considera a linha dessa UASG para quantidade registrada, empenhada, saldo disponivel e empenhos.
+- Linhas de outras UASGs, adesoes, caronas e orgaos nao participantes sao ignoradas integralmente.
+- Snapshot persistido por item: tabela/model `AtaItemExternalBalanceSnapshot`, contendo `source`, `status`, `externalBalance`, `difference`, `warnings` e `lastSyncAt`.
+- O lançamento manual cria movimentação `EXTERNAL_CONSUMPTION`, reduz apenas o saldo disponível/eleva o consumido no cálculo local e gera audit log `REGISTER_EXTERNAL_CONSUMPTION`.
+- Valores estimados aparecem somente em `estimatedAmount`; `numeroEmpenho` permanece `null` quando a API externa nao informar.
+- A normalizacao revisada considera aliases de NE, fornecedor, data, quantidade e valor nos endpoints `3_consultarUnidadesItem`, `4_consultarEmpenhosSaldoItem` e `2.1_consultarARPItem_Id`.
+- Em `development`, cada item normalizado pode trazer `rawKeyDebug` com as chaves cruas disponiveis, endpoint de origem, item e unidade.
+- Se a API retornar `200` sem registros, itens importados do Compras.gov.br usam fallback com `externalBalance.source = COMPRAS_GOV_IMPORT_FALLBACK`, quantidade registrada importada e empenhado zero.
+- Em `development`, o retorno inclui `debug` com URLs chamadas, status HTTP, quantidade de registros, sample dos primeiros registros e itens locais sem match.
 
 Exemplo de update com substituicao de grupos:
 
@@ -465,6 +664,7 @@ Exemplo de update com substituicao de grupos:
 | `GET` | `/ata-items` | Lista global de itens. | Autenticado |
 | `GET` | `/ata-items/:id` | Detalhe por id. | Autenticado |
 | `GET` | `/ata-items/code/:code` | Detalhe por codigo amigavel. | Autenticado |
+| `GET` | `/ata-items/:id/movements` | Historico de movimentacoes de saldo do item. | Autenticado |
 | `PATCH` | `/ata-items/:id` | Atualiza item. | `atas.manage` |
 | `DELETE` | `/ata-items/:id` | Remove item. | `atas.manage` |
 | `GET` | `/atas/:id/items` | Lista itens de uma ata. | Autenticado |
@@ -570,6 +770,22 @@ Observacoes:
 
 - se `coverageGroupCode` for enviado, ele precisa existir na mesma ata do item atual.
 - `DELETE /api/ata-items/:id` remove fisicamente o item e retorna apenas mensagem simples.
+
+### Movimentacoes De Saldo Do Item
+
+```http
+GET /api/ata-items/:id/movements
+```
+
+Retorna um array ordenado por `createdAt` decrescente. Cada item contem:
+
+- `id`, `movementType`, `quantity`, `unitPrice`, `totalAmount`, `summary`, `actorName`, `createdAt`;
+- `projectId` e `projectCode`, quando houver projeto associado;
+- `estimateId` e `estimateCode`, quando houver estimativa associada;
+- `diexRequestId` e `diexCode`, quando houver DIEx associado;
+- `serviceOrderId` e `serviceOrderCode`, quando houver ordem de servico associada.
+
+O endpoint e somente leitura e nao altera regra de saldo nem fluxo documental.
 
 ## Organizacoes Militares
 

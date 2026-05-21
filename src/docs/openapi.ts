@@ -4,6 +4,7 @@ const bearerSecurity = [{ bearerAuth: [] }];
 
 const tagExternalDocs = {
   auth: "./auth-and-permissions.md",
+  audits: "./insights-and-admin.md",
   projects: "./projects-and-operations.md",
   tasks: "./projects-and-operations.md",
   estimates: "./projects-and-operations.md",
@@ -18,6 +19,7 @@ const tagExternalDocs = {
   permissions: "./insights-and-admin.md",
   atas: "./insights-and-admin.md",
   "ata-items": "./insights-and-admin.md",
+  integrations: "./insights-and-admin.md",
   "military-organizations": "./insights-and-admin.md",
   health: "./README.md",
 };
@@ -166,6 +168,7 @@ export const openApiDocument: OpenApiDocument = {
   tags: [
     "health",
     "auth",
+    "audits",
     "projects",
     "tasks",
     "estimates",
@@ -180,6 +183,7 @@ export const openApiDocument: OpenApiDocument = {
     "permissions",
     "atas",
     "ata-items",
+    "integrations",
     "military-organizations",
   ].map((name) => ({
     name,
@@ -274,6 +278,11 @@ export const openApiDocument: OpenApiDocument = {
         type: "integer",
         minimum: 1,
       }),
+      ServiceOrderNumber: pathIdParameter(
+        "serviceOrderNumber",
+        "Numero documental da ordem de servico.",
+        { type: "string" },
+      ),
       UserId: pathIdParameter("id", "Identificador UUID do usuario."),
       RoleName: pathIdParameter("role", "Role do RBAC persistido.", {
         type: "string",
@@ -285,6 +294,10 @@ export const openApiDocument: OpenApiDocument = {
       ),
       SessionId: pathIdParameter("sessionId", "Identificador da sessao."),
       AtaId: pathIdParameter("id", "Identificador UUID da ata."),
+      AtaCoverageGroupId: pathIdParameter(
+        "groupId",
+        "Identificador UUID do grupo de cobertura da ata.",
+      ),
       AtaCode: pathIdParameter("code", "Codigo sequencial da ata.", {
         type: "integer",
         minimum: 1,
@@ -385,6 +398,52 @@ export const openApiDocument: OpenApiDocument = {
           },
         },
       },
+      AuditLog: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          entityType: { type: "string" },
+          entityId: { type: "string" },
+          action: { type: "string" },
+          actorUserId: { type: "string", nullable: true },
+          actorName: { type: "string", nullable: true },
+          summary: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+          metadata: {
+            type: "object",
+            nullable: true,
+            additionalProperties: true,
+          },
+        },
+        example: {
+          id: "cmaudit123",
+          entityType: "PROJECT",
+          entityId: "cmproject123",
+          action: "UPDATE",
+          actorUserId: "cmuser123",
+          actorName: "Gestor SAGEP",
+          summary: "Projeto atualizado",
+          createdAt: "2026-05-08T12:00:00.000Z",
+          metadata: {
+            source: "projects.update",
+          },
+        },
+      },
+      AuditLogListEnvelope: {
+        type: "object",
+        properties: {
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/AuditLog" },
+          },
+          meta: { $ref: "#/components/schemas/PaginationMeta" },
+          filters: {
+            type: "object",
+            additionalProperties: true,
+          },
+          links: { $ref: "#/components/schemas/ListLinks" },
+        },
+      },
       AccessProfile: {
         type: "object",
         required: ["role", "permissions", "isAdmin"],
@@ -421,6 +480,23 @@ export const openApiDocument: OpenApiDocument = {
             items: { type: "string" },
           },
           access: { $ref: "#/components/schemas/AccessProfile" },
+        },
+      },
+      UserUpdateRequest: {
+        type: "object",
+        description: "Atualiza dados cadastrais do usuario. Somente ADMIN.",
+        properties: {
+          name: { type: "string", minLength: 3 },
+          email: { type: "string", format: "email" },
+          rank: { type: "string", nullable: true },
+          cpf: { type: "string", nullable: true },
+        },
+      },
+      UserStatusUpdateRequest: {
+        type: "object",
+        required: ["active"],
+        properties: {
+          active: { type: "boolean" },
         },
       },
       PermissionCatalogItem: {
@@ -821,9 +897,34 @@ export const openApiDocument: OpenApiDocument = {
           serviceOrderIssuedAt: { type: "string", format: "date-time", nullable: true },
           executionStartedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltReceivedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltReviewedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltApprovedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltRejectedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltRejectionReason: { type: "string", nullable: true },
           invoiceAttestedAt: { type: "string", format: "date-time", nullable: true },
           serviceCompletedAt: { type: "string", format: "date-time", nullable: true },
         },
+      },
+      ProjectAsBuiltReviewRequest: {
+        oneOf: [
+          {
+            type: "object",
+            required: ["approved", "reviewedAt"],
+            properties: {
+              approved: { type: "boolean", const: true },
+              reviewedAt: { type: "string", format: "date-time" },
+            },
+          },
+          {
+            type: "object",
+            required: ["approved", "reviewedAt", "rejectionReason"],
+            properties: {
+              approved: { type: "boolean", const: false },
+              reviewedAt: { type: "string", format: "date-time" },
+              rejectionReason: { type: "string", minLength: 3 },
+            },
+          },
+        ],
       },
       ProjectCommitmentNoteCancelRequest: {
         type: "object",
@@ -1260,7 +1361,7 @@ export const openApiDocument: OpenApiDocument = {
       },
       ServiceOrderCreateRequest: {
         type: "object",
-        required: ["serviceOrderNumber", "issuedAt", "contractorCnpj"],
+        required: ["issuedAt", "contractorCnpj"],
         properties: {
           projectId: { type: "string" },
           projectCode: { type: "integer", minimum: 1 },
@@ -1268,7 +1369,10 @@ export const openApiDocument: OpenApiDocument = {
           estimateCode: { type: "integer", minimum: 1 },
           diexId: { type: "string" },
           diexCode: { type: "integer", minimum: 1 },
-          serviceOrderNumber: { type: "string", minLength: 3 },
+          serviceOrderNumber: {
+            type: "string",
+            description: "Opcional. Se informado, sera sobrescrito pelo numero gerado automaticamente.",
+          },
           issuedAt: { type: "string", format: "date-time" },
           contractorCnpj: { type: "string", minLength: 14 },
           requesterName: { type: "string", nullable: true },
@@ -1713,6 +1817,28 @@ export const openApiDocument: OpenApiDocument = {
           ],
         },
       },
+      AtaCoverageGroupUpdateRequest: {
+        type: "object",
+        description:
+          "Update parcial de um grupo de cobertura. Quando `localities` e enviado, substitui apenas as localidades deste grupo.",
+        properties: {
+          code: { type: "string", minLength: 2 },
+          name: { type: "string", minLength: 2 },
+          description: { type: "string", nullable: true },
+          localities: {
+            type: "array",
+            minItems: 1,
+            items: { $ref: "#/components/schemas/AtaCoverageLocality" },
+          },
+        },
+        example: {
+          name: "Grupo Roraima atualizado",
+          localities: [
+            { cityName: "Boa Vista", stateUf: "RR" },
+            { cityName: "Pacaraima", stateUf: "RR" },
+          ],
+        },
+      },
       Ata: {
         type: "object",
         description:
@@ -1728,6 +1854,12 @@ export const openApiDocument: OpenApiDocument = {
           validUntil: { type: "string", format: "date-time", nullable: true },
           notes: { type: "string", nullable: true },
           isActive: { type: "boolean" },
+          externalSource: { type: "string", nullable: true },
+          externalUasg: { type: "string", nullable: true },
+          externalPregaoNumber: { type: "string", nullable: true },
+          externalPregaoYear: { type: "string", nullable: true },
+          externalAtaNumber: { type: "string", nullable: true },
+          externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
           coverageGroups: {
             type: "array",
             items: { $ref: "#/components/schemas/AtaCoverageGroup" },
@@ -1809,6 +1941,154 @@ export const openApiDocument: OpenApiDocument = {
           links: { $ref: "#/components/schemas/ListLinks" },
         },
       },
+      ComprasGovAtaPreviewItem: {
+        type: "object",
+        properties: {
+          referenceCode: { type: "string" },
+          description: { type: "string" },
+          unit: { type: "string" },
+          unitPrice: { type: "number" },
+          initialQuantity: { type: "number" },
+          externalItemId: { type: "string" },
+          externalItemNumber: { type: "string" },
+        },
+      },
+      ComprasGovAtaFound: {
+        type: "object",
+        properties: {
+          ataNumber: { type: "string" },
+          vendorName: { type: "string", nullable: true },
+          itemCount: { type: "number" },
+          totalAmount: { type: "number", nullable: true },
+          validFrom: { type: "string", format: "date-time", nullable: true },
+          validUntil: { type: "string", format: "date-time", nullable: true },
+          sampleItems: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ComprasGovAtaPreviewItem" },
+          },
+        },
+      },
+      ComprasGovAtaPreview: {
+        type: "object",
+        properties: {
+          source: { type: "string", enum: ["COMPRAS_GOV"] },
+          uasg: { type: "string" },
+          numeroPregao: { type: "string" },
+          anoPregao: { type: "string" },
+          ata: {
+            nullable: true,
+            oneOf: [
+              {
+                type: "object",
+                properties: {
+                  number: { type: "string" },
+                  type: {
+                    type: "string",
+                    enum: ["CFTV", "FIBRA_OPTICA"],
+                    nullable: true,
+                  },
+                  vendorName: { type: "string", nullable: true },
+                  managingAgency: { type: "string", nullable: true },
+                  validFrom: { type: "string", format: "date-time", nullable: true },
+                  validUntil: { type: "string", format: "date-time", nullable: true },
+                },
+              },
+            ],
+          },
+          coverageGroups: {
+            type: "array",
+            items: { type: "object" },
+          },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ComprasGovAtaPreviewItem" },
+          },
+          atasFound: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ComprasGovAtaFound" },
+          },
+          selectedAta: {
+            nullable: true,
+            allOf: [{ $ref: "#/components/schemas/ComprasGovAtaFound" }],
+          },
+          warnings: {
+            type: "array",
+            items: { type: "string" },
+          },
+        },
+      },
+      ComprasGovAtaImportRequest: {
+        type: "object",
+        required: ["uasg", "numeroPregao", "anoPregao", "ataType"],
+        properties: {
+          uasg: { type: "string" },
+          numeroPregao: { type: "string" },
+          anoPregao: { type: "string" },
+          numeroAta: { type: "string", nullable: true },
+          ataType: { type: "string", enum: ["CFTV", "FIBRA_OPTICA"] },
+          coverageGroupId: { type: "string", nullable: true },
+          coverageGroupCode: { type: "string", nullable: true },
+          coverageGroupName: { type: "string", nullable: true },
+          coverageGroupStateUf: { type: "string", enum: ["AM", "RO", "RR", "AC"], nullable: true },
+          coverageGroupCityName: { type: "string", nullable: true },
+          coverageGroupLocalities: {
+            type: "array",
+            nullable: true,
+            items: { $ref: "#/components/schemas/AtaCoverageLocality" },
+          },
+          dryRun: { type: "boolean", nullable: true },
+        },
+      },
+      ComprasGovAtaImportResponse: {
+        type: "object",
+        properties: {
+          dryRun: { type: "boolean" },
+          preview: { $ref: "#/components/schemas/ComprasGovAtaPreview" },
+          ata: {
+            nullable: true,
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              ataCode: { type: "integer" },
+              number: { type: "string" },
+              type: { type: "string", enum: ["CFTV", "FIBRA_OPTICA"] },
+              vendorName: { type: "string" },
+              managingAgency: { type: "string", nullable: true },
+              validFrom: { type: "string", format: "date-time", nullable: true },
+              validUntil: { type: "string", format: "date-time", nullable: true },
+            },
+          },
+          coverageGroup: {
+            nullable: true,
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              code: { type: "string" },
+              name: { type: "string" },
+              localities: {
+                type: "array",
+                items: { $ref: "#/components/schemas/AtaCoverageLocality" },
+              },
+            },
+          },
+          itemsCreated: { type: "integer" },
+          itemsUpdated: { type: "integer" },
+          warnings: {
+            type: "array",
+            items: { type: "string" },
+          },
+          imported: {
+            type: "object",
+            properties: {
+              ataId: { type: "string", nullable: true },
+              coverageGroupId: { type: "string", nullable: true },
+              coverageGroupCode: { type: "string", nullable: true },
+              createdItems: { type: "integer" },
+              updatedItems: { type: "integer" },
+            },
+          },
+        },
+      },
       AtaItem: {
         type: "object",
         description:
@@ -1829,6 +2109,10 @@ export const openApiDocument: OpenApiDocument = {
           notes: { type: "string", nullable: true },
           isActive: { type: "boolean" },
           deletedAt: { type: "string", format: "date-time", nullable: true },
+          externalSource: { type: "string", nullable: true },
+          externalItemId: { type: "string", nullable: true },
+          externalItemNumber: { type: "string", nullable: true },
+          externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
           balance: {
             type: "object",
             properties: {
@@ -1843,6 +2127,26 @@ export const openApiDocument: OpenApiDocument = {
               lowStock: { type: "boolean" },
               insufficient: { type: "boolean" },
               lastMovementAt: { type: "string", format: "date-time", nullable: true },
+            },
+          },
+          latestExternalBalanceSnapshot: {
+            type: "object",
+            nullable: true,
+            properties: {
+              source: { type: "string" },
+              status: { type: "string" },
+              externalBalance: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+              difference: { type: "string", nullable: true },
+              lastSyncAt: { type: "string", format: "date-time" },
+              warnings: {
+                type: "array",
+                nullable: true,
+                items: { type: "string" },
+              },
             },
           },
           createdAt: { type: "string", format: "date-time" },
@@ -1965,6 +2269,33 @@ export const openApiDocument: OpenApiDocument = {
           isActive: false,
         },
       },
+      AtaItemRegisterExternalConsumptionRequest: {
+        type: "object",
+        required: ["quantity", "reason", "source", "externalStatus", "externalReference"],
+        properties: {
+          quantity: { type: "number", exclusiveMinimum: 0 },
+          reason: { type: "string" },
+          source: { type: "string" },
+          externalStatus: {
+            type: "string",
+            description: "Status oficial da UASG principal; origens de adesao/carona nao sao aceitas.",
+          },
+          externalReference: { type: "string" },
+          commitmentNumber: { type: "string", nullable: true },
+          unit: { type: "string", nullable: true },
+          notes: { type: "string", nullable: true },
+        },
+        example: {
+          quantity: 2,
+          reason: "Consumo externo confirmado manualmente apos conferencia do snapshot",
+          source: "COMPRAS_GOV",
+          externalStatus: "CONSUMO_OFICIAL_DETECTADO",
+          externalReference: "SNAPSHOT-2026-05-15T10:30:00.000Z",
+          commitmentNumber: "2026NE000567",
+          unit: "160016",
+          notes: "Conferencia manual aprovada pelo gestor",
+        },
+      },
       AtaItemsEnvelope: {
         type: "object",
         properties: {
@@ -1979,6 +2310,227 @@ export const openApiDocument: OpenApiDocument = {
           },
           links: { $ref: "#/components/schemas/ListLinks" },
         },
+      },
+      AtaItemBalanceMovement: {
+        type: "object",
+        description:
+          "Movimentacao historica de saldo de um item de ATA. Leitura apenas; nao altera regra de saldo.",
+        properties: {
+          id: { type: "string" },
+          movementType: {
+            type: "string",
+            enum: [
+              "RESERVE",
+              "RELEASE",
+              "CONSUME",
+              "EXTERNAL_CONSUMPTION",
+              "REVERSE_CONSUME",
+              "ADJUSTMENT",
+            ],
+          },
+          quantity: { type: "string", description: "Decimal serializado pelo Prisma." },
+          unitPrice: { type: "string", description: "Decimal serializado pelo Prisma." },
+          totalAmount: { type: "string", description: "Decimal serializado pelo Prisma." },
+          summary: { type: "string" },
+          actorName: { type: "string", nullable: true },
+          projectId: { type: "string", nullable: true },
+          projectCode: { type: "integer", nullable: true },
+          estimateId: { type: "string", nullable: true },
+          estimateCode: { type: "integer", nullable: true },
+          diexRequestId: { type: "string", nullable: true },
+          diexCode: { type: "integer", nullable: true },
+          serviceOrderId: { type: "string", nullable: true },
+          serviceOrderCode: { type: "integer", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+        },
+        example: {
+          id: "cmmovement123",
+          movementType: "RESERVE",
+          quantity: "2",
+          unitPrice: "100",
+          totalAmount: "200",
+          summary: "Reserva de saldo para o DIEx #7",
+          actorName: "ADMIN",
+          projectId: "cmproject123",
+          projectCode: 15,
+          estimateId: "cmestimate123",
+          estimateCode: 21,
+          diexRequestId: "cmdiex123",
+          diexCode: 7,
+          serviceOrderId: null,
+          serviceOrderCode: null,
+          createdAt: "2026-04-29T00:00:00.000Z",
+        },
+      },
+      AtaItemBalanceMovementsResponse: {
+        type: "array",
+        items: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
+      },
+      AtaItemRegisterExternalConsumptionResponse: {
+        type: "object",
+        properties: {
+          item: { $ref: "#/components/schemas/AtaItem" },
+          movement: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
+          localBalance: {
+            type: "object",
+            additionalProperties: true,
+          },
+          message: { type: "string" },
+        },
+      },
+      ComprasGovExternalBalanceComparisonItem: {
+        type: "object",
+        properties: {
+          item: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              ataItemCode: { type: "integer" },
+              referenceCode: { type: "string" },
+              description: { type: "string" },
+              externalItemId: { type: "string", nullable: true },
+              externalItemNumber: { type: "string", nullable: true },
+            },
+          },
+          localBalance: {
+            type: "object",
+            additionalProperties: true,
+          },
+          externalBalance: {
+            nullable: true,
+            type: "object",
+            properties: {
+              externalItemNumber: { type: "string" },
+              source: { type: "string", enum: ["COMPRAS_GOV", "COMPRAS_GOV_IMPORT_FALLBACK"] },
+              registeredQuantity: { type: "string" },
+              committedQuantity: { type: "string" },
+              availableQuantity: { type: "string" },
+              commitments: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    numeroEmpenho: { type: "string", nullable: true },
+                    unidade: { type: "string", nullable: true },
+                    tipoUnidade: { type: "string", nullable: true },
+                    fornecedor: { type: "string", nullable: true },
+                    dataEmpenho: { type: "string", format: "date-time", nullable: true },
+                    quantidadeIncluida: { type: "string", nullable: true },
+                    quantidadeEmpenhada: { type: "string", nullable: true },
+                    estimatedAmount: { type: "string", nullable: true },
+                    affectsManagedBalance: { type: "boolean" },
+                    rawKeyDebug: {
+                      type: "object",
+                      nullable: true,
+                      properties: {
+                        availableKeys: {
+                          type: "array",
+                          items: { type: "string" },
+                        },
+                        sourceEndpoint: { type: "string" },
+                        item: { type: "string", nullable: true },
+                        unidade: { type: "string", nullable: true },
+                      },
+                    },
+                  },
+                },
+              },
+              lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
+              rawRecords: { type: "integer" },
+            },
+          },
+          difference: { type: "string", nullable: true },
+          lastSyncAt: { type: "string", format: "date-time", nullable: true },
+          status: {
+            type: "string",
+            enum: [
+              "OK",
+              "DIVERGENTE",
+              "CONSUMO_OFICIAL_DETECTADO",
+              "NAO_SINCRONIZADO",
+              "NAO_ENCONTRADO",
+              "ERRO_CONSULTA_EXTERNA",
+              "RATE_LIMIT_COMPRAS_GOV",
+            ],
+          },
+          externalError: {
+            type: "object",
+            nullable: true,
+            properties: {
+              status: { type: "integer", nullable: true },
+              url: { type: "string", nullable: true },
+              body: { type: "string", nullable: true },
+              retryAfterSeconds: { type: "integer", nullable: true },
+            },
+          },
+        },
+      },
+      ComprasGovExternalBalanceComparison: {
+        type: "object",
+        properties: {
+          source: { type: "string", enum: ["COMPRAS_GOV"] },
+          ata: {
+            type: "object",
+            properties: {
+              id: { type: "string" },
+              ataCode: { type: "integer" },
+              number: { type: "string" },
+              externalUasg: { type: "string", nullable: true },
+              externalPregaoNumber: { type: "string", nullable: true },
+              externalPregaoYear: { type: "string", nullable: true },
+              externalAtaNumber: { type: "string", nullable: true },
+              externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
+            },
+          },
+          comparedAt: { type: "string", format: "date-time" },
+          summary: {
+            type: "object",
+            properties: {
+              totalItems: { type: "integer" },
+              ok: { type: "integer" },
+              divergent: { type: "integer" },
+              externalConsumptionDetected: { type: "integer" },
+              naoSincronizado: { type: "integer" },
+              notFound: { type: "integer" },
+              externalQueryErrors: { type: "integer" },
+              rateLimitErrors: { type: "integer" },
+              semEmpenhoRegistrado: { type: "integer" },
+            },
+          },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/ComprasGovExternalBalanceComparisonItem" },
+          },
+          warnings: {
+            type: "array",
+            items: { type: "string" },
+          },
+          retryAfterSeconds: { type: "integer", nullable: true },
+          debug: {
+            type: "array",
+            nullable: true,
+            items: {
+              type: "object",
+              additionalProperties: true,
+            },
+          },
+        },
+      },
+      ComprasGovExternalBalanceSyncResponse: {
+        allOf: [
+          { $ref: "#/components/schemas/ComprasGovExternalBalanceComparison" },
+          {
+            type: "object",
+            properties: {
+              syncedAt: { type: "string", format: "date-time", nullable: true },
+              updatedItems: { type: "integer" },
+              warnings: {
+                type: "array",
+                items: { type: "string" },
+              },
+            },
+          },
+        ],
       },
       MilitaryOrganization: {
         type: "object",
@@ -2274,6 +2826,43 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["sessions.manage_all"],
       },
     },
+    "/audits": {
+      get: {
+        tags: ["audits"],
+        summary: "Listar logs de auditoria",
+        description:
+          "Retorna AuditLog ordenado por createdAt desc. Acesso restrito a usuarios ADMIN e GESTOR.",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/Page" },
+          queryParameter("limit", "Quantidade por pagina.", {
+            type: "integer",
+            minimum: 1,
+            maximum: 100,
+            default: 50,
+          }),
+          queryParameter("entityType", "Tipo da entidade auditada.", { type: "string" }),
+          queryParameter("action", "Acao auditada.", { type: "string" }),
+          queryParameter("actor", "Busca por nome do ator ou id do usuario.", {
+            type: "string",
+          }),
+          queryParameter("search", "Busca em resumo, entidade e ator.", { type: "string" }),
+          queryParameter("startDate", "Inicio do periodo por createdAt.", {
+            type: "string",
+            format: "date-time",
+          }),
+          queryParameter("endDate", "Fim do periodo por createdAt.", {
+            type: "string",
+            format: "date-time",
+          }),
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/AuditLogListEnvelope"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN", "GESTOR"],
+      },
+    },
     "/projects": {
       get: {
         tags: ["projects"],
@@ -2387,6 +2976,22 @@ export const openApiDocument: OpenApiDocument = {
         requestBody: {
           required: true,
           content: jsonContent("#/components/schemas/ProjectFlowUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/Project"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/projects/{id}/as-built/review": {
+      patch: {
+        tags: ["projects"],
+        summary: "Aprovar ou reprovar a análise do As-Built",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ProjectAsBuiltReviewRequest"),
         },
         responses: {
           "200": okJson("#/components/schemas/Project"),
@@ -3025,6 +3630,18 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
+    "/service-orders/number/{serviceOrderNumber}": {
+      get: {
+        tags: ["service-orders"],
+        summary: "Buscar ordem de servico por numero documental",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ServiceOrderNumber" }],
+        responses: {
+          "200": okJson("#/components/schemas/ServiceOrder"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
     "/service-orders/{id}": {
       get: {
         tags: ["service-orders"],
@@ -3348,6 +3965,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserListEnvelope"),
           ...defaultErrorResponses,
         },
+        "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
       post: {
@@ -3364,6 +3982,59 @@ export const openApiDocument: OpenApiDocument = {
           "201": createdJson("#/components/schemas/UserSummary"),
           ...defaultErrorResponses,
         },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["users.manage"],
+      },
+    },
+    "/users/{id}": {
+      get: {
+        tags: ["users"],
+        summary: "Detalhar usuario",
+        description: "Consulta administrativa de usuario por id. Somente ADMIN.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        responses: {
+          "200": okJson("#/components/schemas/UserSummary"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["users.manage"],
+      },
+      patch: {
+        tags: ["users"],
+        summary: "Atualizar dados cadastrais de usuario",
+        description: "Atualiza name, email, rank e cpf. Somente ADMIN.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/UserUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/UserSummary"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["users.manage"],
+      },
+    },
+    "/users/{id}/status": {
+      patch: {
+        tags: ["users"],
+        summary: "Atualizar status de usuario",
+        description:
+          "Ativa ou desativa usuario. Nao permite que o ADMIN autenticado desative a si mesmo quando isso deixaria o sistema sem ADMIN ativo.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/UserId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/UserStatusUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/UserSummary"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
     },
@@ -3383,6 +4054,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/UserSummary"),
           ...defaultErrorResponses,
         },
+        "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
     },
@@ -3566,6 +4238,51 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["atas.manage"],
       },
     },
+    "/integrations/compras-gov/atas/preview": {
+      get: {
+        tags: ["integrations"],
+        summary: "Previsualizar importacao de ATA do Compras.gov.br",
+        description:
+          "Consulta a API publica do Compras.gov.br no backend e retorna uma previa normalizada da ARP e de seus itens. Usa os endpoints oficiais `/modulo-arp/1_consultarARP` e `/modulo-arp/2_consultarARPItem`.",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("uasg", "Codigo da UASG gerenciadora.", { type: "string" }),
+          queryParameter("numeroPregao", "Numero do pregao/compra.", {
+            type: "string",
+          }),
+          queryParameter("anoPregao", "Ano do pregao/compra.", { type: "string" }),
+          queryParameter("numeroAta", "Numero da ata de registro de preco.", {
+            type: "string",
+          }),
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovAtaPreview"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["atas.manage"],
+      },
+    },
+    "/integrations/compras-gov/atas/import": {
+      post: {
+        tags: ["integrations"],
+        summary: "Importar ATA do Compras.gov.br",
+        description:
+          "Consulta a API publica do Compras.gov.br no backend e cria ou atualiza a ATA e seus itens sem duplicar registros. Nao altera movimentos de saldo local.",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ComprasGovAtaImportRequest"),
+        },
+        responses: {
+          "201": createdJson("#/components/schemas/ComprasGovAtaImportResponse"),
+          "200": okJson("#/components/schemas/ComprasGovAtaImportResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["atas.manage"],
+      },
+    },
     "/atas/code/{code}": {
       get: {
         tags: ["atas"],
@@ -3618,6 +4335,66 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["atas.manage"],
       },
     },
+    "/atas/{id}/coverage-groups": {
+      post: {
+        tags: ["atas"],
+        summary: "Criar grupo de cobertura da ata",
+        description:
+          "Cria um grupo de cobertura em uma ATA existente sem substituir os demais grupos.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/AtaCoverageGroup"),
+        },
+        responses: {
+          "201": createdJson("#/components/schemas/AtaCoverageGroup"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["atas.manage"],
+      },
+    },
+    "/atas/{id}/coverage-groups/{groupId}": {
+      patch: {
+        tags: ["atas"],
+        summary: "Atualizar grupo de cobertura da ata",
+        description:
+          "Atualiza um grupo de cobertura especifico. Se `localities` for enviado, substitui apenas as localidades deste grupo.",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/AtaId" },
+          { $ref: "#/components/parameters/AtaCoverageGroupId" },
+        ],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/AtaCoverageGroupUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/AtaCoverageGroup"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["atas.manage"],
+      },
+      delete: {
+        tags: ["atas"],
+        summary: "Remover grupo de cobertura da ata",
+        description:
+          "Remove o grupo de cobertura quando ele nao possui itens ou estimativas vinculadas.",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/AtaId" },
+          { $ref: "#/components/parameters/AtaCoverageGroupId" },
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/ErrorResponse", "Grupo removido"),
+          ...defaultErrorResponses,
+        },
+        "x-roles": ["ADMIN"],
+        "x-permissions": ["atas.manage"],
+      },
+    },
     "/atas/{id}/items": {
       get: {
         tags: ["ata-items"],
@@ -3666,6 +4443,35 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["atas.manage"],
       },
     },
+    "/atas/{id}/external-balance": {
+      get: {
+        tags: ["atas"],
+        summary: "Ler snapshot local de saldo externo da ATA",
+        description:
+          "Retorna apenas snapshots externos persistidos localmente para os itens da ATA. Nao consulta o Compras.gov.br e nao altera saldo local.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparison"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/atas/{id}/sync-external-balance": {
+      post: {
+        tags: ["atas"],
+        summary: "Sincronizar snapshot externo de saldo Compras.gov.br",
+        description:
+          "Consulta o Compras.gov.br somente neste POST e atualiza snapshots externos persistidos para os itens processados. Nao altera movimentos nem saldo local.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovExternalBalanceSyncResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["atas.manage"],
+      },
+    },
     "/ata-items": {
       get: {
         tags: ["ata-items"],
@@ -3708,6 +4514,67 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [{ $ref: "#/components/parameters/AtaItemCode" }],
         responses: {
           "200": okJson("#/components/schemas/AtaItem"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/ata-items/{id}/movements": {
+      get: {
+        tags: ["ata-items"],
+        summary: "Listar movimentacoes de saldo do item de ata",
+        description:
+          "Retorna o historico de movimentacoes de saldo do item, ordenado por criacao desc. Endpoint de consulta; nao altera regra de saldo nem fluxo documental.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: {
+          "200": okJson("#/components/schemas/AtaItemBalanceMovementsResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/ata-items/{id}/balance-comparison": {
+      get: {
+        tags: ["ata-items"],
+        summary: "Ler snapshot local de saldo externo do item",
+        description:
+          "Retorna a comparacao entre saldo local e o ultimo snapshot externo persistido do item. Se nao existir snapshot, retorna `NAO_SINCRONIZADO`. Nao consulta o Compras.gov.br.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparisonItem"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/ata-items/{id}/sync-external-balance": {
+      post: {
+        tags: ["ata-items"],
+        summary: "Sincronizar snapshot externo de saldo Compras.gov.br do item",
+        description:
+          "Consulta o Compras.gov.br somente neste POST para o item informado e atualiza o snapshot persistido desse item. Nao altera movimentos nem saldo local.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparisonItem"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["atas.manage"],
+      },
+    },
+    "/ata-items/{id}/register-external-consumption": {
+      post: {
+        tags: ["ata-items"],
+        summary: "Registrar consumo externo manualmente",
+        description:
+          "Registra internamente um consumo externo confirmado manualmente pelo usuario, com justificativa obrigatoria e sem consultar o Compras.gov.br.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/AtaItemRegisterExternalConsumptionRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/AtaItemRegisterExternalConsumptionResponse"),
           ...defaultErrorResponses,
         },
       },

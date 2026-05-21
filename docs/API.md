@@ -244,6 +244,7 @@ Administração de usuários do sistema.
 #### `POST /users`
 
 - Autenticação: sim
+- Role: `ADMIN`
 - Permissão: `users.manage`
 - Body exemplo:
 
@@ -269,11 +270,34 @@ Administração de usuários do sistema.
 #### `GET /users`
 
 - Autenticação: sim
+- Role: `ADMIN`
 - Permissão: `users.manage`
+
+#### `GET /users/:id`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `users.manage`
+
+#### `PATCH /users/:id`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `users.manage`
+- Campos: `name`, `email`, `rank`, `cpf`
+
+#### `PATCH /users/:id/status`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `users.manage`
+- Campos: `active`
+- Bloqueia a auto-desativação quando isso deixaria o sistema sem ADMIN ativo.
 
 #### `PATCH /users/:id/role`
 
 - Autenticação: sim
+- Role: `ADMIN`
 - Permissão: `users.manage`
 - Body exemplo:
 
@@ -346,6 +370,33 @@ Entidade principal do sistema. Representa o ciclo de vida completo do projeto.
 - Observação:
   - informar a NE pode consumir saldo da ATA;
   - avançar etapas depende de documentos e regras do workflow.
+
+#### `PATCH /projects/:id/as-built/review`
+
+- Autenticação: sim
+- Permissão: `projects.edit_own` ou `projects.edit_all`
+- Regras:
+  - somente disponível quando o projeto estiver em `ANALISANDO_AS_BUILT`;
+  - se aprovado, o projeto avança para `ATESTAR_NF`;
+  - se reprovado, exige motivo, limpa `asBuiltReceivedAt` e retorna para `SERVICO_EM_EXECUCAO`.
+- Body exemplo para aprovação:
+
+```json
+{
+  "approved": true,
+  "reviewedAt": "2026-05-06T10:00:00.000Z"
+}
+```
+
+- Body exemplo para reprovação:
+
+```json
+{
+  "approved": false,
+  "reviewedAt": "2026-05-06T10:00:00.000Z",
+  "rejectionReason": "Documento incompleto"
+}
+```
 
 #### `POST /projects/:id/commitment-note/cancel`
 
@@ -515,9 +566,89 @@ Cadastro da ata e sua estrutura de cobertura.
 - Autenticação: sim
 - Permissão: `atas.manage`
 
+#### `POST /atas/:id/coverage-groups`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Cria um grupo de cobertura sem substituir os demais grupos da ATA.
+- Body: `code`, `name`, `description` opcional e `localities`.
+
+#### `PATCH /atas/:id/coverage-groups/:groupId`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Atualiza parcialmente um grupo de cobertura. Quando `localities` for enviado, substitui apenas as localidades desse grupo.
+
+#### `DELETE /atas/:id/coverage-groups/:groupId`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Remove o grupo quando ele ainda não possui itens ou estimativas vinculadas.
+
 - Erros comuns:
   - `404` ata não encontrada
   - `409` vínculo ou regra de integridade
+
+---
+
+## Integrações Compras.gov.br
+
+### Objetivo
+
+Importar ATA de Registro de Preços e itens a partir da API pública do Compras.gov.br, sempre pelo backend.
+
+### Endpoints
+
+#### `GET /integrations/compras-gov/atas/preview`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Query: `uasg`, `numeroPregao`, `anoPregao`, `numeroAta` opcional
+
+#### `POST /integrations/compras-gov/atas/import`
+
+- Autenticação: sim
+- Role: `ADMIN`
+- Permissão: `atas.manage`
+- Body: `uasg`, `numeroPregao`, `anoPregao`, `numeroAta` opcional, `ataType`, `coverageGroupId` opcional, `coverageGroupCode` opcional, `coverageGroupName` opcional, `coverageGroupStateUf` opcional, `coverageGroupCityName` opcional, `coverageGroupLocalities` opcional, `dryRun` opcional
+- Cria ou atualiza a ATA e cria ou atualiza itens sem duplicar por `ataId`, grupo e `referenceCode`.
+
+```json
+{
+  "uasg": "120624",
+  "numeroPregao": "90001",
+  "anoPregao": "2026",
+  "numeroAta": "0001",
+  "ataType": "CFTV",
+  "coverageGroupCode": "MAO",
+  "coverageGroupName": "Manaus",
+  "coverageGroupStateUf": "AM",
+  "coverageGroupCityName": "Manaus"
+}
+```
+
+#### Saldos externos Compras.gov.br
+
+- `GET /atas/:id/external-balance`: le apenas snapshots externos persistidos no banco; nao consulta Compras.gov.br.
+- `POST /atas/:id/sync-external-balance`: consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
+- `GET /ata-items/:id/balance-comparison`: le apenas o ultimo snapshot persistido do item; se nao existir, retorna `NAO_SINCRONIZADO`.
+- `POST /ata-items/:id/sync-external-balance`: consulta Compras.gov.br e atualiza apenas o snapshot persistido do item informado, sem sincronizar os demais itens da ATA.
+- `GET /ata-items` e leituras de item podem expor `latestExternalBalanceSnapshot` com resumo local do ultimo snapshot salvo (`source`, `status`, `externalBalance`, `difference`, `lastSyncAt`, `warnings`).
+- Quando existir snapshot salvo, os GET locais devolvem `externalBalance` completo com `source`, `externalItemNumber`, `registeredQuantity`, `committedQuantity`, `availableQuantity`, `commitments`, `lastUpdatedAt` e `rawRecords`.
+- Status: `OK`, `DIVERGENTE`, `CONSUMO_OFICIAL_DETECTADO`, `NAO_SINCRONIZADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`.
+- HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
+- A consulta externa da ATA tenta primeiro `4_consultarEmpenhosSaldoItem` por `numeroAta` e `unidadeGerenciadora`. Se o endpoint oficial retornar vazio, o backend usa o `externalItemId`/`externalItemNumber` do item para consultar `2.1_consultarARPItem_Id` e `3_consultarUnidadesItem`, casando por `numeroItem` com zeros a esquerda normalizados.
+- `Ata.externalUasg` e a UASG principal. O backend so considera a linha dessa UASG para quantidade registrada, empenhada, saldo disponivel e empenhos.
+- Linhas de outras UASGs, adesoes, caronas e orgaos nao participantes sao ignoradas integralmente.
+- Snapshot persistido por item: `AtaItemExternalBalanceSnapshot` com `source`, `status`, `externalBalance`, `difference`, `lastSyncAt` e `warnings`.
+- Valores estimados de empenhos saem apenas em `estimatedAmount`; o backend nao inventa `numeroEmpenho`.
+- Os aliases revisados cobrem `numeroEmpenho`, `fornecedor`, `dataEmpenho`, `quantidadeEmpenhada` e `estimatedAmount` a partir dos endpoints `3_consultarUnidadesItem`, `4_consultarEmpenhosSaldoItem` e `2.1_consultarARPItem_Id`.
+- Em `development`, cada empenho pode incluir `rawKeyDebug` com chaves brutas disponiveis, endpoint de origem, item e unidade para facilitar diagnostico.
+- Se a API retornar `200` sem registros, itens importados do Compras.gov.br exibem fallback baseado na quantidade registrada importada (`COMPRAS_GOV_IMPORT_FALLBACK`).
 
 ---
 
@@ -546,6 +677,17 @@ Itens precificáveis da ATA, agora com saldo inicial e saldo efetivo calculado p
 }
 ```
 
+#### `POST /ata-items/:id/register-external-consumption`
+
+- Autenticação: sim
+- Acesso: `ADMIN`, `GESTOR` ou usuário com `atas.manage`
+- Uso: registra manualmente um consumo externo no saldo interno do SAGEP com justificativa obrigatória. Não consulta o Compras.gov.br e não altera `initialQuantity`.
+- Regras:
+  - `quantity` deve ser maior que zero
+  - `quantity` não pode ultrapassar o saldo disponível local
+  - cria movimentação `EXTERNAL_CONSUMPTION`
+  - grava audit log `REGISTER_EXTERNAL_CONSUMPTION`
+
 #### `GET /atas/:id/items`
 
 - Autenticação: sim
@@ -563,6 +705,13 @@ Itens precificáveis da ATA, agora com saldo inicial e saldo efetivo calculado p
 #### `GET /ata-items/:id`
 
 - Autenticação: sim
+
+#### `GET /ata-items/:id/movements`
+
+- Autenticacao: sim
+- Observacao:
+  - retorna historico de movimentacoes de saldo ordenado por `createdAt desc`
+  - inclui codigos amigaveis de projeto, estimativa, DIEx e ordem de servico quando existirem
 
 #### `PATCH /ata-items/:id`
 
@@ -787,7 +936,6 @@ Ordem de Serviço derivada do projeto com NE informada.
 {
   "projectId": "prj_123",
   "estimateId": "est_123",
-  "serviceOrderNumber": "OS-001",
   "issuedAt": "2026-05-02T00:00:00.000Z",
   "contractorCnpj": "12345678000190",
   "requesterName": "Fiscal",
@@ -795,11 +943,19 @@ Ordem de Serviço derivada do projeto com NE informada.
 }
 ```
 
+- `serviceOrderNumber` não precisa mais ser enviado no `POST /service-orders`.
+- O backend gera automaticamente no formato `OS-YYYY-XXX` com sequencia anual baseada em `issuedAt`.
+- Se `serviceOrderNumber` vier no payload, ele é sobrescrito pelo valor gerado.
+
 #### `GET /service-orders`
 
 - Autenticação: sim
 
 #### `GET /service-orders/code/:code`
+
+- Autenticação: sim
+
+#### `GET /service-orders/number/:serviceOrderNumber`
 
 - Autenticação: sim
 
@@ -959,6 +1115,41 @@ Fornecer visão geral, operacional e executiva para acompanhamento do sistema.
 - Erros comuns:
   - `400` combinação inválida de filtros temporais
   - `403` sem permissão
+
+---
+
+## Auditoria
+
+### Objetivo
+
+Expor a listagem real de `AuditLog` para telas administrativas.
+
+### Endpoint
+
+#### `GET /audits`
+
+- Autenticacao: sim
+- Perfis: `ADMIN`, `GESTOR`
+- Ordenacao: `createdAt desc`
+- Query params opcionais:
+  - `entityType`
+  - `action`
+  - `actor`
+  - `search`
+  - `startDate`
+  - `endDate`
+  - `page`
+  - `limit`
+- Campos retornados por item:
+  - `id`
+  - `entityType`
+  - `entityId`
+  - `action`
+  - `actorUserId`
+  - `actorName`
+  - `summary`
+  - `createdAt`
+  - `metadata`
 
 ---
 

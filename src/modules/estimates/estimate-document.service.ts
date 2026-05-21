@@ -1,9 +1,9 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import puppeteer from "puppeteer";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { pdfService } from "../../shared/pdf.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { renderEstimateDocumentHtml } from "./estimate-document.template.js";
 
@@ -165,17 +165,10 @@ export class EstimateDocumentService {
   }
 
   async generateEstimatePdf(estimateId: string, user: CurrentUser) {
-    const html = await this.generateEstimateHtml(estimateId, user);
-
-    const browser = await puppeteer.launch({
-      headless: true,
-    });
-
-    try {
-      const page = await browser.newPage();
-      await page.setContent(html, { waitUntil: "networkidle0" });
-
-      const pdf = await page.pdf({
+    return pdfService.renderPdf({
+      label: `estimate:${estimateId}`,
+      buildHtml: () => this.generateEstimateHtml(estimateId, user),
+      pdfOptions: {
         format: "A4",
         landscape: true,
         printBackground: true,
@@ -185,11 +178,7 @@ export class EstimateDocumentService {
           bottom: "8mm",
           left: "8mm",
         },
-      });
-
-      return Buffer.from(pdf);
-    } finally {
-      await browser.close();
-    }
+      },
+    });
   }
 }

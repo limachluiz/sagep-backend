@@ -5,6 +5,7 @@ import {
   listServiceOrdersQuerySchema,
   serviceOrderCodeParamSchema,
   serviceOrderIdParamSchema,
+  serviceOrderNumberParamSchema,
   updateServiceOrderSchema,
 } from "./service-orders.schemas.js";
 import { ServiceOrdersService } from "./service-orders.service.js";
@@ -49,6 +50,17 @@ export class ServiceOrdersController {
     const { code } = serviceOrderCodeParamSchema.parse(req.params);
     const query = archivedServiceOrdersQuerySchema.parse(req.query);
     const serviceOrder = await serviceOrdersService.findByCode(code, req.user!, query);
+    return res.status(200).json(serviceOrder);
+  }
+
+  async findByNumber(req: Request, res: Response) {
+    const { serviceOrderNumber } = serviceOrderNumberParamSchema.parse(req.params);
+    const query = archivedServiceOrdersQuerySchema.parse(req.query);
+    const serviceOrder = await serviceOrdersService.findByNumber(
+      serviceOrderNumber,
+      req.user!,
+      query,
+    );
     return res.status(200).json(serviceOrder);
   }
 

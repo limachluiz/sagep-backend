@@ -123,6 +123,7 @@ Endpoints:
 - `GET /projects/:id/next-action`
 - `PATCH /projects/:id`
 - `PATCH /projects/:id/flow`
+- `PATCH /projects/:id/as-built/review`
 - `POST /projects/:id/commitment-note/cancel`
 
 Componentes principais:
@@ -249,6 +250,7 @@ Perfis:
 Endpoints:
 
 - `GET /service-orders`
+- `GET /service-orders/number/:serviceOrderNumber`
 - `GET /service-orders/:id`
 - `POST /service-orders`
 - `PATCH /service-orders/:id`
@@ -262,6 +264,11 @@ Componentes principais:
 - cronograma
 - documentos entregues
 - preview/documento
+
+Observação de integração:
+
+- No `POST /service-orders`, o frontend deve enviar `issuedAt`, mas não precisa mais enviar `serviceOrderNumber`.
+- O backend retorna `serviceOrderNumber` já gerado no padrão `OS-YYYY-XXX`.
 
 ### 10. ATAs
 
@@ -279,6 +286,11 @@ Endpoints:
 - `POST /atas`
 - `PATCH /atas/:id`
 - `DELETE /atas/:id`
+- `POST /atas/:id/coverage-groups`
+- `PATCH /atas/:id/coverage-groups/:groupId`
+- `DELETE /atas/:id/coverage-groups/:groupId`
+- `GET /integrations/compras-gov/atas/preview`
+- `POST /integrations/compras-gov/atas/import`
 
 ### 11. Itens da ATA
 
@@ -371,7 +383,10 @@ Perfis:
 Endpoints:
 
 - `GET /users`
+- `GET /users/:id`
 - `POST /users`
+- `PATCH /users/:id`
+- `PATCH /users/:id/status`
 - `PATCH /users/:id/role`
 
 ### 17. Administração de permissões
@@ -407,6 +422,28 @@ Endpoints:
 - `GET /auth/users/:userId/sessions`
 - `POST /auth/users/:userId/sessions/revoke-all`
 - `POST /auth/users/:userId/sessions/:sessionId/revoke`
+
+### 19. Auditoria administrativa
+
+Perfis:
+
+- ADMIN
+- GESTOR
+
+Endpoints:
+
+- `GET /audits`
+
+Filtros:
+
+- `entityType`
+- `action`
+- `actor`
+- `search`
+- `startDate`
+- `endDate`
+- `page`
+- `limit`
 
 ## Ordem sugerida de implementação
 

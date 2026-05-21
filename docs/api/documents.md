@@ -122,7 +122,6 @@ Filtros:
   "projectId": "...",
   "estimateId": "...",
   "diexId": "...",
-  "serviceOrderNumber": "OS-001",
   "issuedAt": "2026-04-03T00:00:00.000Z",
   "contractorCnpj": "12345678000190",
   "requesterName": "Fiscal",
@@ -149,6 +148,9 @@ Filtros:
 ```
 
 Tambem aceita `projectCode`, `estimateCode` e `diexCode`.
+
+`serviceOrderNumber` e gerado automaticamente a partir de `issuedAt` no formato `OS-YYYY-XXX`.
+Se o campo for enviado pelo cliente, o backend sobrescreve o valor para manter o padrao.
 
 Regras importantes:
 

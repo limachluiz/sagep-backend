@@ -1,4 +1,5 @@
 import { Prisma } from "../../generated/prisma/client.js";
+import * as $Enums from "../../generated/prisma/enums.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 
@@ -43,7 +44,13 @@ type BalanceMovementContext = {
   serviceOrderId?: string | null;
   quantity: Prisma.Decimal;
   unitPrice: Prisma.Decimal;
-  movementType: "RESERVE" | "RELEASE" | "CONSUME" | "REVERSE_CONSUME" | "ADJUSTMENT";
+  movementType:
+    | "RESERVE"
+    | "RELEASE"
+    | "CONSUME"
+    | "EXTERNAL_CONSUMPTION"
+    | "REVERSE_CONSUME"
+    | "ADJUSTMENT";
   summary: string;
   metadata?: Prisma.InputJsonValue;
 };
@@ -86,6 +93,10 @@ export class AtaItemBalanceService {
 
       if (movement.movementType === "CONSUME") {
         reservedQuantity = reservedQuantity.sub(movement.quantity);
+        consumedQuantity = consumedQuantity.add(movement.quantity);
+      }
+
+      if (movement.movementType === "EXTERNAL_CONSUMPTION") {
         consumedQuantity = consumedQuantity.add(movement.quantity);
       }
 
@@ -280,7 +291,7 @@ export class AtaItemBalanceService {
         serviceOrderId: context.serviceOrderId ?? null,
         actorUserId: actor.id,
         actorName: actor.name ?? actor.email ?? null,
-        movementType: context.movementType,
+        movementType: context.movementType as $Enums.AtaItemBalanceMovementType,
         quantity: context.quantity,
         unitPrice: context.unitPrice,
         totalAmount: context.unitPrice.mul(context.quantity).toDecimalPlaces(2),

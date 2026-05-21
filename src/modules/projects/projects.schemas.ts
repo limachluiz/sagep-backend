@@ -119,3 +119,18 @@ export const issueServiceOrderSchema = z.object({
 export const cancelCommitmentNoteSchema = z.object({
   reason: z.string().trim().min(3, "Motivo do cancelamento da NE é obrigatório"),
 });
+
+export const reviewAsBuiltSchema = z.discriminatedUnion("approved", [
+  z.object({
+    approved: z.literal(true),
+    reviewedAt: z.coerce.date(),
+  }),
+  z.object({
+    approved: z.literal(false),
+    reviewedAt: z.coerce.date(),
+    rejectionReason: z
+      .string()
+      .trim()
+      .min(3, "Motivo da reprovação do As-Built é obrigatório"),
+  }),
+]);

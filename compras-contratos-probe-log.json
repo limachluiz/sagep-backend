@@ -1,0 +1,29 @@
+[
+  {
+    "name": "contratos_item_idCompra_codigoItem",
+    "url": "https://dadosabertos.compras.gov.br/modulo-contratos/2_consultarContratosItem?codigoOrgao=52121&dataVigenciaInicialMin=2026-01-01&dataVigenciaInicialMax=2026-12-31&idCompra=16001605900122025&codigoItem=13684",
+    "status": 200,
+    "totalRegistros": 0,
+    "recordsReturned": 0,
+    "firstRecord": null,
+    "firstRecordKeys": []
+  },
+  {
+    "name": "contratos_item_unidade_realizadora_codigoItem",
+    "url": "https://dadosabertos.compras.gov.br/modulo-contratos/2_consultarContratosItem?codigoOrgao=52121&dataVigenciaInicialMin=2026-01-01&dataVigenciaInicialMax=2026-12-31&codigoUnidadeRealizadoraCompra=160016&codigoItem=13684",
+    "status": 200,
+    "totalRegistros": 0,
+    "recordsReturned": 0,
+    "firstRecord": null,
+    "firstRecordKeys": []
+  },
+  {
+    "name": "contratos_item_unidade_gestora_codigoItem",
+    "url": "https://dadosabertos.compras.gov.br/modulo-contratos/2_consultarContratosItem?codigoOrgao=52121&dataVigenciaInicialMin=2026-01-01&dataVigenciaInicialMax=2026-12-31&codigoUnidadeGestora=160016&codigoItem=13684",
+    "status": 200,
+    "totalRegistros": 0,
+    "recordsReturned": 0,
+    "firstRecord": null,
+    "firstRecordKeys": []
+  }
+]

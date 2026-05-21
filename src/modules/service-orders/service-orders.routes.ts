@@ -9,6 +9,7 @@ serviceOrdersRoutes.use(authMiddleware);
 
 serviceOrdersRoutes.post("/", (req, res) => controller.create(req, res));
 serviceOrdersRoutes.get("/", (req, res) => controller.list(req, res));
+serviceOrdersRoutes.get("/number/:serviceOrderNumber", (req, res) => controller.findByNumber(req, res));
 serviceOrdersRoutes.get("/code/:code", (req, res) => controller.findByCode(req, res));
 
 serviceOrdersRoutes.get("/:id/document/html", (req, res) => controller.documentHtml(req, res));
