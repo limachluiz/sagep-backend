@@ -59,6 +59,13 @@ decisoes sem depender do texto da mensagem:
 O campo `message` continua apropriado para exibicao humana. Integracoes devem
 usar `code` para ramificacao logica e `requestId` para suporte.
 
+Falhas conhecidas de persistencia tambem sao normalizadas. Unicidade e vinculos
+invalidos retornam `409` com `DATABASE_UNIQUE_CONSTRAINT` ou
+`DATABASE_RELATION_CONSTRAINT`; registros ausentes retornam `404` com
+`RESOURCE_NOT_FOUND`. Conflitos transacionais retornam
+`DATABASE_TRANSACTION_CONFLICT` com `details.retryable: true`. Metadados e
+mensagens internas do banco nunca fazem parte da resposta.
+
 ## CORS
 
 Origens de navegador sao autorizadas exclusivamente por

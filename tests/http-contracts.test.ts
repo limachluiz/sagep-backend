@@ -83,4 +83,32 @@ describe("contratos HTTP transversais", () => {
     expect(setHeader).toHaveBeenCalledWith(REQUEST_ID_HEADER, response.locals.requestId);
     expect(next).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    ["P2002", 409, "DATABASE_UNIQUE_CONSTRAINT"],
+    ["P2003", 409, "DATABASE_RELATION_CONSTRAINT"],
+    ["P2025", 404, "RESOURCE_NOT_FOUND"],
+    ["P2034", 409, "DATABASE_TRANSACTION_CONFLICT"],
+  ])("mapeia erro Prisma %s sem expor metadados internos", (prismaCode, statusCode, code) => {
+    const requestId = "2c4a3610-9e9f-40d7-97d0-886bf983302e";
+    const json = vi.fn();
+    const status = vi.fn(() => ({ json }));
+    const response = { locals: { requestId }, status } as unknown as Response;
+    const error = Object.assign(new Error("detalhe interno do banco"), {
+      code: prismaCode,
+      meta: { target: ["email"] },
+    });
+
+    errorMiddleware(error, {} as Request, response, vi.fn() as NextFunction);
+
+    expect(status).toHaveBeenCalledWith(statusCode);
+    expect(json).toHaveBeenCalledWith({
+      code,
+      message: expect.any(String),
+      ...(prismaCode === "P2034" ? { details: { retryable: true } } : {}),
+      requestId,
+    });
+    expect(JSON.stringify(json.mock.calls)).not.toContain("email");
+    expect(JSON.stringify(json.mock.calls)).not.toContain("detalhe interno");
+  });
 });
