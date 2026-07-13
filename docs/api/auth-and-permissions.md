@@ -262,6 +262,10 @@ POST /api/auth/register
 ```
 
 Cria usuario com role inicial `CONSULTA`.
+O endpoint fica desativado por padrao e responde `403` com
+`AUTH_PUBLIC_REGISTRATION_DISABLED`. Para habilita-lo conscientemente, configure
+`ALLOW_PUBLIC_REGISTRATION=true`. Em ambientes administrados, prefira a criacao
+de usuarios pela rota administrativa.
 
 ```json
 {

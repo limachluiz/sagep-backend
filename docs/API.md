@@ -57,7 +57,7 @@ Autenticação, sessão, refresh token e autogestão de sessões.
 
 #### `POST /auth/register`
 
-- Autenticação: não
+- Autenticação: não; disponível somente com `ALLOW_PUBLIC_REGISTRATION=true`
 - Permissão: não
 - Body exemplo:
 

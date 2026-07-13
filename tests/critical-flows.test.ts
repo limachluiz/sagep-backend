@@ -437,10 +437,32 @@ describe("critical flows", () => {
     expect(logoutMetadata.revokedReason).toBe("LOGOUT");
     expect(logoutMetadata.alreadyRevoked).toBe(false);
 
-    await request(app)
+    const revokedRefresh = await request(app)
       .post("/api/auth/refresh")
       .send({ refreshToken: refreshed.body.refreshToken })
       .expect(401);
+
+    expect(revokedRefresh.body.code).toBe("AUTH_REFRESH_TOKEN_REVOKED");
+  });
+
+  it("auth: public registration is disabled and malformed refresh is rejected", async () => {
+    const registration = await request(app)
+      .post("/api/auth/register")
+      .send({
+        name: "Usuario Externo",
+        email: "externo@sagep.com",
+        password,
+      })
+      .expect(403);
+
+    expect(registration.body.code).toBe("AUTH_PUBLIC_REGISTRATION_DISABLED");
+
+    const malformedRefresh = await request(app)
+      .post("/api/auth/refresh")
+      .send({ refreshToken: "nao-e-um-jwt" })
+      .expect(401);
+
+    expect(malformedRefresh.body.code).toBe("AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED");
   });
 
   it("permissions persistence: role base is governed by persisted role permissions", async () => {

@@ -2669,8 +2669,9 @@ export const openApiDocument: OpenApiDocument = {
     "/auth/register": {
       post: {
         tags: ["auth"],
-        summary: "Registrar usuario publico",
-        description: "Cria um usuario com role inicial CONSULTA.",
+        summary: "Registrar usuario publico (configuravel)",
+        description:
+          "Cria um usuario com role inicial CONSULTA somente quando ALLOW_PUBLIC_REGISTRATION=true. Desativado por padrao.",
         requestBody: {
           required: true,
           content: jsonContent("#/components/schemas/PublicRegisterRequest"),
@@ -2678,6 +2679,7 @@ export const openApiDocument: OpenApiDocument = {
         responses: {
           "201": createdJson("#/components/schemas/UserSummary"),
           "400": { $ref: "#/components/responses/BadRequest" },
+          "403": { $ref: "#/components/responses/Forbidden" },
         },
       },
     },

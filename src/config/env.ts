@@ -20,6 +20,10 @@ const envSchema = z
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  ALLOW_PUBLIC_REGISTRATION: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 })
   .transform((env) => ({
     ...env,

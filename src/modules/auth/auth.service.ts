@@ -514,7 +514,15 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string, context?: AuthRequestContext) {
-    verifyRefreshToken(refreshToken);
+    try {
+      verifyRefreshToken(refreshToken);
+    } catch {
+      throw new AppError(
+        "Refresh token inválido ou expirado",
+        401,
+        "AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED",
+      );
+    }
 
     const tokenHash = hashToken(refreshToken);
 
@@ -526,20 +534,20 @@ export class AuthService {
     });
 
     if (!storedToken) {
-      throw new AppError("Refresh token inv\u00e1lido", 401);
+      throw new AppError("Refresh token inv\u00e1lido", 401, "AUTH_REFRESH_TOKEN_INVALID");
     }
 
     if (storedToken.revokedAt) {
-      throw new AppError("Refresh token revogado", 401);
+      throw new AppError("Refresh token revogado", 401, "AUTH_REFRESH_TOKEN_REVOKED");
     }
 
     if (storedToken.expiresAt < new Date()) {
       await this.markSessionAsExpired(storedToken, context);
-      throw new AppError("Refresh token expirado", 401);
+      throw new AppError("Refresh token expirado", 401, "AUTH_REFRESH_TOKEN_EXPIRED");
     }
 
     if (!storedToken.user.active) {
-      throw new AppError("Usu\u00e1rio inativo", 401);
+      throw new AppError("Usu\u00e1rio inativo", 401, "AUTH_USER_INACTIVE");
     }
 
     const newAccessToken = generateAccessToken(
@@ -560,8 +568,8 @@ export class AuthService {
 
     const now = new Date();
     const newStoredRefreshToken = await prisma.$transaction(async (tx) => {
-      await tx.refreshToken.update({
-        where: { id: storedToken.id },
+      const rotation = await tx.refreshToken.updateMany({
+        where: { id: storedToken.id, revokedAt: null },
         data: {
           lastUsedAt: now,
           revokedAt: now,
@@ -569,6 +577,14 @@ export class AuthService {
           revokedByUserId: null,
         },
       });
+
+      if (rotation.count !== 1) {
+        throw new AppError(
+          "Refresh token já foi rotacionado ou revogado",
+          401,
+          "AUTH_REFRESH_TOKEN_REUSED",
+        );
+      }
 
       return tx.refreshToken.create({
         data: {
