@@ -1,0 +1,83 @@
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+      - feat/backend-melhorias
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Build, testes e contratos
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: sagep
+          POSTGRES_PASSWORD: sagep_ci
+          POSTGRES_DB: sagep_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U sagep -d sagep_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://sagep:sagep_ci@localhost:5432/sagep_test?schema=public
+      JWT_SECRET: ci-access-secret-not-for-production
+      JWT_REFRESH_SECRET: ci-refresh-secret-not-for-production
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      PDF_RENDER_MODE: mock
+      PUPPETEER_SKIP_DOWNLOAD: "true"
+      CORS_ALLOWED_ORIGINS: http://localhost:4200
+      CORS_ALLOW_CREDENTIALS: "false"
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v7
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Gerar Prisma Client
+        run: npm run prisma:generate
+
+      - name: Aplicar migrations no banco de teste
+        run: npx prisma migrate deploy
+
+      - name: Compilar TypeScript
+        run: npm run build
+
+      - name: Validar OpenAPI
+        run: npm run openapi:validate
+
+      - name: Verificar OpenAPI versionado
+        run: |
+          npm run openapi:export
+          git diff --exit-code -- docs/api/openapi/openapi.json
+
+      - name: Executar testes
+        run: npm test

@@ -618,6 +618,21 @@
           }
         }
       },
+      "MessageResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "permissionUsed": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
+      },
       "PaginationMeta": {
         "type": "object",
         "required": [
@@ -5014,21 +5029,6 @@
             "format": "date-time"
           }
         }
-      },
-      "MessageResponse": {
-        "type": "object",
-        "required": [
-          "message"
-        ],
-        "properties": {
-          "message": {
-            "type": "string"
-          },
-          "permissionUsed": {
-            "type": "string"
-          }
-        },
-        "additionalProperties": true
       }
     }
   },
@@ -5049,12 +5049,6 @@
                 }
               }
             }
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "operationId": "health_get_collection"
@@ -5090,12 +5084,6 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "operationId": "auth_post_register"
@@ -5147,12 +5135,6 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "operationId": "auth_post_login"
@@ -5182,12 +5164,6 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "operationId": "auth_get_me"
@@ -5233,12 +5209,6 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "operationId": "auth_post_refresh"
@@ -5281,12 +5251,6 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
-          },
-          "409": {
-            "$ref": "#/components/responses/Conflict"
-          },
-          "500": {
-            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "operationId": "auth_post_logout"
