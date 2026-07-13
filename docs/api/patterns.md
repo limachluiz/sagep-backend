@@ -23,6 +23,7 @@ Erros comuns:
   "code": "PERMISSION_DENIED",
   "message": "Você não tem permissão para acessar este recurso",
   "details": { "requiredPermissions": ["projects.edit_all"] },
+  "requiredPermissions": ["projects.edit_all"],
   "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
 }
 ```
@@ -35,6 +36,8 @@ devolvido no header `X-Request-Id` para correlacao com logs e suporte.
 
 Falhas de validacao Zod preservam temporariamente o campo legado `errors` e
 tambem retornam `details.fieldErrors` e `details.formErrors`.
+Falhas de permissao preservam temporariamente `requiredPermissions` no nivel
+superior e tambem retornam `details.requiredPermissions`.
 
 Codigos genericos derivados do status incluem `BAD_REQUEST`, `UNAUTHORIZED`,
 `FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `BAD_GATEWAY` e `INTERNAL_ERROR`.

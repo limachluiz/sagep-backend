@@ -341,6 +341,7 @@ export const openApiDocument: OpenApiDocument = {
           details: {
             requiredPermissions: ["projects.edit_all"],
           },
+          requiredPermissions: ["projects.edit_all"],
           requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
@@ -386,6 +387,12 @@ export const openApiDocument: OpenApiDocument = {
             type: "object",
             description: "Alias legado mantido nas falhas de validacao Zod.",
             additionalProperties: true,
+          },
+          requiredPermissions: {
+            type: "array",
+            description:
+              "Alias legado mantido em falhas de autorizacao. Novos clientes devem usar details.requiredPermissions.",
+            items: { type: "string" },
           },
           requestId: {
             type: "string",

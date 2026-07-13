@@ -11,10 +11,20 @@ export function errorMiddleware(
   const requestId = String(res.locals.requestId ?? "unavailable");
 
   if (error instanceof AppError) {
+    const structuredDetails =
+      error.details && typeof error.details === "object"
+        ? (error.details as Record<string, unknown>)
+        : null;
+    const requiredPermissions = Array.isArray(structuredDetails?.requiredPermissions)
+      ? structuredDetails.requiredPermissions
+      : undefined;
+
     return res.status(error.statusCode).json({
       code: error.code,
       message: error.message,
       ...(error.details !== undefined ? { details: error.details } : {}),
+      // Compatibilidade temporaria com consumidores anteriores ao contrato estruturado.
+      ...(requiredPermissions ? { requiredPermissions } : {}),
       requestId,
     });
   }

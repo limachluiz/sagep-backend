@@ -51,6 +51,7 @@ describe("contratos HTTP transversais", () => {
       code: "PERMISSION_DENIED",
       message: "Sem permissao",
       details: { requiredPermissions: ["projects.edit_all"] },
+      requiredPermissions: ["projects.edit_all"],
       requestId,
     });
   });
