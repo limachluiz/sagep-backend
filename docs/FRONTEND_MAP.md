@@ -2,6 +2,23 @@
 
 Este documento organiza a construção do frontend a partir do backend atual.
 
+## Tipos gerados do contrato
+
+O arquivo `src/generated/openapi.ts` e gerado a partir do OpenAPI versionado e
+contem os tipos de paths, operacoes, requests e responses. Ele pode ser copiado
+ou publicado como pacote compartilhado para o frontend.
+
+```ts
+import type { paths, components } from "../generated/openapi";
+
+type LoginBody = paths["/auth/login"]["post"]["requestBody"]["content"]["application/json"];
+type Project = components["schemas"]["Project"];
+```
+
+Depois de alterar `src/docs/openapi.ts`, execute `npm run openapi:export` e
+`npm run openapi:generate-client`. O CI rejeita tanto o JSON quanto os tipos
+gerados quando estiverem desatualizados.
+
 ## Estratégia geral
 
 Prioridade recomendada:

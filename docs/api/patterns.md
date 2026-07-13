@@ -121,6 +121,24 @@ Listagens com envelope/legacy:
 - `GET /estimates`
 - `GET /diex`
 - `GET /service-orders`
+- `GET /users`
+- `GET /atas`
+- `GET /ata-items` e `GET /atas/{ataId}/items`
+- `GET /military-organizations`
+- listagens de sessoes em `/auth`
+
+## Representacao de dados
+
+- Datas e instantes nas respostas usam strings ISO 8601; datas sem horario usam
+  `YYYY-MM-DD` quando o dominio nao exige fuso.
+- Valores monetarios, precos e quantidades decimais usam strings decimais para
+  evitar perda de precisao no JavaScript, por exemplo `"1250.50"`.
+- Identificadores internos usam string; codigos sequenciais amigaveis usam
+  numero inteiro.
+- Enums usam os valores em caixa alta declarados no OpenAPI. O frontend nao
+  deve derivar novos valores a partir dos textos exibidos.
+- Campos opcionais sem valor sao representados por `null` quando fazem parte do
+  recurso; propriedades de filtros nao enviados podem ser omitidas.
 
 ## Filtros De Arquivamento
 
