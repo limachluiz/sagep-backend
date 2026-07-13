@@ -63,9 +63,38 @@ function main() {
   const securitySchemes = components?.securitySchemes as Record<string, unknown> | undefined;
   assert(securitySchemes?.bearerAuth, "Security scheme bearerAuth ausente");
 
+  const operationIds = new Set<string>();
+  let operationCount = 0;
+  const httpMethods = new Set(["get", "post", "put", "patch", "delete"]);
+
+  for (const [path, rawPathItem] of Object.entries(paths)) {
+    const pathItem = rawPathItem as Record<string, unknown>;
+
+    for (const [method, rawOperation] of Object.entries(pathItem)) {
+      if (!httpMethods.has(method)) {
+        continue;
+      }
+
+      operationCount += 1;
+      const operation = rawOperation as Record<string, unknown>;
+      const operationId = operation.operationId;
+      assert(
+        typeof operationId === "string" && operationId.length > 0,
+        `operationId ausente em ${method.toUpperCase()} ${path}`,
+      );
+      assert(
+        !operationIds.has(operationId as string),
+        `operationId duplicado: ${operationId as string}`,
+      );
+      operationIds.add(operationId as string);
+    }
+  }
+
   JSON.stringify(openApiDocument);
 
-  console.log(`OpenAPI validado com ${Object.keys(paths).length} paths e ${tags.length} tags.`);
+  console.log(
+    `OpenAPI validado com ${Object.keys(paths).length} paths, ${operationCount} operacoes e ${tags.length} tags.`,
+  );
 }
 
 try {

@@ -38,6 +38,8 @@ Tambem inclui:
 - endpoints de arquivamento e restore
 - sessoes proprias e administrativas
 - grupos de permissao por operacao via `x-permissions`
+- `operationId` unico e deterministico em todas as operacoes
+- contrato de erro com `code`, `message`, `details` e `requestId`
 
 ## Observacoes
 
@@ -52,6 +54,9 @@ Tambem inclui:
 npm run openapi:validate
 npm run openapi:export
 ```
+
+A validacao bloqueia operacoes sem `operationId` ou com identificadores
+duplicados, permitindo a geracao previsivel de clientes para o frontend.
 
 O comando de export gera:
 

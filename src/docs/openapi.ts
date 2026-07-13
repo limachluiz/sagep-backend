@@ -112,6 +112,8 @@ const defaultErrorResponses = {
   "401": { $ref: "#/components/responses/Unauthorized" },
   "403": { $ref: "#/components/responses/Forbidden" },
   "404": { $ref: "#/components/responses/NotFound" },
+  "409": { $ref: "#/components/responses/Conflict" },
+  "500": { $ref: "#/components/responses/InternalServerError" },
 };
 
 const archiveResponseExample = {
@@ -318,45 +320,88 @@ export const openApiDocument: OpenApiDocument = {
       BadRequest: {
         description: "Requisicao invalida.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "BAD_REQUEST",
           message: "Informe pelo menos um campo para atualizar",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
       Unauthorized: {
         description: "Autenticacao ausente ou invalida.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "AUTH_TOKEN_MISSING",
           message: "Token não informado",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
       Forbidden: {
         description: "Usuario autenticado sem permissao suficiente.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "PERMISSION_DENIED",
           message: "Você não tem permissão para acessar este recurso",
+          details: {
+            requiredPermissions: ["projects.edit_all"],
+          },
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
       NotFound: {
         description: "Recurso nao encontrado.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "NOT_FOUND",
           message: "Recurso não encontrado",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
+        }),
+      },
+      Conflict: {
+        description: "Conflito com o estado atual do recurso ou regra de negocio.",
+        content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "CONFLICT",
+          message: "O recurso não pode ser alterado no estado atual",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
+        }),
+      },
+      InternalServerError: {
+        description: "Erro interno inesperado.",
+        content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "INTERNAL_ERROR",
+          message: "Erro interno do servidor",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
     },
     schemas: {
       ErrorResponse: {
         type: "object",
+        required: ["code", "message", "requestId"],
+        properties: {
+          code: {
+            type: "string",
+            description: "Codigo estavel e legivel por maquina para tratamento no cliente.",
+          },
+          message: { type: "string" },
+          details: {
+            description: "Contexto estruturado opcional do erro.",
+          },
+          errors: {
+            type: "object",
+            description: "Alias legado mantido nas falhas de validacao Zod.",
+            additionalProperties: true,
+          },
+          requestId: {
+            type: "string",
+            format: "uuid",
+            description: "Identificador da requisicao, tambem devolvido em X-Request-Id.",
+          },
+        },
+      },
+      MessageResponse: {
+        type: "object",
         required: ["message"],
         properties: {
           message: { type: "string" },
-          issues: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                path: { type: "string" },
-                message: { type: "string" },
-              },
-            },
-          },
+          permissionUsed: { type: "string" },
         },
+        additionalProperties: true,
       },
       PaginationMeta: {
         type: "object",
@@ -2710,7 +2755,7 @@ export const openApiDocument: OpenApiDocument = {
           },
         },
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Logout realizado"),
+          "200": okJson("#/components/schemas/MessageResponse", "Logout realizado"),
           "400": { $ref: "#/components/responses/BadRequest" },
         },
       },
@@ -2742,7 +2787,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/SessionId" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Sessao revogada"),
+          "200": okJson("#/components/schemas/MessageResponse", "Sessao revogada"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_own"],
@@ -2754,7 +2799,7 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Revogar todas as sessoes proprias",
         security: bearerSecurity,
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Sessoes revogadas"),
+          "200": okJson("#/components/schemas/MessageResponse", "Sessoes revogadas"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_own"],
@@ -2791,7 +2836,7 @@ export const openApiDocument: OpenApiDocument = {
           { $ref: "#/components/parameters/SessionId" },
         ],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Sessao revogada"),
+          "200": okJson("#/components/schemas/MessageResponse", "Sessao revogada"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -2804,7 +2849,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [pathIdParameter("userId", "Identificador do usuario.")],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Sessoes revogadas"),
+          "200": okJson("#/components/schemas/MessageResponse", "Sessoes revogadas"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -3137,7 +3182,7 @@ export const openApiDocument: OpenApiDocument = {
           { $ref: "#/components/parameters/MemberId" },
         ],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Membro removido"),
+          "200": okJson("#/components/schemas/MessageResponse", "Membro removido"),
           ...defaultErrorResponses,
         },
       },
@@ -4329,7 +4374,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Ata removida"),
+          "200": okJson("#/components/schemas/MessageResponse", "Ata removida"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["atas.manage"],
@@ -4388,7 +4433,7 @@ export const openApiDocument: OpenApiDocument = {
           { $ref: "#/components/parameters/AtaCoverageGroupId" },
         ],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Grupo removido"),
+          "200": okJson("#/components/schemas/MessageResponse", "Grupo removido"),
           ...defaultErrorResponses,
         },
         "x-roles": ["ADMIN"],
@@ -4613,7 +4658,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Item removido"),
+          "200": okJson("#/components/schemas/MessageResponse", "Item removido"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["atas.manage"],
@@ -4694,7 +4739,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/MilitaryOrganizationCode" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "OM removida"),
+          "200": okJson("#/components/schemas/MessageResponse", "OM removida"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["military_organizations.manage"],
@@ -4732,7 +4777,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/MilitaryOrganizationId" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "OM removida"),
+          "200": okJson("#/components/schemas/MessageResponse", "OM removida"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["military_organizations.manage"],
@@ -4740,6 +4785,53 @@ export const openApiDocument: OpenApiDocument = {
     },
   },
 };
+
+const httpMethods = ["get", "post", "put", "patch", "delete"] as const;
+
+function normalizeOperationToken(value: string) {
+  return value
+    .replace(/[{}]/g, "")
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_match, next: string) => next.toUpperCase())
+    .replace(/^[A-Z]/, (first) => first.toLowerCase());
+}
+
+function buildOperationId(
+  method: (typeof httpMethods)[number],
+  path: string,
+  operation: Record<string, unknown>,
+) {
+  const tags = operation.tags as string[] | undefined;
+  const tag = normalizeOperationToken(tags?.[0] ?? path.split("/").filter(Boolean)[0] ?? "api");
+  const tokens = path
+    .split("/")
+    .filter(Boolean)
+    .map((token) => (token.startsWith("{") ? `by-${token.slice(1, -1)}` : token))
+    .map(normalizeOperationToken);
+
+  if (tokens[0] === tag) {
+    tokens.shift();
+  }
+
+  const resource = tokens.length > 0 ? tokens.join("_") : "collection";
+  return `${tag}_${method}_${resource}`;
+}
+
+function applyOperationIds(document: OpenApiDocument) {
+  const paths = (document.paths as Record<string, Record<string, unknown>> | undefined) ?? {};
+
+  for (const [path, pathItem] of Object.entries(paths)) {
+    for (const method of httpMethods) {
+      const operation = pathItem[method] as Record<string, unknown> | undefined;
+      if (!operation) {
+        continue;
+      }
+
+      operation.operationId = buildOperationId(method, path, operation);
+    }
+  }
+}
+
+applyOperationIds(openApiDocument);
 
 export function buildOpenApiDocsHtml(specUrl: string) {
   return `<!DOCTYPE html>

@@ -499,7 +499,9 @@
               "$ref": "#/components/schemas/ErrorResponse"
             },
             "example": {
-              "message": "Informe pelo menos um campo para atualizar"
+              "code": "BAD_REQUEST",
+              "message": "Informe pelo menos um campo para atualizar",
+              "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
             }
           }
         }
@@ -512,7 +514,9 @@
               "$ref": "#/components/schemas/ErrorResponse"
             },
             "example": {
-              "message": "Token não informado"
+              "code": "AUTH_TOKEN_MISSING",
+              "message": "Token não informado",
+              "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
             }
           }
         }
@@ -525,7 +529,14 @@
               "$ref": "#/components/schemas/ErrorResponse"
             },
             "example": {
-              "message": "Você não tem permissão para acessar este recurso"
+              "code": "PERMISSION_DENIED",
+              "message": "Você não tem permissão para acessar este recurso",
+              "details": {
+                "requiredPermissions": [
+                  "projects.edit_all"
+                ]
+              },
+              "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
             }
           }
         }
@@ -538,7 +549,39 @@
               "$ref": "#/components/schemas/ErrorResponse"
             },
             "example": {
-              "message": "Recurso não encontrado"
+              "code": "NOT_FOUND",
+              "message": "Recurso não encontrado",
+              "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Conflito com o estado atual do recurso ou regra de negocio.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "CONFLICT",
+              "message": "O recurso não pode ser alterado no estado atual",
+              "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+            }
+          }
+        }
+      },
+      "InternalServerError": {
+        "description": "Erro interno inesperado.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "INTERNAL_ERROR",
+              "message": "Erro interno do servidor",
+              "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
             }
           }
         }
@@ -548,25 +591,30 @@
       "ErrorResponse": {
         "type": "object",
         "required": [
-          "message"
+          "code",
+          "message",
+          "requestId"
         ],
         "properties": {
+          "code": {
+            "type": "string",
+            "description": "Codigo estavel e legivel por maquina para tratamento no cliente."
+          },
           "message": {
             "type": "string"
           },
-          "issues": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "path": {
-                  "type": "string"
-                },
-                "message": {
-                  "type": "string"
-                }
-              }
-            }
+          "details": {
+            "description": "Contexto estruturado opcional do erro."
+          },
+          "errors": {
+            "type": "object",
+            "description": "Alias legado mantido nas falhas de validacao Zod.",
+            "additionalProperties": true
+          },
+          "requestId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Identificador da requisicao, tambem devolvido em X-Request-Id."
           }
         }
       },
@@ -4966,6 +5014,21 @@
             "format": "date-time"
           }
         }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "permissionUsed": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": true
       }
     }
   },
@@ -4986,8 +5049,15 @@
                 }
               }
             }
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "health_get_collection"
       }
     },
     "/auth/register": {
@@ -5020,8 +5090,15 @@
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "auth_post_register"
       }
     },
     "/auth/login": {
@@ -5070,8 +5147,15 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "auth_post_login"
       }
     },
     "/auth/me": {
@@ -5098,8 +5182,15 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "auth_get_me"
       }
     },
     "/auth/refresh": {
@@ -5142,8 +5233,15 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "auth_post_refresh"
       }
     },
     "/auth/logout": {
@@ -5176,15 +5274,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
           },
           "400": {
             "$ref": "#/components/responses/BadRequest"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "auth_post_logout"
       }
     },
     "/auth/sessions": {
@@ -5247,11 +5352,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "sessions.manage_own"
-        ]
+        ],
+        "operationId": "auth_get_sessions"
       }
     },
     "/auth/sessions/{sessionId}/revoke": {
@@ -5276,7 +5388,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -5292,11 +5404,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "sessions.manage_own"
-        ]
+        ],
+        "operationId": "auth_post_sessions_bySessionId_revoke"
       }
     },
     "/auth/sessions/revoke-all": {
@@ -5316,7 +5435,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -5332,11 +5451,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "sessions.manage_own"
-        ]
+        ],
+        "operationId": "auth_post_sessions_revokeAll"
       }
     },
     "/auth/users/{userId}/sessions": {
@@ -5408,11 +5534,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "sessions.manage_all"
-        ]
+        ],
+        "operationId": "auth_get_users_byUserId_sessions"
       }
     },
     "/auth/users/{userId}/sessions/{sessionId}/revoke": {
@@ -5446,7 +5579,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -5462,11 +5595,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "sessions.manage_all"
-        ]
+        ],
+        "operationId": "auth_post_users_byUserId_sessions_bySessionId_revoke"
       }
     },
     "/auth/users/{userId}/sessions/revoke-all": {
@@ -5497,7 +5637,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -5513,11 +5653,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "sessions.manage_all"
-        ]
+        ],
+        "operationId": "auth_post_users_byUserId_sessions_revokeAll"
       }
     },
     "/auth/sessions/cleanup": {
@@ -5563,11 +5710,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "sessions.manage_all"
-        ]
+        ],
+        "operationId": "auth_post_sessions_cleanup"
       }
     },
     "/audits": {
@@ -5677,12 +5831,19 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
           "ADMIN",
           "GESTOR"
-        ]
+        ],
+        "operationId": "audits_get_collection"
       }
     },
     "/projects": {
@@ -5804,8 +5965,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_get_collection"
       },
       "post": {
         "tags": [
@@ -5849,8 +6017,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_post_collection"
       }
     },
     "/projects/code/{code}": {
@@ -5891,8 +6066,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_get_code_byCode"
       }
     },
     "/projects/{id}": {
@@ -5933,8 +6115,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_get_byId"
       },
       "patch": {
         "tags": [
@@ -5983,12 +6172,19 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "projects.edit_all",
           "projects.edit_own"
-        ]
+        ],
+        "operationId": "projects_patch_byId"
       },
       "delete": {
         "tags": [
@@ -6035,8 +6231,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_delete_byId"
       }
     },
     "/projects/{id}/flow": {
@@ -6087,8 +6290,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_patch_byId_flow"
       }
     },
     "/projects/{id}/as-built/review": {
@@ -6139,8 +6349,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_patch_byId_asBuilt_review"
       }
     },
     "/projects/{id}/commitment-note/cancel": {
@@ -6191,8 +6408,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_post_byId_commitmentNote_cancel"
       }
     },
     "/projects/{id}/restore": {
@@ -6269,11 +6493,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "projects.restore"
-        ]
+        ],
+        "operationId": "projects_post_byId_restore"
       }
     },
     "/projects/{id}/details": {
@@ -6317,8 +6548,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_get_byId_details"
       }
     },
     "/projects/{id}/timeline": {
@@ -6362,8 +6600,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_get_byId_timeline"
       }
     },
     "/projects/{id}/next-action": {
@@ -6405,8 +6650,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_get_byId_nextAction"
       }
     },
     "/projects/{id}/members": {
@@ -6450,8 +6702,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_get_byId_members"
       },
       "post": {
         "tags": [
@@ -6500,8 +6759,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_post_byId_members"
       }
     },
     "/projects/{id}/members/{memberId}": {
@@ -6529,7 +6795,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -6545,8 +6811,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "projects_delete_byId_members_byMemberId"
       }
     },
     "/tasks": {
@@ -6667,8 +6940,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "tasks_get_collection"
       },
       "post": {
         "tags": [
@@ -6712,11 +6992,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "tasks.create"
-        ]
+        ],
+        "operationId": "tasks_post_collection"
       }
     },
     "/tasks/code/{code}": {
@@ -6757,8 +7044,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "tasks_get_code_byCode"
       }
     },
     "/tasks/{id}": {
@@ -6799,8 +7093,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "tasks_get_byId"
       },
       "patch": {
         "tags": [
@@ -6849,13 +7150,20 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "tasks.edit_all",
           "tasks.edit_own",
           "tasks.assign"
-        ]
+        ],
+        "operationId": "tasks_patch_byId"
       },
       "delete": {
         "tags": [
@@ -6902,11 +7210,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "tasks.archive"
-        ]
+        ],
+        "operationId": "tasks_delete_byId"
       }
     },
     "/tasks/{id}/status": {
@@ -6957,13 +7272,20 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "tasks.edit_all",
           "tasks.edit_own",
           "tasks.complete"
-        ]
+        ],
+        "operationId": "tasks_patch_byId_status"
       }
     },
     "/tasks/{id}/restore": {
@@ -7017,11 +7339,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "tasks.restore"
-        ]
+        ],
+        "operationId": "tasks_post_byId_restore"
       }
     },
     "/estimates": {
@@ -7174,8 +7503,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "estimates_get_collection"
       },
       "post": {
         "tags": [
@@ -7219,11 +7555,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "estimates.create"
-        ]
+        ],
+        "operationId": "estimates_post_collection"
       }
     },
     "/estimates/code/{code}": {
@@ -7264,8 +7607,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "estimates_get_code_byCode"
       }
     },
     "/estimates/{id}": {
@@ -7306,8 +7656,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "estimates_get_byId"
       },
       "patch": {
         "tags": [
@@ -7356,12 +7713,19 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "estimates.edit",
           "estimates.finalize"
-        ]
+        ],
+        "operationId": "estimates_patch_byId"
       },
       "delete": {
         "tags": [
@@ -7400,11 +7764,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "estimates.archive"
-        ]
+        ],
+        "operationId": "estimates_delete_byId"
       }
     },
     "/estimates/{id}/status": {
@@ -7455,12 +7826,19 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "estimates.edit",
           "estimates.finalize"
-        ]
+        ],
+        "operationId": "estimates_patch_byId_status"
       }
     },
     "/estimates/{id}/restore": {
@@ -7514,11 +7892,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "estimates.restore"
-        ]
+        ],
+        "operationId": "estimates_post_byId_restore"
       }
     },
     "/estimates/{id}/document/html": {
@@ -7559,8 +7944,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "estimates_get_byId_document_html"
       }
     },
     "/estimates/{id}/document/pdf": {
@@ -7602,8 +7994,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "estimates_get_byId_document_pdf"
       }
     },
     "/diex": {
@@ -7708,8 +8107,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "diex_get_collection"
       },
       "post": {
         "tags": [
@@ -7753,11 +8159,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "diex.issue"
-        ]
+        ],
+        "operationId": "diex_post_collection"
       }
     },
     "/diex/code/{code}": {
@@ -7798,8 +8211,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "diex_get_code_byCode"
       }
     },
     "/diex/{id}": {
@@ -7840,8 +8260,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "diex_get_byId"
       },
       "patch": {
         "tags": [
@@ -7890,8 +8317,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "diex_patch_byId"
       },
       "delete": {
         "tags": [
@@ -7930,11 +8364,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "diex.cancel"
-        ]
+        ],
+        "operationId": "diex_delete_byId"
       }
     },
     "/diex/{id}/restore": {
@@ -7988,11 +8429,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "diex.restore"
-        ]
+        ],
+        "operationId": "diex_post_byId_restore"
       }
     },
     "/diex/{id}/document/html": {
@@ -8033,8 +8481,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "diex_get_byId_document_html"
       }
     },
     "/diex/{id}/document/pdf": {
@@ -8076,8 +8531,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "diex_get_byId_document_pdf"
       }
     },
     "/service-orders": {
@@ -8201,8 +8663,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "serviceOrders_get_collection"
       },
       "post": {
         "tags": [
@@ -8246,11 +8715,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "service_orders.issue"
-        ]
+        ],
+        "operationId": "serviceOrders_post_collection"
       }
     },
     "/service-orders/code/{code}": {
@@ -8291,8 +8767,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "serviceOrders_get_code_byCode"
       }
     },
     "/service-orders/number/{serviceOrderNumber}": {
@@ -8333,8 +8816,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "serviceOrders_get_number_byServiceOrderNumber"
       }
     },
     "/service-orders/{id}": {
@@ -8375,8 +8865,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "serviceOrders_get_byId"
       },
       "patch": {
         "tags": [
@@ -8425,8 +8922,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "serviceOrders_patch_byId"
       },
       "delete": {
         "tags": [
@@ -8465,11 +8969,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "service_orders.cancel"
-        ]
+        ],
+        "operationId": "serviceOrders_delete_byId"
       }
     },
     "/service-orders/{id}/restore": {
@@ -8523,11 +9034,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "service_orders.restore"
-        ]
+        ],
+        "operationId": "serviceOrders_post_byId_restore"
       }
     },
     "/service-orders/{id}/document/html": {
@@ -8568,8 +9086,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "serviceOrders_get_byId_document_html"
       }
     },
     "/service-orders/{id}/document/pdf": {
@@ -8611,8 +9136,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "serviceOrders_get_byId_document_pdf"
       }
     },
     "/dashboard/operational": {
@@ -8674,11 +9206,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "dashboard.view_operational"
-        ]
+        ],
+        "operationId": "dashboard_get_operational"
       }
     },
     "/dashboard/executive": {
@@ -8771,11 +9310,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "dashboard.view_executive"
-        ]
+        ],
+        "operationId": "dashboard_get_executive"
       }
     },
     "/dashboard": {
@@ -8868,11 +9414,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "dashboard.financial_view"
-        ]
+        ],
+        "operationId": "dashboard_get_collection"
       }
     },
     "/search": {
@@ -8931,8 +9484,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "search_get_collection"
       }
     },
     "/operational-alerts": {
@@ -8994,8 +9554,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "operationalAlerts_get_collection"
       }
     },
     "/exports/projects.xlsx": {
@@ -9093,11 +9660,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "reports.export"
-        ]
+        ],
+        "operationId": "exports_get_projectsXlsx"
       }
     },
     "/reports/projects/{id}/dossier": {
@@ -9139,11 +9713,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "reports.export"
-        ]
+        ],
+        "operationId": "reports_get_projects_byId_dossier"
       }
     },
     "/reports/projects/{id}/dossier.pdf": {
@@ -9185,11 +9766,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "reports.export"
-        ]
+        ],
+        "operationId": "reports_get_projects_byId_dossierPdf"
       }
     },
     "/users": {
@@ -9270,6 +9858,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -9277,7 +9871,8 @@
         ],
         "x-permissions": [
           "users.manage"
-        ]
+        ],
+        "operationId": "users_get_collection"
       },
       "post": {
         "tags": [
@@ -9322,6 +9917,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -9329,7 +9930,8 @@
         ],
         "x-permissions": [
           "users.manage"
-        ]
+        ],
+        "operationId": "users_post_collection"
       }
     },
     "/users/{id}": {
@@ -9371,6 +9973,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -9378,7 +9986,8 @@
         ],
         "x-permissions": [
           "users.manage"
-        ]
+        ],
+        "operationId": "users_get_byId"
       },
       "patch": {
         "tags": [
@@ -9428,6 +10037,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -9435,7 +10050,8 @@
         ],
         "x-permissions": [
           "users.manage"
-        ]
+        ],
+        "operationId": "users_patch_byId"
       }
     },
     "/users/{id}/status": {
@@ -9487,6 +10103,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -9494,7 +10116,8 @@
         ],
         "x-permissions": [
           "users.manage"
-        ]
+        ],
+        "operationId": "users_patch_byId_status"
       }
     },
     "/users/{id}/role": {
@@ -9546,6 +10169,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -9553,7 +10182,8 @@
         ],
         "x-permissions": [
           "users.manage"
-        ]
+        ],
+        "operationId": "users_patch_byId_role"
       }
     },
     "/permissions/catalog": {
@@ -9590,11 +10220,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "permissions.view"
-        ]
+        ],
+        "operationId": "permissions_get_catalog"
       }
     },
     "/permissions/roles/{role}": {
@@ -9636,11 +10273,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "permissions.view"
-        ]
+        ],
+        "operationId": "permissions_get_roles_byRole"
       },
       "put": {
         "tags": [
@@ -9690,11 +10334,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "permissions.manage_role_permissions"
-        ]
+        ],
+        "operationId": "permissions_put_roles_byRole"
       }
     },
     "/permissions/users/{id}": {
@@ -9736,11 +10387,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "permissions.view"
-        ]
+        ],
+        "operationId": "permissions_get_users_byId"
       }
     },
     "/permissions/users/{id}/overrides": {
@@ -9781,11 +10439,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "permissions.view"
-        ]
+        ],
+        "operationId": "permissions_get_users_byId_overrides"
       }
     },
     "/permissions/users/{id}/overrides/allow": {
@@ -9837,11 +10502,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "permissions.manage_user_overrides"
-        ]
+        ],
+        "operationId": "permissions_post_users_byId_overrides_allow"
       }
     },
     "/permissions/users/{id}/overrides/deny": {
@@ -9893,11 +10565,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "permissions.manage_user_overrides"
-        ]
+        ],
+        "operationId": "permissions_post_users_byId_overrides_deny"
       }
     },
     "/permissions/users/{id}/overrides/{permissionCode}": {
@@ -9942,11 +10621,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "permissions.manage_user_overrides"
-        ]
+        ],
+        "operationId": "permissions_delete_users_byId_overrides_byPermissionCode"
       }
     },
     "/atas": {
@@ -10068,8 +10754,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "atas_get_collection"
       },
       "post": {
         "tags": [
@@ -10114,11 +10807,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "atas_post_collection"
       }
     },
     "/integrations/compras-gov/atas/preview": {
@@ -10193,6 +10893,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -10200,7 +10906,8 @@
         ],
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "integrations_get_comprasGov_atas_preview"
       }
     },
     "/integrations/compras-gov/atas/import": {
@@ -10257,6 +10964,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -10264,7 +10977,8 @@
         ],
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "integrations_post_comprasGov_atas_import"
       }
     },
     "/atas/code/{code}": {
@@ -10305,8 +11019,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "atas_get_code_byCode"
       }
     },
     "/atas/{id}": {
@@ -10347,8 +11068,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "atas_get_byId"
       },
       "patch": {
         "tags": [
@@ -10398,11 +11126,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "atas_patch_byId"
       },
       "delete": {
         "tags": [
@@ -10425,7 +11160,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -10441,11 +11176,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "atas_delete_byId"
       }
     },
     "/atas/{id}/coverage-groups": {
@@ -10497,6 +11239,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -10504,7 +11252,8 @@
         ],
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "atas_post_byId_coverageGroups"
       }
     },
     "/atas/{id}/coverage-groups/{groupId}": {
@@ -10559,6 +11308,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -10566,7 +11321,8 @@
         ],
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "atas_patch_byId_coverageGroups_byGroupId"
       },
       "delete": {
         "tags": [
@@ -10593,7 +11349,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -10609,6 +11365,12 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-roles": [
@@ -10616,7 +11378,8 @@
         ],
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "atas_delete_byId_coverageGroups_byGroupId"
       }
     },
     "/atas/{id}/items": {
@@ -10728,8 +11491,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "ataItems_get_atas_byId_items"
       },
       "post": {
         "tags": [
@@ -10779,11 +11549,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "ataItems_post_atas_byId_items"
       }
     },
     "/atas/{id}/external-balance": {
@@ -10825,8 +11602,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "atas_get_byId_externalBalance"
       }
     },
     "/atas/{id}/sync-external-balance": {
@@ -10868,11 +11652,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "atas_post_byId_syncExternalBalance"
       }
     },
     "/ata-items": {
@@ -10991,8 +11782,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "ataItems_get_collection"
       }
     },
     "/ata-items/code/{code}": {
@@ -11033,8 +11831,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "ataItems_get_code_byCode"
       }
     },
     "/ata-items/{id}/movements": {
@@ -11076,8 +11881,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "ataItems_get_byId_movements"
       }
     },
     "/ata-items/{id}/balance-comparison": {
@@ -11119,8 +11931,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "ataItems_get_byId_balanceComparison"
       }
     },
     "/ata-items/{id}/sync-external-balance": {
@@ -11162,11 +11981,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "ataItems_post_byId_syncExternalBalance"
       }
     },
     "/ata-items/{id}/register-external-consumption": {
@@ -11218,8 +12044,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "ataItems_post_byId_registerExternalConsumption"
       }
     },
     "/ata-items/{id}": {
@@ -11260,8 +12093,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "ataItems_get_byId"
       },
       "patch": {
         "tags": [
@@ -11311,11 +12151,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "ataItems_patch_byId"
       },
       "delete": {
         "tags": [
@@ -11338,7 +12185,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -11354,11 +12201,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "atas.manage"
-        ]
+        ],
+        "operationId": "ataItems_delete_byId"
       }
     },
     "/military-organizations": {
@@ -11467,8 +12321,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "militaryOrganizations_get_collection"
       },
       "post": {
         "tags": [
@@ -11513,11 +12374,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "military_organizations.manage"
-        ]
+        ],
+        "operationId": "militaryOrganizations_post_collection"
       }
     },
     "/military-organizations/code/{code}": {
@@ -11558,8 +12426,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "militaryOrganizations_get_code_byCode"
       },
       "patch": {
         "tags": [
@@ -11608,11 +12483,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "military_organizations.manage"
-        ]
+        ],
+        "operationId": "militaryOrganizations_patch_code_byCode"
       },
       "delete": {
         "tags": [
@@ -11635,7 +12517,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -11651,11 +12533,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "military_organizations.manage"
-        ]
+        ],
+        "operationId": "militaryOrganizations_delete_code_byCode"
       }
     },
     "/military-organizations/{id}": {
@@ -11696,8 +12585,15 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
-        }
+        },
+        "operationId": "militaryOrganizations_get_byId"
       },
       "patch": {
         "tags": [
@@ -11746,11 +12642,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "military_organizations.manage"
-        ]
+        ],
+        "operationId": "militaryOrganizations_patch_byId"
       },
       "delete": {
         "tags": [
@@ -11773,7 +12676,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/MessageResponse"
                 }
               }
             }
@@ -11789,11 +12692,18 @@
           },
           "404": {
             "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
           }
         },
         "x-permissions": [
           "military_organizations.manage"
-        ]
+        ],
+        "operationId": "militaryOrganizations_delete_byId"
       }
     }
   }

@@ -2,6 +2,7 @@ import { NextFunction, Request, Response, Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { AtaItemsController } from "./ata-items.controller.js";
+import { AppError } from "../../shared/app-error.js";
 
 export const ataItemsRoutes = Router();
 const controller = new AtaItemsController();
@@ -12,7 +13,7 @@ const allowExternalConsumptionRegistration = (
   next: NextFunction,
 ) => {
   if (!req.user) {
-    return res.status(401).json({ message: "Usuário não autenticado" });
+    return next(new AppError("Usuário não autenticado", 401, "AUTH_REQUIRED"));
   }
 
   if (
@@ -23,9 +24,13 @@ const allowExternalConsumptionRegistration = (
     return next();
   }
 
-  return res.status(403).json({
-    message: "Você não tem permissão para registrar consumo externo manual",
-  });
+  return next(
+    new AppError(
+      "Você não tem permissão para registrar consumo externo manual",
+      403,
+      "EXTERNAL_CONSUMPTION_PERMISSION_DENIED",
+    ),
+  );
 };
 
 ataItemsRoutes.use(authMiddleware);

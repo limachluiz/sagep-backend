@@ -24,10 +24,20 @@
 | Sessoes | `sessions.manage_own`, `sessions.manage_all` |
 | Usuarios | `users.manage` |
 
-As permissoes sao derivadas por role no codigo, nao persistidas no banco.
-Nesta matriz, permissoes de manutencao de catalogos (`atas.manage` e
+As permissoes sao governadas pelo banco:
+
+- `RolePermission` armazena a matriz base de cada role;
+- `UserPermissionOverride` aplica excecoes individuais com `ALLOW` ou `DENY`;
+- o catalogo em `permissions.catalog.ts` funciona como definicao dos codigos,
+  matriz inicial do seed e fallback apenas quando ainda nao existe uma matriz
+  persistida;
+- `/auth/me` devolve as permissoes efetivas ja calculadas para o usuario.
+
+Na matriz inicial, permissoes de manutencao de catalogos (`atas.manage` e
 `military_organizations.manage`) sao exclusivas de `ADMIN`; `GESTOR`,
 `PROJETISTA` e `CONSULTA` mantem acesso autenticado de leitura aos catalogos.
+Alteracoes administrativas posteriores na matriz persistida passam a ser a
+fonte de verdade.
 
 ## Login
 

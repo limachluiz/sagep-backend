@@ -1,0 +1,71 @@
+import { describe, expect, it, vi } from "vitest";
+import type { NextFunction, Request, Response } from "express";
+import { openApiDocument } from "../src/docs/openapi.js";
+import { errorMiddleware } from "../src/middlewares/error.middleware.js";
+import {
+  REQUEST_ID_HEADER,
+  requestContextMiddleware,
+} from "../src/middlewares/request-context.middleware.js";
+import { AppError } from "../src/shared/app-error.js";
+
+describe("contratos HTTP transversais", () => {
+  it("atribui operationId unico a todas as operacoes OpenAPI", () => {
+    const paths = openApiDocument.paths as Record<string, Record<string, unknown>>;
+    const operationIds: string[] = [];
+
+    for (const pathItem of Object.values(paths)) {
+      for (const method of ["get", "post", "put", "patch", "delete"]) {
+        const operation = pathItem[method] as Record<string, unknown> | undefined;
+        if (operation) {
+          operationIds.push(operation.operationId as string);
+        }
+      }
+    }
+
+    expect(operationIds).toHaveLength(121);
+    expect(operationIds.every(Boolean)).toBe(true);
+    expect(new Set(operationIds).size).toBe(operationIds.length);
+  });
+
+  it("mantem message e acrescenta code, details e requestId em AppError", () => {
+    const requestId = "2c4a3610-9e9f-40d7-97d0-886bf983302e";
+    const json = vi.fn();
+    const status = vi.fn(() => ({ json }));
+    const response = {
+      locals: { requestId },
+      status,
+    } as unknown as Response;
+    const error = new AppError("Sem permissao", 403, "PERMISSION_DENIED", {
+      requiredPermissions: ["projects.edit_all"],
+    });
+
+    errorMiddleware(
+      error,
+      {} as Request,
+      response,
+      vi.fn() as NextFunction,
+    );
+
+    expect(status).toHaveBeenCalledWith(403);
+    expect(json).toHaveBeenCalledWith({
+      code: "PERMISSION_DENIED",
+      message: "Sem permissao",
+      details: { requiredPermissions: ["projects.edit_all"] },
+      requestId,
+    });
+  });
+
+  it("gera requestId e o devolve no header", () => {
+    const setHeader = vi.fn();
+    const response = { locals: {}, setHeader } as unknown as Response;
+    const next = vi.fn();
+
+    requestContextMiddleware({} as Request, response, next);
+
+    expect(response.locals.requestId).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(setHeader).toHaveBeenCalledWith(REQUEST_ID_HEADER, response.locals.requestId);
+    expect(next).toHaveBeenCalledOnce();
+  });
+});

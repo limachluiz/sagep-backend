@@ -11,12 +11,50 @@ Authorization: Bearer <accessToken>
 Erros comuns:
 
 ```json
-{ "message": "Token não informado" }
+{
+  "code": "AUTH_TOKEN_MISSING",
+  "message": "Token não informado",
+  "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+}
 ```
 
 ```json
-{ "message": "Você não tem permissão para acessar este recurso" }
+{
+  "code": "PERMISSION_DENIED",
+  "message": "Você não tem permissão para acessar este recurso",
+  "details": { "requiredPermissions": ["projects.edit_all"] },
+  "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+}
 ```
+
+## Contrato De Erro
+
+Toda falha processada pela API retorna `code`, `message` e `requestId`.
+`details` contem contexto estruturado opcional. O `requestId` tambem e
+devolvido no header `X-Request-Id` para correlacao com logs e suporte.
+
+Falhas de validacao Zod preservam temporariamente o campo legado `errors` e
+tambem retornam `details.fieldErrors` e `details.formErrors`.
+
+Codigos genericos derivados do status incluem `BAD_REQUEST`, `UNAUTHORIZED`,
+`FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `BAD_GATEWAY` e `INTERNAL_ERROR`.
+Middlewares usam codigos mais especificos, como
+`AUTH_TOKEN_INVALID_OR_EXPIRED` e `PERMISSION_DENIED`.
+
+## CORS
+
+Origens de navegador sao autorizadas exclusivamente por
+`CORS_ALLOWED_ORIGINS`, em lista separada por virgulas. Requisicoes sem header
+`Origin`, como health checks, scripts, Docker e clientes REST, continuam
+permitidas.
+
+```env
+CORS_ALLOWED_ORIGINS="http://localhost:4200,https://sagep.exemplo.mil.br"
+CORS_ALLOW_CREDENTIALS=false
+```
+
+Origem nao autorizada recebe `403` com `CORS_ORIGIN_DENIED`. Em producao,
+lista vazia significa que nenhuma origem de navegador externa esta autorizada.
 
 ## Listagens Com Envelope
 

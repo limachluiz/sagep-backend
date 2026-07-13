@@ -96,6 +96,8 @@ Variáveis usadas atualmente:
 | `PDF_RENDER_MODE` | nao | `real` para gerar PDF com Chromium; em testes pode ser `mock` |
 | `COMPRAS_GOV_DEBUG` | nao | Flag de diagnostico para integracoes Compras.gov.br |
 | `PORTAL_TRANSPARENCIA_API_TOKEN` | nao | Token da API do Portal da Transparencia, se usado |
+| `CORS_ALLOWED_ORIGINS` | nao | Lista de origens de navegador autorizadas, separadas por virgula. Vazia bloqueia origens externas |
+| `CORS_ALLOW_CREDENTIALS` | nao | Habilita credenciais CORS. Padrao `false` no modelo Bearer atual |
 | `JWT_REFRESH_SECRET` | sim | Segredo do refresh token |
 | `JWT_ACCESS_EXPIRES_IN` | sim | Expiração do access token |
 | `JWT_REFRESH_EXPIRES_IN` | sim | Expiração do refresh token |
@@ -114,7 +116,13 @@ PDF_TIMEOUT_MS=60000
 PDF_RENDER_MODE=real
 COMPRAS_GOV_DEBUG=false
 PORTAL_TRANSPARENCIA_API_TOKEN=
+CORS_ALLOWED_ORIGINS="http://localhost:4200"
+CORS_ALLOW_CREDENTIALS=false
 ```
+
+Requisicoes sem header `Origin`, como scripts, health checks e comunicacao
+entre servicos, nao sao bloqueadas pelo CORS. Em producao, informe apenas as
+URLs oficiais do frontend.
 
 ## Docker com banco persistente
 
