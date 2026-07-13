@@ -1,7 +1,7 @@
 # SAGEP Backend
 
-![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933?logo=node.js&logoColor=white)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.x-3178C6?logo=typescript&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-24-339933?logo=node.js&logoColor=white)
+![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?logo=typescript&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-5.x-000000?logo=express&logoColor=white)
 ![Prisma](https://img.shields.io/badge/Prisma-ORM-2D3748?logo=prisma&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Database-4169E1?logo=postgresql&logoColor=white)
@@ -23,11 +23,14 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - auditoria de ações críticas;
 - dashboards operacionais, executivos e financeiros;
 - gestão de saldo dos itens da ATA com reserva, consumo, estorno e rollback de NE.
+- importação completa de ATAs e itens pelo Compras.gov.br;
+- Kanban interno derivado do workflow dos projetos;
+- Gantt consolidado a partir das Ordens de Serviço.
 
 ## Stack técnica
 
-- Node.js 20+
-- TypeScript
+- Node.js 24
+- TypeScript 6
 - Express
 - Prisma ORM
 - PostgreSQL
@@ -42,16 +45,22 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - sessões do usuário e revogação administrativa;
 - RBAC governado pelo banco com permissões por role e overrides por usuário;
 - projetos com workflow documental;
+- Kanban de projetos com movimentação protegida pelo workflow;
 - tarefas e membros de projeto;
 - catálogo de ATAs e itens de ATA;
 - estimativas de preço;
 - DIEx requisitório;
 - Ordens de Serviço;
+- Gantt consolidado e individual das Ordens de Serviço;
+- aprovação do As-Built condicionada a link de arquivo ou pasta em nuvem;
+- importação única de ATA completa pelo Compras.gov.br;
 - saldo dos itens da ATA por movimentação;
 - dashboards operacional, executivo e visão geral;
 - alertas operacionais;
 - relatórios e exportações;
 - auditoria e timeline.
+- contrato OpenAPI com cliente TypeScript gerado;
+- códigos de erro estáveis e `requestId` para suporte.
 
 ## Fluxo documental resumido
 
@@ -65,6 +74,9 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 8. Atestar NF
 9. Serviço Concluído
 
+Para avançar de `ANALISANDO_AS_BUILT` para `ATESTAR_NF`, a revisão aprovada
+deve informar `asBuiltLink` com uma URL válida para o arquivo ou pasta em nuvem.
+
 Com o módulo de saldo da ATA:
 
 - a estimativa consulta saldo disponível;
@@ -72,9 +84,23 @@ Com o módulo de saldo da ATA:
 - a NE consome saldo;
 - o cancelamento da NE estorna saldo e faz rollback documental do projeto.
 
+## Compras.gov.br e saldo local
+
+O Compras.gov.br é consultado somente em `preview` e na importação inicial da
+ATA completa. O SAGEP persiste cabeçalho, itens, preços e quantidades. Depois da
+importação não há sincronização externa ou consulta individual de itens:
+reservas, consumos e estornos usam exclusivamente o razão de saldo local.
+
+## Planejamento visual
+
+- `GET /api/projects/kanban`: quadro agregado pelas etapas oficiais.
+- `PATCH /api/projects/:id/kanban/move`: movimentação validada pelo workflow.
+- `GET /api/service-orders/gantt`: Gantt consolidado das OS.
+- `GET /api/service-orders/:id/gantt`: Gantt de uma OS.
+
 ## Requisitos para rodar localmente
 
-- Node.js 20 ou superior
+- Node.js 24
 - npm
 - PostgreSQL 15+ ou Docker Compose
 - acesso local para criar e migrar o banco
@@ -101,6 +127,7 @@ Variáveis usadas atualmente:
 | `JWT_REFRESH_SECRET` | sim | Segredo do refresh token |
 | `JWT_ACCESS_EXPIRES_IN` | sim | Expiração do access token |
 | `JWT_REFRESH_EXPIRES_IN` | sim | Expiração do refresh token |
+| `ALLOW_PUBLIC_REGISTRATION` | nao | Habilita `POST /auth/register`. Padrao seguro: `false` |
 
 Exemplo:
 
@@ -118,6 +145,7 @@ COMPRAS_GOV_DEBUG=false
 PORTAL_TRANSPARENCIA_API_TOKEN=
 CORS_ALLOWED_ORIGINS="http://localhost:4200"
 CORS_ALLOW_CREDENTIALS=false
+ALLOW_PUBLIC_REGISTRATION=false
 ```
 
 Requisicoes sem header `Origin`, como scripts, health checks e comunicacao
@@ -126,7 +154,7 @@ URLs oficiais do frontend.
 
 ## Docker com banco persistente
 
-O ambiente Docker sobe `api`, `postgres` e `pgadmin`. O PostgreSQL usa o volume nomeado `sagep_postgres_data`, montado em `/var/lib/postgresql/data`, para preservar ATAs importadas, usuarios, snapshots e demais dados entre reinicios.
+O ambiente Docker sobe `api`, `postgres` e `pgadmin`. O PostgreSQL usa o volume nomeado `sagep_postgres_data`, montado em `/var/lib/postgresql/data`, para preservar ATAs importadas, usuários, projetos e demais dados entre reinícios.
 
 Dentro do Docker, a API sempre usa `DATABASE_URL=postgresql://sagep:sagep123@postgres:5432/sagep?schema=public`. Nao use `localhost` dentro do container da API: nesse contexto, `localhost` e o proprio container, nao o Postgres.
 
@@ -280,6 +308,8 @@ npm run start
 npm test
 npm run openapi:validate
 npm run openapi:export
+npm run openapi:generate-client
+npm run openapi:check-client
 npm run prisma:generate
 npm run prisma:migrate
 npm run prisma:seed
@@ -319,6 +349,10 @@ Material complementar já existente no repositório:
 
 - [Docs de API por temas](docs/api/README.md)
 - [OpenAPI exportado](docs/api/openapi/openapi.json)
+- [Cliente TypeScript gerado](src/generated/openapi.ts)
+
+O CI valida migrations, build, OpenAPI versionado, cliente TypeScript gerado e
+a suíte completa. O contrato atual possui 89 paths e 120 operações.
 
 ## Estrutura resumida
 
@@ -333,6 +367,7 @@ src/
     estimates/
     diex/
     service-orders/
+    compras-gov/
     dashboard/
     permissions/
     operational-alerts/
@@ -351,4 +386,6 @@ docs/
 - O backend usa autenticação Bearer JWT.
 - O controle de permissão efetiva é calculado a partir da role persistida no banco e dos overrides por usuário.
 - O módulo de saldo da ATA é auditável por movimentação, não por campo acumulado simples.
+- O Compras.gov.br é usado somente para prévia e importação inicial da ATA.
+- Kanban e Gantt são projeções do domínio existente; não mantêm estados paralelos.
 - O frontend pode tomar o `README` como porta de entrada e os arquivos em `docs/` como base funcional.
