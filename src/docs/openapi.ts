@@ -951,6 +951,7 @@ export const openApiDocument: OpenApiDocument = {
           asBuiltReceivedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltReviewedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltApprovedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltLink: { type: "string", format: "uri", maxLength: 2048, nullable: true },
           asBuiltRejectedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltRejectionReason: { type: "string", nullable: true },
           invoiceAttestedAt: { type: "string", format: "date-time", nullable: true },
@@ -961,10 +962,16 @@ export const openApiDocument: OpenApiDocument = {
         oneOf: [
           {
             type: "object",
-            required: ["approved", "reviewedAt"],
+            required: ["approved", "reviewedAt", "asBuiltLink"],
             properties: {
               approved: { type: "boolean", const: true },
               reviewedAt: { type: "string", format: "date-time" },
+              asBuiltLink: {
+                type: "string",
+                format: "uri",
+                maxLength: 2048,
+                description: "Link do arquivo ou pasta em nuvem que contem o As-Built.",
+              },
             },
           },
           {

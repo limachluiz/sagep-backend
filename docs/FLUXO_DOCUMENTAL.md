@@ -134,13 +134,14 @@ Significa:
 
 O que destrava a próxima etapa:
 
-- validação do As-Built.
+- validação do As-Built;
+- link válido do arquivo ou pasta em nuvem que contém o As-Built.
 
 Regras:
 
-- se aprovado, o projeto avança para `ATESTAR_NF`;
+- se aprovado e possuir `asBuiltLink`, o projeto avança para `ATESTAR_NF`;
 - se reprovado, exige motivo e o projeto retorna para `SERVICO_EM_EXECUCAO`;
-- na reprovação, `asBuiltReceivedAt` é limpo para permitir novo recebimento.
+- na reprovação, `asBuiltReceivedAt` e `asBuiltLink` são limpos para permitir novo recebimento.
 
 ### 8. Atestar NF
 

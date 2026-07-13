@@ -124,6 +124,11 @@ export const reviewAsBuiltSchema = z.discriminatedUnion("approved", [
   z.object({
     approved: z.literal(true),
     reviewedAt: z.coerce.date(),
+    asBuiltLink: z
+      .string()
+      .trim()
+      .url("Informe um link válido para o arquivo ou pasta do As-Built")
+      .max(2048, "Link do As-Built muito longo"),
   }),
   z.object({
     approved: z.literal(false),

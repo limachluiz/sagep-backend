@@ -2033,6 +2033,8 @@ export interface components {
             asBuiltReviewedAt?: string | null;
             /** Format: date-time */
             asBuiltApprovedAt?: string | null;
+            /** Format: uri */
+            asBuiltLink?: string | null;
             /** Format: date-time */
             asBuiltRejectedAt?: string | null;
             asBuiltRejectionReason?: string | null;
@@ -2046,6 +2048,11 @@ export interface components {
             approved: true;
             /** Format: date-time */
             reviewedAt: string;
+            /**
+             * Format: uri
+             * @description Link do arquivo ou pasta em nuvem que contem o As-Built.
+             */
+            asBuiltLink: string;
         } | {
             /** @constant */
             approved: false;

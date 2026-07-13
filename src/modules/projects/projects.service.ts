@@ -70,6 +70,7 @@ type ReviewAsBuiltInput =
   | {
       approved: true;
       reviewedAt: Date;
+      asBuiltLink: string;
     }
   | {
       approved: false;
@@ -361,6 +362,7 @@ export class ProjectsService {
     asBuiltReceivedAt?: Date | null;
     asBuiltReviewedAt?: Date | null;
     asBuiltApprovedAt?: Date | null;
+    asBuiltLink?: string | null;
     asBuiltRejectedAt?: Date | null;
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
@@ -388,6 +390,7 @@ export class ProjectsService {
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
       asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
       asBuiltApprovedAt: project.asBuiltApprovedAt ?? null,
+      asBuiltLink: project.asBuiltLink ?? null,
       asBuiltRejectedAt: project.asBuiltRejectedAt ?? null,
       asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
@@ -411,6 +414,7 @@ export class ProjectsService {
     asBuiltReceivedAt?: Date | null;
     asBuiltReviewedAt?: Date | null;
     asBuiltApprovedAt?: Date | null;
+    asBuiltLink?: string | null;
     asBuiltRejectedAt?: Date | null;
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
@@ -432,6 +436,7 @@ export class ProjectsService {
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
       asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
       asBuiltApprovedAt: project.asBuiltApprovedAt ?? null,
+      asBuiltLink: project.asBuiltLink ?? null,
       asBuiltRejectedAt: project.asBuiltRejectedAt ?? null,
       asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
@@ -446,6 +451,10 @@ export class ProjectsService {
 
     const parsed = Number(value.toString());
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getAsBuiltLink(project: object) {
+    return (project as { asBuiltLink?: string | null }).asBuiltLink ?? null;
   }
 
   private sumAmounts(items: { totalAmount: { toString(): string } | string | number }[]) {
@@ -1134,6 +1143,7 @@ export class ProjectsService {
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
         asBuiltApprovedAt: true,
+        asBuiltLink: true,
         asBuiltRejectedAt: true,
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
@@ -1500,6 +1510,7 @@ export class ProjectsService {
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
         asBuiltApprovedAt: true,
+        asBuiltLink: true,
         asBuiltRejectedAt: true,
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
@@ -1650,6 +1661,7 @@ export class ProjectsService {
       asBuiltReceivedAt: data.asBuiltReceivedAt ?? currentProject.asBuiltReceivedAt,
       asBuiltReviewedAt: currentProject.asBuiltReviewedAt,
       asBuiltApprovedAt: currentProject.asBuiltApprovedAt,
+      asBuiltLink: this.getAsBuiltLink(currentProject),
       asBuiltRejectedAt: currentProject.asBuiltRejectedAt,
       asBuiltRejectionReason: currentProject.asBuiltRejectionReason,
       invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
@@ -1766,6 +1778,7 @@ export class ProjectsService {
       asBuiltReceivedAt: project.asBuiltReceivedAt,
       asBuiltReviewedAt: project.asBuiltReviewedAt,
       asBuiltApprovedAt: project.asBuiltApprovedAt,
+      asBuiltLink: this.getAsBuiltLink(project),
       asBuiltRejectedAt: project.asBuiltRejectedAt,
       asBuiltRejectionReason: project.asBuiltRejectionReason,
       invoiceAttestedAt: project.invoiceAttestedAt,
@@ -1803,6 +1816,7 @@ export class ProjectsService {
             asBuiltReceivedAt: project.asBuiltReceivedAt,
             asBuiltReviewedAt: project.asBuiltReviewedAt,
             asBuiltApprovedAt: project.asBuiltApprovedAt,
+            asBuiltLink: this.getAsBuiltLink(project),
             asBuiltRejectedAt: project.asBuiltRejectedAt,
             asBuiltRejectionReason: project.asBuiltRejectionReason,
             invoiceAttestedAt: project.invoiceAttestedAt,
@@ -1893,6 +1907,7 @@ export class ProjectsService {
       asBuiltReceivedAt: data.approved ? currentProject.asBuiltReceivedAt : null,
       asBuiltReviewedAt: reviewedAt,
       asBuiltApprovedAt: data.approved ? reviewedAt : null,
+      asBuiltLink: data.approved ? data.asBuiltLink : null,
       asBuiltRejectedAt: data.approved ? null : reviewedAt,
       asBuiltRejectionReason: rejectionReason,
       invoiceAttestedAt: currentProject.invoiceAttestedAt,
@@ -1918,9 +1933,10 @@ export class ProjectsService {
         status: workflowService.getMacroStatusFromStage(targetStage),
         asBuiltReviewedAt: reviewedAt,
         asBuiltApprovedAt: data.approved ? reviewedAt : null,
+        asBuiltLink: data.approved ? data.asBuiltLink : null,
         asBuiltRejectedAt: data.approved ? null : reviewedAt,
         asBuiltRejectionReason: rejectionReason,
-        ...(data.approved ? {} : { asBuiltReceivedAt: null }),
+        ...(data.approved ? {} : { asBuiltReceivedAt: null, asBuiltLink: null }),
       },
       include: projectInclude,
     });
@@ -1948,6 +1964,7 @@ export class ProjectsService {
       asBuiltReceivedAt: project.asBuiltReceivedAt,
       asBuiltReviewedAt: project.asBuiltReviewedAt,
       asBuiltApprovedAt: project.asBuiltApprovedAt,
+      asBuiltLink: this.getAsBuiltLink(project),
       asBuiltRejectedAt: project.asBuiltRejectedAt,
       asBuiltRejectionReason: project.asBuiltRejectionReason,
       invoiceAttestedAt: project.invoiceAttestedAt,
@@ -1968,6 +1985,7 @@ export class ProjectsService {
         source: "project.as-built.review",
         approved: data.approved,
         reviewedAt,
+        asBuiltLink: data.approved ? data.asBuiltLink : null,
         rejectionReason,
       },
     });
@@ -1988,6 +2006,7 @@ export class ProjectsService {
         previousStage: currentProject.stage,
         newStage: project.stage,
         reviewedAt,
+        asBuiltLink: data.approved ? data.asBuiltLink : null,
         rejectionReason,
         nextActionCode: workflowService.getNextAction(
           this.buildWorkflowSnapshot({
@@ -2006,6 +2025,7 @@ export class ProjectsService {
             asBuiltReceivedAt: project.asBuiltReceivedAt,
             asBuiltReviewedAt: project.asBuiltReviewedAt,
             asBuiltApprovedAt: project.asBuiltApprovedAt,
+            asBuiltLink: this.getAsBuiltLink(project),
             asBuiltRejectedAt: project.asBuiltRejectedAt,
             asBuiltRejectionReason: project.asBuiltRejectionReason,
             invoiceAttestedAt: project.invoiceAttestedAt,

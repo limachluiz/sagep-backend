@@ -1309,18 +1309,29 @@ describe("critical flows", () => {
       })
       .expect(200);
 
-    const approved = await request(app)
+    await request(app)
       .patch(`/api/projects/${project.id}/as-built/review`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         approved: true,
         reviewedAt: "2026-04-08T00:00:00.000Z",
       })
+      .expect(400);
+
+    const approved = await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-08T00:00:00.000Z",
+        asBuiltLink: "https://drive.example.mil.br/pastas/as-built-prj",
+      })
       .expect(200);
 
     expect(approved.body.stage).toBe("ATESTAR_NF");
     expect(approved.body.asBuiltReviewedAt).toBeTruthy();
     expect(approved.body.asBuiltApprovedAt).toBeTruthy();
+    expect(approved.body.asBuiltLink).toBe("https://drive.example.mil.br/pastas/as-built-prj");
     expect(approved.body.asBuiltRejectedAt).toBeNull();
     expect(approved.body.asBuiltRejectionReason).toBeNull();
 
@@ -1440,6 +1451,7 @@ describe("critical flows", () => {
       .send({
         approved: true,
         reviewedAt: "2026-04-06T00:00:00.000Z",
+        asBuiltLink: "https://drive.example.mil.br/arquivos/as-built-1.pdf",
       })
       .expect(200);
 
@@ -1540,6 +1552,7 @@ describe("critical flows", () => {
       .send({
         approved: true,
         reviewedAt: "2026-04-06T00:00:00.000Z",
+        asBuiltLink: "https://drive.example.mil.br/arquivos/as-built-2.pdf",
       })
       .expect(200);
 

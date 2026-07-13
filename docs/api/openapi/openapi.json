@@ -1691,6 +1691,12 @@
             "format": "date-time",
             "nullable": true
           },
+          "asBuiltLink": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "nullable": true
+          },
           "asBuiltRejectedAt": {
             "type": "string",
             "format": "date-time",
@@ -1718,7 +1724,8 @@
             "type": "object",
             "required": [
               "approved",
-              "reviewedAt"
+              "reviewedAt",
+              "asBuiltLink"
             ],
             "properties": {
               "approved": {
@@ -1728,6 +1735,12 @@
               "reviewedAt": {
                 "type": "string",
                 "format": "date-time"
+              },
+              "asBuiltLink": {
+                "type": "string",
+                "format": "uri",
+                "maxLength": 2048,
+                "description": "Link do arquivo ou pasta em nuvem que contem o As-Built."
               }
             }
           },

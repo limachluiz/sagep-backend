@@ -206,6 +206,14 @@ export class WorkflowService {
           409,
         );
       }
+
+      if (!snapshot.asBuiltLink) {
+        throw new AppError(
+          "Para finalizar a etapa do As-Built, informe o link do arquivo ou pasta em nuvem",
+          409,
+          "WORKFLOW_AS_BUILT_LINK_REQUIRED",
+        );
+      }
     }
 
     if (stage === "SERVICO_CONCLUIDO") {

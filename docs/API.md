@@ -377,14 +377,15 @@ Entidade principal do sistema. Representa o ciclo de vida completo do projeto.
 - Permissão: `projects.edit_own` ou `projects.edit_all`
 - Regras:
   - somente disponível quando o projeto estiver em `ANALISANDO_AS_BUILT`;
-  - se aprovado, o projeto avança para `ATESTAR_NF`;
-  - se reprovado, exige motivo, limpa `asBuiltReceivedAt` e retorna para `SERVICO_EM_EXECUCAO`.
+  - se aprovado, exige um link válido do arquivo ou pasta em nuvem e avança para `ATESTAR_NF`;
+  - se reprovado, exige motivo, limpa `asBuiltReceivedAt` e `asBuiltLink` e retorna para `SERVICO_EM_EXECUCAO`.
 - Body exemplo para aprovação:
 
 ```json
 {
   "approved": true,
-  "reviewedAt": "2026-05-06T10:00:00.000Z"
+  "reviewedAt": "2026-05-06T10:00:00.000Z",
+  "asBuiltLink": "https://drive.example.mil.br/pastas/as-built-prj-123"
 }
 ```
 

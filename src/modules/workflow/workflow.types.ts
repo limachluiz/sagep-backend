@@ -46,6 +46,7 @@ export type WorkflowProjectSnapshot = {
   asBuiltReceivedAt?: Date | null;
   asBuiltReviewedAt?: Date | null;
   asBuiltApprovedAt?: Date | null;
+  asBuiltLink?: string | null;
   asBuiltRejectedAt?: Date | null;
   asBuiltRejectionReason?: string | null;
   invoiceAttestedAt?: Date | null;

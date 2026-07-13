@@ -85,6 +85,14 @@ Campos aceitos:
 }
 ```
 
+### Revisão do As-Built
+
+`PATCH /projects/:id/as-built/review` finaliza a análise. Na aprovação, o body
+deve conter `approved: true`, `reviewedAt` e `asBuiltLink` com uma URL válida
+para o arquivo ou pasta em nuvem. Sem o link, a etapa não avança para
+`ATESTAR_NF`. Na reprovação, o motivo é obrigatório e qualquer link anterior é
+limpo junto com a data de recebimento.
+
 ### Details
 
 `GET /projects/:id/details` e o endpoint recomendado para a tela principal do projeto. Retorna:
