@@ -4504,35 +4504,6 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["atas.manage"],
       },
     },
-    "/atas/{id}/external-balance": {
-      get: {
-        tags: ["atas"],
-        summary: "Ler snapshot local de saldo externo da ATA",
-        description:
-          "Retorna apenas snapshots externos persistidos localmente para os itens da ATA. Nao consulta o Compras.gov.br e nao altera saldo local.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaId" }],
-        responses: {
-          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparison"),
-          ...defaultErrorResponses,
-        },
-      },
-    },
-    "/atas/{id}/sync-external-balance": {
-      post: {
-        tags: ["atas"],
-        summary: "Sincronizar snapshot externo de saldo Compras.gov.br",
-        description:
-          "Consulta o Compras.gov.br somente neste POST e atualiza snapshots externos persistidos para os itens processados. Nao altera movimentos nem saldo local.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaId" }],
-        responses: {
-          "200": okJson("#/components/schemas/ComprasGovExternalBalanceSyncResponse"),
-          ...defaultErrorResponses,
-        },
-        "x-permissions": ["atas.manage"],
-      },
-    },
     "/ata-items": {
       get: {
         tags: ["ata-items"],
@@ -4589,53 +4560,6 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
         responses: {
           "200": okJson("#/components/schemas/AtaItemBalanceMovementsResponse"),
-          ...defaultErrorResponses,
-        },
-      },
-    },
-    "/ata-items/{id}/balance-comparison": {
-      get: {
-        tags: ["ata-items"],
-        summary: "Ler snapshot local de saldo externo do item",
-        description:
-          "Retorna a comparacao entre saldo local e o ultimo snapshot externo persistido do item. Se nao existir snapshot, retorna `NAO_SINCRONIZADO`. Nao consulta o Compras.gov.br.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        responses: {
-          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparisonItem"),
-          ...defaultErrorResponses,
-        },
-      },
-    },
-    "/ata-items/{id}/sync-external-balance": {
-      post: {
-        tags: ["ata-items"],
-        summary: "Sincronizar snapshot externo de saldo Compras.gov.br do item",
-        description:
-          "Consulta o Compras.gov.br somente neste POST para o item informado e atualiza o snapshot persistido desse item. Nao altera movimentos nem saldo local.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        responses: {
-          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparisonItem"),
-          ...defaultErrorResponses,
-        },
-        "x-permissions": ["atas.manage"],
-      },
-    },
-    "/ata-items/{id}/register-external-consumption": {
-      post: {
-        tags: ["ata-items"],
-        summary: "Registrar consumo externo manualmente",
-        description:
-          "Registra internamente um consumo externo confirmado manualmente pelo usuario, com justificativa obrigatoria e sem consultar o Compras.gov.br.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        requestBody: {
-          required: true,
-          content: jsonContent("#/components/schemas/AtaItemRegisterExternalConsumptionRequest"),
-        },
-        responses: {
-          "200": okJson("#/components/schemas/AtaItemRegisterExternalConsumptionResponse"),
           ...defaultErrorResponses,
         },
       },

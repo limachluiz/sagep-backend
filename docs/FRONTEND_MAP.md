@@ -309,6 +309,10 @@ Endpoints:
 - `GET /integrations/compras-gov/atas/preview`
 - `POST /integrations/compras-gov/atas/import`
 
+O frontend não deve oferecer sincronização posterior de saldo ou consulta
+individual ao Compras.gov.br. Após a importação, toda operação usa os dados e o
+razão de saldo locais.
+
 ### 11. Itens da ATA
 
 Perfis:

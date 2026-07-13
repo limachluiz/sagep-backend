@@ -1444,46 +1444,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/atas/{id}/external-balance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Ler snapshot local de saldo externo da ATA
-         * @description Retorna apenas snapshots externos persistidos localmente para os itens da ATA. Nao consulta o Compras.gov.br e nao altera saldo local.
-         */
-        get: operations["atas_get_byId_externalBalance"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/atas/{id}/sync-external-balance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Sincronizar snapshot externo de saldo Compras.gov.br
-         * @description Consulta o Compras.gov.br somente neste POST e atualiza snapshots externos persistidos para os itens processados. Nao altera movimentos nem saldo local.
-         */
-        post: operations["atas_post_byId_syncExternalBalance"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ata-items": {
         parameters: {
             query?: never;
@@ -1535,66 +1495,6 @@ export interface paths {
         get: operations["ataItems_get_byId_movements"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/ata-items/{id}/balance-comparison": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Ler snapshot local de saldo externo do item
-         * @description Retorna a comparacao entre saldo local e o ultimo snapshot externo persistido do item. Se nao existir snapshot, retorna `NAO_SINCRONIZADO`. Nao consulta o Compras.gov.br.
-         */
-        get: operations["ataItems_get_byId_balanceComparison"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/ata-items/{id}/sync-external-balance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Sincronizar snapshot externo de saldo Compras.gov.br do item
-         * @description Consulta o Compras.gov.br somente neste POST para o item informado e atualiza o snapshot persistido desse item. Nao altera movimentos nem saldo local.
-         */
-        post: operations["ataItems_post_byId_syncExternalBalance"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/ata-items/{id}/register-external-consumption": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Registrar consumo externo manualmente
-         * @description Registra internamente um consumo externo confirmado manualmente pelo usuario, com justificativa obrigatoria e sem consultar o Compras.gov.br.
-         */
-        post: operations["ataItems_post_byId_registerExternalConsumption"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6823,64 +6723,6 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    atas_get_byId_externalBalance: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Identificador UUID da ata. */
-                id: components["parameters"]["AtaId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ComprasGovExternalBalanceComparison"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    atas_post_byId_syncExternalBalance: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Identificador UUID da ata. */
-                id: components["parameters"]["AtaId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ComprasGovExternalBalanceSyncResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
     ataItems_get_collection: {
         parameters: {
             query?: {
@@ -6976,97 +6818,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AtaItemBalanceMovementsResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    ataItems_get_byId_balanceComparison: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Identificador UUID do item da ata. */
-                id: components["parameters"]["AtaItemId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ComprasGovExternalBalanceComparisonItem"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    ataItems_post_byId_syncExternalBalance: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Identificador UUID do item da ata. */
-                id: components["parameters"]["AtaItemId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ComprasGovExternalBalanceComparisonItem"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    ataItems_post_byId_registerExternalConsumption: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Identificador UUID do item da ata. */
-                id: components["parameters"]["AtaItemId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AtaItemRegisterExternalConsumptionRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AtaItemRegisterExternalConsumptionResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
