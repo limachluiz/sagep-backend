@@ -2,6 +2,16 @@
 
 Este documento organiza a construção do frontend a partir do backend atual.
 
+## Visões internas de planejamento
+
+- `GET /projects/kanban` entrega as colunas do workflow e seus cartões.
+- `PATCH /projects/:id/kanban/move` movimenta um cartão usando as mesmas regras de `/flow`.
+- `GET /service-orders/gantt` entrega o cronograma consolidado das OS.
+- `GET /service-orders/:id/gantt` entrega o cronograma de uma OS.
+
+O frontend nunca deve alterar `stage` localmente sem confirmar a resposta do
+backend. No Gantt, `isDelayed` e `progressPercent` já são calculados pelo servidor.
+
 ## Tipos gerados do contrato
 
 O arquivo `src/generated/openapi.ts` e gerado a partir do OpenAPI versionado e

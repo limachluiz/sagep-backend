@@ -12,6 +12,7 @@ projectsRoutes.use(authMiddleware);
 
 projectsRoutes.post("/", (req, res) => controller.create(req, res));
 projectsRoutes.get("/", (req, res) => controller.list(req, res));
+projectsRoutes.get("/kanban", (req, res) => controller.kanban(req, res));
 projectsRoutes.get("/code/:code", (req, res) => controller.findByCode(req, res));
 
 projectsRoutes.post("/:id/members", (req, res) => projectMembersController.addMember(req, res));
@@ -21,6 +22,7 @@ projectsRoutes.delete("/:id/members/:memberId", (req, res) =>
 );
 
 projectsRoutes.patch("/:id/flow", (req, res) => controller.updateFlow(req, res));
+projectsRoutes.patch("/:id/kanban/move", (req, res) => controller.moveKanban(req, res));
 projectsRoutes.patch("/:id/as-built/review", (req, res) => controller.reviewAsBuilt(req, res));
 projectsRoutes.post("/:id/commitment-note/cancel", (req, res) =>
   controller.cancelCommitmentNote(req, res)

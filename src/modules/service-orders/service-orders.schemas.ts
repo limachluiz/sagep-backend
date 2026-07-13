@@ -137,6 +137,12 @@ export const listServiceOrdersQuerySchema = paginationQuerySchema.extend({
   archivedUntil: optionalDate,
 });
 
+export const ganttServiceOrdersQuerySchema = z.object({
+  projectCode: z.coerce.number().int().positive().optional(),
+  from: optionalDate,
+  until: optionalDate,
+});
+
 export const archivedServiceOrdersQuerySchema = z.object({
   includeArchived: z.coerce.boolean().optional(),
 });

@@ -286,6 +286,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/kanban": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obter quadro Kanban do workflow de projetos */
+        get: operations["projects_get_kanban"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}": {
         parameters: {
             query?: never;
@@ -320,6 +337,23 @@ export interface paths {
         head?: never;
         /** Atualizar etapa e marcos documentais */
         patch: operations["projects_patch_byId_flow"];
+        trace?: never;
+    };
+    "/projects/{id}/kanban/move": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Mover cartao do Kanban com validacao do workflow */
+        patch: operations["projects_patch_byId_kanban_move"];
         trace?: never;
     };
     "/projects/{id}/as-built/review": {
@@ -821,6 +855,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/service-orders/gantt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obter diagrama de Gantt consolidado das ordens de servico */
+        get: operations["serviceOrders_get_gantt"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/service-orders/number/{serviceOrderNumber}": {
         parameters: {
             query?: never;
@@ -868,6 +919,23 @@ export interface paths {
         put?: never;
         /** Restaurar ordem de servico arquivada */
         post: operations["serviceOrders_post_byId_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-orders/{id}/gantt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Obter Gantt de uma ordem de servico */
+        get: operations["serviceOrders_get_byId_gantt"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1612,6 +1680,21 @@ export interface components {
             permissionUsed?: string;
         } & {
             [key: string]: unknown;
+        };
+        ProjectKanbanResponse: {
+            /** Format: date-time */
+            generatedAt: string;
+            columns: {
+                [key: string]: unknown;
+            }[];
+        };
+        ServiceOrderGanttResponse: {
+            range: {
+                [key: string]: unknown;
+            };
+            serviceOrders: {
+                [key: string]: unknown;
+            }[];
         };
         PaginationMeta: {
             page: number;
@@ -3863,6 +3946,41 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    projects_get_kanban: {
+        parameters: {
+            query?: {
+                /** @description Filtrar pelo responsavel. */
+                ownerId?: string;
+                /** @description Filtrar por etapa do workflow. */
+                stage?: string;
+                /** @description Buscar por titulo ou descricao. */
+                search?: string;
+                /** @description Mostrar somente projetos proprios. */
+                onlyMine?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectKanbanResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     projects_get_byId: {
         parameters: {
             query?: never;
@@ -3965,6 +4083,39 @@ export interface operations {
         };
     };
     projects_patch_byId_flow: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID do projeto. */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectFlowUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    projects_patch_byId_kanban_move: {
         parameters: {
             query?: never;
             header?: never;
@@ -5352,6 +5503,39 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    serviceOrders_get_gantt: {
+        parameters: {
+            query?: {
+                /** @description Filtrar pelo codigo do projeto. */
+                projectCode?: number;
+                /** @description Inicio do periodo. */
+                from?: string;
+                /** @description Fim do periodo. */
+                until?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceOrderGanttResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     serviceOrders_get_number_byServiceOrderNumber: {
         parameters: {
             query?: never;
@@ -5500,6 +5684,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    serviceOrders_get_byId_gantt: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da ordem de servico. */
+                id: components["parameters"]["ServiceOrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ServiceOrder"];
                 };
             };
             400: components["responses"]["BadRequest"];

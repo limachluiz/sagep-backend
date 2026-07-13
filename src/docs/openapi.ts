@@ -410,6 +410,22 @@ export const openApiDocument: OpenApiDocument = {
         },
         additionalProperties: true,
       },
+      ProjectKanbanResponse: {
+        type: "object",
+        required: ["generatedAt", "columns"],
+        properties: {
+          generatedAt: { type: "string", format: "date-time" },
+          columns: { type: "array", items: { type: "object", additionalProperties: true } },
+        },
+      },
+      ServiceOrderGanttResponse: {
+        type: "object",
+        required: ["range", "serviceOrders"],
+        properties: {
+          range: { type: "object", additionalProperties: true },
+          serviceOrders: { type: "array", items: { type: "object", additionalProperties: true } },
+        },
+      },
       PaginationMeta: {
         type: "object",
         required: [
@@ -2991,6 +3007,20 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
+    "/projects/kanban": {
+      get: {
+        tags: ["projects"],
+        summary: "Obter quadro Kanban do workflow de projetos",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("ownerId", "Filtrar pelo responsavel.", { type: "string" }),
+          queryParameter("stage", "Filtrar por etapa do workflow.", { type: "string" }),
+          queryParameter("search", "Buscar por titulo ou descricao.", { type: "string" }),
+          queryParameter("onlyMine", "Mostrar somente projetos proprios.", { type: "boolean" }),
+        ],
+        responses: { "200": okJson("#/components/schemas/ProjectKanbanResponse"), ...defaultErrorResponses },
+      },
+    },
     "/projects/{id}": {
       get: {
         tags: ["projects"],
@@ -3042,6 +3072,16 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/Project"),
           ...defaultErrorResponses,
         },
+      },
+    },
+    "/projects/{id}/kanban/move": {
+      patch: {
+        tags: ["projects"],
+        summary: "Mover cartao do Kanban com validacao do workflow",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        requestBody: { required: true, content: jsonContent("#/components/schemas/ProjectFlowUpdateRequest") },
+        responses: { "200": okJson("#/components/schemas/Project"), ...defaultErrorResponses },
       },
     },
     "/projects/{id}/as-built/review": {
@@ -3691,6 +3731,19 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
+    "/service-orders/gantt": {
+      get: {
+        tags: ["service-orders"],
+        summary: "Obter diagrama de Gantt consolidado das ordens de servico",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("projectCode", "Filtrar pelo codigo do projeto.", { type: "integer", minimum: 1 }),
+          queryParameter("from", "Inicio do periodo.", { type: "string", format: "date-time" }),
+          queryParameter("until", "Fim do periodo.", { type: "string", format: "date-time" }),
+        ],
+        responses: { "200": okJson("#/components/schemas/ServiceOrderGanttResponse"), ...defaultErrorResponses },
+      },
+    },
     "/service-orders/number/{serviceOrderNumber}": {
       get: {
         tags: ["service-orders"],
@@ -3755,6 +3808,15 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["service_orders.restore"],
+      },
+    },
+    "/service-orders/{id}/gantt": {
+      get: {
+        tags: ["service-orders"],
+        summary: "Obter Gantt de uma ordem de servico",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ServiceOrderId" }],
+        responses: { "200": okJson("#/components/schemas/ServiceOrder"), ...defaultErrorResponses },
       },
     },
     "/service-orders/{id}/document/html": {

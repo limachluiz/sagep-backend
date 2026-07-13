@@ -99,6 +99,13 @@ export const listProjectsQuerySchema = paginationQuerySchema.extend({
   archivedUntil: optionalDate,
 });
 
+export const kanbanProjectsQuerySchema = z.object({
+  ownerId: z.string().trim().optional(),
+  stage: projectStageEnum.optional(),
+  search: z.string().trim().optional(),
+  onlyMine: z.coerce.boolean().optional(),
+});
+
 export const archivedQuerySchema = z.object({
   includeArchived: z.coerce.boolean().optional(),
 });

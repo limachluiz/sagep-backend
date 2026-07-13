@@ -3,6 +3,7 @@ import {
   archivedServiceOrdersQuerySchema,
   createServiceOrderSchema,
   listServiceOrdersQuerySchema,
+  ganttServiceOrdersQuerySchema,
   serviceOrderCodeParamSchema,
   serviceOrderIdParamSchema,
   serviceOrderNumberParamSchema,
@@ -37,6 +38,16 @@ export class ServiceOrdersController {
         path: req.originalUrl,
       }),
     );
+  }
+
+  async gantt(req: Request, res: Response) {
+    const filters = ganttServiceOrdersQuerySchema.parse(req.query);
+    return res.status(200).json(await serviceOrdersService.gantt(filters, req.user!));
+  }
+
+  async ganttById(req: Request, res: Response) {
+    const { id } = serviceOrderIdParamSchema.parse(req.params);
+    return res.status(200).json(await serviceOrdersService.ganttById(id, req.user!));
   }
 
   async findById(req: Request, res: Response) {

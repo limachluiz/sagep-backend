@@ -141,6 +141,62 @@ const diexService = new DiexService();
 const serviceOrdersService = new ServiceOrdersService();
 
 export class ProjectsService {
+  async kanban(
+    filters: { ownerId?: string; stage?: ProjectStageValue; search?: string; onlyMine?: boolean },
+    user: CurrentUser,
+  ) {
+    const where: Prisma.ProjectWhereInput = {
+      archivedAt: null,
+      deletedAt: null,
+      ...(filters.ownerId && { ownerId: filters.ownerId }),
+      ...(filters.onlyMine && { ownerId: user.id }),
+      ...(filters.stage && { stage: filters.stage }),
+      ...(filters.search && {
+        OR: [
+          { title: { contains: filters.search, mode: "insensitive" } },
+          { description: { contains: filters.search, mode: "insensitive" } },
+        ],
+      }),
+      ...(!this.isPrivileged(user.role) && {
+        OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }],
+      }),
+    };
+    const projects = await prisma.project.findMany({
+      where,
+      orderBy: [{ stage: "asc" }, { updatedAt: "desc" }],
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        serviceOrders: {
+          where: { archivedAt: null, deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true, serviceOrderNumber: true, plannedEndDate: true },
+        },
+      },
+    });
+    const labels: Record<ProjectStageValue, string> = {
+      ESTIMATIVA_PRECO: "Estimativa de preço", AGUARDANDO_NOTA_CREDITO: "Aguardando nota de crédito",
+      DIEX_REQUISITORIO: "DIEx requisitório", AGUARDANDO_NOTA_EMPENHO: "Aguardando nota de empenho",
+      OS_LIBERADA: "OS liberada", SERVICO_EM_EXECUCAO: "Serviço em execução",
+      ANALISANDO_AS_BUILT: "Analisando As-Built", ATESTAR_NF: "Atestar NF",
+      SERVICO_CONCLUIDO: "Serviço concluído", CANCELADO: "Cancelado",
+    };
+    return {
+      generatedAt: new Date().toISOString(),
+      columns: (Object.keys(labels) as ProjectStageValue[]).map((stage) => {
+        const cards = projects.filter((project) => project.stage === stage).map((project) => {
+          const os = project.serviceOrders[0];
+          return {
+            id: project.id, projectCode: project.projectCode, title: project.title,
+            status: project.status, stage: project.stage, owner: project.owner,
+            updatedAt: project.updatedAt, plannedEndDate: os?.plannedEndDate ?? project.endDate,
+            serviceOrder: os ?? null,
+          };
+        });
+        return { stage, label: labels[stage], count: cards.length, cards };
+      }),
+    };
+  }
   private isAdmin(role: string) {
     return role === "ADMIN";
   }

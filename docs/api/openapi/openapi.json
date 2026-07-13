@@ -643,6 +643,46 @@
         },
         "additionalProperties": true
       },
+      "ProjectKanbanResponse": {
+        "type": "object",
+        "required": [
+          "generatedAt",
+          "columns"
+        ],
+        "properties": {
+          "generatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
+      "ServiceOrderGanttResponse": {
+        "type": "object",
+        "required": [
+          "range",
+          "serviceOrders"
+        ],
+        "properties": {
+          "range": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "serviceOrders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      },
       "PaginationMeta": {
         "type": "object",
         "required": [
@@ -6067,6 +6107,88 @@
         "operationId": "projects_get_code_byCode"
       }
     },
+    "/projects/kanban": {
+      "get": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Obter quadro Kanban do workflow de projetos",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar pelo responsavel.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stage",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por etapa do workflow.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Buscar por titulo ou descricao.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "onlyMine",
+            "in": "query",
+            "required": false,
+            "description": "Mostrar somente projetos proprios.",
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectKanbanResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "projects_get_kanban"
+      }
+    },
     "/projects/{id}": {
       "get": {
         "tags": [
@@ -6289,6 +6411,65 @@
           }
         },
         "operationId": "projects_patch_byId_flow"
+      }
+    },
+    "/projects/{id}/kanban/move": {
+      "patch": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Mover cartao do Kanban com validacao do workflow",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectFlowUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "projects_patch_byId_kanban_move"
       }
     },
     "/projects/{id}/as-built/review": {
@@ -8768,6 +8949,82 @@
         "operationId": "serviceOrders_get_code_byCode"
       }
     },
+    "/service-orders/gantt": {
+      "get": {
+        "tags": [
+          "service-orders"
+        ],
+        "summary": "Obter diagrama de Gantt consolidado das ordens de servico",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectCode",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar pelo codigo do projeto.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "from",
+            "in": "query",
+            "required": false,
+            "description": "Inicio do periodo.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "description": "Fim do periodo.",
+            "schema": {
+              "type": "string",
+              "format": "date-time"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceOrderGanttResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "serviceOrders_get_gantt"
+      }
+    },
     "/service-orders/number/{serviceOrderNumber}": {
       "get": {
         "tags": [
@@ -9036,6 +9293,55 @@
           "service_orders.restore"
         ],
         "operationId": "serviceOrders_post_byId_restore"
+      }
+    },
+    "/service-orders/{id}/gantt": {
+      "get": {
+        "tags": [
+          "service-orders"
+        ],
+        "summary": "Obter Gantt de uma ordem de servico",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServiceOrderId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceOrder"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "serviceOrders_get_byId_gantt"
       }
     },
     "/service-orders/{id}/document/html": {

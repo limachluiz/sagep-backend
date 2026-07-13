@@ -216,6 +216,34 @@ const serviceOrderInclude = {
 } satisfies Prisma.ServiceOrderInclude;
 
 export class ServiceOrdersService {
+  private toGanttItem(serviceOrder: Awaited<ReturnType<ServiceOrdersService["findById"]>>) {
+    const now = new Date();
+    const start = serviceOrder.plannedStartDate;
+    const end = serviceOrder.plannedEndDate;
+    const progressPercent = serviceOrder.project.stage === "SERVICO_CONCLUIDO" ? 100 :
+      serviceOrder.project.stage === "SERVICO_EM_EXECUCAO" || serviceOrder.project.stage === "ANALISANDO_AS_BUILT" || serviceOrder.project.stage === "ATESTAR_NF" ? 50 : 0;
+    return {
+      id: serviceOrder.id, serviceOrderCode: serviceOrder.serviceOrderCode,
+      serviceOrderNumber: serviceOrder.serviceOrderNumber, project: serviceOrder.project,
+      plannedStartDate: start, plannedEndDate: end, progressPercent,
+      isDelayed: Boolean(end && end < now && progressPercent < 100),
+      tasks: serviceOrder.scheduleItems.map((item) => ({ ...item })),
+    };
+  }
+
+  async gantt(filters: { projectCode?: number; from?: Date; until?: Date }, user: CurrentUser) {
+    const items = await this.list({ projectCode: filters.projectCode }, user);
+    const selected = items.filter((item) =>
+      (!filters.from || !item.plannedEndDate || item.plannedEndDate >= filters.from) &&
+      (!filters.until || !item.plannedStartDate || item.plannedStartDate <= filters.until));
+    const ganttItems = selected.map((item) => this.toGanttItem(item));
+    const dates = ganttItems.flatMap((item) => [item.plannedStartDate, item.plannedEndDate]).filter(Boolean) as Date[];
+    return { range: { start: dates.length ? new Date(Math.min(...dates.map(Number))) : null, end: dates.length ? new Date(Math.max(...dates.map(Number))) : null }, serviceOrders: ganttItems };
+  }
+
+  async ganttById(id: string, user: CurrentUser) {
+    return this.toGanttItem(await this.findById(id, user, {}));
+  }
   private async generateServiceOrderNumber(issuedAt: Date, db: DbClient = prisma) {
     const year = issuedAt.getUTCFullYear();
     const prefix = `OS-${year}-`;

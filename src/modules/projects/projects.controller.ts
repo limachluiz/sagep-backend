@@ -4,6 +4,7 @@ import {
   cancelCommitmentNoteSchema,
   createProjectSchema,
   listProjectsQuerySchema,
+  kanbanProjectsQuerySchema,
   projectCodeParamSchema,
   projectIdParamSchema,
   reviewAsBuiltSchema,
@@ -39,6 +40,17 @@ export class ProjectsController {
         path: req.originalUrl,
       }),
     );
+  }
+
+  async kanban(req: Request, res: Response) {
+    const filters = kanbanProjectsQuerySchema.parse(req.query);
+    return res.status(200).json(await projectsService.kanban(filters, req.user!));
+  }
+
+  async moveKanban(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const data = updateProjectFlowSchema.parse(req.body);
+    return res.status(200).json(await projectsService.updateFlow(id, data, req.user!));
   }
 
   async findById(req: Request, res: Response) {
