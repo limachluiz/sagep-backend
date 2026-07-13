@@ -44,6 +44,21 @@ Codigos genericos derivados do status incluem `BAD_REQUEST`, `UNAUTHORIZED`,
 Middlewares usam codigos mais especificos, como
 `AUTH_TOKEN_INVALID_OR_EXPIRED` e `PERMISSION_DENIED`.
 
+Erros de dominio recorrentes possuem codigos estaveis para o frontend tomar
+decisoes sem depender do texto da mensagem:
+
+| Dominio | Codigos principais |
+|---|---|
+| Projetos | `PROJECT_NOT_FOUND`, `PROJECT_ACCESS_DENIED` |
+| Estimativas | `ESTIMATE_NOT_FOUND`, `ESTIMATE_ACCESS_DENIED` |
+| ATAs e saldo | `ATA_NOT_FOUND`, `ATA_ITEM_NOT_FOUND`, `ATA_COVERAGE_GROUP_NOT_FOUND`, `ATA_BALANCE_NOT_FOUND`, `ATA_BALANCE_INSUFFICIENT`, `ATA_BALANCE_INCONSISTENT` |
+| DIEx | `DIEX_NOT_FOUND`, `DIEX_ACCESS_DENIED` |
+| Ordens de servico | `SERVICE_ORDER_NOT_FOUND`, `SERVICE_ORDER_ACCESS_DENIED` |
+| Fluxo | `WORKFLOW_INVALID_TRANSITION` e codigos `WORKFLOW_*_REQUIRED` para cada pre-requisito ausente |
+
+O campo `message` continua apropriado para exibicao humana. Integracoes devem
+usar `code` para ramificacao logica e `requestId` para suporte.
+
 ## CORS
 
 Origens de navegador sao autorizadas exclusivamente por

@@ -1507,7 +1507,7 @@ export class EstimatesService {
     });
 
     if (!currentEstimate) {
-      throw new AppError("Estimativa nÃ£o encontrada", 404);
+      throw new AppError("Estimativa não encontrada", 404);
     }
 
     if (data.status === "FINALIZADA") {

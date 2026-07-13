@@ -1,3 +1,5 @@
+import { domainCodeForMessage } from "./error-codes.js";
+
 export class AppError extends Error {
   public readonly statusCode: number;
   public readonly code: string;
@@ -7,7 +9,7 @@ export class AppError extends Error {
     super(message);
     this.name = "AppError";
     this.statusCode = statusCode;
-    this.code = code ?? AppError.defaultCodeForStatus(statusCode);
+    this.code = code ?? domainCodeForMessage(message) ?? AppError.defaultCodeForStatus(statusCode);
     this.details = details;
   }
 

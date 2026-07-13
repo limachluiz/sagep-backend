@@ -526,7 +526,7 @@ export class AtaItemsService {
     });
 
     if (!item || item.deletedAt) {
-      throw new AppError("Item da ata nÃ£o encontrado", 404);
+      throw new AppError("Item da ata não encontrado", 404);
     }
 
     const movements = await prisma.ataItemBalanceMovement.findMany({

@@ -7,6 +7,7 @@ import {
   requestContextMiddleware,
 } from "../src/middlewares/request-context.middleware.js";
 import { AppError } from "../src/shared/app-error.js";
+import { ERROR_CODES } from "../src/shared/error-codes.js";
 
 describe("contratos HTTP transversais", () => {
   it("atribui operationId unico a todas as operacoes OpenAPI", () => {
@@ -54,6 +55,19 @@ describe("contratos HTTP transversais", () => {
       requiredPermissions: ["projects.edit_all"],
       requestId,
     });
+  });
+
+  it("atribui codigos de dominio estaveis sem alterar mensagens existentes", () => {
+    expect(new AppError("Projeto não encontrado", 404).code).toBe(
+      ERROR_CODES.PROJECT_NOT_FOUND,
+    );
+    expect(new AppError("Saldo insuficiente para o item", 409).code).toBe(
+      ERROR_CODES.ATA_BALANCE_INSUFFICIENT,
+    );
+    expect(
+      new AppError("Transição inválida: etapa não permitida", 409).code,
+    ).toBe(ERROR_CODES.WORKFLOW_INVALID_TRANSITION);
+    expect(new AppError("Conflito ainda não catalogado", 409).code).toBe("CONFLICT");
   });
 
   it("gera requestId e o devolve no header", () => {

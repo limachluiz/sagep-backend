@@ -295,7 +295,7 @@ Resposta tipica:
 | `id` | requests de update e respostas | UUID/cuid interno do usuario. |
 | `userCode` | respostas | Codigo sequencial amigavel para exibicao. |
 | `role` | create/list/update | Perfil funcional do usuario. |
-| `active` | list/responses | Hoje so pode ser filtrado; nao ha rota administrativa dedicada para alterar esse campo. |
+| `active` | list/responses | Pode ser filtrado na listagem e alterado por `PATCH /users/:id/status`. |
 | `rank`, `cpf` | create e filtro de busca | Relevantes para cadastro e busca textual; nem sempre retornam nos selects atuais. |
 
 ### Roles Aceitos
