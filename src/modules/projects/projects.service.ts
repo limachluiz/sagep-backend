@@ -1600,6 +1600,7 @@ export class ProjectsService {
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
         asBuiltApprovedAt: true,
+        asBuiltLink: true,
         asBuiltRejectedAt: true,
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
