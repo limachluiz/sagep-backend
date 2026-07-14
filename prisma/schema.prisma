@@ -22,6 +22,11 @@ enum ProjectStatus {
   CANCELADO
 }
 
+enum ProjectType {
+  CFTV
+  FIBRA_OPTICA_PONTO_LOGICO
+}
+
 enum TaskStatus {
   PENDENTE
   EM_ANDAMENTO
@@ -181,6 +186,9 @@ model Project {
   projectCode              Int             @unique @default(autoincrement())
   title                    String
   description              String?
+  projectType              ProjectType?
+  omId                     String?
+  om                       MilitaryOrganization? @relation(fields: [omId], references: [id], onDelete: Restrict)
   status                   ProjectStatus   @default(PLANEJAMENTO)
   stage                    ProjectStage    @default(ESTIMATIVA_PRECO)
   ownerId                  String
@@ -214,6 +222,9 @@ model Project {
   deletedAt                DateTime?
   createdAt                DateTime        @default(now())
   updatedAt                DateTime        @updatedAt
+
+  @@index([projectType])
+  @@index([omId])
 }
 
 model ProjectMember {
@@ -429,6 +440,7 @@ model MilitaryOrganization {
   cityName  String
   stateUf   FederativeUnit
   estimates Estimate[]
+  projects  Project[]
   isActive  Boolean        @default(true)
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt

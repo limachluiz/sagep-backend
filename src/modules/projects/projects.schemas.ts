@@ -10,6 +10,12 @@ const projectStatusEnum = z.enum([
   "CANCELADO",
 ]);
 
+const projectTypeEnum = z.enum(["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"]);
+
+function hasCompleteClassification(data: { projectType?: string; omId?: string }) {
+  return Boolean(data.projectType) === Boolean(data.omId);
+}
+
 const projectStageEnum = z.enum([
   "ESTIMATIVA_PRECO",
   "AGUARDANDO_NOTA_CREDITO",
@@ -27,9 +33,15 @@ export const createProjectSchema = z
   .object({
     title: z.string().trim().min(3, "Título deve ter pelo menos 3 caracteres"),
     description: optionalString,
+    projectType: projectTypeEnum.optional(),
+    omId: optionalString,
     status: projectStatusEnum.optional(),
     startDate: optionalDate,
     endDate: optionalDate,
+  })
+  .refine(hasCompleteClassification, {
+    message: "Informe o tipo do projeto e a OM de destino",
+    path: ["omId"],
   })
   .refine(
     (data) => {
@@ -49,6 +61,8 @@ export const updateProjectSchema = z
   .object({
     title: z.string().trim().min(3, "Título deve ter pelo menos 3 caracteres").optional(),
     description: optionalString,
+    projectType: projectTypeEnum.optional(),
+    omId: optionalString,
     status: projectStatusEnum.optional(),
     startDate: optionalDate,
     endDate: optionalDate,

@@ -53,11 +53,17 @@ POST /api/projects
 {
   "title": "Projeto CFTV Manaus",
   "description": "Projeto de instalacao",
+  "projectType": "CFTV",
+  "omId": "cmom123",
   "status": "PLANEJAMENTO",
-  "startDate": "2026-04-01T00:00:00.000Z",
-  "endDate": "2026-05-01T00:00:00.000Z"
+  "startDate": "2026-04-01T00:00:00.000Z"
 }
 ```
+
+`projectType` aceita `CFTV` ou `FIBRA_OPTICA_PONTO_LOGICO`. Quando a classificação
+for informada, `projectType` e `omId` devem ser enviados juntos. Projetos de CFTV
+são aceitos somente para OMs ativas situadas em Manaus/AM; projetos de fibra e
+ponto lógico podem utilizar OMs ativas de AM, RO, RR e AC.
 
 ### Atualizar Fluxo
 

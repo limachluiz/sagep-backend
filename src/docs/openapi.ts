@@ -879,6 +879,13 @@ export const openApiDocument: OpenApiDocument = {
           projectCode: { type: "integer" },
           title: { type: "string" },
           description: { type: "string", nullable: true },
+          projectType: {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+            nullable: true,
+          },
+          omId: { type: "string", nullable: true },
+          om: { $ref: "#/components/schemas/MilitaryOrganization" },
           status: {
             type: "string",
             enum: ["PLANEJAMENTO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO", "CANCELADO"],
@@ -915,6 +922,11 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           title: { type: "string", minLength: 3 },
           description: { type: "string", nullable: true },
+          projectType: {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          },
+          omId: { type: "string" },
           status: {
             type: "string",
             enum: ["PLANEJAMENTO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO", "CANCELADO"],
@@ -928,6 +940,11 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           title: { type: "string", minLength: 3 },
           description: { type: "string", nullable: true },
+          projectType: {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          },
+          omId: { type: "string" },
           status: {
             type: "string",
             enum: ["PLANEJAMENTO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO", "CANCELADO"],

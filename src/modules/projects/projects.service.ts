@@ -34,9 +34,13 @@ type ProjectStageValue =
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
+type ProjectTypeValue = "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+
 type CreateProjectInput = {
   title: string;
   description?: string;
+  projectType?: ProjectTypeValue;
+  omId?: string;
   status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
   startDate?: Date;
   endDate?: Date;
@@ -45,6 +49,8 @@ type CreateProjectInput = {
 type UpdateProjectInput = {
   title?: string;
   description?: string;
+  projectType?: ProjectTypeValue;
+  omId?: string;
   status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
   startDate?: Date;
   endDate?: Date;
@@ -109,6 +115,17 @@ type TimelineEntityInput = {
 };
 
 const projectInclude = {
+  om: {
+    select: {
+      id: true,
+      omCode: true,
+      sigla: true,
+      name: true,
+      cityName: true,
+      stateUf: true,
+      isActive: true,
+    },
+  },
   owner: {
     select: {
       id: true,
@@ -141,6 +158,39 @@ const diexService = new DiexService();
 const serviceOrdersService = new ServiceOrdersService();
 
 export class ProjectsService {
+  private async validateProjectClassification(projectType?: ProjectTypeValue | null, omId?: string | null) {
+    if (!projectType && !omId) return null;
+
+    if (!projectType || !omId) {
+      throw new AppError("Informe o tipo do projeto e a OM de destino", 400);
+    }
+
+    const om = await prisma.militaryOrganization.findUnique({
+      where: { id: omId },
+      select: {
+        id: true,
+        sigla: true,
+        cityName: true,
+        stateUf: true,
+        isActive: true,
+      },
+    });
+
+    if (!om) {
+      throw new AppError("OM não encontrada", 404);
+    }
+
+    if (!om.isActive) {
+      throw new AppError("Não é possível vincular uma OM inativa ao projeto", 409);
+    }
+
+    if (projectType === "CFTV" && (om.stateUf !== "AM" || om.cityName.trim().toLocaleLowerCase("pt-BR") !== "manaus")) {
+      throw new AppError("Projetos de CFTV estão restritos às OMs de Manaus/AM", 400);
+    }
+
+    return om;
+  }
+
   async kanban(
     filters: { ownerId?: string; stage?: ProjectStageValue; search?: string; onlyMine?: boolean },
     user: CurrentUser,
@@ -401,6 +451,8 @@ export class ProjectsService {
     projectCode?: number | null;
     title?: string | null;
     description?: string | null;
+    projectType?: ProjectTypeValue | null;
+    omId?: string | null;
     status?: string | null;
     stage?: ProjectStageValue | null;
     ownerId?: string | null;
@@ -429,6 +481,8 @@ export class ProjectsService {
       projectCode: project.projectCode ?? null,
       title: project.title ?? null,
       description: project.description ?? null,
+      projectType: project.projectType ?? null,
+      omId: project.omId ?? null,
       status: project.status ?? null,
       stage: project.stage ?? null,
       ownerId: project.ownerId ?? null,
@@ -921,10 +975,14 @@ export class ProjectsService {
   }
 
   async create(data: CreateProjectInput, user: CurrentUser) {
+    await this.validateProjectClassification(data.projectType, data.omId);
+
     const project = await prisma.project.create({
       data: {
         title: data.title,
         description: data.description,
+        projectType: data.projectType,
+        omId: data.omId,
         status: data.status ?? "PLANEJAMENTO",
         stage: "ESTIMATIVA_PRECO",
         startDate: data.startDate,
@@ -945,6 +1003,8 @@ export class ProjectsService {
         projectCode: project.projectCode,
         title: project.title,
         description: project.description,
+        projectType: project.projectType,
+        omId: project.omId,
         status: project.status,
         stage: project.stage,
         ownerId: project.ownerId,
@@ -1056,6 +1116,17 @@ export class ProjectsService {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       include: {
+        om: {
+          select: {
+            id: true,
+            omCode: true,
+            sigla: true,
+            name: true,
+            cityName: true,
+            stateUf: true,
+            isActive: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -1183,6 +1254,19 @@ export class ProjectsService {
         projectCode: true,
         title: true,
         description: true,
+        projectType: true,
+        omId: true,
+        om: {
+          select: {
+            id: true,
+            omCode: true,
+            sigla: true,
+            name: true,
+            cityName: true,
+            stateUf: true,
+            isActive: true,
+          },
+        },
         status: true,
         stage: true,
         startDate: true,
@@ -1392,6 +1476,9 @@ export class ProjectsService {
         projectCode: project.projectCode,
         title: project.title,
         description: project.description,
+        projectType: project.projectType,
+        omId: project.omId,
+        om: project.om,
         owner: project.owner,
         members: project.members,
         startDate: project.startDate,
@@ -1463,6 +1550,17 @@ export class ProjectsService {
     const project = await prisma.project.findUnique({
       where: { projectCode },
       include: {
+        om: {
+          select: {
+            id: true,
+            omCode: true,
+            sigla: true,
+            name: true,
+            cityName: true,
+            stateUf: true,
+            isActive: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -1549,6 +1647,8 @@ export class ProjectsService {
         projectCode: true,
         title: true,
         description: true,
+        projectType: true,
+        omId: true,
         status: true,
         stage: true,
         ownerId: true,
@@ -1578,11 +1678,20 @@ export class ProjectsService {
       throw new AppError("Projeto não encontrado", 404);
     }
 
+    if (data.projectType !== undefined || data.omId !== undefined) {
+      await this.validateProjectClassification(
+        data.projectType ?? before.projectType,
+        data.omId ?? before.omId,
+      );
+    }
+
     const project = await prisma.project.update({
       where: { id: projectId },
       data: {
         ...(data.title !== undefined && { title: data.title }),
         ...(data.description !== undefined && { description: data.description }),
+        ...(data.projectType !== undefined && { projectType: data.projectType }),
+        ...(data.omId !== undefined && { omId: data.omId }),
         ...(data.status !== undefined && { status: data.status }),
         ...(data.startDate !== undefined && { startDate: data.startDate }),
         ...(data.endDate !== undefined && { endDate: data.endDate }),
@@ -1602,6 +1711,8 @@ export class ProjectsService {
         projectCode: project.projectCode,
         title: project.title,
         description: project.description,
+        projectType: project.projectType,
+        omId: project.omId,
         status: project.status,
         stage: project.stage,
         ownerId: project.ownerId,
