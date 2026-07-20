@@ -596,6 +596,16 @@ export const openApiDocument: OpenApiDocument = {
           },
         },
       },
+      PermissionUsersResponse: {
+        type: "object",
+        required: ["items"],
+        properties: {
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/UserSummary" },
+          },
+        },
+      },
       RolePermissionItem: {
         allOf: [
           { $ref: "#/components/schemas/PermissionCatalogItem" },
@@ -4234,6 +4244,20 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_role_permissions"],
+      },
+    },
+    "/permissions/users": {
+      get: {
+        tags: ["permissions"],
+        summary: "Listar usuários para governança de permissões",
+        description:
+          "Retorna as contas disponíveis para consulta e administração de permissões, sem exigir acesso ao módulo completo de gestão de usuários.",
+        security: bearerSecurity,
+        responses: {
+          "200": okJson("#/components/schemas/PermissionUsersResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["permissions.view"],
       },
     },
     "/permissions/users/{id}": {

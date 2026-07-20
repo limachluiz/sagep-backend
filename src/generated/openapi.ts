@@ -1244,6 +1244,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/permissions/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar usuários para governança de permissões
+         * @description Retorna as contas disponíveis para consulta e administração de permissões, sem exigir acesso ao módulo completo de gestão de usuários.
+         */
+        get: operations["permissions_get_users"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/permissions/users/{id}": {
         parameters: {
             query?: never;
@@ -1569,6 +1589,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/ata-items/{id}/register-external-consumption": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar consumo externo de saldo
+         * @description Registra consumo confirmado fora do fluxo local, preservando justificativa, origem, referência externa e trilha de auditoria.
+         */
+        post: operations["ataItems_post_byId_registerExternalConsumption"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/ata-items/{id}": {
         parameters: {
             query?: never;
@@ -1800,6 +1840,9 @@ export interface components {
         PermissionCatalogResponse: {
             items: components["schemas"]["PermissionCatalogItem"][];
         };
+        PermissionUsersResponse: {
+            items: components["schemas"]["UserSummary"][];
+        };
         RolePermissionItem: components["schemas"]["PermissionCatalogItem"] & {
             assigned: boolean;
         };
@@ -1953,6 +1996,10 @@ export interface components {
             projectCode?: number;
             title?: string;
             description?: string | null;
+            /** @enum {string|null} */
+            projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO" | null;
+            omId?: string | null;
+            om?: components["schemas"]["MilitaryOrganization"];
             /** @enum {string} */
             status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
             /** @enum {string} */
@@ -1977,7 +2024,8 @@ export interface components {
             title: string;
             description?: string | null;
             /** @enum {string} */
-            status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
+            projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+            omId?: string;
             /** Format: date-time */
             startDate?: string | null;
             /** Format: date-time */
@@ -1987,7 +2035,8 @@ export interface components {
             title?: string;
             description?: string | null;
             /** @enum {string} */
-            status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
+            projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+            omId?: string;
             /** Format: date-time */
             startDate?: string | null;
             /** Format: date-time */
@@ -6330,6 +6379,32 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    permissions_get_users: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PermissionUsersResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     permissions_get_users_byId: {
         parameters: {
             query?: never;
@@ -7031,6 +7106,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AtaItemBalanceMovementsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    ataItems_post_byId_registerExternalConsumption: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID do item da ata. */
+                id: components["parameters"]["AtaItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AtaItemRegisterExternalConsumptionRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AtaItemRegisterExternalConsumptionResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

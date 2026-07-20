@@ -1000,6 +1000,20 @@
           }
         }
       },
+      "PermissionUsersResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserSummary"
+            }
+          }
+        }
+      },
       "RolePermissionItem": {
         "allOf": [
           {
@@ -10657,6 +10671,54 @@
           "permissions.manage_role_permissions"
         ],
         "operationId": "permissions_put_roles_byRole"
+      }
+    },
+    "/permissions/users": {
+      "get": {
+        "tags": [
+          "permissions"
+        ],
+        "summary": "Listar usuários para governança de permissões",
+        "description": "Retorna as contas disponíveis para consulta e administração de permissões, sem exigir acesso ao módulo completo de gestão de usuários.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionUsersResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "permissions.view"
+        ],
+        "operationId": "permissions_get_users"
       }
     },
     "/permissions/users/{id}": {
