@@ -216,6 +216,7 @@ export class ProjectsService {
       orderBy: [{ stage: "asc" }, { updatedAt: "desc" }],
       include: {
         owner: { select: { id: true, name: true, email: true } },
+        om: { select: { id: true, sigla: true, cityName: true, stateUf: true } },
         serviceOrders: {
           where: { archivedAt: null, deletedAt: null },
           orderBy: { createdAt: "desc" },
@@ -238,7 +239,8 @@ export class ProjectsService {
           const os = project.serviceOrders[0];
           return {
             id: project.id, projectCode: project.projectCode, title: project.title,
-            status: project.status, stage: project.stage, owner: project.owner,
+            status: project.status, stage: project.stage, projectType: project.projectType,
+            om: project.om, owner: project.owner,
             updatedAt: project.updatedAt, plannedEndDate: os?.plannedEndDate ?? project.endDate,
             serviceOrder: os ?? null,
           };
