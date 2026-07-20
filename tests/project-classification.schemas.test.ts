@@ -30,4 +30,10 @@ describe("classificação de projetos", () => {
 
     expect(result.success).toBe(true);
   });
+
+  it("não aceita atualização manual isolada do status", () => {
+    const result = updateProjectSchema.safeParse({ status: "EM_ANDAMENTO" });
+
+    expect(result.success).toBe(false);
+  });
 });

@@ -46,12 +46,7 @@ export class WorkflowService {
       return "CANCELADO";
     }
 
-    if (
-      stage === "OS_LIBERADA" ||
-      stage === "SERVICO_EM_EXECUCAO" ||
-      stage === "ANALISANDO_AS_BUILT" ||
-      stage === "ATESTAR_NF"
-    ) {
+    if (stage !== "ESTIMATIVA_PRECO") {
       return "EM_ANDAMENTO";
     }
 

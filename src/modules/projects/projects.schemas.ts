@@ -35,7 +35,6 @@ export const createProjectSchema = z
     description: optionalString,
     projectType: projectTypeEnum.optional(),
     omId: optionalString,
-    status: projectStatusEnum.optional(),
     startDate: optionalDate,
     endDate: optionalDate,
   })
@@ -63,7 +62,6 @@ export const updateProjectSchema = z
     description: optionalString,
     projectType: projectTypeEnum.optional(),
     omId: optionalString,
-    status: projectStatusEnum.optional(),
     startDate: optionalDate,
     endDate: optionalDate,
   })

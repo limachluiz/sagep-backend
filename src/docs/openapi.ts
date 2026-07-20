@@ -927,10 +927,6 @@ export const openApiDocument: OpenApiDocument = {
             enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
           },
           omId: { type: "string" },
-          status: {
-            type: "string",
-            enum: ["PLANEJAMENTO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO", "CANCELADO"],
-          },
           startDate: { type: "string", format: "date-time", nullable: true },
           endDate: { type: "string", format: "date-time", nullable: true },
         },
@@ -945,10 +941,6 @@ export const openApiDocument: OpenApiDocument = {
             enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
           },
           omId: { type: "string" },
-          status: {
-            type: "string",
-            enum: ["PLANEJAMENTO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO", "CANCELADO"],
-          },
           startDate: { type: "string", format: "date-time", nullable: true },
           endDate: { type: "string", format: "date-time", nullable: true },
         },

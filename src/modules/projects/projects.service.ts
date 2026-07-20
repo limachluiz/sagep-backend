@@ -41,7 +41,6 @@ type CreateProjectInput = {
   description?: string;
   projectType?: ProjectTypeValue;
   omId?: string;
-  status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
   startDate?: Date;
   endDate?: Date;
 };
@@ -51,7 +50,6 @@ type UpdateProjectInput = {
   description?: string;
   projectType?: ProjectTypeValue;
   omId?: string;
-  status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
   startDate?: Date;
   endDate?: Date;
 };
@@ -985,7 +983,7 @@ export class ProjectsService {
         description: data.description,
         projectType: data.projectType,
         omId: data.omId,
-        status: data.status ?? "PLANEJAMENTO",
+        status: workflowService.getMacroStatusFromStage("ESTIMATIVA_PRECO"),
         stage: "ESTIMATIVA_PRECO",
         startDate: data.startDate,
         endDate: data.endDate,
@@ -1694,7 +1692,6 @@ export class ProjectsService {
         ...(data.description !== undefined && { description: data.description }),
         ...(data.projectType !== undefined && { projectType: data.projectType }),
         ...(data.omId !== undefined && { omId: data.omId }),
-        ...(data.status !== undefined && { status: data.status }),
         ...(data.startDate !== undefined && { startDate: data.startDate }),
         ...(data.endDate !== undefined && { endDate: data.endDate }),
       },
