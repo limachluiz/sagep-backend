@@ -1453,7 +1453,10 @@ export interface paths {
         get: operations["atas_get_byId"];
         put?: never;
         post?: never;
-        /** Remover ata */
+        /**
+         * Excluir ata inativa sem histórico
+         * @description Exige inativação prévia e bloqueia a exclusão quando houver estimativas ou movimentações de saldo vinculadas, preservando a rastreabilidade operacional.
+         */
         delete: operations["atas_delete_byId"];
         options?: never;
         head?: never;

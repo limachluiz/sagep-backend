@@ -517,13 +517,45 @@ export class AtasService {
   }
 
   async remove(ataId: string) {
-    const ataExists = await prisma.ata.findUnique({
+    const ata = await prisma.ata.findUnique({
       where: { id: ataId },
-      select: { id: true },
+      select: {
+        id: true,
+        isActive: true,
+        _count: {
+          select: {
+            estimates: true,
+          },
+        },
+        items: {
+          select: {
+            _count: {
+              select: {
+                balanceMovements: true,
+              },
+            },
+          },
+        },
+      },
     });
 
-    if (!ataExists) {
+    if (!ata) {
       throw new AppError("Ata não encontrada", 404);
+    }
+
+    if (ata.isActive) {
+      throw new AppError("Inative a ata antes de excluí-la", 409);
+    }
+
+    const hasBalanceHistory = ata.items.some(
+      (item) => item._count.balanceMovements > 0,
+    );
+
+    if (ata._count.estimates > 0 || hasBalanceHistory) {
+      throw new AppError(
+        "Ata com estimativas ou movimentações de saldo não pode ser excluída",
+        409,
+      );
     }
 
     await prisma.ata.delete({

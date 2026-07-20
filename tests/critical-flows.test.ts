@@ -2628,6 +2628,33 @@ describe("critical flows", () => {
     expect(ataAfterCoverageGroupDelete.body.coverageGroups).toHaveLength(1);
     expect(ataAfterCoverageGroupDelete.body.coverageGroups[0].code).toBe("AM");
 
+    await request(app)
+      .delete(`/api/atas/${ata.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(409)
+      .expect((response) => {
+        expect(response.body.message).toBe("Inative a ata antes de excluí-la");
+      });
+
+    await request(app)
+      .patch(`/api/atas/${ata.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ isActive: false })
+      .expect(200);
+
+    await request(app)
+      .delete(`/api/atas/${ata.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.message).toBe("Ata excluída com sucesso");
+      });
+
+    await request(app)
+      .get(`/api/atas/${ata.body.id}`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(404);
+
     const om = await request(app)
       .post("/api/military-organizations")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)

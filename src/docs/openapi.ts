@@ -4481,7 +4481,9 @@ export const openApiDocument: OpenApiDocument = {
       },
       delete: {
         tags: ["atas"],
-        summary: "Remover ata",
+        summary: "Excluir ata inativa sem histórico",
+        description:
+          "Exige inativação prévia e bloqueia a exclusão quando houver estimativas ou movimentações de saldo vinculadas, preservando a rastreabilidade operacional.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
         responses: {
