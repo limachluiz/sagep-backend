@@ -5,6 +5,7 @@ import {
   ataItemIdParamSchema,
   createAtaItemSchema,
   listAtaItemsQuerySchema,
+  registerExternalConsumptionSchema,
   updateAtaItemSchema,
 } from "./ata-items.schemas.js";
 import { AtaItemsService } from "./ata-items.service.js";
@@ -83,6 +84,14 @@ export class AtaItemsController {
     const movements = await ataItemsService.listMovements(id);
 
     return res.status(200).json(movements);
+  }
+
+  async registerExternalConsumption(req: Request, res: Response) {
+    const { id } = ataItemIdParamSchema.parse(req.params);
+    const data = registerExternalConsumptionSchema.parse(req.body);
+    const result = await ataItemsService.registerExternalConsumption(id, data, req.user!);
+
+    return res.status(200).json(result);
   }
 
   async update(req: Request, res: Response) {

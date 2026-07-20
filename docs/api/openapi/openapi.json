@@ -12100,6 +12100,69 @@
         "operationId": "ataItems_get_byId_movements"
       }
     },
+    "/ata-items/{id}/register-external-consumption": {
+      "post": {
+        "tags": [
+          "ata-items"
+        ],
+        "summary": "Registrar consumo externo de saldo",
+        "description": "Registra consumo confirmado fora do fluxo local, preservando justificativa, origem, referência externa e trilha de auditoria.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/AtaItemId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AtaItemRegisterExternalConsumptionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AtaItemRegisterExternalConsumptionResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "atas.manage"
+        ],
+        "operationId": "ataItems_post_byId_registerExternalConsumption"
+      }
+    },
     "/ata-items/{id}": {
       "get": {
         "tags": [

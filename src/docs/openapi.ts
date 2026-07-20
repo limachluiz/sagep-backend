@@ -4635,6 +4635,25 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
+    "/ata-items/{id}/register-external-consumption": {
+      post: {
+        tags: ["ata-items"],
+        summary: "Registrar consumo externo de saldo",
+        description:
+          "Registra consumo confirmado fora do fluxo local, preservando justificativa, origem, referência externa e trilha de auditoria.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/AtaItemRegisterExternalConsumptionRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/AtaItemRegisterExternalConsumptionResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["atas.manage"],
+      },
+    },
     "/ata-items/{id}": {
       get: {
         tags: ["ata-items"],
