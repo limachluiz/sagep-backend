@@ -2257,6 +2257,7 @@ describe("critical flows", () => {
       .expect(200);
 
     expect(cancelResponse.body.project.stage).toBe("ESTIMATIVA_PRECO");
+    expect(cancelResponse.body.project.status).toBe("EM_ANDAMENTO");
     expect(cancelResponse.body.project.commitmentNoteNumber).toBeNull();
     expect(cancelResponse.body.rollback.estimateId).toBe(estimate.id);
 
@@ -2279,7 +2280,7 @@ describe("critical flows", () => {
       ]);
 
     expect(rolledProject.stage).toBe("ESTIMATIVA_PRECO");
-    expect(rolledProject.status).toBe("PLANEJAMENTO");
+    expect(rolledProject.status).toBe("EM_ANDAMENTO");
     expect(rolledProject.diexNumber).toBeNull();
     expect(rolledProject.commitmentNoteNumber).toBeNull();
     expect(rolledProject.serviceOrderNumber).toBeNull();

@@ -37,7 +37,10 @@ export class WorkflowService {
     return stageTransitions[stage] ?? [];
   }
 
-  getMacroStatusFromStage(stage: ProjectStageValue): ProjectStatusValue {
+  getMacroStatusFromStage(
+    stage: ProjectStageValue,
+    previousStatus?: ProjectStatusValue,
+  ): ProjectStatusValue {
     if (stage === "SERVICO_CONCLUIDO") {
       return "CONCLUIDO";
     }
@@ -47,6 +50,10 @@ export class WorkflowService {
     }
 
     if (stage !== "ESTIMATIVA_PRECO") {
+      return "EM_ANDAMENTO";
+    }
+
+    if (previousStatus && previousStatus !== "PLANEJAMENTO") {
       return "EM_ANDAMENTO";
     }
 

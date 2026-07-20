@@ -2382,7 +2382,10 @@ export class ProjectsService {
         where: { id: projectId },
         data: {
           stage: "ESTIMATIVA_PRECO",
-          status: workflowService.getMacroStatusFromStage("ESTIMATIVA_PRECO"),
+          status: workflowService.getMacroStatusFromStage(
+            "ESTIMATIVA_PRECO",
+            currentProject.status,
+          ),
           diexNumber: null,
           diexIssuedAt: null,
           commitmentNoteNumber: null,

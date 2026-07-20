@@ -10,6 +10,15 @@ describe("status macro do workflow", () => {
     expect(service.getMacroStatusFromStage("ESTIMATIVA_PRECO")).toBe("PLANEJAMENTO");
   });
 
+  it("mantém em andamento um projeto que retorna à estimativa", () => {
+    expect(service.getMacroStatusFromStage("ESTIMATIVA_PRECO", "EM_ANDAMENTO")).toBe(
+      "EM_ANDAMENTO",
+    );
+    expect(service.getMacroStatusFromStage("ESTIMATIVA_PRECO", "CONCLUIDO")).toBe(
+      "EM_ANDAMENTO",
+    );
+  });
+
   it("considera em andamento todas as etapas ativas após a estimativa", () => {
     const activeStages: ProjectStageValue[] = [
       "AGUARDANDO_NOTA_CREDITO",
