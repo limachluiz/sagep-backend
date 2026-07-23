@@ -33,4 +33,34 @@ describe("normalizeMojibakeText", () => {
       "utilizando método de CABEAMENTO SUBTERRÂNEO ou MND (Método não Destrutível).",
     );
   });
+
+  it("repairs descriptions from items 2 through 6 of ARP 00001/2026", () => {
+    const damagedDescriptions = [
+      "Servi�o TIPO I-B de lan�amento e instala��o de cabo de fibra �ptica tipo DROP, " +
+        "utilizando m�todo de CABEAMENTO SUBTERR�NEO ou MND (M�todo n �o Destrut�vel). " +
+        "Demais caracter�sticas conforme Termo de Refer�ncia.",
+      "Servi�o de instala��o com fornecimento de C�mera IP PoE do tipo Bullet para mo nitoramento " +
+        "Convencional. Demais caracter�sticas conforme Termo de Refer�ncia.",
+      "Servi�o de instala��o com fornecimento de C�mera IP PoE do tipo Dome para moni toramento " +
+        "Convencional. Demais caracter�sticas conforme Termo de Refer�ncia.",
+      "Servi�o de instala��o com fornecimento de C�mera IP PoE do tipo Bullet para mo nitoramento " +
+        "Inteligente. Demais caracter�sticas conforme Termo de Refer�ncia.",
+      "Servi�o de instala��o com fornecimento de C�mera IP do tipo Speed Dome de long o alcance. " +
+        "Demais caracter�sticas conforme Termo de Refer�ncia.",
+    ];
+
+    expect(damagedDescriptions.map(normalizeMojibakeText)).toEqual([
+      "Serviço TIPO I-B de lançamento e instalação de cabo de fibra óptica tipo DROP, " +
+        "utilizando método de CABEAMENTO SUBTERRÂNEO ou MND (Método não Destrutível). " +
+        "Demais características conforme Termo de Referência.",
+      "Serviço de instalação com fornecimento de Câmera IP PoE do tipo Bullet para monitoramento " +
+        "Convencional. Demais características conforme Termo de Referência.",
+      "Serviço de instalação com fornecimento de Câmera IP PoE do tipo Dome para monitoramento " +
+        "Convencional. Demais características conforme Termo de Referência.",
+      "Serviço de instalação com fornecimento de Câmera IP PoE do tipo Bullet para monitoramento " +
+        "Inteligente. Demais características conforme Termo de Referência.",
+      "Serviço de instalação com fornecimento de Câmera IP do tipo Speed Dome de longo alcance. " +
+        "Demais características conforme Termo de Referência.",
+    ]);
+  });
 });

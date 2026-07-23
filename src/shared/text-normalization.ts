@@ -39,12 +39,30 @@ function decodeWindows1252AsUtf8(value: string) {
   return Buffer.from(encodeWindows1252(value)).toString("utf8");
 }
 
+function preserveWordCase(match: string, replacement: string) {
+  const compactMatch = match.replace(/\s+/g, "");
+
+  if (compactMatch === compactMatch.toUpperCase()) {
+    return replacement.toUpperCase();
+  }
+
+  if (compactMatch[0] === compactMatch[0]?.toUpperCase()) {
+    return replacement[0]?.toUpperCase() + replacement.slice(1);
+  }
+
+  return replacement;
+}
+
 function repairReplacementCharacters(value: string) {
   return value
     .replace(/lan�amento/gi, (match) => match[0] === "L" ? "Lançamento" : "lançamento")
     .replace(/�ptica/gi, (match) => match.slice(1) === "PTICA" ? "ÓPTICA" : "óptica")
     .replace(/acess�rios/gi, (match) => match[0] === "A" ? "Acessórios" : "acessórios")
     .replace(/m�todo/gi, (match) => match[0] === "M" ? "Método" : "método")
+    .replace(/c�mera/gi, (match) => preserveWordCase(match, "câmera"))
+    .replace(/caracter�sticas/gi, (match) => preserveWordCase(match, "características"))
+    .replace(/refer�ncia/gi, (match) => preserveWordCase(match, "referência"))
+    .replace(/a�reo/gi, (match) => preserveWordCase(match, "aéreo"))
     .replace(/subterr�neo/gi, (match) => {
       if (match === match.toUpperCase()) return "SUBTERRÂNEO";
       return match[0] === "S" ? "Subterrâneo" : "subterrâneo";
@@ -57,6 +75,10 @@ function repairReplacementCharacters(value: string) {
     .replace(/\bn�o\b/gi, (match) => match[0] === "N" ? "Não" : "não")
     .replace(/\bCab\s+o\b/g, "Cabo")
     .replace(/\bident\s+ificação\b/gi, "identificação")
+    .replace(/\bmo\s+nitoramento\b/gi, (match) => preserveWordCase(match, "monitoramento"))
+    .replace(/\bmoni\s+toramento\b/gi, (match) => preserveWordCase(match, "monitoramento"))
+    .replace(/\blong\s+o\b/gi, (match) => preserveWordCase(match, "longo"))
+    .replace(/\bcaracterística\s+s\b/gi, (match) => preserveWordCase(match, "características"))
     .replace(/\bSERVI�O\b/g, "SERVIÇO")
     .replace(/\bServi�o\b/g, "Serviço")
     .replace(/\bservi�o\b/g, "serviço")
