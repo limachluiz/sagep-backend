@@ -1433,6 +1433,8 @@ export class DashboardService {
               title: true,
               stage: true,
               status: true,
+              commitmentNoteNumber: true,
+              commitmentNoteReceivedAt: true,
             },
           },
           ata: {
@@ -1548,6 +1550,26 @@ export class DashboardService {
     const finalizedEstimates = scopedEstimates.filter(
       (estimate) => estimate.status === "FINALIZADA",
     );
+    const committedEstimates = scopedEstimates.filter(
+      (estimate) =>
+        estimate.status === "FINALIZADA" &&
+        (!!estimate.project.commitmentNoteNumber ||
+          !!estimate.project.commitmentNoteReceivedAt),
+    );
+    const completedProjectEstimates = scopedEstimates.filter(
+      (estimate) =>
+        estimate.status === "FINALIZADA" &&
+        (estimate.project.status === "CONCLUIDO" ||
+          estimate.project.stage === "SERVICO_CONCLUIDO"),
+    );
+    const totalCommittedAmount = committedEstimates.reduce(
+      (sum, estimate) => sum + toNumber(estimate.totalAmount),
+      0,
+    );
+    const totalCompletedProjectsAmount = completedProjectEstimates.reduce(
+      (sum, estimate) => sum + toNumber(estimate.totalAmount),
+      0,
+    );
     const inventory = this.buildInventoryExecutiveBlock(ataItems, ataItemMovements, filterContext);
 
     return {
@@ -1583,6 +1605,8 @@ export class DashboardService {
             0,
           ),
         ),
+        totalCommittedAmount: formatAmount(totalCommittedAmount),
+        totalCompletedProjectsAmount: formatAmount(totalCompletedProjectsAmount),
         totalWithDiex: formatAmount(totalWithDiex),
         totalWithServiceOrder: formatAmount(totalWithServiceOrder),
         ataItemsAtRisk: inventory.snapshot.itemsAtRisk,
@@ -1601,6 +1625,8 @@ export class DashboardService {
       },
       financial: {
         totalEstimatedAmount: formatAmount(totalEstimatedAmount),
+        totalCommittedAmount: formatAmount(totalCommittedAmount),
+        totalCompletedProjectsAmount: formatAmount(totalCompletedProjectsAmount),
         totalWithDiex: formatAmount(totalWithDiex),
         totalWithServiceOrder: formatAmount(totalWithServiceOrder),
         inventoryCurrentReservedAmount: inventory.snapshot.totalReservedAmount,
