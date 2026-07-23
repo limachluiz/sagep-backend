@@ -89,6 +89,41 @@ async function repairAtaItems() {
   return corrected;
 }
 
+async function repairCopiedItemDescriptions() {
+  const [estimateItems, diexItems, serviceOrderItems] = await Promise.all([
+    prisma.estimateItem.findMany({ select: { id: true, description: true } }),
+    prisma.diexRequestItem.findMany({ select: { id: true, description: true } }),
+    prisma.serviceOrderItem.findMany({ select: { id: true, description: true } }),
+  ]);
+  let corrected = 0;
+
+  for (const item of estimateItems) {
+    const description = normalizeMojibakeText(item.description);
+    if (textChanged(item.description, description)) {
+      await prisma.estimateItem.update({ where: { id: item.id }, data: { description } });
+      corrected += 1;
+    }
+  }
+
+  for (const item of diexItems) {
+    const description = normalizeMojibakeText(item.description);
+    if (textChanged(item.description, description)) {
+      await prisma.diexRequestItem.update({ where: { id: item.id }, data: { description } });
+      corrected += 1;
+    }
+  }
+
+  for (const item of serviceOrderItems) {
+    const description = normalizeMojibakeText(item.description);
+    if (textChanged(item.description, description)) {
+      await prisma.serviceOrderItem.update({ where: { id: item.id }, data: { description } });
+      corrected += 1;
+    }
+  }
+
+  return corrected;
+}
+
 async function repairCoverageGroups() {
   const groups = await prisma.ataCoverageGroup.findMany({
     select: {
@@ -160,9 +195,10 @@ async function repairSnapshots() {
 }
 
 async function main() {
-  const [atas, ataItems, coverageGroups, snapshots] = await Promise.all([
+  const [atas, ataItems, copiedItems, coverageGroups, snapshots] = await Promise.all([
     repairAtas(),
     repairAtaItems(),
+    repairCopiedItemDescriptions(),
     repairCoverageGroups(),
     repairSnapshots(),
   ]);
@@ -170,9 +206,10 @@ async function main() {
   console.info("repair:mojibake completed", {
     atas,
     ataItems,
+    copiedItems,
     coverageGroups,
     snapshots,
-    total: atas + ataItems + coverageGroups + snapshots,
+    total: atas + ataItems + copiedItems + coverageGroups + snapshots,
   });
 }
 
