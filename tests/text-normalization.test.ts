@@ -18,4 +18,19 @@ describe("normalizeMojibakeText", () => {
     expect(normalizeMojibakeText("identifica\ufffd\ufffdo")).toBe("identifica\u00e7\u00e3o");
     expect(normalizeMojibakeText("SERVI\ufffdO")).toBe("SERVI\u00c7O");
   });
+
+  it("repairs a technical ATA description without corrupting valid accents", () => {
+    const damaged =
+      "Serviço TIPO I-B de lan�amento e instalação de cabo de fibra �ptica tipo DROP, " +
+      "incluindo material para fixação, terminação SC/UPC Rosca e identificação: Cab o com uma " +
+      "Fibra �ptica monomodo, contemplando: acess�rios para fixação e ident ificação do cabo; " +
+      "utilizando m�todo de CABEAMENTO SUBTERR�NEO ou MND (M�todo n �o Destrut�vel).";
+
+    expect(normalizeMojibakeText(damaged)).toBe(
+      "Serviço TIPO I-B de lançamento e instalação de cabo de fibra óptica tipo DROP, " +
+      "incluindo material para fixação, terminação SC/UPC Rosca e identificação: Cabo com uma " +
+      "Fibra óptica monomodo, contemplando: acessórios para fixação e identificação do cabo; " +
+      "utilizando método de CABEAMENTO SUBTERRÂNEO ou MND (Método não Destrutível).",
+    );
+  });
 });
