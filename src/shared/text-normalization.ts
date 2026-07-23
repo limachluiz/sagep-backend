@@ -1,4 +1,4 @@
-const MOJIBAKE_MARKERS = /Ã|Â|â|ð|�/;
+const REVERSIBLE_MOJIBAKE_MARKERS = /Ã|Â|â|ð/;
 const WINDOWS_1252_REVERSE: Record<string, number> = {
   "€": 0x80,
   "‚": 0x82,
@@ -41,6 +41,22 @@ function decodeWindows1252AsUtf8(value: string) {
 
 function repairReplacementCharacters(value: string) {
   return value
+    .replace(/lan�amento/gi, (match) => match[0] === "L" ? "Lançamento" : "lançamento")
+    .replace(/�ptica/gi, (match) => match.slice(1) === "PTICA" ? "ÓPTICA" : "óptica")
+    .replace(/acess�rios/gi, (match) => match[0] === "A" ? "Acessórios" : "acessórios")
+    .replace(/m�todo/gi, (match) => match[0] === "M" ? "Método" : "método")
+    .replace(/subterr�neo/gi, (match) => {
+      if (match === match.toUpperCase()) return "SUBTERRÂNEO";
+      return match[0] === "S" ? "Subterrâneo" : "subterrâneo";
+    })
+    .replace(/destrut�vel/gi, (match) => {
+      if (match === match.toUpperCase()) return "DESTRUTÍVEL";
+      return match[0] === "D" ? "Destrutível" : "destrutível";
+    })
+    .replace(/\bn\s+�o\b/gi, (match) => match[0] === "N" ? "Não" : "não")
+    .replace(/\bn�o\b/gi, (match) => match[0] === "N" ? "Não" : "não")
+    .replace(/\bCab\s+o\b/g, "Cabo")
+    .replace(/\bident\s+ificação\b/gi, "identificação")
     .replace(/\bSERVI�O\b/g, "SERVIÇO")
     .replace(/\bServi�o\b/g, "Serviço")
     .replace(/\bservi�o\b/g, "serviço")
@@ -56,7 +72,9 @@ export function normalizeMojibakeText(value: unknown): string;
 export function normalizeMojibakeText(value: unknown): string {
   let text = String(value ?? "");
 
-  for (let attempts = 0; attempts < 3 && MOJIBAKE_MARKERS.test(text); attempts += 1) {
+  // U+FFFD means bytes were already lost. Re-decoding the whole string in that
+  // situation corrupts valid accents that coexist with the damaged character.
+  for (let attempts = 0; attempts < 3 && REVERSIBLE_MOJIBAKE_MARKERS.test(text); attempts += 1) {
     const decoded = decodeWindows1252AsUtf8(text);
     if (!decoded || decoded === text) break;
     text = decoded;
