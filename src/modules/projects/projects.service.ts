@@ -1344,6 +1344,17 @@ export class ProjectsService {
             priority: true,
             dueDate: true,
             archivedAt: true,
+            createdAt: true,
+            updatedAt: true,
+            assignee: {
+              select: {
+                id: true,
+                userCode: true,
+                name: true,
+                email: true,
+                role: true,
+              },
+            },
           },
           orderBy: {
             createdAt: "desc",
@@ -1524,6 +1535,7 @@ export class ProjectsService {
       },
       pendingActions: this.buildPendingActions(project),
       timeline,
+      tasks: project.tasks,
       documents: {
         estimates: project.estimates.slice(0, 5),
         diexRequests: project.diexRequests.slice(0, 5),

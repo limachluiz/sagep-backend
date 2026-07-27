@@ -45,6 +45,22 @@ describe("contratos HTTP transversais", () => {
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
 
+  it("documenta tarefas no detalhe contextual do projeto", () => {
+    const schema = (openApiDocument.components.schemas as Record<string, any>)
+      .ProjectDetailsResponse;
+
+    expect(schema.properties.tasks.type).toBe("array");
+    expect(schema.properties.tasks.items.properties).toEqual(
+      expect.objectContaining({
+        taskCode: expect.objectContaining({ type: "integer" }),
+        status: expect.objectContaining({
+          enum: expect.arrayContaining(["PENDENTE", "CONCLUIDA"]),
+        }),
+        assignee: expect.objectContaining({ nullable: true }),
+      }),
+    );
+  });
+
   it("mantem message e acrescenta code, details e requestId em AppError", () => {
     const requestId = "2c4a3610-9e9f-40d7-97d0-886bf983302e";
     const json = vi.fn();

@@ -1121,6 +1121,30 @@ export const openApiDocument: OpenApiDocument = {
             type: "array",
             items: { $ref: "#/components/schemas/ProjectTimelineItem" },
           },
+          tasks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", format: "uuid" },
+                taskCode: { type: "integer" },
+                title: { type: "string" },
+                status: {
+                  type: "string",
+                  enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
+                },
+                priority: { type: "integer", minimum: 1, maximum: 5 },
+                dueDate: { type: "string", format: "date-time", nullable: true },
+                archivedAt: { type: "string", format: "date-time", nullable: true },
+                createdAt: { type: "string", format: "date-time" },
+                updatedAt: { type: "string", format: "date-time" },
+                assignee: {
+                  allOf: [{ $ref: "#/components/schemas/UserSummary" }],
+                  nullable: true,
+                },
+              },
+            },
+          },
           documents: {
             type: "object",
             additionalProperties: true,

@@ -2265,6 +2265,24 @@ export interface components {
                 [key: string]: unknown;
             }[];
             timeline?: components["schemas"]["ProjectTimelineItem"][];
+            tasks?: {
+                /** Format: uuid */
+                id?: string;
+                taskCode?: number;
+                title?: string;
+                /** @enum {string} */
+                status?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA";
+                priority?: number;
+                /** Format: date-time */
+                dueDate?: string | null;
+                /** Format: date-time */
+                archivedAt?: string | null;
+                /** Format: date-time */
+                createdAt?: string;
+                /** Format: date-time */
+                updatedAt?: string;
+                assignee?: components["schemas"]["UserSummary"] | null;
+            }[];
             documents?: {
                 [key: string]: unknown;
             };
