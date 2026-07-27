@@ -21,7 +21,7 @@ Base:
 | `GET` | `/projects/:id/next-action` | Proxima acao do workflow. | Pode ver projeto. |
 | `PATCH` | `/projects/:id` | Atualiza dados basicos. | `projects.edit_all` ou `projects.edit_own` em escopo. |
 | `PATCH` | `/projects/:id/flow` | Atualiza etapa/marcos documentais. | Regras de edicao e workflow. |
-| `DELETE` | `/projects/:id` | Arquiva projeto. | Regras de edicao; bloqueia se houver vinculos. |
+| `DELETE` | `/projects/:id` | Arquiva projeto. | Regras de edicao; permitido ate `OS_LIBERADA` e bloqueado a partir de `SERVICO_EM_EXECUCAO`. Vinculos sao preservados. |
 | `POST` | `/projects/:id/restore` | Restaura projeto. | `projects.restore`. |
 
 ### Listagem

@@ -133,6 +133,15 @@ export class WorkflowService {
     }
   }
 
+  assertCanArchiveProject(project: WorkflowProjectSnapshot) {
+    if (!this.isStageBefore(project.stage, "SERVICO_EM_EXECUCAO")) {
+      throw new AppError(
+        "Não é possível arquivar um projeto que já entrou em execução",
+        409,
+      );
+    }
+  }
+
   validateStageRequirements(
     stage: ProjectStageValue,
     snapshot: WorkflowProjectSnapshot,

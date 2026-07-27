@@ -39,4 +39,32 @@ describe("status macro do workflow", () => {
     expect(service.getMacroStatusFromStage("SERVICO_CONCLUIDO")).toBe("CONCLUIDO");
     expect(service.getMacroStatusFromStage("CANCELADO")).toBe("CANCELADO");
   });
+
+  it("permite arquivar o projeto somente antes do início da execução", () => {
+    const stagesBeforeExecution: ProjectStageValue[] = [
+      "ESTIMATIVA_PRECO",
+      "AGUARDANDO_NOTA_CREDITO",
+      "DIEX_REQUISITORIO",
+      "AGUARDANDO_NOTA_EMPENHO",
+      "OS_LIBERADA",
+    ];
+
+    stagesBeforeExecution.forEach((stage) => {
+      expect(() => service.assertCanArchiveProject({ id: "project-1", stage })).not.toThrow();
+    });
+
+    const blockedStages: ProjectStageValue[] = [
+      "SERVICO_EM_EXECUCAO",
+      "ANALISANDO_AS_BUILT",
+      "ATESTAR_NF",
+      "SERVICO_CONCLUIDO",
+      "CANCELADO",
+    ];
+
+    blockedStages.forEach((stage) => {
+      expect(() => service.assertCanArchiveProject({ id: "project-1", stage })).toThrow(
+        "já entrou em execução",
+      );
+    });
+  });
 });

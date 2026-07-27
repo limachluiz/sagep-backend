@@ -2510,16 +2510,9 @@ export class ProjectsService {
   async remove(projectId: string, user: CurrentUser) {
     const projectAccess = await this.ensureCanManage(projectId, user);
 
-    if (
-      projectAccess._count.members > 0 ||
-      projectAccess._count.tasks > 0 ||
-      projectAccess._count.estimates > 0
-    ) {
-      throw new AppError(
-        "Não é possível arquivar um projeto que já possui membros, tarefas ou estimativas vinculadas",
-        409,
-      );
-    }
+    workflowService.assertCanArchiveProject(
+      this.buildWorkflowSnapshot(projectAccess),
+    );
 
     const before = await prisma.project.findUnique({
       where: { id: projectId },
@@ -2567,15 +2560,17 @@ export class ProjectsService {
       before: this.buildProjectAuditSnapshot(before),
     });
 
-    await prisma.project.update({
+    const project = await prisma.project.update({
       where: { id: projectId },
       data: {
         archivedAt: new Date(),
       },
+      include: projectInclude,
     });
 
     return {
       message: "Projeto arquivado com sucesso",
+      project,
     };
   }
 

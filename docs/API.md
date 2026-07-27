@@ -461,6 +461,9 @@ Entidade principal do sistema. Representa o ciclo de vida completo do projeto.
 - Permissão: gestão do projeto
 - Observação:
   - arquiva o projeto, não remove fisicamente
+  - permite arquivamento até a etapa `OS_LIBERADA`, mesmo com membros, tarefas ou estimativas vinculados
+  - bloqueia a operação a partir de `SERVICO_EM_EXECUCAO`
+  - preserva todos os vínculos e o histórico para restauração posterior
 
 #### `POST /projects/:id/restore`
 
