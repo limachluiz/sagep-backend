@@ -130,6 +130,21 @@ const serviceOrderInclude = {
       title: true,
       stage: true,
       status: true,
+      projectType: true,
+      owner: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      om: {
+        select: {
+          id: true,
+          sigla: true,
+          cityName: true,
+          stateUf: true,
+        },
+      },
     },
   },
   estimate: {
@@ -231,11 +246,21 @@ export class ServiceOrdersService {
     };
   }
 
-  async gantt(filters: { projectCode?: number; from?: Date; until?: Date }, user: CurrentUser) {
+  async gantt(filters: {
+    projectCode?: number;
+    from?: Date;
+    until?: Date;
+    stateUf?: "AM" | "RO" | "RR" | "AC";
+    projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+    ownerId?: string;
+  }, user: CurrentUser) {
     const items = await this.list({ projectCode: filters.projectCode }, user);
     const selected = items.filter((item) =>
       (!filters.from || !item.plannedEndDate || item.plannedEndDate >= filters.from) &&
-      (!filters.until || !item.plannedStartDate || item.plannedStartDate <= filters.until));
+      (!filters.until || !item.plannedStartDate || item.plannedStartDate <= filters.until) &&
+      (!filters.stateUf || item.project.om?.stateUf === filters.stateUf) &&
+      (!filters.projectType || item.project.projectType === filters.projectType) &&
+      (!filters.ownerId || item.project.owner.id === filters.ownerId));
     const ganttItems = selected.map((item) => this.toGanttItem(item));
     const dates = ganttItems.flatMap((item) => [item.plannedStartDate, item.plannedEndDate]).filter(Boolean) as Date[];
     return { range: { start: dates.length ? new Date(Math.min(...dates.map(Number))) : null, end: dates.length ? new Date(Math.max(...dates.map(Number))) : null }, serviceOrders: ganttItems };

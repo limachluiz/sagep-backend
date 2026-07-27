@@ -11,6 +11,7 @@ const projectStatusEnum = z.enum([
 ]);
 
 const projectTypeEnum = z.enum(["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"]);
+const federativeUnitEnum = z.enum(["AM", "RO", "RR", "AC"]);
 
 function hasCompleteClassification(data: { projectType?: string; omId?: string }) {
   return Boolean(data.projectType) === Boolean(data.omId);
@@ -114,6 +115,9 @@ export const listProjectsQuerySchema = paginationQuerySchema.extend({
 export const kanbanProjectsQuerySchema = z.object({
   ownerId: z.string().trim().optional(),
   stage: projectStageEnum.optional(),
+  projectType: projectTypeEnum.optional(),
+  omId: z.string().trim().optional(),
+  stateUf: federativeUnitEnum.optional(),
   search: z.string().trim().optional(),
   onlyMine: z.coerce.boolean().optional(),
 });

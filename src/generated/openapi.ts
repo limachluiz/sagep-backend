@@ -4147,6 +4147,12 @@ export interface operations {
                 ownerId?: string;
                 /** @description Filtrar por etapa do workflow. */
                 stage?: string;
+                /** @description Filtrar pelo tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+                /** @description Filtrar pela OM. */
+                omId?: string;
+                /** @description Filtrar pela UF. */
+                stateUf?: "AM" | "RO" | "RR" | "AC";
                 /** @description Buscar por titulo ou descricao. */
                 search?: string;
                 /** @description Mostrar somente projetos proprios. */
@@ -5822,6 +5828,12 @@ export interface operations {
                 from?: string;
                 /** @description Fim do periodo. */
                 until?: string;
+                /** @description Filtrar pela UF do projeto. */
+                stateUf?: "AM" | "RO" | "RR" | "AC";
+                /** @description Filtrar pelo tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+                /** @description Filtrar pelo responsavel do projeto. */
+                ownerId?: string;
             };
             header?: never;
             path?: never;
@@ -6164,6 +6176,14 @@ export interface operations {
                 endDate?: string;
                 /** @description Ponto no tempo ISO. */
                 asOfDate?: string;
+                /** @description Filtrar a carteira pela UF. */
+                stateUf?: "AM" | "RO" | "RR" | "AC";
+                /** @description Filtrar a carteira pela OM. */
+                omId?: string;
+                /** @description Filtrar a carteira pelo tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+                /** @description Filtrar a carteira pelo responsavel. */
+                ownerId?: string;
             };
             header?: never;
             path?: never;

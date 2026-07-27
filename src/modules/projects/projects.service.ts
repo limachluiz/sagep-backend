@@ -191,7 +191,15 @@ export class ProjectsService {
   }
 
   async kanban(
-    filters: { ownerId?: string; stage?: ProjectStageValue; search?: string; onlyMine?: boolean },
+    filters: {
+      ownerId?: string;
+      stage?: ProjectStageValue;
+      projectType?: ProjectTypeValue;
+      omId?: string;
+      stateUf?: "AM" | "RO" | "RR" | "AC";
+      search?: string;
+      onlyMine?: boolean;
+    },
     user: CurrentUser,
   ) {
     const where: Prisma.ProjectWhereInput = {
@@ -200,6 +208,9 @@ export class ProjectsService {
       ...(filters.ownerId && { ownerId: filters.ownerId }),
       ...(filters.onlyMine && { ownerId: user.id }),
       ...(filters.stage && { stage: filters.stage }),
+      ...(filters.projectType && { projectType: filters.projectType }),
+      ...(filters.omId && { omId: filters.omId }),
+      ...(filters.stateUf && { om: { stateUf: filters.stateUf } }),
       ...(filters.search && {
         OR: [
           { title: { contains: filters.search, mode: "insensitive" } },

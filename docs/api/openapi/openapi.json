@@ -6309,6 +6309,43 @@
             }
           },
           {
+            "name": "projectType",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar pelo tipo de projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA_PONTO_LOGICO"
+              ]
+            }
+          },
+          {
+            "name": "omId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar pela OM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "stateUf",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar pela UF.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "AM",
+                "RO",
+                "RR",
+                "AC"
+              ]
+            }
+          },
+          {
             "name": "search",
             "in": "query",
             "required": false,
@@ -9369,6 +9406,43 @@
               "type": "string",
               "format": "date-time"
             }
+          },
+          {
+            "name": "stateUf",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar pela UF do projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "AM",
+                "RO",
+                "RR",
+                "AC"
+              ]
+            }
+          },
+          {
+            "name": "projectType",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar pelo tipo de projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA_PONTO_LOGICO"
+              ]
+            }
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar pelo responsavel do projeto.",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -10012,6 +10086,52 @@
             "schema": {
               "type": "string",
               "format": "date-time"
+            }
+          },
+          {
+            "name": "stateUf",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar a carteira pela UF.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "AM",
+                "RO",
+                "RR",
+                "AC"
+              ]
+            }
+          },
+          {
+            "name": "omId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar a carteira pela OM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectType",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar a carteira pelo tipo de projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA_PONTO_LOGICO"
+              ]
+            }
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar a carteira pelo responsavel.",
+            "schema": {
+              "type": "string"
             }
           }
         ],

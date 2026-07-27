@@ -256,7 +256,7 @@ export class OperationalAlertsService {
       const workflowSnapshot = this.buildWorkflowSnapshot(project);
       const nextAction = workflowService.getNextAction(workflowSnapshot);
       const projectSummary = this.buildProjectSummary(project);
-      const detailsPath = `/api/projects/${project.id}/details`;
+      const detailsPath = `/projects/${project.id}`;
       const hasCreditNote = !!project.creditNoteNumber || !!project.creditNoteReceivedAt;
       const hasCommitmentNote =
         !!project.commitmentNoteNumber || !!project.commitmentNoteReceivedAt;

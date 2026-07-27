@@ -21,11 +21,11 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - emissão e acompanhamento de Estimativas, DIEx e Ordens de Serviço;
 - governança de acesso via RBAC persistido no banco;
 - auditoria de ações críticas;
-- dashboards operacionais, executivos e financeiros;
+- dashboards operacionais, executivos e financeiros com filtros temporais e organizacionais;
 - gestão de saldo dos itens da ATA com reserva, consumo, estorno e rollback de NE.
 - importação completa de ATAs e itens pelo Compras.gov.br;
-- Kanban interno derivado do workflow dos projetos;
-- Gantt consolidado a partir das Ordens de Serviço.
+- Kanban interno derivado do workflow dos projetos, filtrável por etapa, UF, OM, tipo e responsável;
+- Gantt consolidado a partir das Ordens de Serviço, com recortes por UF, tipo e responsável.
 
 ## Stack técnica
 

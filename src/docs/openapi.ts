@@ -3106,6 +3106,15 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [
           queryParameter("ownerId", "Filtrar pelo responsavel.", { type: "string" }),
           queryParameter("stage", "Filtrar por etapa do workflow.", { type: "string" }),
+          queryParameter("projectType", "Filtrar pelo tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("omId", "Filtrar pela OM.", { type: "string" }),
+          queryParameter("stateUf", "Filtrar pela UF.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
           queryParameter("search", "Buscar por titulo ou descricao.", { type: "string" }),
           queryParameter("onlyMine", "Mostrar somente projetos proprios.", { type: "boolean" }),
         ],
@@ -3883,6 +3892,15 @@ export const openApiDocument: OpenApiDocument = {
           queryParameter("projectCode", "Filtrar pelo codigo do projeto.", { type: "integer", minimum: 1 }),
           queryParameter("from", "Inicio do periodo.", { type: "string", format: "date-time" }),
           queryParameter("until", "Fim do periodo.", { type: "string", format: "date-time" }),
+          queryParameter("stateUf", "Filtrar pela UF do projeto.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("projectType", "Filtrar pelo tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("ownerId", "Filtrar pelo responsavel do projeto.", { type: "string" }),
         ],
         responses: { "200": okJson("#/components/schemas/ServiceOrderGanttResponse"), ...defaultErrorResponses },
       },
@@ -4051,6 +4069,16 @@ export const openApiDocument: OpenApiDocument = {
             type: "string",
             format: "date-time",
           }),
+          queryParameter("stateUf", "Filtrar a carteira pela UF.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("omId", "Filtrar a carteira pela OM.", { type: "string" }),
+          queryParameter("projectType", "Filtrar a carteira pelo tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("ownerId", "Filtrar a carteira pelo responsavel.", { type: "string" }),
         ],
         responses: {
           "200": okJson("#/components/schemas/DashboardExecutiveResponse"),

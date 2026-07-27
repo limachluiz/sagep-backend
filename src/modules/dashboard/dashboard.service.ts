@@ -1,4 +1,5 @@
 import { prisma } from "../../config/prisma.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 import { OperationalAlertsService } from "../operational-alerts/operational-alerts.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
@@ -1344,7 +1345,7 @@ export class DashboardService {
         updatedAt: project.updatedAt,
         owner: project.owner,
         nextAction,
-        detailsPath: `/api/projects/${project.id}/details`,
+        detailsPath: `/projects/${project.id}`,
       };
     });
 
@@ -1389,12 +1390,19 @@ export class DashboardService {
 
   async executive(filters: DashboardExecutiveQuery = {}) {
     const filterContext = buildFilterContext(filters);
+    const portfolioWhere: Prisma.ProjectWhereInput = {
+      ...(filters.stateUf && { om: { stateUf: filters.stateUf } }),
+      ...(filters.omId && { omId: filters.omId }),
+      ...(filters.projectType && { projectType: filters.projectType }),
+      ...(filters.ownerId && { ownerId: filters.ownerId }),
+    };
     const [projects, estimates, diexRequests, serviceOrders, ataItems, ataItemMovements] =
       await Promise.all([
       prisma.project.findMany({
         where: {
           archivedAt: null,
           deletedAt: null,
+          ...portfolioWhere,
         },
         select: {
           id: true,
@@ -1415,6 +1423,7 @@ export class DashboardService {
           deletedAt: null,
           project: {
             deletedAt: null,
+            ...portfolioWhere,
           },
         },
         select: {
@@ -1450,6 +1459,7 @@ export class DashboardService {
           deletedAt: null,
           project: {
             deletedAt: null,
+            ...portfolioWhere,
           },
           estimate: {
             deletedAt: null,
@@ -1469,6 +1479,7 @@ export class DashboardService {
           deletedAt: null,
           project: {
             deletedAt: null,
+            ...portfolioWhere,
           },
           estimate: {
             deletedAt: null,
@@ -1582,6 +1593,10 @@ export class DashboardService {
         startDate: serializeDate(filterContext.startDate),
         endDate: serializeDate(filterContext.endDate),
         asOfDate: serializeDate(filterContext.asOfDate),
+        stateUf: filters.stateUf ?? null,
+        omId: filters.omId ?? null,
+        projectType: filters.projectType ?? null,
+        ownerId: filters.ownerId ?? null,
       },
       summary: {
         projectsTotal: scopedProjects.length,
