@@ -237,7 +237,7 @@ export interface paths {
         };
         /**
          * Listar logs de auditoria
-         * @description Retorna AuditLog ordenado por createdAt desc. Acesso restrito a usuarios ADMIN e GESTOR.
+         * @description Retorna AuditLog ordenado por createdAt desc. Exige a permissao audit.view.
          */
         get: operations["audits_get_collection"];
         put?: never;
@@ -2245,16 +2245,18 @@ export interface components {
             source?: string | null;
             context?: {
                 [key: string]: unknown;
-            };
+            } | null;
+        };
+        ProjectAuditItem: components["schemas"]["ProjectTimelineItem"] & {
             before?: {
                 [key: string]: unknown;
-            };
+            } | null;
             after?: {
                 [key: string]: unknown;
-            };
+            } | null;
             metadata?: {
                 [key: string]: unknown;
-            };
+            } | null;
         };
         ProjectDetailsResponse: {
             project?: components["schemas"]["Project"];
@@ -2265,6 +2267,8 @@ export interface components {
                 [key: string]: unknown;
             }[];
             timeline?: components["schemas"]["ProjectTimelineItem"][];
+            /** @description Trilha tecnica retornada somente quando o usuario possui audit.view. */
+            auditTrail?: components["schemas"]["ProjectAuditItem"][] | null;
             tasks?: {
                 /** Format: uuid */
                 id?: string;

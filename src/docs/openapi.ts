@@ -1086,21 +1086,35 @@ export const openApiDocument: OpenApiDocument = {
           source: { type: "string", nullable: true },
           context: {
             type: "object",
-            additionalProperties: true,
-          },
-          before: {
-            type: "object",
-            additionalProperties: true,
-          },
-          after: {
-            type: "object",
-            additionalProperties: true,
-          },
-          metadata: {
-            type: "object",
+            nullable: true,
             additionalProperties: true,
           },
         },
+      },
+      ProjectAuditItem: {
+        allOf: [
+          { $ref: "#/components/schemas/ProjectTimelineItem" },
+          {
+            type: "object",
+            properties: {
+              before: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+              after: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+              metadata: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+            },
+          },
+        ],
       },
       ProjectDetailsResponse: {
         type: "object",
@@ -1120,6 +1134,13 @@ export const openApiDocument: OpenApiDocument = {
           timeline: {
             type: "array",
             items: { $ref: "#/components/schemas/ProjectTimelineItem" },
+          },
+          auditTrail: {
+            description:
+              "Trilha tecnica retornada somente quando o usuario possui audit.view.",
+            nullable: true,
+            type: "array",
+            items: { $ref: "#/components/schemas/ProjectAuditItem" },
           },
           tasks: {
             type: "array",
@@ -2978,7 +2999,7 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["audits"],
         summary: "Listar logs de auditoria",
         description:
-          "Retorna AuditLog ordenado por createdAt desc. Acesso restrito a usuarios ADMIN e GESTOR.",
+          "Retorna AuditLog ordenado por createdAt desc. Exige a permissao audit.view.",
         security: bearerSecurity,
         parameters: [
           { $ref: "#/components/parameters/Page" },
@@ -3007,7 +3028,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/AuditLogListEnvelope"),
           ...defaultErrorResponses,
         },
-        "x-roles": ["ADMIN", "GESTOR"],
+        "x-permissions": ["audit.view"],
       },
     },
     "/projects": {

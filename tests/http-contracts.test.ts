@@ -11,6 +11,16 @@ import { ERROR_CODES } from "../src/shared/error-codes.js";
 import { rolePermissions } from "../src/modules/permissions/permissions.catalog.js";
 
 describe("contratos HTTP transversais", () => {
+  it("restringe auditoria tecnica a ADMIN e GESTOR por permissao dedicada", () => {
+    expect(rolePermissions.ADMIN).toContain("audit.view");
+    expect(rolePermissions.GESTOR).toContain("audit.view");
+    expect(rolePermissions.PROJETISTA).not.toContain("audit.view");
+    expect(rolePermissions.CONSULTA).not.toContain("audit.view");
+
+    const auditOperation = (openApiDocument.paths as Record<string, any>)["/audits"].get;
+    expect(auditOperation["x-permissions"]).toEqual(["audit.view"]);
+  });
+
   it("concede exclusao logica aos perfis operacionais e bloqueia consulta", () => {
     const deletionPermissions = [
       "projects.delete",
@@ -57,6 +67,29 @@ describe("contratos HTTP transversais", () => {
           enum: expect.arrayContaining(["PENDENTE", "CONCLUIDA"]),
         }),
         assignee: expect.objectContaining({ nullable: true }),
+      }),
+    );
+  });
+
+  it("separa timeline publica da trilha tecnica de auditoria", () => {
+    const schemas = openApiDocument.components.schemas as Record<string, any>;
+    const detailsSchema = schemas.ProjectDetailsResponse;
+
+    expect(detailsSchema.properties.timeline.items.$ref).toBe(
+      "#/components/schemas/ProjectTimelineItem",
+    );
+    expect(detailsSchema.properties.auditTrail).toEqual(
+      expect.objectContaining({
+        nullable: true,
+        type: "array",
+        items: { $ref: "#/components/schemas/ProjectAuditItem" },
+      }),
+    );
+    expect(schemas.ProjectTimelineItem.properties).not.toHaveProperty("before");
+    expect(schemas.ProjectAuditItem.allOf[1].properties).toEqual(
+      expect.objectContaining({
+        before: expect.objectContaining({ nullable: true }),
+        after: expect.objectContaining({ nullable: true }),
       }),
     );
   });

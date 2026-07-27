@@ -108,10 +108,12 @@ limpo junto com a data de recebimento.
 - `pendingActions`: pendencias calculadas.
 - `timeline`: timeline unificada com auditoria do projeto e entidades relacionadas
   (`PROJECT`, `ESTIMATE`, `DIEX_REQUEST`, `SERVICE_ORDER`, `TASK`). Cada item
-  mantem `id`, `at`, `action`, `label`, `summary`, `actorName`, `before`,
-  `after` e `metadata`, e tambem informa `entityType`, `entityId`, `source` e
-  `context` para a UI identificar o recurso de origem.
-- `documents`: ultimas estimativas, DIEx e OS.
+  mantem `id`, `at`, `action`, `label`, `summary`, `actorName`, `entityType`,
+  `entityId`, `source` e `context` para a UI identificar o recurso de origem.
+- `auditTrail`: estados técnicos `before`, `after` e `metadata` das mesmas
+  entidades, retornados apenas quando o usuário possui `audit.view`; caso
+  contrário, o campo é `null`.
+- `documents`: estimativas, DIEx e OS vinculados ao projeto.
 - `financialSummary`: totais financeiros sem arquivados por padrao.
 - `operationalSummary`: contagens, incluindo `openTasksCount` sem arquivadas.
 

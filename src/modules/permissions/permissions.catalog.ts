@@ -1,4 +1,5 @@
 export type Permission =
+  | "audit.view"
   | "permissions.view"
   | "permissions.manage_user_overrides"
   | "permissions.manage_role_permissions"
@@ -79,6 +80,7 @@ const deletionPermissions: Permission[] = [
 
 export const rolePermissions: Record<UserRole, Permission[]> = {
   ADMIN: [
+    "audit.view",
     "permissions.view",
     "permissions.manage_user_overrides",
     "permissions.manage_role_permissions",
@@ -108,6 +110,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "users.manage",
   ],
   GESTOR: [
+    "audit.view",
     "permissions.view",
     "projects.view_all",
     "projects.edit_own",
@@ -155,6 +158,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
 };
 
 export const permissionDescriptions: Record<Permission, string> = {
+  "audit.view": "Permite visualizar detalhes tecnicos dos registros de auditoria",
   "permissions.view": "Permite consultar a governanca administrativa de permissoes",
   "permissions.manage_user_overrides":
     "Permite administrar overrides de permissoes por usuario",
@@ -205,6 +209,7 @@ export const permissionDescriptions: Record<Permission, string> = {
 export const allPermissions = Object.keys(permissionDescriptions) as Permission[];
 
 const permissionGroupLabels: Record<string, string> = {
+  audit: "Auditoria",
   projects: "Projetos",
   tasks: "Tarefas",
   estimates: "Estimativas",
@@ -230,6 +235,7 @@ export type PermissionCatalogItem = {
 };
 
 export const criticalPermissions: Permission[] = [
+  "audit.view",
   "permissions.manage_role_permissions",
   "permissions.manage_user_overrides",
   "users.manage",

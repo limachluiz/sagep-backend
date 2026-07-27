@@ -18,6 +18,7 @@ type CurrentUser = {
   name?: string;
   email: string;
   role: string;
+  permissions?: string[];
   rank?: string | null;
   cpf?: string | null;
 };
@@ -985,6 +986,21 @@ export class ProjectsService {
     );
   }
 
+  private toPublicTimelineItem(item: Awaited<ReturnType<typeof auditService.listTimelineForEntities>>[number]) {
+    return {
+      id: item.id,
+      at: item.at,
+      entityType: item.entityType,
+      entityId: item.entityId,
+      action: item.action,
+      label: item.label,
+      actorName: item.actorName,
+      summary: item.summary,
+      source: item.source,
+      context: item.context ?? null,
+    };
+  }
+
   async create(data: CreateProjectInput, user: CurrentUser) {
     await this.validateProjectClassification(data.projectType, data.omId);
 
@@ -1484,7 +1500,9 @@ export class ProjectsService {
 
     const workflowSnapshot = this.buildWorkflowSnapshot(project);
     const nextAction = workflowService.getNextAction(workflowSnapshot);
-    const timeline = await this.buildUnifiedTimeline(project);
+    const auditTrail = await this.buildUnifiedTimeline(project);
+    const canViewAudit = permissionsService.hasPermission(user, "audit.view");
+    const timeline = auditTrail.map((item) => this.toPublicTimelineItem(item));
     const finalizedEstimates = project.estimates.filter(
       (estimate) => estimate.status === "FINALIZADA",
     );
@@ -1527,6 +1545,7 @@ export class ProjectsService {
           asBuiltReceivedAt: project.asBuiltReceivedAt,
           asBuiltReviewedAt: project.asBuiltReviewedAt,
           asBuiltApprovedAt: project.asBuiltApprovedAt,
+          asBuiltLink: project.asBuiltLink,
           asBuiltRejectedAt: project.asBuiltRejectedAt,
           asBuiltRejectionReason: project.asBuiltRejectionReason,
           invoiceAttestedAt: project.invoiceAttestedAt,
@@ -1535,11 +1554,12 @@ export class ProjectsService {
       },
       pendingActions: this.buildPendingActions(project),
       timeline,
+      auditTrail: canViewAudit ? auditTrail : null,
       tasks: project.tasks,
       documents: {
-        estimates: project.estimates.slice(0, 5),
-        diexRequests: project.diexRequests.slice(0, 5),
-        serviceOrders: project.serviceOrders.slice(0, 5),
+        estimates: project.estimates,
+        diexRequests: project.diexRequests,
+        serviceOrders: project.serviceOrders,
       },
       financialSummary: {
         estimatesCount: project.estimates.length,
@@ -2949,7 +2969,8 @@ export class ProjectsService {
       throw new AppError("Projeto não encontrado", 404);
     }
 
-    return this.buildUnifiedTimeline(project);
+    const timeline = await this.buildUnifiedTimeline(project);
+    return timeline.map((item) => this.toPublicTimelineItem(item));
   }
 
   async getNextAction(projectId: string, user: CurrentUser) {
