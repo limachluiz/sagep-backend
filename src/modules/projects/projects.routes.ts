@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { serviceOrdersRoutes } from "../service-orders/service-orders.routes.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { ProjectMembersController } from "../project-members/project-members.controller.js";
 import { ProjectsController } from "./projects.controller.js";
 
@@ -34,4 +35,7 @@ projectsRoutes.get("/:id/next-action", (req, res) => controller.nextAction(req, 
 projectsRoutes.get("/:id", (req, res) => controller.findById(req, res));
 projectsRoutes.patch("/:id", (req, res) => controller.update(req, res));
 projectsRoutes.post("/:id/restore", (req, res) => controller.restore(req, res));
+projectsRoutes.delete("/:id/permanent", requirePermission("projects.delete"), (req, res) =>
+  controller.softDelete(req, res),
+);
 projectsRoutes.delete("/:id", (req, res) => controller.remove(req, res));

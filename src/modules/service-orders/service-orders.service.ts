@@ -301,7 +301,11 @@ export class ServiceOrdersService {
   }
 
   private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
-    return Boolean(includeArchived && this.isPrivileged(user.role));
+    return Boolean(
+      includeArchived &&
+      (permissionsService.hasPermission(user, "service_orders.restore") ||
+        permissionsService.hasPermission(user, "service_orders.delete")),
+    );
   }
 
   private resolveArchivedAccess(
@@ -315,16 +319,23 @@ export class ServiceOrdersService {
       archivedUntil?: Date;
     },
   ) {
-    if (
-      (filters.includeArchived ||
-        filters.onlyArchived ||
-        filters.includeDeleted ||
-        filters.onlyDeleted ||
-        filters.archivedFrom ||
-        filters.archivedUntil) &&
-      !this.isAdmin(user.role)
-    ) {
-      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    const canAccessArchived =
+      permissionsService.hasPermission(user, "service_orders.restore") ||
+      permissionsService.hasPermission(user, "service_orders.delete");
+    const requestsArchived = Boolean(
+      filters.includeArchived ||
+      filters.onlyArchived ||
+      filters.archivedFrom ||
+      filters.archivedUntil,
+    );
+    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+
+    if (requestsArchived && !canAccessArchived) {
+      throw new AppError("Você não tem permissão para consultar Ordens de Serviço arquivadas", 403);
+    }
+
+    if (requestsDeleted && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar Ordens de Serviço excluídas", 403);
     }
 
     if (filters.onlyArchived && filters.onlyDeleted) {
@@ -332,8 +343,8 @@ export class ServiceOrdersService {
     }
 
     return {
-      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
-      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeArchived: Boolean(filters.includeArchived && canAccessArchived),
+      onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
       includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
@@ -807,8 +818,8 @@ export class ServiceOrdersService {
     return serviceOrder;
   }
 
-  private async ensureCanManage(serviceOrderId: string, user: CurrentUser) {
-    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId);
+  private async ensureCanManage(serviceOrderId: string, user: CurrentUser, includeArchived = false) {
+    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId, includeArchived);
 
     if (!this.canManageProject(serviceOrder.project, user)) {
       throw new AppError("Você não tem permissão para gerenciar esta OS", 403);
@@ -1766,6 +1777,78 @@ private buildWorkflowSnapshot(project: {
 
     return {
       message: "OS arquivada com sucesso",
+    };
+  }
+
+  async softDelete(serviceOrderId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "service_orders.delete")) {
+      throw new AppError("Você não tem permissão para excluir esta Ordem de Serviço", 403);
+    }
+
+    await this.ensureCanManage(serviceOrderId, user, true);
+
+    const before = await prisma.serviceOrder.findUnique({
+      where: { id: serviceOrderId },
+      select: {
+        id: true,
+        serviceOrderCode: true,
+        projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderNumber: true,
+        issuedAt: true,
+        contractorName: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
+
+    if (!before.archivedAt) {
+      throw new AppError("A Ordem de Serviço precisa estar arquivada antes da exclusão", 409);
+    }
+
+    const deletedAt = new Date();
+    const serviceOrder = await prisma.serviceOrder.update({
+      where: { id: serviceOrderId },
+      data: { deletedAt },
+      select: {
+        id: true,
+        serviceOrderCode: true,
+        projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderNumber: true,
+        issuedAt: true,
+        contractorName: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: before.id,
+      action: "DELETE",
+      actor: this.getAuditActor(user),
+      summary: `OS ${before.serviceOrderNumber ?? `#${before.serviceOrderCode}`} excluída logicamente`,
+      before: this.buildServiceOrderAuditSnapshot(before),
+      after: this.buildServiceOrderAuditSnapshot(serviceOrder),
+      metadata: {
+        permissionUsed: "service_orders.delete",
+        softDelete: true,
+      },
+    });
+
+    return {
+      message: "Ordem de Serviço excluída com sucesso",
+      permissionUsed: "service_orders.delete" as const,
+      deletedAt,
     };
   }
 

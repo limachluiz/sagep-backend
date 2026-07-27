@@ -115,6 +115,12 @@ export class ProjectsController {
     return res.status(200).json(result);
   }
 
+  async softDelete(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const result = await projectsService.softDelete(id, req.user!);
+    return res.status(200).json(result);
+  }
+
   async timeline(req: Request, res: Response) {
     const projectId = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
 

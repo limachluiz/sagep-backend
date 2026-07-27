@@ -94,6 +94,12 @@ export class ServiceOrdersController {
     const result = await serviceOrdersService.restore(id, req.user!, options);
     return res.status(200).json(result);
   }
+
+  async softDelete(req: Request, res: Response) {
+    const { id } = serviceOrderIdParamSchema.parse(req.params);
+    const result = await serviceOrdersService.softDelete(id, req.user!);
+    return res.status(200).json(result);
+  }
     async documentHtml(req: Request, res: Response) {
     const { id } = serviceOrderIdParamSchema.parse(req.params);
     const html = await serviceOrderDocumentService.generateServiceOrderHtml(id, req.user!);

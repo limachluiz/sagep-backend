@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { ServiceOrdersController } from "./service-orders.controller.js";
 
 export const serviceOrdersRoutes = Router();
@@ -20,4 +21,9 @@ serviceOrdersRoutes.get("/:id", (req, res) => controller.findById(req, res));
 serviceOrdersRoutes.get("/:id/gantt", (req, res) => controller.ganttById(req, res));
 serviceOrdersRoutes.patch("/:id", (req, res) => controller.update(req, res));
 serviceOrdersRoutes.post("/:id/restore", (req, res) => controller.restore(req, res));
+serviceOrdersRoutes.delete(
+  "/:id/permanent",
+  requirePermission("service_orders.delete"),
+  (req, res) => controller.softDelete(req, res),
+);
 serviceOrdersRoutes.delete("/:id", (req, res) => controller.remove(req, res));

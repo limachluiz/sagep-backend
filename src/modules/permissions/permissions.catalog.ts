@@ -5,6 +5,7 @@ export type Permission =
   | "projects.view_all"
   | "projects.edit_own"
   | "projects.edit_all"
+  | "projects.delete"
   | "projects.restore"
   | "projects.complete"
   | "projects.reopen"
@@ -15,18 +16,22 @@ export type Permission =
   | "tasks.assign"
   | "tasks.complete"
   | "tasks.archive"
+  | "tasks.delete"
   | "tasks.restore"
   | "estimates.view_all"
   | "estimates.create"
   | "estimates.edit"
   | "estimates.finalize"
   | "estimates.archive"
+  | "estimates.delete"
   | "estimates.restore"
   | "diex.issue"
   | "diex.cancel"
+  | "diex.delete"
   | "diex.restore"
   | "service_orders.issue"
   | "service_orders.cancel"
+  | "service_orders.delete"
   | "service_orders.restore"
   | "atas.manage"
   | "military_organizations.manage"
@@ -50,6 +55,7 @@ const taskPermissions: Permission[] = [
   "tasks.assign",
   "tasks.complete",
   "tasks.archive",
+  "tasks.delete",
   "tasks.restore",
 ];
 
@@ -59,7 +65,16 @@ const estimatePermissions: Permission[] = [
   "estimates.edit",
   "estimates.finalize",
   "estimates.archive",
+  "estimates.delete",
   "estimates.restore",
+];
+
+const deletionPermissions: Permission[] = [
+  "projects.delete",
+  "tasks.delete",
+  "estimates.delete",
+  "diex.delete",
+  "service_orders.delete",
 ];
 
 export const rolePermissions: Record<UserRole, Permission[]> = {
@@ -70,6 +85,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "projects.view_all",
     "projects.edit_own",
     "projects.edit_all",
+    ...deletionPermissions,
     "projects.restore",
     "projects.complete",
     "projects.reopen",
@@ -96,6 +112,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "projects.view_all",
     "projects.edit_own",
     "projects.edit_all",
+    ...deletionPermissions,
     "projects.restore",
     "projects.complete",
     "projects.reopen",
@@ -115,6 +132,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
   ],
   PROJETISTA: [
     "projects.edit_own",
+    ...deletionPermissions,
     "projects.complete",
     "tasks.create",
     "tasks.edit_own",
@@ -145,6 +163,7 @@ export const permissionDescriptions: Record<Permission, string> = {
   "projects.view_all": "Permite visualizar projetos de qualquer responsavel",
   "projects.edit_own": "Permite editar projetos proprios",
   "projects.edit_all": "Permite editar qualquer projeto",
+  "projects.delete": "Permite excluir logicamente projetos arquivados",
   "projects.restore": "Permite restaurar projetos arquivados",
   "projects.complete": "Permite concluir projetos",
   "projects.reopen": "Permite reabrir projetos concluidos",
@@ -155,18 +174,22 @@ export const permissionDescriptions: Record<Permission, string> = {
   "tasks.assign": "Permite atribuir tarefas a usuarios",
   "tasks.complete": "Permite concluir tarefas",
   "tasks.archive": "Permite arquivar tarefas",
+  "tasks.delete": "Permite excluir logicamente tarefas arquivadas",
   "tasks.restore": "Permite restaurar tarefas arquivadas",
   "estimates.view_all": "Permite visualizar estimativas de qualquer projeto",
   "estimates.create": "Permite criar estimativas",
   "estimates.edit": "Permite editar estimativas",
   "estimates.finalize": "Permite finalizar estimativas",
   "estimates.archive": "Permite arquivar estimativas",
+  "estimates.delete": "Permite excluir logicamente estimativas arquivadas",
   "estimates.restore": "Permite restaurar estimativas arquivadas",
   "diex.issue": "Permite emitir DIEx",
   "diex.cancel": "Permite arquivar ou cancelar DIEx",
+  "diex.delete": "Permite excluir logicamente DIEx arquivados",
   "diex.restore": "Permite restaurar DIEx arquivados",
   "service_orders.issue": "Permite emitir ordens de servico",
   "service_orders.cancel": "Permite arquivar ou cancelar ordens de servico",
+  "service_orders.delete": "Permite excluir logicamente ordens de servico arquivadas",
   "service_orders.restore": "Permite restaurar ordens de servico arquivadas",
   "atas.manage": "Permite administrar atas e itens de ata",
   "military_organizations.manage": "Permite administrar organizacoes militares",

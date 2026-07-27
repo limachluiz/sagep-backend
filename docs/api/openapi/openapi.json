@@ -6707,6 +6707,58 @@
         "operationId": "projects_post_byId_restore"
       }
     },
+    "/projects/{id}/permanent": {
+      "delete": {
+        "tags": [
+          "projects"
+        ],
+        "summary": "Excluir logicamente projeto arquivado",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Projeto excluído",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "projects.delete"
+        ],
+        "operationId": "projects_delete_byId_permanent"
+      }
+    },
     "/projects/{id}/details": {
       "get": {
         "tags": [
@@ -7553,6 +7605,58 @@
         "operationId": "tasks_post_byId_restore"
       }
     },
+    "/tasks/{id}/permanent": {
+      "delete": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Excluir logicamente tarefa arquivada",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tarefa excluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "tasks.delete"
+        ],
+        "operationId": "tasks_delete_byId_permanent"
+      }
+    },
     "/estimates": {
       "get": {
         "tags": [
@@ -8106,6 +8210,58 @@
         "operationId": "estimates_post_byId_restore"
       }
     },
+    "/estimates/{id}/permanent": {
+      "delete": {
+        "tags": [
+          "estimates"
+        ],
+        "summary": "Excluir logicamente estimativa arquivada",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/EstimateId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Estimativa excluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "estimates.delete"
+        ],
+        "operationId": "estimates_delete_byId_permanent"
+      }
+    },
     "/estimates/{id}/document/html": {
       "get": {
         "tags": [
@@ -8641,6 +8797,58 @@
           "diex.restore"
         ],
         "operationId": "diex_post_byId_restore"
+      }
+    },
+    "/diex/{id}/permanent": {
+      "delete": {
+        "tags": [
+          "diex"
+        ],
+        "summary": "Excluir logicamente DIEx arquivado",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/DiexId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "DIEx excluído",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "diex.delete"
+        ],
+        "operationId": "diex_delete_byId_permanent"
       }
     },
     "/diex/{id}/document/html": {
@@ -9322,6 +9530,58 @@
           "service_orders.restore"
         ],
         "operationId": "serviceOrders_post_byId_restore"
+      }
+    },
+    "/service-orders/{id}/permanent": {
+      "delete": {
+        "tags": [
+          "service-orders"
+        ],
+        "summary": "Excluir logicamente ordem de servico arquivada",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ServiceOrderId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OS excluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "service_orders.delete"
+        ],
+        "operationId": "serviceOrders_delete_byId_permanent"
       }
     },
     "/service-orders/{id}/gantt": {

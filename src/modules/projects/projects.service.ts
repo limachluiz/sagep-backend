@@ -274,7 +274,11 @@ export class ProjectsService {
   }
 
   private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
-    return Boolean(includeArchived && this.isPrivileged(user.role));
+    return Boolean(
+      includeArchived &&
+      (permissionsService.hasPermission(user, "projects.restore") ||
+        permissionsService.hasPermission(user, "projects.delete")),
+    );
   }
 
   private resolveArchivedAccess(
@@ -288,16 +292,23 @@ export class ProjectsService {
       archivedUntil?: Date;
     },
   ) {
-    if (
-      (filters.includeArchived ||
-        filters.onlyArchived ||
-        filters.includeDeleted ||
-        filters.onlyDeleted ||
-        filters.archivedFrom ||
-        filters.archivedUntil) &&
-      !this.isAdmin(user.role)
-    ) {
-      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    const canAccessArchived =
+      permissionsService.hasPermission(user, "projects.restore") ||
+      permissionsService.hasPermission(user, "projects.delete");
+    const requestsArchived = Boolean(
+      filters.includeArchived ||
+      filters.onlyArchived ||
+      filters.archivedFrom ||
+      filters.archivedUntil,
+    );
+    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+
+    if (requestsArchived && !canAccessArchived) {
+      throw new AppError("Você não tem permissão para consultar projetos arquivados", 403);
+    }
+
+    if (requestsDeleted && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar projetos excluídos", 403);
     }
 
     if (filters.onlyArchived && filters.onlyDeleted) {
@@ -305,8 +316,8 @@ export class ProjectsService {
     }
 
     return {
-      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
-      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeArchived: Boolean(filters.includeArchived && canAccessArchived),
+      onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
       includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
@@ -2571,6 +2582,112 @@ export class ProjectsService {
     return {
       message: "Projeto arquivado com sucesso",
       project,
+    };
+  }
+
+  async softDelete(projectId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "projects.delete")) {
+      throw new AppError("Você não tem permissão para excluir este projeto", 403);
+    }
+
+    const projectAccess = await this.ensureCanManage(projectId, user, true);
+    workflowService.assertCanArchiveProject(this.buildWorkflowSnapshot(projectAccess));
+
+    const before = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        ownerId: true,
+        startDate: true,
+        endDate: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (!before.archivedAt) {
+      throw new AppError("O projeto precisa estar arquivado antes da exclusão", 409);
+    }
+
+    const deletedAt = new Date();
+    const deleted = await prisma.$transaction(async (tx) => {
+      const [tasks, estimates, diexRequests, serviceOrders] = await Promise.all([
+        tx.task.updateMany({
+          where: { projectId, deletedAt: null },
+          data: { deletedAt },
+        }),
+        tx.estimate.updateMany({
+          where: { projectId, deletedAt: null },
+          data: { deletedAt },
+        }),
+        tx.diexRequest.updateMany({
+          where: { projectId, deletedAt: null },
+          data: { deletedAt },
+        }),
+        tx.serviceOrder.updateMany({
+          where: { projectId, deletedAt: null },
+          data: { deletedAt },
+        }),
+      ]);
+
+      const project = await tx.project.update({
+        where: { id: projectId },
+        data: { deletedAt },
+        select: {
+          id: true,
+          projectCode: true,
+          title: true,
+          description: true,
+          status: true,
+          stage: true,
+          ownerId: true,
+          startDate: true,
+          endDate: true,
+          archivedAt: true,
+          deletedAt: true,
+        },
+      });
+
+      return {
+        project,
+        dependents: {
+          tasks: tasks.count,
+          estimates: estimates.count,
+          diexRequests: diexRequests.count,
+          serviceOrders: serviceOrders.count,
+        },
+      };
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: before.id,
+      action: "DELETE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${before.projectCode} excluído logicamente`,
+      before: this.buildProjectAuditSnapshot(before),
+      after: this.buildProjectAuditSnapshot(deleted.project),
+      metadata: {
+        permissionUsed: "projects.delete",
+        softDelete: true,
+        dependents: deleted.dependents,
+      },
+    });
+
+    return {
+      message: "Projeto excluído com sucesso",
+      permissionUsed: "projects.delete" as const,
+      deletedAt,
+      deleted: deleted.dependents,
     };
   }
 

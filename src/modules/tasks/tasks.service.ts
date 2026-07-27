@@ -95,16 +95,23 @@ export class TasksService {
       archivedUntil?: Date;
     },
   ) {
-    if (
-      (filters.includeArchived ||
-        filters.onlyArchived ||
-        filters.includeDeleted ||
-        filters.onlyDeleted ||
-        filters.archivedFrom ||
-        filters.archivedUntil) &&
-      !this.isAdmin(user.role)
-    ) {
-      throw new AppError("Apenas ADMIN pode consultar tarefas arquivadas", 403);
+    const canAccessArchived =
+      permissionsService.hasPermission(user, "tasks.restore") ||
+      permissionsService.hasPermission(user, "tasks.delete");
+    const requestsArchived = Boolean(
+      filters.includeArchived ||
+      filters.onlyArchived ||
+      filters.archivedFrom ||
+      filters.archivedUntil,
+    );
+    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+
+    if (requestsArchived && !canAccessArchived) {
+      throw new AppError("Você não tem permissão para consultar tarefas arquivadas", 403);
+    }
+
+    if (requestsDeleted && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar tarefas excluídas", 403);
     }
 
     if (filters.onlyArchived && filters.onlyDeleted) {
@@ -112,8 +119,8 @@ export class TasksService {
     }
 
     return {
-      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
-      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeArchived: Boolean(filters.includeArchived && canAccessArchived),
+      onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
       includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
@@ -470,10 +477,10 @@ export class TasksService {
     return task;
   }
 
-  private async ensureCanManage(taskId: string, user: CurrentUser) {
+  private async ensureCanManage(taskId: string, user: CurrentUser, includeArchived = false) {
     const task = await this.getTaskAccessData(taskId);
 
-    if (task.archivedAt) {
+    if (!includeArchived && task.archivedAt) {
       throw new AppError("Tarefa arquivada não pode ser alterada", 409);
     }
 
@@ -869,6 +876,45 @@ export class TasksService {
       message: "Tarefa arquivada com sucesso",
       permissionUsed: "tasks.archive" as const,
       task,
+    };
+  }
+
+  async softDelete(taskId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "tasks.delete")) {
+      throw new AppError("Você não tem permissão para excluir esta tarefa", 403);
+    }
+
+    const before = await this.ensureCanManage(taskId, user, true);
+
+    if (!before.archivedAt) {
+      throw new AppError("A tarefa precisa estar arquivada antes da exclusão", 409);
+    }
+
+    const deletedAt = new Date();
+    const task = await prisma.task.update({
+      where: { id: taskId },
+      data: { deletedAt },
+      include: taskInclude,
+    });
+
+    await auditService.log({
+      entityType: "TASK",
+      entityId: before.id,
+      action: "DELETE",
+      actor: this.getAuditActor(user),
+      summary: `Tarefa TSK-${before.taskCode} excluída logicamente`,
+      before: this.buildTaskAuditSnapshot(before),
+      after: this.buildTaskAuditSnapshot(task),
+      metadata: {
+        permissionUsed: "tasks.delete",
+        softDelete: true,
+      },
+    });
+
+    return {
+      message: "Tarefa excluída com sucesso",
+      permissionUsed: "tasks.delete" as const,
+      deletedAt,
     };
   }
 

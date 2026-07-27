@@ -3152,6 +3152,19 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["projects.restore"],
       },
     },
+    "/projects/{id}/permanent": {
+      delete: {
+        tags: ["projects"],
+        summary: "Excluir logicamente projeto arquivado",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "Projeto excluído"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["projects.delete"],
+      },
+    },
     "/projects/{id}/details": {
       get: {
         tags: ["projects"],
@@ -3393,6 +3406,19 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["tasks.restore"],
       },
     },
+    "/tasks/{id}/permanent": {
+      delete: {
+        tags: ["tasks"],
+        summary: "Excluir logicamente tarefa arquivada",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "Tarefa excluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["tasks.delete"],
+      },
+    },
     "/estimates": {
       get: {
         tags: ["estimates"],
@@ -3533,6 +3559,19 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["estimates.restore"],
       },
     },
+    "/estimates/{id}/permanent": {
+      delete: {
+        tags: ["estimates"],
+        summary: "Excluir logicamente estimativa arquivada",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/EstimateId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "Estimativa excluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["estimates.delete"],
+      },
+    },
     "/estimates/{id}/document/html": {
       get: {
         tags: ["estimates"],
@@ -3664,6 +3703,19 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["diex.restore"],
+      },
+    },
+    "/diex/{id}/permanent": {
+      delete: {
+        tags: ["diex"],
+        summary: "Excluir logicamente DIEx arquivado",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/DiexId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "DIEx excluído"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["diex.delete"],
       },
     },
     "/diex/{id}/document/html": {
@@ -3827,6 +3879,19 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["service_orders.restore"],
+      },
+    },
+    "/service-orders/{id}/permanent": {
+      delete: {
+        tags: ["service-orders"],
+        summary: "Excluir logicamente ordem de servico arquivada",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ServiceOrderId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "OS excluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["service_orders.delete"],
       },
     },
     "/service-orders/{id}/gantt": {

@@ -31,6 +31,9 @@ estimatesRoutes.patch(
 estimatesRoutes.post("/:id/restore", requirePermission("estimates.restore"), (req, res) =>
   controller.restore(req, res),
 );
+estimatesRoutes.delete("/:id/permanent", requirePermission("estimates.delete"), (req, res) =>
+  controller.softDelete(req, res),
+);
 estimatesRoutes.delete("/:id", requirePermission("estimates.archive"), (req, res) =>
   controller.remove(req, res),
 );

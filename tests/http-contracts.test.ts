@@ -8,8 +8,25 @@ import {
 } from "../src/middlewares/request-context.middleware.js";
 import { AppError } from "../src/shared/app-error.js";
 import { ERROR_CODES } from "../src/shared/error-codes.js";
+import { rolePermissions } from "../src/modules/permissions/permissions.catalog.js";
 
 describe("contratos HTTP transversais", () => {
+  it("concede exclusao logica aos perfis operacionais e bloqueia consulta", () => {
+    const deletionPermissions = [
+      "projects.delete",
+      "tasks.delete",
+      "estimates.delete",
+      "diex.delete",
+      "service_orders.delete",
+    ] as const;
+
+    for (const role of ["ADMIN", "GESTOR", "PROJETISTA"] as const) {
+      expect(rolePermissions[role]).toEqual(expect.arrayContaining(deletionPermissions));
+    }
+
+    expect(rolePermissions.CONSULTA).not.toEqual(expect.arrayContaining(deletionPermissions));
+  });
+
   it("atribui operationId unico a todas as operacoes OpenAPI", () => {
     const paths = openApiDocument.paths as Record<string, Record<string, unknown>>;
     const operationIds: string[] = [];
@@ -23,7 +40,7 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(122);
+    expect(operationIds).toHaveLength(127);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });

@@ -407,6 +407,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Excluir logicamente projeto arquivado */
+        delete: operations["projects_delete_byId_permanent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{id}/details": {
         parameters: {
             query?: never;
@@ -584,6 +601,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tasks/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Excluir logicamente tarefa arquivada */
+        delete: operations["tasks_delete_byId_permanent"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/estimates": {
         parameters: {
             query?: never;
@@ -670,6 +704,23 @@ export interface paths {
         /** Restaurar estimativa arquivada */
         post: operations["estimates_post_byId_restore"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/estimates/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Excluir logicamente estimativa arquivada */
+        delete: operations["estimates_delete_byId_permanent"];
         options?: never;
         head?: never;
         patch?: never;
@@ -778,6 +829,23 @@ export interface paths {
         /** Restaurar DIEx arquivado */
         post: operations["diex_post_byId_restore"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/diex/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Excluir logicamente DIEx arquivado */
+        delete: operations["diex_delete_byId_permanent"];
         options?: never;
         head?: never;
         patch?: never;
@@ -920,6 +988,23 @@ export interface paths {
         /** Restaurar ordem de servico arquivada */
         post: operations["serviceOrders_post_byId_restore"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/service-orders/{id}/permanent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Excluir logicamente ordem de servico arquivada */
+        delete: operations["serviceOrders_delete_byId_permanent"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4329,6 +4414,35 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    projects_delete_byId_permanent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID do projeto. */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Projeto excluído */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     projects_get_byId_details: {
         parameters: {
             query?: {
@@ -4800,6 +4914,35 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    tasks_delete_byId_permanent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da tarefa. */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tarefa excluída */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     estimates_get_collection: {
         parameters: {
             query?: {
@@ -5066,6 +5209,35 @@ export interface operations {
         };
         responses: {
             /** @description Estimativa restaurada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    estimates_delete_byId_permanent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da estimativa. */
+                id: components["parameters"]["EstimateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Estimativa excluída */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5365,6 +5537,35 @@ export interface operations {
         };
         responses: {
             /** @description DIEx restaurado */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    diex_delete_byId_permanent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID do DIEx. */
+                id: components["parameters"]["DiexId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description DIEx excluído */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -5730,6 +5931,35 @@ export interface operations {
         };
         responses: {
             /** @description OS restaurada */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    serviceOrders_delete_byId_permanent: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da ordem de servico. */
+                id: components["parameters"]["ServiceOrderId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OS excluída */
             200: {
                 headers: {
                     [name: string]: unknown;
