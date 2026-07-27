@@ -195,8 +195,9 @@ Observacoes:
 
 - `onlyArchived=true` continua retornando apenas arquivados com `deletedAt = null`.
 - `onlyArchived=true` e `onlyDeleted=true` nao devem ser combinados.
-- nesta fase, nao existe endpoint publico dedicado para marcar `deletedAt`; a
-  base foi preparada para leitura, filtro e comportamento consistente.
+- a exclusao logica e feita por `DELETE /:id/permanent` nos modulos
+  suportados, exige permissao especifica e somente aceita registros
+  previamente arquivados.
 
 Quando uma listagem administrativa retorna itens arquivados, cada item arquivado
 pode trazer `archiveContext` com `archivedAt`, `auditLogId`, `summary`,

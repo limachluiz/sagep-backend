@@ -1196,6 +1196,7 @@ export const openApiDocument: OpenApiDocument = {
           assigneeUserCode: { type: "integer", minimum: 1, nullable: true },
           clearAssignee: { type: "boolean", nullable: true },
           dueDate: { type: "string", format: "date-time", nullable: true },
+          clearDueDate: { type: "boolean", nullable: true },
         },
       },
       TaskStatusUpdateRequest: {

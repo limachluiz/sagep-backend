@@ -2306,6 +2306,7 @@ export interface components {
             clearAssignee?: boolean | null;
             /** Format: date-time */
             dueDate?: string | null;
+            clearDueDate?: boolean | null;
         };
         TaskStatusUpdateRequest: {
             /** @enum {string} */

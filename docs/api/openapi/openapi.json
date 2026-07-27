@@ -2188,6 +2188,10 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "clearDueDate": {
+            "type": "boolean",
+            "nullable": true
           }
         }
       },

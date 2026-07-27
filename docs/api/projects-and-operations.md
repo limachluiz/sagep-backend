@@ -149,6 +149,7 @@ Base:
 | `PATCH` | `/tasks/:id` | Atualiza dados. | `tasks.edit_all`, `tasks.edit_own`; mudanca de responsavel exige `tasks.assign`. |
 | `DELETE` | `/tasks/:id` | Arquiva tarefa. | `tasks.archive`. |
 | `POST` | `/tasks/:id/restore` | Restaura tarefa. | `tasks.restore`. |
+| `DELETE` | `/tasks/:id/permanent` | Exclui logicamente uma tarefa arquivada. | `tasks.delete`; exige arquivamento previo. |
 
 ### Filtros
 
@@ -163,8 +164,8 @@ GET /api/tasks?projectCode=1&status=PENDENTE&page=1&pageSize=20
 | `assigneeCode` | number |
 | `status` | `PENDENTE`, `EM_ANDAMENTO`, `REVISAO`, `CONCLUIDA`, `CANCELADA` |
 | `search` | string |
-| `includeArchived`, `onlyArchived` | boolean, apenas `ADMIN` |
-| `archivedFrom`, `archivedUntil` | datas ISO, apenas `ADMIN`; filtram por periodo de arquivamento |
+| `includeArchived`, `onlyArchived` | boolean; exige `tasks.restore` ou `tasks.delete` |
+| `archivedFrom`, `archivedUntil` | datas ISO; exigem acesso aos arquivados e filtram por periodo |
 | `format` | `envelope` ou `legacy` |
 
 ### Criar Tarefa
@@ -182,6 +183,10 @@ GET /api/tasks?projectCode=1&status=PENDENTE&page=1&pageSize=20
 ```
 
 `projectId` ou `projectCode` e obrigatorio. `assigneeId` ou `assigneeUserCode` sao opcionais, mas atribuir exige `tasks.assign`.
+
+Na atualizacao, use `clearAssignee: true` para remover o responsavel e
+`clearDueDate: true` para remover o prazo. Esses campos nao podem ser enviados
+junto com um novo responsavel ou uma nova data, respectivamente.
 
 ## Estimates
 

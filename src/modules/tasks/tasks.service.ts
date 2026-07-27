@@ -33,6 +33,7 @@ type UpdateTaskInput = {
   assigneeUserCode?: number;
   clearAssignee?: boolean;
   dueDate?: Date;
+  clearDueDate?: boolean;
 };
 
 type UpdateTaskStatusInput = {
@@ -515,7 +516,7 @@ export class TasksService {
     const assignee = await this.resolveAssignee(data.assigneeId, data.assigneeUserCode);
 
     if (assignee && !permissionsService.hasPermission(user, "tasks.assign")) {
-      throw new AppError("VocÃª nÃ£o tem permissÃ£o para atribuir tarefas", 403);
+      throw new AppError("Você não tem permissão para atribuir tarefas", 403);
     }
 
     if (assignee) {
@@ -749,13 +750,13 @@ export class TasksService {
 
     if (data.clearAssignee) {
       if (!permissionsService.hasPermission(user, "tasks.assign")) {
-        throw new AppError("VocÃª nÃ£o tem permissÃ£o para alterar atribuiÃ§Ã£o de tarefas", 403);
+        throw new AppError("Você não tem permissão para alterar atribuição de tarefas", 403);
       }
 
       resolvedAssigneeId = undefined;
     } else if (data.assigneeId || data.assigneeUserCode) {
       if (!permissionsService.hasPermission(user, "tasks.assign")) {
-        throw new AppError("VocÃª nÃ£o tem permissÃ£o para alterar atribuiÃ§Ã£o de tarefas", 403);
+        throw new AppError("Você não tem permissão para alterar atribuição de tarefas", 403);
       }
 
       const assignee = await this.resolveAssignee(data.assigneeId, data.assigneeUserCode);
@@ -774,6 +775,7 @@ export class TasksService {
         ...(data.status !== undefined && { status: data.status }),
         ...(data.priority !== undefined && { priority: data.priority }),
         ...(data.dueDate !== undefined && { dueDate: data.dueDate }),
+        ...(data.clearDueDate === true && { dueDate: null }),
         ...(data.clearAssignee === true && { assigneeId: null }),
         ...(data.clearAssignee !== true &&
           resolvedAssigneeId !== undefined && { assigneeId: resolvedAssigneeId }),
