@@ -43,6 +43,16 @@ export const listUsersQuerySchema = paginationQuerySchema.extend({
   search: optionalString,
 });
 
+export const listUserOptionsQuerySchema = z
+  .object({
+    projectId: z.string().min(1).optional(),
+    projectCode: z.coerce.number().int().positive().optional(),
+  })
+  .refine((data) => !(data.projectId && data.projectCode), {
+    message: "Informe projectId ou projectCode, não ambos",
+    path: ["projectId"],
+  });
+
 export const userIdParamSchema = z.object({
   id: z.string().min(1, "Id do usuário é obrigatório"),
 });

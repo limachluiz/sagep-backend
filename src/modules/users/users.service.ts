@@ -1,11 +1,13 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 
 type CurrentUser = {
   id: string;
   email: string;
   role: string;
+  permissions?: string[];
 };
 
 type CreateUserByAdminInput = {
@@ -40,6 +42,11 @@ type ListUsersFilters = {
   search?: string;
 };
 
+type ListUserOptionsFilters = {
+  projectId?: string;
+  projectCode?: number;
+};
+
 const adminUserSelect = {
   id: true,
   userCode: true,
@@ -54,6 +61,66 @@ const adminUserSelect = {
 } as const;
 
 export class UsersService {
+  async listOptions(filters: ListUserOptionsFilters, currentUser: CurrentUser) {
+    let eligibleUserIds: string[] | undefined;
+
+    if (filters.projectId || filters.projectCode) {
+      const project = await prisma.project.findFirst({
+        where: {
+          ...(filters.projectId && { id: filters.projectId }),
+          ...(filters.projectCode && { projectCode: filters.projectCode }),
+          deletedAt: null,
+        },
+        select: {
+          ownerId: true,
+          members: {
+            select: {
+              userId: true,
+            },
+          },
+        },
+      });
+
+      if (!project) {
+        throw new AppError("Projeto não encontrado", 404);
+      }
+
+      const canViewAll = permissionsService.hasPermission(currentUser, "projects.view_all");
+      const belongsToProject =
+        project.ownerId === currentUser.id ||
+        project.members.some((member) => member.userId === currentUser.id);
+
+      if (!canViewAll && !belongsToProject) {
+        throw new AppError("Você não tem acesso a este projeto", 403);
+      }
+
+      eligibleUserIds = [
+        project.ownerId,
+        ...project.members.map((member) => member.userId),
+      ];
+    }
+
+    return prisma.user.findMany({
+      where: {
+        active: true,
+        ...(eligibleUserIds && { id: { in: eligibleUserIds } }),
+      },
+      select: {
+        id: true,
+        userCode: true,
+        name: true,
+        email: true,
+        role: true,
+        rank: true,
+        active: true,
+      },
+      orderBy: [
+        { name: "asc" },
+        { userCode: "asc" },
+      ],
+    });
+  }
+
   async create(data: CreateUserByAdminInput) {
     const userExists = await prisma.user.findUnique({
       where: { email: data.email },

@@ -1221,6 +1221,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/users/options": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Listar usuários disponíveis para vínculos
+         * @description Retorna dados mínimos de usuários ativos. Quando um projeto é informado, restringe a resposta ao responsável e aos membros ativos elegíveis para atribuição de tarefas.
+         */
+        get: operations["users_get_options"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/{id}": {
         parameters: {
             query?: never;
@@ -1904,6 +1924,20 @@ export interface components {
             createdAt: string;
             permissions?: string[];
             access?: components["schemas"]["AccessProfile"];
+        };
+        UserOption: {
+            id: string;
+            userCode: number;
+            name: string;
+            /** Format: email */
+            email: string;
+            /** @enum {string} */
+            role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
+            rank?: string | null;
+            active: boolean;
+        };
+        UserOptionsResponse: {
+            items: components["schemas"]["UserOption"][];
         };
         /** @description Atualiza dados cadastrais do usuario. Somente ADMIN. */
         UserUpdateRequest: {
@@ -6387,6 +6421,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UserSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    users_get_options: {
+        parameters: {
+            query?: {
+                /** @description Restringir opções à equipe deste projeto. */
+                projectId?: string;
+                /** @description Restringir opções à equipe pelo código do projeto. */
+                projectCode?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOptionsResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

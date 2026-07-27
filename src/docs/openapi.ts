@@ -550,6 +550,32 @@ export const openApiDocument: OpenApiDocument = {
           access: { $ref: "#/components/schemas/AccessProfile" },
         },
       },
+      UserOption: {
+        type: "object",
+        required: ["id", "userCode", "name", "email", "role", "active"],
+        properties: {
+          id: { type: "string" },
+          userCode: { type: "integer" },
+          name: { type: "string" },
+          email: { type: "string", format: "email" },
+          role: {
+            type: "string",
+            enum: ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"],
+          },
+          rank: { type: "string", nullable: true },
+          active: { type: "boolean" },
+        },
+      },
+      UserOptionsResponse: {
+        type: "object",
+        required: ["items"],
+        properties: {
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/UserOption" },
+          },
+        },
+      },
       UserUpdateRequest: {
         type: "object",
         description: "Atualiza dados cadastrais do usuario. Somente ADMIN.",
@@ -4192,6 +4218,29 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
+      },
+    },
+    "/users/options": {
+      get: {
+        tags: ["users"],
+        summary: "Listar usuários disponíveis para vínculos",
+        description:
+          "Retorna dados mínimos de usuários ativos. Quando um projeto é informado, restringe a resposta ao responsável e aos membros ativos elegíveis para atribuição de tarefas.",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("projectId", "Restringir opções à equipe deste projeto.", {
+            type: "string",
+          }),
+          queryParameter("projectCode", "Restringir opções à equipe pelo código do projeto.", {
+            type: "integer",
+            minimum: 1,
+          }),
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/UserOptionsResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["projects.edit_all", "projects.edit_own", "tasks.assign"],
       },
     },
     "/users/{id}": {

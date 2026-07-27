@@ -909,6 +909,62 @@
           }
         }
       },
+      "UserOption": {
+        "type": "object",
+        "required": [
+          "id",
+          "userCode",
+          "name",
+          "email",
+          "role",
+          "active"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "userCode": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "ADMIN",
+              "GESTOR",
+              "PROJETISTA",
+              "CONSULTA"
+            ]
+          },
+          "rank": {
+            "type": "string",
+            "nullable": true
+          },
+          "active": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserOptionsResponse": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserOption"
+            }
+          }
+        }
+      },
       "UserUpdateRequest": {
         "type": "object",
         "description": "Atualiza dados cadastrais do usuario. Somente ADMIN.",
@@ -10521,6 +10577,77 @@
           "users.manage"
         ],
         "operationId": "users_post_collection"
+      }
+    },
+    "/users/options": {
+      "get": {
+        "tags": [
+          "users"
+        ],
+        "summary": "Listar usuários disponíveis para vínculos",
+        "description": "Retorna dados mínimos de usuários ativos. Quando um projeto é informado, restringe a resposta ao responsável e aos membros ativos elegíveis para atribuição de tarefas.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "projectId",
+            "in": "query",
+            "required": false,
+            "description": "Restringir opções à equipe deste projeto.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectCode",
+            "in": "query",
+            "required": false,
+            "description": "Restringir opções à equipe pelo código do projeto.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserOptionsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "projects.edit_all",
+          "projects.edit_own",
+          "tasks.assign"
+        ],
+        "operationId": "users_get_options"
       }
     },
     "/users/{id}": {

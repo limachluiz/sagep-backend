@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   createUserByAdminSchema,
+  listUserOptionsQuerySchema,
   listUsersQuerySchema,
   updateUserSchema,
   updateUserRoleSchema,
@@ -13,6 +14,13 @@ import { buildListResponse } from "../../shared/pagination.js";
 const usersService = new UsersService();
 
 export class UsersController {
+  async listOptions(req: Request, res: Response) {
+    const filters = listUserOptionsQuerySchema.parse(req.query);
+    const options = await usersService.listOptions(filters, req.user!);
+
+    return res.status(200).json({ items: options });
+  }
+
   async create(req: Request, res: Response) {
     const data = createUserByAdminSchema.parse(req.body);
 
