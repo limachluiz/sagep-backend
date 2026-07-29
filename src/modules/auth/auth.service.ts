@@ -97,6 +97,46 @@ type SerializedSession = {
 };
 
 export class AuthService {
+  private buildAccessProfile(role: string, permissions: string[]) {
+    const permissionSet = new Set(permissions);
+    const groupedPermissions = new Map<
+      string,
+      Array<{
+        code: string;
+        module: string;
+        action: string;
+        description: string;
+        critical: boolean;
+      }>
+    >();
+
+    for (const item of permissionsService.getPermissionCatalog()) {
+      if (!permissionSet.has(item.code)) {
+        continue;
+      }
+
+      const group = groupedPermissions.get(item.group) ?? [];
+      group.push({
+        code: item.code,
+        module: item.module,
+        action: item.action,
+        description: item.description,
+        critical: item.critical,
+      });
+      groupedPermissions.set(item.group, group);
+    }
+
+    return {
+      role,
+      permissions,
+      isAdmin: role === "ADMIN",
+      groups: [...groupedPermissions.entries()].map(([name, items]) => ({
+        name,
+        permissions: items,
+      })),
+    };
+  }
+
   private getSessionStatus(token: Pick<SessionRecord, "expiresAt" | "revokedAt">, now = new Date()) {
     if (token.revokedAt) {
       return "REVOKED" as const;
@@ -503,12 +543,10 @@ export class AuthService {
         cpf: user.cpf,
         active: user.active,
         createdAt: user.createdAt,
+        lastLoginAt: loginAt,
+        updatedAt: user.updatedAt,
         permissions: effectivePermissions,
-        access: {
-          role: user.role,
-          permissions: effectivePermissions,
-          isAdmin: user.role === "ADMIN",
-        },
+        access: this.buildAccessProfile(user.role, effectivePermissions),
       },
     };
   }
@@ -685,6 +723,8 @@ export class AuthService {
         cpf: true,
         active: true,
         createdAt: true,
+        lastLoginAt: true,
+        updatedAt: true,
       },
     });
 
@@ -700,11 +740,7 @@ export class AuthService {
     return {
       ...user,
       permissions: effectivePermissions,
-      access: {
-        role: user.role,
-        permissions: effectivePermissions,
-        isAdmin: user.role === "ADMIN",
-      },
+      access: this.buildAccessProfile(user.role, effectivePermissions),
     };
   }
 

@@ -512,9 +512,31 @@ export const openApiDocument: OpenApiDocument = {
           links: { $ref: "#/components/schemas/ListLinks" },
         },
       },
+      EffectivePermission: {
+        type: "object",
+        required: ["code", "module", "action", "description", "critical"],
+        properties: {
+          code: { type: "string" },
+          module: { type: "string" },
+          action: { type: "string" },
+          description: { type: "string" },
+          critical: { type: "boolean" },
+        },
+      },
+      PermissionGroup: {
+        type: "object",
+        required: ["name", "permissions"],
+        properties: {
+          name: { type: "string" },
+          permissions: {
+            type: "array",
+            items: { $ref: "#/components/schemas/EffectivePermission" },
+          },
+        },
+      },
       AccessProfile: {
         type: "object",
-        required: ["role", "permissions", "isAdmin"],
+        required: ["role", "permissions", "isAdmin", "groups"],
         properties: {
           role: {
             type: "string",
@@ -525,6 +547,10 @@ export const openApiDocument: OpenApiDocument = {
             items: { type: "string" },
           },
           isAdmin: { type: "boolean" },
+          groups: {
+            type: "array",
+            items: { $ref: "#/components/schemas/PermissionGroup" },
+          },
         },
       },
       UserSummary: {
@@ -543,6 +569,8 @@ export const openApiDocument: OpenApiDocument = {
           cpf: { type: "string", nullable: true },
           active: { type: "boolean" },
           createdAt: { type: "string", format: "date-time" },
+          lastLoginAt: { type: "string", format: "date-time", nullable: true },
+          updatedAt: { type: "string", format: "date-time" },
           permissions: {
             type: "array",
             items: { type: "string" },

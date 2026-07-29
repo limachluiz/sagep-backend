@@ -1920,11 +1920,23 @@ export interface components {
             };
             links?: components["schemas"]["ListLinks"];
         };
+        EffectivePermission: {
+            code: string;
+            module: string;
+            action: string;
+            description: string;
+            critical: boolean;
+        };
+        PermissionGroup: {
+            name: string;
+            permissions: components["schemas"]["EffectivePermission"][];
+        };
         AccessProfile: {
             /** @enum {string} */
             role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
             permissions: string[];
             isAdmin: boolean;
+            groups: components["schemas"]["PermissionGroup"][];
         };
         UserSummary: {
             id: string;
@@ -1939,6 +1951,10 @@ export interface components {
             active: boolean;
             /** Format: date-time */
             createdAt: string;
+            /** Format: date-time */
+            lastLoginAt?: string | null;
+            /** Format: date-time */
+            updatedAt?: string;
             permissions?: string[];
             access?: components["schemas"]["AccessProfile"];
         };

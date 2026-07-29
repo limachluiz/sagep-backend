@@ -389,6 +389,21 @@ describe("critical flows", () => {
     expect(me.body.permissions).toContain("military_organizations.manage");
     expect(me.body.access.role).toBe("ADMIN");
     expect(me.body.access.isAdmin).toBe(true);
+    expect(me.body.access.groups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Tarefas",
+          permissions: expect.arrayContaining([
+            expect.objectContaining({
+              code: "tasks.create",
+              description: expect.any(String),
+            }),
+          ]),
+        }),
+      ]),
+    );
+    expect(me.body.lastLoginAt).toBeTruthy();
+    expect(me.body.updatedAt).toBeTruthy();
     expect(adminAuth.user.permissions).toContain("tasks.create");
 
     const loggedUser = await prisma.user.findUnique({

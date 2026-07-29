@@ -821,12 +821,58 @@
           }
         }
       },
+      "EffectivePermission": {
+        "type": "object",
+        "required": [
+          "code",
+          "module",
+          "action",
+          "description",
+          "critical"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "critical": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PermissionGroup": {
+        "type": "object",
+        "required": [
+          "name",
+          "permissions"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermission"
+            }
+          }
+        }
+      },
       "AccessProfile": {
         "type": "object",
         "required": [
           "role",
           "permissions",
-          "isAdmin"
+          "isAdmin",
+          "groups"
         ],
         "properties": {
           "role": {
@@ -846,6 +892,12 @@
           },
           "isAdmin": {
             "type": "boolean"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionGroup"
+            }
           }
         }
       },
@@ -895,6 +947,15 @@
             "type": "boolean"
           },
           "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
             "type": "string",
             "format": "date-time"
           },
