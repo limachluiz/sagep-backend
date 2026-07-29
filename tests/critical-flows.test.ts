@@ -4595,11 +4595,18 @@ describe("critical flows", () => {
       ),
     ).toBe(true);
 
-    await request(app)
+    const tasksArchivedByPeriodForManager = await request(app)
       .get("/api/tasks")
       .query({ archivedFrom: "2000-01-01T00:00:00.000Z" })
       .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .expect(403);
+      .expect(200);
+
+    expect(tasksArchivedByPeriodForManager.body.filters.archivedFrom).toBeDefined();
+    expect(
+      tasksArchivedByPeriodForManager.body.items.every(
+        (item: { archivedAt: string | null }) => Boolean(item.archivedAt),
+      ),
+    ).toBe(true);
 
     const estimatesOnlyArchived = await request(app)
       .get("/api/estimates")
