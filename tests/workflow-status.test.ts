@@ -25,6 +25,8 @@ describe("status macro do workflow", () => {
       "DIEX_REQUISITORIO",
       "AGUARDANDO_NOTA_EMPENHO",
       "OS_LIBERADA",
+      "AGUARDANDO_OS_ASSINADA",
+      "AGUARDANDO_INICIO_EXECUCAO",
       "SERVICO_EM_EXECUCAO",
       "ANALISANDO_AS_BUILT",
       "ATESTAR_NF",
@@ -47,6 +49,8 @@ describe("status macro do workflow", () => {
       "DIEX_REQUISITORIO",
       "AGUARDANDO_NOTA_EMPENHO",
       "OS_LIBERADA",
+      "AGUARDANDO_OS_ASSINADA",
+      "AGUARDANDO_INICIO_EXECUCAO",
     ];
 
     stagesBeforeExecution.forEach((stage) => {
@@ -65,6 +69,52 @@ describe("status macro do workflow", () => {
       expect(() => service.assertCanArchiveProject({ id: "project-1", stage })).toThrow(
         "já entrou em execução",
       );
+    });
+  });
+
+  it("bloqueia o início até o recebimento da OS assinada nas OS novas", () => {
+    const snapshot = {
+      id: "project-1",
+      stage: "AGUARDANDO_INICIO_EXECUCAO" as const,
+      creditNoteNumber: "NC-1",
+      diexNumber: "DIEx-1",
+      commitmentNoteNumber: "NE-1",
+      serviceOrderNumber: "OS-1",
+      serviceOrderSignatureRequired: true,
+    };
+
+    expect(() =>
+      service.validateStageRequirements(
+        "AGUARDANDO_INICIO_EXECUCAO",
+        snapshot,
+        1,
+      ),
+    ).toThrow("registre o link e a data de recebimento da OS assinada");
+
+    expect(() =>
+      service.validateStageRequirements(
+        "AGUARDANDO_INICIO_EXECUCAO",
+        {
+          ...snapshot,
+          signedServiceOrderLink: "https://drive.example/os-assinada.pdf",
+          signedServiceOrderReceivedAt: new Date("2026-07-28"),
+        },
+        1,
+      ),
+    ).not.toThrow();
+  });
+
+  it("orienta o registro da OS assinada antes de iniciar a execução", () => {
+    expect(
+      service.getNextAction({
+        id: "project-1",
+        stage: "AGUARDANDO_OS_ASSINADA",
+        serviceOrderNumber: "OS-1",
+        serviceOrderSignatureRequired: true,
+      }),
+    ).toMatchObject({
+      code: "REGISTRAR_OS_ASSINADA",
+      targetStage: "AGUARDANDO_INICIO_EXECUCAO",
     });
   });
 });

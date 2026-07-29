@@ -4,6 +4,8 @@ export type ProjectStageValue =
   | "DIEX_REQUISITORIO"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "OS_LIBERADA"
+  | "AGUARDANDO_OS_ASSINADA"
+  | "AGUARDANDO_INICIO_EXECUCAO"
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
@@ -16,6 +18,7 @@ export type WorkflowActionCode =
   | "EMITIR_DIEX"
   | "INFORMAR_NOTA_EMPENHO"
   | "EMITIR_OS"
+  | "REGISTRAR_OS_ASSINADA"
   | "INICIAR_EXECUCAO"
   | "ANEXAR_AS_BUILT"
   | "VALIDAR_AS_BUILT"
@@ -42,6 +45,9 @@ export type WorkflowProjectSnapshot = {
   commitmentNoteReceivedAt?: Date | null;
   serviceOrderNumber?: string | null;
   serviceOrderIssuedAt?: Date | null;
+  serviceOrderSignatureRequired?: boolean;
+  signedServiceOrderLink?: string | null;
+  signedServiceOrderReceivedAt?: Date | null;
   executionStartedAt?: Date | null;
   asBuiltReceivedAt?: Date | null;
   asBuiltReviewedAt?: Date | null;

@@ -1622,6 +1622,8 @@
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -1753,6 +1755,8 @@
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -1794,6 +1798,25 @@
           "serviceOrderIssuedAt": {
             "type": "string",
             "format": "date-time",
+            "nullable": true
+          },
+          "serviceOrderSignatureRequired": {
+            "type": "boolean"
+          },
+          "signedServiceOrderLink": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "nullable": true
+          },
+          "signedServiceOrderReceivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "signedServiceOrderNotes": {
+            "type": "string",
+            "maxLength": 2000,
             "nullable": true
           },
           "executionStartedAt": {
@@ -1892,6 +1915,29 @@
             }
           }
         ]
+      },
+      "ProjectSignedServiceOrderRequest": {
+        "type": "object",
+        "required": [
+          "signedServiceOrderLink",
+          "signedServiceOrderReceivedAt"
+        ],
+        "properties": {
+          "signedServiceOrderLink": {
+            "type": "string",
+            "format": "uri",
+            "maxLength": 2048,
+            "description": "Link do arquivo ou pasta em nuvem com a OS assinada."
+          },
+          "signedServiceOrderReceivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "signedServiceOrderNotes": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        }
       },
       "ProjectCommitmentNoteCancelRequest": {
         "type": "object",
@@ -6126,6 +6172,8 @@
                 "DIEX_REQUISITORIO",
                 "AGUARDANDO_NOTA_EMPENHO",
                 "OS_LIBERADA",
+                "AGUARDANDO_OS_ASSINADA",
+                "AGUARDANDO_INICIO_EXECUCAO",
                 "SERVICO_EM_EXECUCAO",
                 "ANALISANDO_AS_BUILT",
                 "ATESTAR_NF",
@@ -6737,6 +6785,66 @@
           }
         },
         "operationId": "projects_patch_byId_asBuilt_review"
+      }
+    },
+    "/projects/{id}/service-order/signature": {
+      "patch": {
+        "tags": [
+          "projects",
+          "service-orders"
+        ],
+        "summary": "Registrar recebimento da Ordem de Serviço assinada",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProjectId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectSignedServiceOrderRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Project"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "projects_patch_byId_serviceOrder_signature"
       }
     },
     "/projects/{id}/commitment-note/cancel": {
@@ -10463,6 +10571,8 @@
                 "DIEX_REQUISITORIO",
                 "AGUARDANDO_NOTA_EMPENHO",
                 "OS_LIBERADA",
+                "AGUARDANDO_OS_ASSINADA",
+                "AGUARDANDO_INICIO_EXECUCAO",
                 "SERVICO_EM_EXECUCAO",
                 "ANALISANDO_AS_BUILT",
                 "ATESTAR_NF",

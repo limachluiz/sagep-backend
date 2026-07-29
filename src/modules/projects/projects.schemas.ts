@@ -23,6 +23,8 @@ const projectStageEnum = z.enum([
   "DIEX_REQUISITORIO",
   "AGUARDANDO_NOTA_EMPENHO",
   "OS_LIBERADA",
+  "AGUARDANDO_OS_ASSINADA",
+  "AGUARDANDO_INICIO_EXECUCAO",
   "SERVICO_EM_EXECUCAO",
   "ANALISANDO_AS_BUILT",
   "ATESTAR_NF",
@@ -162,3 +164,17 @@ export const reviewAsBuiltSchema = z.discriminatedUnion("approved", [
       .min(3, "Motivo da reprovação do As-Built é obrigatório"),
   }),
 ]);
+
+export const registerSignedServiceOrderSchema = z.object({
+  signedServiceOrderLink: z
+    .string()
+    .trim()
+    .url("Informe um link válido para o arquivo ou pasta da OS assinada")
+    .max(2048, "Link da OS assinada muito longo"),
+  signedServiceOrderReceivedAt: z.coerce.date(),
+  signedServiceOrderNotes: z
+    .string()
+    .trim()
+    .max(2000, "Observação da OS assinada muito longa")
+    .optional(),
+});

@@ -949,6 +949,24 @@ Ordem de Serviço derivada do projeto com NE informada.
 
 - Autenticação: sim
 
+#### `PATCH /projects/:id/service-order/signature`
+
+- Autenticação: sim
+- Registra a versão da OS assinada pela contratada antes do início da execução.
+- Body:
+
+```json
+{
+  "signedServiceOrderLink": "https://drive.example.mil.br/os/assinada.pdf",
+  "signedServiceOrderReceivedAt": "2026-07-28T00:00:00.000Z",
+  "signedServiceOrderNotes": "Recebida após assinatura digital no GOV.BR."
+}
+```
+
+- Avança de `AGUARDANDO_OS_ASSINADA` para `AGUARDANDO_INICIO_EXECUCAO`.
+- O link e a data são obrigatórios; a observação é opcional.
+- A ação registra responsável, timeline e auditoria.
+
 #### `GET /service-orders/:id/document/html`
 
 - Autenticação: sim

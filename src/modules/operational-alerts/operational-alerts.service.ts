@@ -21,6 +21,7 @@ type AlertCategory =
   | "AGUARDANDO_DIEX"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "AGUARDANDO_ORDEM_SERVICO"
+  | "AGUARDANDO_OS_ASSINADA"
   | "SEM_AVANCO"
   | "AGUARDANDO_INICIO_EXECUCAO"
   | "AGUARDANDO_AS_BUILT"
@@ -69,6 +70,7 @@ const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
   AGUARDANDO_DIEX: [],
   AGUARDANDO_NOTA_EMPENHO: [],
   AGUARDANDO_ORDEM_SERVICO: [],
+  AGUARDANDO_OS_ASSINADA: [],
   SEM_AVANCO: [],
   AGUARDANDO_INICIO_EXECUCAO: [],
   AGUARDANDO_AS_BUILT: [],
@@ -110,6 +112,9 @@ export class OperationalAlertsService {
     commitmentNoteReceivedAt?: Date | null;
     serviceOrderNumber?: string | null;
     serviceOrderIssuedAt?: Date | null;
+    serviceOrderSignatureRequired?: boolean;
+    signedServiceOrderLink?: string | null;
+    signedServiceOrderReceivedAt?: Date | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
     invoiceAttestedAt?: Date | null;
@@ -127,6 +132,9 @@ export class OperationalAlertsService {
       commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
       serviceOrderNumber: project.serviceOrderNumber ?? null,
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+      serviceOrderSignatureRequired: project.serviceOrderSignatureRequired ?? false,
+      signedServiceOrderLink: project.signedServiceOrderLink ?? null,
+      signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt ?? null,
       executionStartedAt: project.executionStartedAt ?? null,
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
@@ -187,6 +195,9 @@ export class OperationalAlertsService {
         commitmentNoteReceivedAt: true,
         serviceOrderNumber: true,
         serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
         executionStartedAt: true,
         asBuiltReceivedAt: true,
         invoiceAttestedAt: true,
@@ -341,7 +352,38 @@ export class OperationalAlertsService {
         });
       }
 
-      if (project.stage === "OS_LIBERADA" && latestServiceOrder && !project.executionStartedAt) {
+      if (
+        project.stage === "AGUARDANDO_OS_ASSINADA" &&
+        latestServiceOrder &&
+        (!project.signedServiceOrderLink || !project.signedServiceOrderReceivedAt)
+      ) {
+        alerts.push({
+          id: `${project.id}:AGUARDANDO_OS_ASSINADA`,
+          category: "AGUARDANDO_OS_ASSINADA",
+          severity: "CRITICAL",
+          title: `PRJ-${project.projectCode} aguardando OS assinada`,
+          description:
+            "A Ordem de Serviço foi emitida, mas a versão assinada pela contratada ainda não foi vinculada.",
+          project: projectSummary,
+          nextAction,
+          detailsPath,
+          document: {
+            type: "SERVICE_ORDER",
+            id: latestServiceOrder.id,
+            code: `OS-${latestServiceOrder.serviceOrderCode}`,
+            number: latestServiceOrder.serviceOrderNumber,
+            status: latestServiceOrder.documentStatus,
+            issuedAt: latestServiceOrder.issuedAt,
+          },
+        });
+      }
+
+      if (
+        (project.stage === "OS_LIBERADA" ||
+          project.stage === "AGUARDANDO_INICIO_EXECUCAO") &&
+        latestServiceOrder &&
+        !project.executionStartedAt
+      ) {
         alerts.push({
           id: `${project.id}:AGUARDANDO_INICIO_EXECUCAO`,
           category: "AGUARDANDO_INICIO_EXECUCAO",
@@ -419,6 +461,7 @@ export class OperationalAlertsService {
       AGUARDANDO_DIEX: [...emptyCategoryGroups.AGUARDANDO_DIEX],
       AGUARDANDO_NOTA_EMPENHO: [...emptyCategoryGroups.AGUARDANDO_NOTA_EMPENHO],
       AGUARDANDO_ORDEM_SERVICO: [...emptyCategoryGroups.AGUARDANDO_ORDEM_SERVICO],
+      AGUARDANDO_OS_ASSINADA: [...emptyCategoryGroups.AGUARDANDO_OS_ASSINADA],
       SEM_AVANCO: [...emptyCategoryGroups.SEM_AVANCO],
       AGUARDANDO_INICIO_EXECUCAO: [...emptyCategoryGroups.AGUARDANDO_INICIO_EXECUCAO],
       AGUARDANDO_AS_BUILT: [...emptyCategoryGroups.AGUARDANDO_AS_BUILT],

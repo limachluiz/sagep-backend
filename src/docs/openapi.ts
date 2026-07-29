@@ -934,6 +934,8 @@ export const openApiDocument: OpenApiDocument = {
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -993,6 +995,8 @@ export const openApiDocument: OpenApiDocument = {
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -1008,6 +1012,10 @@ export const openApiDocument: OpenApiDocument = {
           commitmentNoteReceivedAt: { type: "string", format: "date-time", nullable: true },
           serviceOrderNumber: { type: "string", nullable: true },
           serviceOrderIssuedAt: { type: "string", format: "date-time", nullable: true },
+          serviceOrderSignatureRequired: { type: "boolean" },
+          signedServiceOrderLink: { type: "string", format: "uri", maxLength: 2048, nullable: true },
+          signedServiceOrderReceivedAt: { type: "string", format: "date-time", nullable: true },
+          signedServiceOrderNotes: { type: "string", maxLength: 2000, nullable: true },
           executionStartedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltReceivedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltReviewedAt: { type: "string", format: "date-time", nullable: true },
@@ -1045,6 +1053,26 @@ export const openApiDocument: OpenApiDocument = {
             },
           },
         ],
+      },
+      ProjectSignedServiceOrderRequest: {
+        type: "object",
+        required: ["signedServiceOrderLink", "signedServiceOrderReceivedAt"],
+        properties: {
+          signedServiceOrderLink: {
+            type: "string",
+            format: "uri",
+            maxLength: 2048,
+            description: "Link do arquivo ou pasta em nuvem com a OS assinada.",
+          },
+          signedServiceOrderReceivedAt: {
+            type: "string",
+            format: "date-time",
+          },
+          signedServiceOrderNotes: {
+            type: "string",
+            maxLength: 2000,
+          },
+        },
       },
       ProjectCommitmentNoteCancelRequest: {
         type: "object",
@@ -3056,6 +3084,8 @@ export const openApiDocument: OpenApiDocument = {
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -3193,6 +3223,22 @@ export const openApiDocument: OpenApiDocument = {
         requestBody: {
           required: true,
           content: jsonContent("#/components/schemas/ProjectAsBuiltReviewRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/Project"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/projects/{id}/service-order/signature": {
+      patch: {
+        tags: ["projects", "service-orders"],
+        summary: "Registrar recebimento da Ordem de Serviço assinada",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ProjectSignedServiceOrderRequest"),
         },
         responses: {
           "200": okJson("#/components/schemas/Project"),
@@ -4190,6 +4236,8 @@ export const openApiDocument: OpenApiDocument = {
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",

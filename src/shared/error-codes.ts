@@ -23,6 +23,7 @@ export const ERROR_CODES = {
   WORKFLOW_AS_BUILT_REQUIRED: "WORKFLOW_AS_BUILT_REQUIRED",
   WORKFLOW_AS_BUILT_APPROVAL_REQUIRED: "WORKFLOW_AS_BUILT_APPROVAL_REQUIRED",
   WORKFLOW_AS_BUILT_LINK_REQUIRED: "WORKFLOW_AS_BUILT_LINK_REQUIRED",
+  WORKFLOW_SIGNED_SERVICE_ORDER_REQUIRED: "WORKFLOW_SIGNED_SERVICE_ORDER_REQUIRED",
   WORKFLOW_INVOICE_ATTEST_REQUIRED: "WORKFLOW_INVOICE_ATTEST_REQUIRED",
   WORKFLOW_SERVICE_COMPLETION_REQUIRED: "WORKFLOW_SERVICE_COMPLETION_REQUIRED",
 } as const;
@@ -50,6 +51,7 @@ const exactMessageCodes = new Map<string, DomainErrorCode>([
   ["Para colocar o serviço em execução, informe a data de início da execução", ERROR_CODES.WORKFLOW_EXECUTION_START_REQUIRED],
   ["Para entrar na etapa de análise do As-Built, informe a data de recebimento do As-Built", ERROR_CODES.WORKFLOW_AS_BUILT_REQUIRED],
   ["Para avançar para o ateste da NF, o As-Built precisa estar aprovado", ERROR_CODES.WORKFLOW_AS_BUILT_APPROVAL_REQUIRED],
+  ["Para liberar o início da execução, registre o link e a data de recebimento da OS assinada", ERROR_CODES.WORKFLOW_SIGNED_SERVICE_ORDER_REQUIRED],
   ["Para concluir o serviço, informe a data de atesto da NF", ERROR_CODES.WORKFLOW_INVOICE_ATTEST_REQUIRED],
   ["Para concluir o serviço, informe a data de conclusão do serviço", ERROR_CODES.WORKFLOW_SERVICE_COMPLETION_REQUIRED],
 ]);

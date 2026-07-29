@@ -312,6 +312,22 @@ async function issueDiex(projectId: string, estimateId: string, token: string) {
   return response.body as { id: string; diexCode: number; diexNumber: string };
 }
 
+async function registerSignedServiceOrder(projectId: string, token: string) {
+  const response = await request(app)
+    .patch(`/api/projects/${projectId}/service-order/signature`)
+    .set("Authorization", `Bearer ${token}`)
+    .send({
+      signedServiceOrderLink: "https://drive.example.mil.br/os/assinada.pdf",
+      signedServiceOrderReceivedAt: "2026-04-03T12:00:00.000Z",
+      signedServiceOrderNotes: "Documento devolvido pela contratada.",
+    })
+    .expect(200);
+
+  expect(response.body.stage).toBe("AGUARDANDO_INICIO_EXECUCAO");
+  expect(response.body.signedServiceOrderLink).toContain("assinada.pdf");
+  return response.body;
+}
+
 async function setProjectAndEstimateCreatedAt(
   projectId: string,
   estimateId: string,
@@ -1244,6 +1260,25 @@ describe("critical flows", () => {
       })
       .expect(201);
 
+    const waitingSignature = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(waitingSignature.body.workflow.stage).toBe("AGUARDANDO_OS_ASSINADA");
+    expect(waitingSignature.body.workflow.nextAction.code).toBe("REGISTRAR_OS_ASSINADA");
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
+      .expect(409);
+
+    await registerSignedServiceOrder(project.id, adminAuth.accessToken);
+
     await request(app)
       .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
@@ -1427,6 +1462,8 @@ describe("critical flows", () => {
       })
       .expect(201);
 
+    await registerSignedServiceOrder(project.id, adminAuth.accessToken);
+
     await request(app)
       .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
@@ -1527,6 +1564,8 @@ describe("critical flows", () => {
         requesterCpf: "11122233344",
       })
       .expect(201);
+
+    await registerSignedServiceOrder(project.id, adminAuth.accessToken);
 
     await request(app)
       .patch(`/api/projects/${project.id}/flow`)

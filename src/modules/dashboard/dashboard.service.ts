@@ -23,6 +23,8 @@ type ProjectStage =
   | "DIEX_REQUISITORIO"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "OS_LIBERADA"
+  | "AGUARDANDO_OS_ASSINADA"
+  | "AGUARDANDO_INICIO_EXECUCAO"
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
@@ -117,6 +119,8 @@ const STAGE_ORDER: ProjectStage[] = [
   "DIEX_REQUISITORIO",
   "AGUARDANDO_NOTA_EMPENHO",
   "OS_LIBERADA",
+  "AGUARDANDO_OS_ASSINADA",
+  "AGUARDANDO_INICIO_EXECUCAO",
   "SERVICO_EM_EXECUCAO",
   "ANALISANDO_AS_BUILT",
   "ATESTAR_NF",
@@ -373,7 +377,15 @@ function mapAttentionReason(stage: ProjectStage, hasDraftDiex: boolean) {
   }
 
   if (stage === "OS_LIBERADA") {
-    return "OS emitida, aguardando início da execução";
+    return "Nota de Empenho registrada, aguardando emissão da OS";
+  }
+
+  if (stage === "AGUARDANDO_OS_ASSINADA") {
+    return "OS emitida, aguardando devolução assinada";
+  }
+
+  if (stage === "AGUARDANDO_INICIO_EXECUCAO") {
+    return "OS assinada recebida, aguardando início da execução";
   }
 
   if (stage === "SERVICO_EM_EXECUCAO") {
@@ -401,6 +413,8 @@ function mapStatusFromStage(stage: ProjectStage) {
 
   if (
     stage === "OS_LIBERADA" ||
+    stage === "AGUARDANDO_OS_ASSINADA" ||
+    stage === "AGUARDANDO_INICIO_EXECUCAO" ||
     stage === "SERVICO_EM_EXECUCAO" ||
     stage === "ANALISANDO_AS_BUILT" ||
     stage === "ATESTAR_NF"
@@ -431,6 +445,8 @@ function getProjectSnapshotAsOf(
     diexIssuedAt: Date | null;
     commitmentNoteReceivedAt: Date | null;
     serviceOrderIssuedAt: Date | null;
+    serviceOrderSignatureRequired: boolean;
+    signedServiceOrderReceivedAt: Date | null;
     executionStartedAt: Date | null;
     asBuiltReceivedAt: Date | null;
     invoiceAttestedAt: Date | null;
@@ -459,8 +475,15 @@ function getProjectSnapshotAsOf(
     snapshotStage = "ANALISANDO_AS_BUILT";
   } else if (project.executionStartedAt && project.executionStartedAt <= asOfDate) {
     snapshotStage = "SERVICO_EM_EXECUCAO";
+  } else if (
+    project.signedServiceOrderReceivedAt &&
+    project.signedServiceOrderReceivedAt <= asOfDate
+  ) {
+    snapshotStage = "AGUARDANDO_INICIO_EXECUCAO";
   } else if (project.serviceOrderIssuedAt && project.serviceOrderIssuedAt <= asOfDate) {
-    snapshotStage = "OS_LIBERADA";
+    snapshotStage = project.serviceOrderSignatureRequired
+      ? "AGUARDANDO_OS_ASSINADA"
+      : "OS_LIBERADA";
   } else if (
     project.commitmentNoteReceivedAt &&
     project.commitmentNoteReceivedAt <= asOfDate
@@ -727,6 +750,8 @@ export class DashboardService {
           diexIssuedAt: true,
           commitmentNoteReceivedAt: true,
           serviceOrderIssuedAt: true,
+          serviceOrderSignatureRequired: true,
+          signedServiceOrderReceivedAt: true,
           executionStartedAt: true,
           asBuiltReceivedAt: true,
           invoiceAttestedAt: true,
@@ -1116,7 +1141,12 @@ export class DashboardService {
           (project) => project.stage === "AGUARDANDO_NOTA_EMPENHO"
         ).length,
         awaitingExecutionStart: scopedProjects.filter(
-          (project) => project.stage === "OS_LIBERADA"
+          (project) =>
+            project.stage === "OS_LIBERADA" ||
+            project.stage === "AGUARDANDO_INICIO_EXECUCAO"
+        ).length,
+        awaitingSignedServiceOrder: scopedProjects.filter(
+          (project) => project.stage === "AGUARDANDO_OS_ASSINADA"
         ).length,
         awaitingAsBuiltAnalysis: scopedProjects.filter(
           (project) => project.stage === "ANALISANDO_AS_BUILT"
@@ -1284,6 +1314,8 @@ export class DashboardService {
           commitmentNoteReceivedAt: true,
           serviceOrderNumber: true,
           serviceOrderIssuedAt: true,
+          serviceOrderSignatureRequired: true,
+          signedServiceOrderReceivedAt: true,
           executionStartedAt: true,
           asBuiltReceivedAt: true,
           invoiceAttestedAt: true,
@@ -1328,6 +1360,8 @@ export class DashboardService {
         commitmentNoteReceivedAt: project.commitmentNoteReceivedAt,
         serviceOrderNumber: project.serviceOrderNumber,
         serviceOrderIssuedAt: project.serviceOrderIssuedAt,
+        serviceOrderSignatureRequired: project.serviceOrderSignatureRequired,
+        signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt,
         executionStartedAt: project.executionStartedAt,
         asBuiltReceivedAt: project.asBuiltReceivedAt,
         invoiceAttestedAt: project.invoiceAttestedAt,
@@ -1369,6 +1403,8 @@ export class DashboardService {
         awaitingDiex: alerts.groups.byCategory.AGUARDANDO_DIEX.length,
         awaitingCommitmentNote: alerts.groups.byCategory.AGUARDANDO_NOTA_EMPENHO.length,
         awaitingServiceOrder: alerts.groups.byCategory.AGUARDANDO_ORDEM_SERVICO.length,
+        awaitingSignedServiceOrder:
+          alerts.groups.byCategory.AGUARDANDO_OS_ASSINADA.length,
         awaitingExecutionStart: alerts.groups.byCategory.AGUARDANDO_INICIO_EXECUCAO.length,
         awaitingAsBuilt: alerts.groups.byCategory.AGUARDANDO_AS_BUILT.length,
         awaitingInvoiceAttestation: alerts.groups.byCategory.AGUARDANDO_ATESTO_NF.length,

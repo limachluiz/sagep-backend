@@ -11,7 +11,9 @@ const stageTransitions: Record<ProjectStageValue, ProjectStageValue[]> = {
   AGUARDANDO_NOTA_CREDITO: ["DIEX_REQUISITORIO", "CANCELADO"],
   DIEX_REQUISITORIO: ["AGUARDANDO_NOTA_EMPENHO", "CANCELADO"],
   AGUARDANDO_NOTA_EMPENHO: ["OS_LIBERADA", "CANCELADO"],
-  OS_LIBERADA: ["SERVICO_EM_EXECUCAO", "CANCELADO"],
+  OS_LIBERADA: ["AGUARDANDO_OS_ASSINADA", "SERVICO_EM_EXECUCAO", "CANCELADO"],
+  AGUARDANDO_OS_ASSINADA: ["AGUARDANDO_INICIO_EXECUCAO", "CANCELADO"],
+  AGUARDANDO_INICIO_EXECUCAO: ["SERVICO_EM_EXECUCAO", "CANCELADO"],
   SERVICO_EM_EXECUCAO: ["ANALISANDO_AS_BUILT", "CANCELADO"],
   ANALISANDO_AS_BUILT: ["ATESTAR_NF", "SERVICO_EM_EXECUCAO", "CANCELADO"],
   ATESTAR_NF: ["SERVICO_CONCLUIDO", "CANCELADO"],
@@ -26,6 +28,8 @@ export class WorkflowService {
     "DIEX_REQUISITORIO",
     "AGUARDANDO_NOTA_EMPENHO",
     "OS_LIBERADA",
+    "AGUARDANDO_OS_ASSINADA",
+    "AGUARDANDO_INICIO_EXECUCAO",
     "SERVICO_EM_EXECUCAO",
     "ANALISANDO_AS_BUILT",
     "ATESTAR_NF",
@@ -185,6 +189,16 @@ export class WorkflowService {
       }
     }
 
+    if (this.isStageAtOrBeyond(stage, "AGUARDANDO_OS_ASSINADA")) {
+      if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
+        throw new AppError(
+          "Para aguardar a OS assinada, a Ordem de Serviço precisa estar emitida",
+          409,
+          "WORKFLOW_SERVICE_ORDER_REQUIRED",
+        );
+      }
+    }
+
     if (this.isStageAtOrBeyond(stage, "SERVICO_EM_EXECUCAO")) {
       if (!snapshot.serviceOrderNumber && !snapshot.serviceOrderIssuedAt) {
         throw new AppError(
@@ -197,6 +211,19 @@ export class WorkflowService {
         throw new AppError(
           "Para colocar o serviço em execução, informe a data de início da execução",
           409,
+        );
+      }
+    }
+
+    if (
+      this.isStageAtOrBeyond(stage, "AGUARDANDO_INICIO_EXECUCAO") &&
+      snapshot.serviceOrderSignatureRequired
+    ) {
+      if (!snapshot.signedServiceOrderLink || !snapshot.signedServiceOrderReceivedAt) {
+        throw new AppError(
+          "Para liberar o início da execução, registre o link e a data de recebimento da OS assinada",
+          409,
+          "WORKFLOW_SIGNED_SERVICE_ORDER_REQUIRED",
         );
       }
     }
@@ -279,12 +306,18 @@ export class WorkflowService {
 
   getProjectPatchAfterServiceOrderCreated(project: WorkflowProjectSnapshot) {
     return {
-      ...(project.stage === "AGUARDANDO_NOTA_EMPENHO"
+      ...(project.stage === "OS_LIBERADA" ||
+        project.stage === "AGUARDANDO_NOTA_EMPENHO"
         ? {
-            stage: "OS_LIBERADA" as const,
-            status: this.getMacroStatusFromStage("OS_LIBERADA"),
+            stage: "AGUARDANDO_OS_ASSINADA" as const,
+            status: this.getMacroStatusFromStage("AGUARDANDO_OS_ASSINADA"),
           }
         : {}),
+      serviceOrderSignatureRequired: true,
+      signedServiceOrderLink: null,
+      signedServiceOrderReceivedAt: null,
+      signedServiceOrderNotes: null,
+      signedServiceOrderRegisteredById: null,
       ...(project.serviceOrderNumber
         ? { serviceOrderNumber: project.serviceOrderNumber }
         : {}),
@@ -298,6 +331,11 @@ export class WorkflowService {
     return {
       serviceOrderNumber: null,
       serviceOrderIssuedAt: null,
+      serviceOrderSignatureRequired: false,
+      signedServiceOrderLink: null,
+      signedServiceOrderReceivedAt: null,
+      signedServiceOrderNotes: null,
+      signedServiceOrderRegisteredById: null,
       stage: "AGUARDANDO_NOTA_EMPENHO" as const,
       status: this.getMacroStatusFromStage("AGUARDANDO_NOTA_EMPENHO"),
     };
@@ -367,6 +405,21 @@ export class WorkflowService {
           code: "INICIAR_EXECUCAO",
           label: "Iniciar execução",
           description: "Registre o início da execução do serviço.",
+          targetStage: "SERVICO_EM_EXECUCAO",
+        };
+      case "AGUARDANDO_OS_ASSINADA":
+        return {
+          code: "REGISTRAR_OS_ASSINADA",
+          label: "Registrar OS assinada",
+          description:
+            "Informe o link e a data de recebimento da Ordem de Serviço assinada pela contratada.",
+          targetStage: "AGUARDANDO_INICIO_EXECUCAO",
+        };
+      case "AGUARDANDO_INICIO_EXECUCAO":
+        return {
+          code: "INICIAR_EXECUCAO",
+          label: "Iniciar execução",
+          description: "A OS assinada foi recebida. Registre o início real da execução.",
           targetStage: "SERVICO_EM_EXECUCAO",
         };
       case "SERVICO_EM_EXECUCAO":

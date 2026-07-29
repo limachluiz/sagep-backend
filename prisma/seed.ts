@@ -793,6 +793,8 @@ async function seedDemo(context: Awaited<ReturnType<typeof seedBase>>) {
       | "DIEX_REQUISITORIO"
       | "AGUARDANDO_NOTA_EMPENHO"
       | "OS_LIBERADA"
+      | "AGUARDANDO_OS_ASSINADA"
+      | "AGUARDANDO_INICIO_EXECUCAO"
       | "SERVICO_EM_EXECUCAO"
       | "ANALISANDO_AS_BUILT"
       | "ATESTAR_NF"

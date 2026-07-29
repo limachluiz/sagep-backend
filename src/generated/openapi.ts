@@ -373,6 +373,23 @@ export interface paths {
         patch: operations["projects_patch_byId_asBuilt_review"];
         trace?: never;
     };
+    "/projects/{id}/service-order/signature": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Registrar recebimento da Ordem de Serviço assinada */
+        patch: operations["projects_patch_byId_serviceOrder_signature"];
+        trace?: never;
+    };
     "/projects/{id}/commitment-note/cancel": {
         parameters: {
             query?: never;
@@ -2125,7 +2142,7 @@ export interface components {
             /** @enum {string} */
             status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
             /** @enum {string} */
-            stage?: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
+            stage?: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "AGUARDANDO_OS_ASSINADA" | "AGUARDANDO_INICIO_EXECUCAO" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
             ownerId?: string | null;
             ownerName?: string | null;
             /** Format: date-time */
@@ -2166,7 +2183,7 @@ export interface components {
         };
         ProjectFlowUpdateRequest: {
             /** @enum {string} */
-            stage: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
+            stage: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "AGUARDANDO_OS_ASSINADA" | "AGUARDANDO_INICIO_EXECUCAO" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
             creditNoteNumber?: string | null;
             /** Format: date-time */
             creditNoteReceivedAt?: string | null;
@@ -2179,6 +2196,12 @@ export interface components {
             serviceOrderNumber?: string | null;
             /** Format: date-time */
             serviceOrderIssuedAt?: string | null;
+            serviceOrderSignatureRequired?: boolean;
+            /** Format: uri */
+            signedServiceOrderLink?: string | null;
+            /** Format: date-time */
+            signedServiceOrderReceivedAt?: string | null;
+            signedServiceOrderNotes?: string | null;
             /** Format: date-time */
             executionStartedAt?: string | null;
             /** Format: date-time */
@@ -2213,6 +2236,16 @@ export interface components {
             /** Format: date-time */
             reviewedAt: string;
             rejectionReason: string;
+        };
+        ProjectSignedServiceOrderRequest: {
+            /**
+             * Format: uri
+             * @description Link do arquivo ou pasta em nuvem com a OS assinada.
+             */
+            signedServiceOrderLink: string;
+            /** Format: date-time */
+            signedServiceOrderReceivedAt: string;
+            signedServiceOrderNotes?: string;
         };
         /**
          * @example {
@@ -4054,7 +4087,7 @@ export interface operations {
                 /** @description Status do projeto. */
                 status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
                 /** @description Etapa atual do workflow. */
-                stage?: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
+                stage?: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "AGUARDANDO_OS_ASSINADA" | "AGUARDANDO_INICIO_EXECUCAO" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
                 /** @description Busca textual por titulo e campos relacionados. */
                 search?: string;
             };
@@ -4361,6 +4394,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProjectAsBuiltReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    projects_patch_byId_serviceOrder_signature: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID do projeto. */
+                id: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectSignedServiceOrderRequest"];
             };
         };
         responses: {
@@ -6315,7 +6381,7 @@ export interface operations {
                 /** @description Status do projeto. */
                 status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
                 /** @description Etapa do workflow. */
-                stage?: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
+                stage?: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "AGUARDANDO_OS_ASSINADA" | "AGUARDANDO_INICIO_EXECUCAO" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
                 /** @description Busca textual. */
                 search?: string;
                 /** @description Inclui ativos e arquivados. Uso administrativo. */

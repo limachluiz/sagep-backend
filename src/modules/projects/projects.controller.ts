@@ -7,6 +7,7 @@ import {
   kanbanProjectsQuerySchema,
   projectCodeParamSchema,
   projectIdParamSchema,
+  registerSignedServiceOrderSchema,
   reviewAsBuiltSchema,
   updateProjectFlowSchema,
   updateProjectSchema,
@@ -99,6 +100,13 @@ export class ProjectsController {
     const { id } = projectIdParamSchema.parse(req.params);
     const data = reviewAsBuiltSchema.parse(req.body);
     const project = await projectsService.reviewAsBuilt(id, data, req.user!);
+    return res.status(200).json(project);
+  }
+
+  async registerSignedServiceOrder(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const data = registerSignedServiceOrderSchema.parse(req.body);
+    const project = await projectsService.registerSignedServiceOrder(id, data, req.user!);
     return res.status(200).json(project);
   }
 

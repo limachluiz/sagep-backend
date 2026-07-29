@@ -29,6 +29,8 @@ type ProjectStageValue =
   | "DIEX_REQUISITORIO"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "OS_LIBERADA"
+  | "AGUARDANDO_OS_ASSINADA"
+  | "AGUARDANDO_INICIO_EXECUCAO"
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
@@ -82,6 +84,12 @@ type ReviewAsBuiltInput =
       reviewedAt: Date;
       rejectionReason: string;
     };
+
+type RegisterSignedServiceOrderInput = {
+  signedServiceOrderLink: string;
+  signedServiceOrderReceivedAt: Date;
+  signedServiceOrderNotes?: string;
+};
 
 type CancelCommitmentNoteInput = {
   reason: string;
@@ -238,7 +246,10 @@ export class ProjectsService {
     const labels: Record<ProjectStageValue, string> = {
       ESTIMATIVA_PRECO: "Estimativa de preço", AGUARDANDO_NOTA_CREDITO: "Aguardando nota de crédito",
       DIEX_REQUISITORIO: "DIEx requisitório", AGUARDANDO_NOTA_EMPENHO: "Aguardando nota de empenho",
-      OS_LIBERADA: "OS liberada", SERVICO_EM_EXECUCAO: "Serviço em execução",
+      OS_LIBERADA: "OS liberada",
+      AGUARDANDO_OS_ASSINADA: "Aguardando OS assinada",
+      AGUARDANDO_INICIO_EXECUCAO: "Aguardando início da execução",
+      SERVICO_EM_EXECUCAO: "Serviço em execução",
       ANALISANDO_AS_BUILT: "Analisando As-Built", ATESTAR_NF: "Atestar NF",
       SERVICO_CONCLUIDO: "Serviço concluído", CANCELADO: "Cancelado",
     };
@@ -489,6 +500,11 @@ export class ProjectsService {
     commitmentNoteReceivedAt?: Date | null;
     serviceOrderNumber?: string | null;
     serviceOrderIssuedAt?: Date | null;
+    serviceOrderSignatureRequired?: boolean;
+    signedServiceOrderLink?: string | null;
+    signedServiceOrderReceivedAt?: Date | null;
+    signedServiceOrderNotes?: string | null;
+    signedServiceOrderRegisteredById?: string | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
     asBuiltReviewedAt?: Date | null;
@@ -519,6 +535,12 @@ export class ProjectsService {
       commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
       serviceOrderNumber: project.serviceOrderNumber ?? null,
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+      serviceOrderSignatureRequired: project.serviceOrderSignatureRequired ?? false,
+      signedServiceOrderLink: project.signedServiceOrderLink ?? null,
+      signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt ?? null,
+      signedServiceOrderNotes: project.signedServiceOrderNotes ?? null,
+      signedServiceOrderRegisteredById:
+        project.signedServiceOrderRegisteredById ?? null,
       executionStartedAt: project.executionStartedAt ?? null,
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
       asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
@@ -543,6 +565,9 @@ export class ProjectsService {
     commitmentNoteReceivedAt?: Date | null;
     serviceOrderNumber?: string | null;
     serviceOrderIssuedAt?: Date | null;
+    serviceOrderSignatureRequired?: boolean;
+    signedServiceOrderLink?: string | null;
+    signedServiceOrderReceivedAt?: Date | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
     asBuiltReviewedAt?: Date | null;
@@ -565,6 +590,9 @@ export class ProjectsService {
       commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
       serviceOrderNumber: project.serviceOrderNumber ?? null,
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+      serviceOrderSignatureRequired: project.serviceOrderSignatureRequired ?? false,
+      signedServiceOrderLink: project.signedServiceOrderLink ?? null,
+      signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt ?? null,
       executionStartedAt: project.executionStartedAt ?? null,
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
       asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
@@ -607,6 +635,9 @@ export class ProjectsService {
     commitmentNoteReceivedAt?: Date | null;
     serviceOrderNumber?: string | null;
     serviceOrderIssuedAt?: Date | null;
+    serviceOrderSignatureRequired?: boolean;
+    signedServiceOrderLink?: string | null;
+    signedServiceOrderReceivedAt?: Date | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
     asBuiltReviewedAt?: Date | null;
@@ -705,6 +736,19 @@ export class ProjectsService {
     }
 
     if (
+      project.stage === "AGUARDANDO_OS_ASSINADA" &&
+      project.serviceOrderSignatureRequired &&
+      (!project.signedServiceOrderLink || !project.signedServiceOrderReceivedAt)
+    ) {
+      pendingActions.push({
+        code: "REGISTRAR_OS_ASSINADA",
+        label: "Registrar recebimento da OS assinada",
+        severity: "BLOCKER",
+        targetStage: "AGUARDANDO_INICIO_EXECUCAO",
+      });
+    }
+
+    if (
       workflowService.isStageAtOrBeyond(project.stage, "OS_LIBERADA") &&
       !project.serviceOrderNumber &&
       !project.serviceOrderIssuedAt &&
@@ -718,7 +762,12 @@ export class ProjectsService {
       });
     }
 
-    if (project.stage === "OS_LIBERADA" && project.serviceOrders.length > 0 && !project.executionStartedAt) {
+    if (
+      (project.stage === "OS_LIBERADA" ||
+        project.stage === "AGUARDANDO_INICIO_EXECUCAO") &&
+      project.serviceOrders.length > 0 &&
+      !project.executionStartedAt
+    ) {
       pendingActions.push({
         code: "INICIAR_EXECUCAO",
         label: "Registrar início da execução",
@@ -1317,6 +1366,20 @@ export class ProjectsService {
         commitmentNoteReceivedAt: true,
         serviceOrderNumber: true,
         serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
+        signedServiceOrderNotes: true,
+        signedServiceOrderRegisteredById: true,
+        signedServiceOrderRegisteredBy: {
+          select: {
+            id: true,
+            userCode: true,
+            name: true,
+            email: true,
+            role: true,
+          },
+        },
         executionStartedAt: true,
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
@@ -1552,6 +1615,8 @@ export class ProjectsService {
           commitmentNoteReceivedAt: project.commitmentNoteReceivedAt,
           serviceOrderNumber: project.serviceOrderNumber,
           serviceOrderIssuedAt: project.serviceOrderIssuedAt,
+          signedServiceOrderLink: project.signedServiceOrderLink,
+          signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt,
           executionStartedAt: project.executionStartedAt,
           asBuiltReceivedAt: project.asBuiltReceivedAt,
           asBuiltReviewedAt: project.asBuiltReviewedAt,
@@ -1561,6 +1626,13 @@ export class ProjectsService {
           asBuiltRejectionReason: project.asBuiltRejectionReason,
           invoiceAttestedAt: project.invoiceAttestedAt,
           serviceCompletedAt: project.serviceCompletedAt,
+        },
+        serviceOrderSignature: {
+          required: project.serviceOrderSignatureRequired,
+          link: project.signedServiceOrderLink,
+          receivedAt: project.signedServiceOrderReceivedAt,
+          notes: project.signedServiceOrderNotes,
+          registeredBy: project.signedServiceOrderRegisteredBy,
         },
       },
       pendingActions: this.buildPendingActions(project),
@@ -1716,6 +1788,11 @@ export class ProjectsService {
         commitmentNoteReceivedAt: true,
         serviceOrderNumber: true,
         serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
+        signedServiceOrderNotes: true,
+        signedServiceOrderRegisteredById: true,
         executionStartedAt: true,
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
@@ -1816,6 +1893,11 @@ export class ProjectsService {
         commitmentNoteReceivedAt: true,
         serviceOrderNumber: true,
         serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
+        signedServiceOrderNotes: true,
+        signedServiceOrderRegisteredById: true,
         executionStartedAt: true,
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
@@ -1878,6 +1960,9 @@ export class ProjectsService {
       serviceOrderNumber: data.serviceOrderNumber ?? currentProject.serviceOrderNumber,
       serviceOrderIssuedAt:
         data.serviceOrderIssuedAt ?? currentProject.serviceOrderIssuedAt,
+      serviceOrderSignatureRequired: currentProject.serviceOrderSignatureRequired,
+      signedServiceOrderLink: currentProject.signedServiceOrderLink,
+      signedServiceOrderReceivedAt: currentProject.signedServiceOrderReceivedAt,
       executionStartedAt: data.executionStartedAt ?? currentProject.executionStartedAt,
       asBuiltReceivedAt: data.asBuiltReceivedAt ?? currentProject.asBuiltReceivedAt,
       asBuiltReviewedAt: currentProject.asBuiltReviewedAt,
@@ -2044,6 +2129,160 @@ export class ProjectsService {
             serviceCompletedAt: project.serviceCompletedAt,
           }),
         ).code,
+      },
+    });
+
+    return project;
+  }
+
+  async registerSignedServiceOrder(
+    projectId: string,
+    data: RegisterSignedServiceOrderInput,
+    user: CurrentUser,
+  ) {
+    await this.ensureCanManage(projectId, user);
+
+    const currentProject = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        ownerId: true,
+        startDate: true,
+        endDate: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
+        signedServiceOrderNotes: true,
+        signedServiceOrderRegisteredById: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        asBuiltReviewedAt: true,
+        asBuiltApprovedAt: true,
+        asBuiltLink: true,
+        asBuiltRejectedAt: true,
+        asBuiltRejectionReason: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+        serviceOrders: {
+          where: { archivedAt: null, deletedAt: null },
+          select: { id: true, issuedAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    if (!currentProject) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (currentProject.stage !== "AGUARDANDO_OS_ASSINADA") {
+      throw new AppError(
+        "A OS assinada só pode ser registrada quando o projeto estiver aguardando sua devolução",
+        409,
+      );
+    }
+
+    const activeServiceOrder = currentProject.serviceOrders[0];
+    if (!activeServiceOrder) {
+      throw new AppError("O projeto não possui Ordem de Serviço ativa", 409);
+    }
+
+    if (data.signedServiceOrderReceivedAt < activeServiceOrder.issuedAt) {
+      throw new AppError(
+        "A data de recebimento da OS assinada não pode ser anterior à emissão",
+        400,
+      );
+    }
+
+    if (data.signedServiceOrderReceivedAt > new Date()) {
+      throw new AppError(
+        "A data de recebimento da OS assinada não pode estar no futuro",
+        400,
+      );
+    }
+
+    const targetStage = "AGUARDANDO_INICIO_EXECUCAO" as const;
+    workflowService.assertStageTransition(currentProject.stage, targetStage);
+    const finalizedEstimateCount = await prisma.estimate.count({
+      where: {
+        projectId,
+        status: "FINALIZADA",
+        archivedAt: null,
+        deletedAt: null,
+      },
+    });
+    workflowService.validateStageRequirements(
+      targetStage,
+      this.buildWorkflowSnapshot({
+        ...currentProject,
+        stage: targetStage,
+        signedServiceOrderLink: data.signedServiceOrderLink.trim(),
+        signedServiceOrderReceivedAt: data.signedServiceOrderReceivedAt,
+      }),
+      finalizedEstimateCount,
+    );
+
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        stage: targetStage,
+        status: workflowService.getMacroStatusFromStage(targetStage),
+        signedServiceOrderLink: data.signedServiceOrderLink.trim(),
+        signedServiceOrderReceivedAt: data.signedServiceOrderReceivedAt,
+        signedServiceOrderNotes: data.signedServiceOrderNotes?.trim() || null,
+        signedServiceOrderRegisteredById: user.id,
+      },
+      include: projectInclude,
+    });
+
+    const beforeSnapshot = this.buildProjectAuditSnapshot(currentProject);
+    const afterSnapshot = this.buildProjectAuditSnapshot(project);
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: activeServiceOrder.id,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `OS do projeto PRJ-${project.projectCode} recebida assinada pela contratada`,
+      before: beforeSnapshot,
+      after: afterSnapshot,
+      metadata: {
+        source: "project.service-order.signature",
+        projectId,
+        receivedAt: data.signedServiceOrderReceivedAt,
+        signedServiceOrderLink: data.signedServiceOrderLink.trim(),
+        notes: data.signedServiceOrderNotes?.trim() || null,
+      },
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: project.id,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${project.projectCode} liberado para início após recebimento da OS assinada`,
+      before: beforeSnapshot,
+      after: afterSnapshot,
+      metadata: {
+        source: "project.service-order.signature",
+        previousStage: currentProject.stage,
+        newStage: project.stage,
+        serviceOrderId: activeServiceOrder.id,
+        nextActionCode: "INICIAR_EXECUCAO",
       },
     });
 
@@ -2446,6 +2685,11 @@ export class ProjectsService {
           commitmentNoteReceivedAt: null,
           serviceOrderNumber: null,
           serviceOrderIssuedAt: null,
+          serviceOrderSignatureRequired: false,
+          signedServiceOrderLink: null,
+          signedServiceOrderReceivedAt: null,
+          signedServiceOrderNotes: null,
+          signedServiceOrderRegisteredById: null,
           executionStartedAt: null,
           asBuiltReceivedAt: null,
           invoiceAttestedAt: null,

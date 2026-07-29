@@ -24,6 +24,8 @@ type ProjectStageValue =
   | "DIEX_REQUISITORIO"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "OS_LIBERADA"
+  | "AGUARDANDO_OS_ASSINADA"
+  | "AGUARDANDO_INICIO_EXECUCAO"
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
@@ -131,6 +133,19 @@ const serviceOrderInclude = {
       stage: true,
       status: true,
       projectType: true,
+      serviceOrderSignatureRequired: true,
+      signedServiceOrderLink: true,
+      signedServiceOrderReceivedAt: true,
+      signedServiceOrderNotes: true,
+      signedServiceOrderRegisteredBy: {
+        select: {
+          id: true,
+          userCode: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+      },
       owner: {
         select: {
           id: true,
