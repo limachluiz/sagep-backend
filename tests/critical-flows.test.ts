@@ -1646,7 +1646,7 @@ describe("critical flows", () => {
       .expect(200);
 
     expect(details.body.workflow.stage).toBe("AGUARDANDO_NOTA_CREDITO");
-    expect(details.body.workflow.status).toBe("PLANEJAMENTO");
+    expect(details.body.workflow.status).toBe("EM_ANDAMENTO");
     expect(details.body.workflow.nextAction.code).toBe("EMITIR_DIEX");
 
     const nextAction = await request(app)
@@ -4541,11 +4541,19 @@ describe("critical flows", () => {
       ),
     ).toBe(true);
 
-    await request(app)
+    const projectsWithArchivedForManager = await request(app)
       .get("/api/projects")
       .query({ includeArchived: true })
       .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .expect(403);
+      .expect(200);
+
+    expect(projectsWithArchivedForManager.body.filters.includeArchived).toBe(true);
+    expect(
+      projectsWithArchivedForManager.body.items.some(
+        (item: { id: string; archivedAt: string | null }) =>
+          item.id === archivedProject.id && Boolean(item.archivedAt),
+      ),
+    ).toBe(true);
 
     const tasksWithArchived = await request(app)
       .get("/api/tasks")
