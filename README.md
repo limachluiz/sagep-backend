@@ -114,6 +114,7 @@ Variáveis usadas atualmente:
 | Variável | Obrigatória | Descrição |
 | --- | --- | --- |
 | `PORT` | sim | Porta HTTP da aplicação |
+| `API_PORT` | nao | Porta publicada pelo Docker no host. Padrao `3000`, igual ao proxy do frontend |
 | `NODE_ENV` | sim | Ambiente de execução |
 | `DATABASE_URL` | sim | String de conexão PostgreSQL |
 | `JWT_SECRET` | sim | Segredo do access token |
