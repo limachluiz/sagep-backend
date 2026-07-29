@@ -19,6 +19,9 @@ permissionsRoutes.put(
   requirePermission("permissions.manage_role_permissions"),
   (req, res) => controller.updateRolePermissions(req, res),
 );
+permissionsRoutes.get("/users", requirePermission("permissions.view"), (req, res) =>
+  controller.listUsers(req, res),
+);
 permissionsRoutes.get("/users/:id", requirePermission("permissions.view"), (req, res) =>
   controller.getUserPermissions(req, res),
 );

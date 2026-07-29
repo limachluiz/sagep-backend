@@ -4,8 +4,10 @@ import {
   cancelCommitmentNoteSchema,
   createProjectSchema,
   listProjectsQuerySchema,
+  kanbanProjectsQuerySchema,
   projectCodeParamSchema,
   projectIdParamSchema,
+  registerSignedServiceOrderSchema,
   reviewAsBuiltSchema,
   updateProjectFlowSchema,
   updateProjectSchema,
@@ -39,6 +41,17 @@ export class ProjectsController {
         path: req.originalUrl,
       }),
     );
+  }
+
+  async kanban(req: Request, res: Response) {
+    const filters = kanbanProjectsQuerySchema.parse(req.query);
+    return res.status(200).json(await projectsService.kanban(filters, req.user!));
+  }
+
+  async moveKanban(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const data = updateProjectFlowSchema.parse(req.body);
+    return res.status(200).json(await projectsService.updateFlow(id, data, req.user!));
   }
 
   async findById(req: Request, res: Response) {
@@ -90,6 +103,13 @@ export class ProjectsController {
     return res.status(200).json(project);
   }
 
+  async registerSignedServiceOrder(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const data = registerSignedServiceOrderSchema.parse(req.body);
+    const project = await projectsService.registerSignedServiceOrder(id, data, req.user!);
+    return res.status(200).json(project);
+  }
+
   async remove(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
     const result = await projectsService.remove(id, req.user!);
@@ -100,6 +120,12 @@ export class ProjectsController {
     const { id } = projectIdParamSchema.parse(req.params);
     const options = restoreOptionsSchema.parse(req.body ?? {});
     const result = await projectsService.restore(id, req.user!, options);
+    return res.status(200).json(result);
+  }
+
+  async softDelete(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const result = await projectsService.softDelete(id, req.user!);
     return res.status(200).json(result);
   }
 

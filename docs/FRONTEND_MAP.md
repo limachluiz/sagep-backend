@@ -2,6 +2,33 @@
 
 Este documento organiza a construção do frontend a partir do backend atual.
 
+## Visões internas de planejamento
+
+- `GET /projects/kanban` entrega as colunas do workflow e seus cartões.
+- `PATCH /projects/:id/kanban/move` movimenta um cartão usando as mesmas regras de `/flow`.
+- `GET /service-orders/gantt` entrega o cronograma consolidado das OS.
+- `GET /service-orders/:id/gantt` entrega o cronograma de uma OS.
+
+O frontend nunca deve alterar `stage` localmente sem confirmar a resposta do
+backend. No Gantt, `isDelayed` e `progressPercent` já são calculados pelo servidor.
+
+## Tipos gerados do contrato
+
+O arquivo `src/generated/openapi.ts` e gerado a partir do OpenAPI versionado e
+contem os tipos de paths, operacoes, requests e responses. Ele pode ser copiado
+ou publicado como pacote compartilhado para o frontend.
+
+```ts
+import type { paths, components } from "../generated/openapi";
+
+type LoginBody = paths["/auth/login"]["post"]["requestBody"]["content"]["application/json"];
+type Project = components["schemas"]["Project"];
+```
+
+Depois de alterar `src/docs/openapi.ts`, execute `npm run openapi:export` e
+`npm run openapi:generate-client`. O CI rejeita tanto o JSON quanto os tipos
+gerados quando estiverem desatualizados.
+
 ## Estratégia geral
 
 Prioridade recomendada:
@@ -291,6 +318,10 @@ Endpoints:
 - `DELETE /atas/:id/coverage-groups/:groupId`
 - `GET /integrations/compras-gov/atas/preview`
 - `POST /integrations/compras-gov/atas/import`
+
+O frontend não deve oferecer sincronização posterior de saldo ou consulta
+individual ao Compras.gov.br. Após a importação, toda operação usa os dados e o
+razão de saldo locais.
 
 ### 11. Itens da ATA
 

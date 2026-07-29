@@ -133,6 +133,7 @@ export function renderProjectDossierHtml(dossier: any) {
       <tr><th>DIEx</th><td>${escapeHtml(workflow.milestones.diexNumber)} / ${formatDate(workflow.milestones.diexIssuedAt)}</td></tr>
       <tr><th>Nota de Empenho</th><td>${escapeHtml(workflow.milestones.commitmentNoteNumber)} / ${formatDate(workflow.milestones.commitmentNoteReceivedAt)}</td></tr>
       <tr><th>Ordem de Serviço</th><td>${escapeHtml(workflow.milestones.serviceOrderNumber)} / ${formatDate(workflow.milestones.serviceOrderIssuedAt)}</td></tr>
+      <tr><th>OS assinada</th><td>Recebimento: ${formatDate(workflow.milestones.signedServiceOrderReceivedAt)} | Link: ${escapeHtml(workflow.milestones.signedServiceOrderLink)}</td></tr>
       <tr><th>Execução</th><td>Início: ${formatDate(workflow.milestones.executionStartedAt)} | As-Built: ${formatDate(workflow.milestones.asBuiltReceivedAt)}</td></tr>
       <tr><th>Encerramento</th><td>Atesto NF: ${formatDate(workflow.milestones.invoiceAttestedAt)} | Conclusão: ${formatDate(workflow.milestones.serviceCompletedAt)}</td></tr>
     </tbody>

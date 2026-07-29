@@ -11,10 +11,12 @@ O projeto evolui pelas seguintes fases:
 3. `DIEX_REQUISITORIO`
 4. `AGUARDANDO_NOTA_EMPENHO`
 5. `OS_LIBERADA`
-6. `SERVICO_EM_EXECUCAO`
-7. `ANALISANDO_AS_BUILT`
-8. `ATESTAR_NF`
-9. `SERVICO_CONCLUIDO`
+6. `AGUARDANDO_OS_ASSINADA`
+7. `AGUARDANDO_INICIO_EXECUCAO`
+8. `SERVICO_EM_EXECUCAO`
+9. `ANALISANDO_AS_BUILT`
+10. `ATESTAR_NF`
+11. `SERVICO_CONCLUIDO`
 
 Também existe a fase `CANCELADO`.
 
@@ -31,7 +33,7 @@ Também existe a fase `CANCELADO`.
 - **Nota de Empenho**
   - dado que consolida o compromisso financeiro
 - **Ordem de Serviço**
-  - documento operacional que libera a execução
+  - documento operacional que precisa ser devolvido assinado pela contratada antes da execução
 
 ## Fase a fase
 
@@ -134,13 +136,14 @@ Significa:
 
 O que destrava a próxima etapa:
 
-- validação do As-Built.
+- validação do As-Built;
+- link válido do arquivo ou pasta em nuvem que contém o As-Built.
 
 Regras:
 
-- se aprovado, o projeto avança para `ATESTAR_NF`;
+- se aprovado e possuir `asBuiltLink`, o projeto avança para `ATESTAR_NF`;
 - se reprovado, exige motivo e o projeto retorna para `SERVICO_EM_EXECUCAO`;
-- na reprovação, `asBuiltReceivedAt` é limpo para permitir novo recebimento.
+- na reprovação, `asBuiltReceivedAt` e `asBuiltLink` são limpos para permitir novo recebimento.
 
 ### 8. Atestar NF
 
@@ -244,8 +247,13 @@ Quando executada com sucesso, ocorre em transação:
 ### Ordem de Serviço
 
 - depende do projeto com NE informada;
-- operacionaliza a execução;
+- após a emissão, leva o projeto para `AGUARDANDO_OS_ASSINADA`;
+- exige link `http/https` e data de recebimento da versão assinada;
+- o registro avança para `AGUARDANDO_INICIO_EXECUCAO`;
+- somente então o início real da execução pode ser informado;
+- guarda observação opcional e o usuário responsável pelo registro;
 - pode ser cancelada por rollback da NE.
+- projetos legados anteriores à obrigatoriedade não são bloqueados retroativamente.
 
 ## Relação com saldo da ATA
 

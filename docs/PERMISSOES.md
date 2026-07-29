@@ -30,6 +30,7 @@ Perfil com gestão total do sistema.
 - gerenciar atas e itens de ata;
 - gerenciar OMs;
 - emitir e cancelar documentos;
+- visualizar auditoria técnica;
 - visualizar todos os dashboards;
 - administrar sessões de qualquer usuário;
 - exportar relatórios.
@@ -65,6 +66,7 @@ Perfil gerencial com visão ampla e forte atuação operacional, mas sem governa
 - emitir, cancelar e restaurar DIEx;
 - emitir, cancelar e restaurar OS;
 - visualizar governança de permissões;
+- visualizar auditoria técnica;
 - gerenciar próprias sessões;
 - acessar dashboards operacional, executivo e financeiro;
 - exportar relatórios.
@@ -156,6 +158,10 @@ Perfil de leitura e acompanhamento.
 - dashboard operacional.
 
 ## Permissões por área
+
+### Auditoria
+
+- `audit.view`
 
 ### Governança
 

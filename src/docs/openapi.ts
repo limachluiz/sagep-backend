@@ -112,6 +112,8 @@ const defaultErrorResponses = {
   "401": { $ref: "#/components/responses/Unauthorized" },
   "403": { $ref: "#/components/responses/Forbidden" },
   "404": { $ref: "#/components/responses/NotFound" },
+  "409": { $ref: "#/components/responses/Conflict" },
+  "500": { $ref: "#/components/responses/InternalServerError" },
 };
 
 const archiveResponseExample = {
@@ -318,44 +320,110 @@ export const openApiDocument: OpenApiDocument = {
       BadRequest: {
         description: "Requisicao invalida.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "BAD_REQUEST",
           message: "Informe pelo menos um campo para atualizar",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
       Unauthorized: {
         description: "Autenticacao ausente ou invalida.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "AUTH_TOKEN_MISSING",
           message: "Token não informado",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
       Forbidden: {
         description: "Usuario autenticado sem permissao suficiente.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "PERMISSION_DENIED",
           message: "Você não tem permissão para acessar este recurso",
+          details: {
+            requiredPermissions: ["projects.edit_all"],
+          },
+          requiredPermissions: ["projects.edit_all"],
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
       NotFound: {
         description: "Recurso nao encontrado.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "NOT_FOUND",
           message: "Recurso não encontrado",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
+        }),
+      },
+      Conflict: {
+        description: "Conflito com o estado atual do recurso ou regra de negocio.",
+        content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "CONFLICT",
+          message: "O recurso não pode ser alterado no estado atual",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
+        }),
+      },
+      InternalServerError: {
+        description: "Erro interno inesperado.",
+        content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "INTERNAL_ERROR",
+          message: "Erro interno do servidor",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
     },
     schemas: {
       ErrorResponse: {
         type: "object",
+        required: ["code", "message", "requestId"],
+        properties: {
+          code: {
+            type: "string",
+            description: "Codigo estavel e legivel por maquina para tratamento no cliente.",
+          },
+          message: { type: "string" },
+          details: {
+            description: "Contexto estruturado opcional do erro.",
+          },
+          errors: {
+            type: "object",
+            description: "Alias legado mantido nas falhas de validacao Zod.",
+            additionalProperties: true,
+          },
+          requiredPermissions: {
+            type: "array",
+            description:
+              "Alias legado mantido em falhas de autorizacao. Novos clientes devem usar details.requiredPermissions.",
+            items: { type: "string" },
+          },
+          requestId: {
+            type: "string",
+            format: "uuid",
+            description: "Identificador da requisicao, tambem devolvido em X-Request-Id.",
+          },
+        },
+      },
+      MessageResponse: {
+        type: "object",
         required: ["message"],
         properties: {
           message: { type: "string" },
-          issues: {
-            type: "array",
-            items: {
-              type: "object",
-              properties: {
-                path: { type: "string" },
-                message: { type: "string" },
-              },
-            },
-          },
+          permissionUsed: { type: "string" },
+        },
+        additionalProperties: true,
+      },
+      ProjectKanbanResponse: {
+        type: "object",
+        required: ["generatedAt", "columns"],
+        properties: {
+          generatedAt: { type: "string", format: "date-time" },
+          columns: { type: "array", items: { type: "object", additionalProperties: true } },
+        },
+      },
+      ServiceOrderGanttResponse: {
+        type: "object",
+        required: ["range", "serviceOrders"],
+        properties: {
+          range: { type: "object", additionalProperties: true },
+          serviceOrders: { type: "array", items: { type: "object", additionalProperties: true } },
         },
       },
       PaginationMeta: {
@@ -482,6 +550,32 @@ export const openApiDocument: OpenApiDocument = {
           access: { $ref: "#/components/schemas/AccessProfile" },
         },
       },
+      UserOption: {
+        type: "object",
+        required: ["id", "userCode", "name", "email", "role", "active"],
+        properties: {
+          id: { type: "string" },
+          userCode: { type: "integer" },
+          name: { type: "string" },
+          email: { type: "string", format: "email" },
+          role: {
+            type: "string",
+            enum: ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"],
+          },
+          rank: { type: "string", nullable: true },
+          active: { type: "boolean" },
+        },
+      },
+      UserOptionsResponse: {
+        type: "object",
+        required: ["items"],
+        properties: {
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/UserOption" },
+          },
+        },
+      },
       UserUpdateRequest: {
         type: "object",
         description: "Atualiza dados cadastrais do usuario. Somente ADMIN.",
@@ -525,6 +619,16 @@ export const openApiDocument: OpenApiDocument = {
           items: {
             type: "array",
             items: { $ref: "#/components/schemas/PermissionCatalogItem" },
+          },
+        },
+      },
+      PermissionUsersResponse: {
+        type: "object",
+        required: ["items"],
+        properties: {
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/UserSummary" },
           },
         },
       },
@@ -811,6 +915,13 @@ export const openApiDocument: OpenApiDocument = {
           projectCode: { type: "integer" },
           title: { type: "string" },
           description: { type: "string", nullable: true },
+          projectType: {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+            nullable: true,
+          },
+          omId: { type: "string", nullable: true },
+          om: { $ref: "#/components/schemas/MilitaryOrganization" },
           status: {
             type: "string",
             enum: ["PLANEJAMENTO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO", "CANCELADO"],
@@ -823,6 +934,8 @@ export const openApiDocument: OpenApiDocument = {
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -847,10 +960,11 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           title: { type: "string", minLength: 3 },
           description: { type: "string", nullable: true },
-          status: {
+          projectType: {
             type: "string",
-            enum: ["PLANEJAMENTO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO", "CANCELADO"],
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
           },
+          omId: { type: "string" },
           startDate: { type: "string", format: "date-time", nullable: true },
           endDate: { type: "string", format: "date-time", nullable: true },
         },
@@ -860,10 +974,11 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           title: { type: "string", minLength: 3 },
           description: { type: "string", nullable: true },
-          status: {
+          projectType: {
             type: "string",
-            enum: ["PLANEJAMENTO", "EM_ANDAMENTO", "PAUSADO", "CONCLUIDO", "CANCELADO"],
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
           },
+          omId: { type: "string" },
           startDate: { type: "string", format: "date-time", nullable: true },
           endDate: { type: "string", format: "date-time", nullable: true },
         },
@@ -880,6 +995,8 @@ export const openApiDocument: OpenApiDocument = {
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -895,10 +1012,15 @@ export const openApiDocument: OpenApiDocument = {
           commitmentNoteReceivedAt: { type: "string", format: "date-time", nullable: true },
           serviceOrderNumber: { type: "string", nullable: true },
           serviceOrderIssuedAt: { type: "string", format: "date-time", nullable: true },
+          serviceOrderSignatureRequired: { type: "boolean" },
+          signedServiceOrderLink: { type: "string", format: "uri", maxLength: 2048, nullable: true },
+          signedServiceOrderReceivedAt: { type: "string", format: "date-time", nullable: true },
+          signedServiceOrderNotes: { type: "string", maxLength: 2000, nullable: true },
           executionStartedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltReceivedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltReviewedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltApprovedAt: { type: "string", format: "date-time", nullable: true },
+          asBuiltLink: { type: "string", format: "uri", maxLength: 2048, nullable: true },
           asBuiltRejectedAt: { type: "string", format: "date-time", nullable: true },
           asBuiltRejectionReason: { type: "string", nullable: true },
           invoiceAttestedAt: { type: "string", format: "date-time", nullable: true },
@@ -909,10 +1031,16 @@ export const openApiDocument: OpenApiDocument = {
         oneOf: [
           {
             type: "object",
-            required: ["approved", "reviewedAt"],
+            required: ["approved", "reviewedAt", "asBuiltLink"],
             properties: {
               approved: { type: "boolean", const: true },
               reviewedAt: { type: "string", format: "date-time" },
+              asBuiltLink: {
+                type: "string",
+                format: "uri",
+                maxLength: 2048,
+                description: "Link do arquivo ou pasta em nuvem que contem o As-Built.",
+              },
             },
           },
           {
@@ -925,6 +1053,26 @@ export const openApiDocument: OpenApiDocument = {
             },
           },
         ],
+      },
+      ProjectSignedServiceOrderRequest: {
+        type: "object",
+        required: ["signedServiceOrderLink", "signedServiceOrderReceivedAt"],
+        properties: {
+          signedServiceOrderLink: {
+            type: "string",
+            format: "uri",
+            maxLength: 2048,
+            description: "Link do arquivo ou pasta em nuvem com a OS assinada.",
+          },
+          signedServiceOrderReceivedAt: {
+            type: "string",
+            format: "date-time",
+          },
+          signedServiceOrderNotes: {
+            type: "string",
+            maxLength: 2000,
+          },
+        },
       },
       ProjectCommitmentNoteCancelRequest: {
         type: "object",
@@ -966,21 +1114,35 @@ export const openApiDocument: OpenApiDocument = {
           source: { type: "string", nullable: true },
           context: {
             type: "object",
-            additionalProperties: true,
-          },
-          before: {
-            type: "object",
-            additionalProperties: true,
-          },
-          after: {
-            type: "object",
-            additionalProperties: true,
-          },
-          metadata: {
-            type: "object",
+            nullable: true,
             additionalProperties: true,
           },
         },
+      },
+      ProjectAuditItem: {
+        allOf: [
+          { $ref: "#/components/schemas/ProjectTimelineItem" },
+          {
+            type: "object",
+            properties: {
+              before: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+              after: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+              metadata: {
+                type: "object",
+                nullable: true,
+                additionalProperties: true,
+              },
+            },
+          },
+        ],
       },
       ProjectDetailsResponse: {
         type: "object",
@@ -1000,6 +1162,37 @@ export const openApiDocument: OpenApiDocument = {
           timeline: {
             type: "array",
             items: { $ref: "#/components/schemas/ProjectTimelineItem" },
+          },
+          auditTrail: {
+            description:
+              "Trilha tecnica retornada somente quando o usuario possui audit.view.",
+            nullable: true,
+            type: "array",
+            items: { $ref: "#/components/schemas/ProjectAuditItem" },
+          },
+          tasks: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                id: { type: "string", format: "uuid" },
+                taskCode: { type: "integer" },
+                title: { type: "string" },
+                status: {
+                  type: "string",
+                  enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
+                },
+                priority: { type: "integer", minimum: 1, maximum: 5 },
+                dueDate: { type: "string", format: "date-time", nullable: true },
+                archivedAt: { type: "string", format: "date-time", nullable: true },
+                createdAt: { type: "string", format: "date-time" },
+                updatedAt: { type: "string", format: "date-time" },
+                assignee: {
+                  allOf: [{ $ref: "#/components/schemas/UserSummary" }],
+                  nullable: true,
+                },
+              },
+            },
           },
           documents: {
             type: "object",
@@ -1102,6 +1295,7 @@ export const openApiDocument: OpenApiDocument = {
           assigneeUserCode: { type: "integer", minimum: 1, nullable: true },
           clearAssignee: { type: "boolean", nullable: true },
           dueDate: { type: "string", format: "date-time", nullable: true },
+          clearDueDate: { type: "boolean", nullable: true },
         },
       },
       TaskStatusUpdateRequest: {
@@ -2617,8 +2811,9 @@ export const openApiDocument: OpenApiDocument = {
     "/auth/register": {
       post: {
         tags: ["auth"],
-        summary: "Registrar usuario publico",
-        description: "Cria um usuario com role inicial CONSULTA.",
+        summary: "Registrar usuario publico (configuravel)",
+        description:
+          "Cria um usuario com role inicial CONSULTA somente quando ALLOW_PUBLIC_REGISTRATION=true. Desativado por padrao.",
         requestBody: {
           required: true,
           content: jsonContent("#/components/schemas/PublicRegisterRequest"),
@@ -2626,6 +2821,7 @@ export const openApiDocument: OpenApiDocument = {
         responses: {
           "201": createdJson("#/components/schemas/UserSummary"),
           "400": { $ref: "#/components/responses/BadRequest" },
+          "403": { $ref: "#/components/responses/Forbidden" },
         },
       },
     },
@@ -2710,7 +2906,7 @@ export const openApiDocument: OpenApiDocument = {
           },
         },
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Logout realizado"),
+          "200": okJson("#/components/schemas/MessageResponse", "Logout realizado"),
           "400": { $ref: "#/components/responses/BadRequest" },
         },
       },
@@ -2742,7 +2938,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/SessionId" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Sessao revogada"),
+          "200": okJson("#/components/schemas/MessageResponse", "Sessao revogada"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_own"],
@@ -2754,7 +2950,7 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Revogar todas as sessoes proprias",
         security: bearerSecurity,
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Sessoes revogadas"),
+          "200": okJson("#/components/schemas/MessageResponse", "Sessoes revogadas"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_own"],
@@ -2791,7 +2987,7 @@ export const openApiDocument: OpenApiDocument = {
           { $ref: "#/components/parameters/SessionId" },
         ],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Sessao revogada"),
+          "200": okJson("#/components/schemas/MessageResponse", "Sessao revogada"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -2804,7 +3000,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [pathIdParameter("userId", "Identificador do usuario.")],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Sessoes revogadas"),
+          "200": okJson("#/components/schemas/MessageResponse", "Sessoes revogadas"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -2831,7 +3027,7 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["audits"],
         summary: "Listar logs de auditoria",
         description:
-          "Retorna AuditLog ordenado por createdAt desc. Acesso restrito a usuarios ADMIN e GESTOR.",
+          "Retorna AuditLog ordenado por createdAt desc. Exige a permissao audit.view.",
         security: bearerSecurity,
         parameters: [
           { $ref: "#/components/parameters/Page" },
@@ -2860,7 +3056,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/AuditLogListEnvelope"),
           ...defaultErrorResponses,
         },
-        "x-roles": ["ADMIN", "GESTOR"],
+        "x-permissions": ["audit.view"],
       },
     },
     "/projects": {
@@ -2888,6 +3084,8 @@ export const openApiDocument: OpenApiDocument = {
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -2928,6 +3126,29 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/Project"),
           ...defaultErrorResponses,
         },
+      },
+    },
+    "/projects/kanban": {
+      get: {
+        tags: ["projects"],
+        summary: "Obter quadro Kanban do workflow de projetos",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("ownerId", "Filtrar pelo responsavel.", { type: "string" }),
+          queryParameter("stage", "Filtrar por etapa do workflow.", { type: "string" }),
+          queryParameter("projectType", "Filtrar pelo tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("omId", "Filtrar pela OM.", { type: "string" }),
+          queryParameter("stateUf", "Filtrar pela UF.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("search", "Buscar por titulo ou descricao.", { type: "string" }),
+          queryParameter("onlyMine", "Mostrar somente projetos proprios.", { type: "boolean" }),
+        ],
+        responses: { "200": okJson("#/components/schemas/ProjectKanbanResponse"), ...defaultErrorResponses },
       },
     },
     "/projects/{id}": {
@@ -2983,6 +3204,16 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
+    "/projects/{id}/kanban/move": {
+      patch: {
+        tags: ["projects"],
+        summary: "Mover cartao do Kanban com validacao do workflow",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        requestBody: { required: true, content: jsonContent("#/components/schemas/ProjectFlowUpdateRequest") },
+        responses: { "200": okJson("#/components/schemas/Project"), ...defaultErrorResponses },
+      },
+    },
     "/projects/{id}/as-built/review": {
       patch: {
         tags: ["projects"],
@@ -2992,6 +3223,22 @@ export const openApiDocument: OpenApiDocument = {
         requestBody: {
           required: true,
           content: jsonContent("#/components/schemas/ProjectAsBuiltReviewRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/Project"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/projects/{id}/service-order/signature": {
+      patch: {
+        tags: ["projects", "service-orders"],
+        summary: "Registrar recebimento da Ordem de Serviço assinada",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ProjectSignedServiceOrderRequest"),
         },
         responses: {
           "200": okJson("#/components/schemas/Project"),
@@ -3030,6 +3277,19 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["projects.restore"],
+      },
+    },
+    "/projects/{id}/permanent": {
+      delete: {
+        tags: ["projects"],
+        summary: "Excluir logicamente projeto arquivado",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ProjectId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "Projeto excluído"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["projects.delete"],
       },
     },
     "/projects/{id}/details": {
@@ -3137,7 +3397,7 @@ export const openApiDocument: OpenApiDocument = {
           { $ref: "#/components/parameters/MemberId" },
         ],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Membro removido"),
+          "200": okJson("#/components/schemas/MessageResponse", "Membro removido"),
           ...defaultErrorResponses,
         },
       },
@@ -3271,6 +3531,19 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["tasks.restore"],
+      },
+    },
+    "/tasks/{id}/permanent": {
+      delete: {
+        tags: ["tasks"],
+        summary: "Excluir logicamente tarefa arquivada",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "Tarefa excluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["tasks.delete"],
       },
     },
     "/estimates": {
@@ -3413,6 +3686,19 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["estimates.restore"],
       },
     },
+    "/estimates/{id}/permanent": {
+      delete: {
+        tags: ["estimates"],
+        summary: "Excluir logicamente estimativa arquivada",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/EstimateId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "Estimativa excluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["estimates.delete"],
+      },
+    },
     "/estimates/{id}/document/html": {
       get: {
         tags: ["estimates"],
@@ -3546,6 +3832,19 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["diex.restore"],
       },
     },
+    "/diex/{id}/permanent": {
+      delete: {
+        tags: ["diex"],
+        summary: "Excluir logicamente DIEx arquivado",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/DiexId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "DIEx excluído"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["diex.delete"],
+      },
+    },
     "/diex/{id}/document/html": {
       get: {
         tags: ["diex"],
@@ -3630,6 +3929,28 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
+    "/service-orders/gantt": {
+      get: {
+        tags: ["service-orders"],
+        summary: "Obter diagrama de Gantt consolidado das ordens de servico",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("projectCode", "Filtrar pelo codigo do projeto.", { type: "integer", minimum: 1 }),
+          queryParameter("from", "Inicio do periodo.", { type: "string", format: "date-time" }),
+          queryParameter("until", "Fim do periodo.", { type: "string", format: "date-time" }),
+          queryParameter("stateUf", "Filtrar pela UF do projeto.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("projectType", "Filtrar pelo tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("ownerId", "Filtrar pelo responsavel do projeto.", { type: "string" }),
+        ],
+        responses: { "200": okJson("#/components/schemas/ServiceOrderGanttResponse"), ...defaultErrorResponses },
+      },
+    },
     "/service-orders/number/{serviceOrderNumber}": {
       get: {
         tags: ["service-orders"],
@@ -3694,6 +4015,28 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["service_orders.restore"],
+      },
+    },
+    "/service-orders/{id}/permanent": {
+      delete: {
+        tags: ["service-orders"],
+        summary: "Excluir logicamente ordem de servico arquivada",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ServiceOrderId" }],
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse", "OS excluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["service_orders.delete"],
+      },
+    },
+    "/service-orders/{id}/gantt": {
+      get: {
+        tags: ["service-orders"],
+        summary: "Obter Gantt de uma ordem de servico",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/ServiceOrderId" }],
+        responses: { "200": okJson("#/components/schemas/ServiceOrder"), ...defaultErrorResponses },
       },
     },
     "/service-orders/{id}/document/html": {
@@ -3772,6 +4115,16 @@ export const openApiDocument: OpenApiDocument = {
             type: "string",
             format: "date-time",
           }),
+          queryParameter("stateUf", "Filtrar a carteira pela UF.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("omId", "Filtrar a carteira pela OM.", { type: "string" }),
+          queryParameter("projectType", "Filtrar a carteira pelo tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("ownerId", "Filtrar a carteira pelo responsavel.", { type: "string" }),
         ],
         responses: {
           "200": okJson("#/components/schemas/DashboardExecutiveResponse"),
@@ -3883,6 +4236,8 @@ export const openApiDocument: OpenApiDocument = {
               "DIEX_REQUISITORIO",
               "AGUARDANDO_NOTA_EMPENHO",
               "OS_LIBERADA",
+              "AGUARDANDO_OS_ASSINADA",
+              "AGUARDANDO_INICIO_EXECUCAO",
               "SERVICO_EM_EXECUCAO",
               "ANALISANDO_AS_BUILT",
               "ATESTAR_NF",
@@ -3984,6 +4339,29 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
+      },
+    },
+    "/users/options": {
+      get: {
+        tags: ["users"],
+        summary: "Listar usuários disponíveis para vínculos",
+        description:
+          "Retorna dados mínimos de usuários ativos. Quando um projeto é informado, restringe a resposta ao responsável e aos membros ativos elegíveis para atribuição de tarefas.",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("projectId", "Restringir opções à equipe deste projeto.", {
+            type: "string",
+          }),
+          queryParameter("projectCode", "Restringir opções à equipe pelo código do projeto.", {
+            type: "integer",
+            minimum: 1,
+          }),
+        ],
+        responses: {
+          "200": okJson("#/components/schemas/UserOptionsResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["projects.edit_all", "projects.edit_own", "tasks.assign"],
       },
     },
     "/users/{id}": {
@@ -4102,6 +4480,20 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_role_permissions"],
+      },
+    },
+    "/permissions/users": {
+      get: {
+        tags: ["permissions"],
+        summary: "Listar usuários para governança de permissões",
+        description:
+          "Retorna as contas disponíveis para consulta e administração de permissões, sem exigir acesso ao módulo completo de gestão de usuários.",
+        security: bearerSecurity,
+        responses: {
+          "200": okJson("#/components/schemas/PermissionUsersResponse"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["permissions.view"],
       },
     },
     "/permissions/users/{id}": {
@@ -4325,11 +4717,13 @@ export const openApiDocument: OpenApiDocument = {
       },
       delete: {
         tags: ["atas"],
-        summary: "Remover ata",
+        summary: "Excluir ata inativa sem histórico",
+        description:
+          "Exige inativação prévia e bloqueia a exclusão quando houver estimativas ou movimentações de saldo vinculadas, preservando a rastreabilidade operacional.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Ata removida"),
+          "200": okJson("#/components/schemas/MessageResponse", "Ata removida"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["atas.manage"],
@@ -4388,7 +4782,7 @@ export const openApiDocument: OpenApiDocument = {
           { $ref: "#/components/parameters/AtaCoverageGroupId" },
         ],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Grupo removido"),
+          "200": okJson("#/components/schemas/MessageResponse", "Grupo removido"),
           ...defaultErrorResponses,
         },
         "x-roles": ["ADMIN"],
@@ -4438,35 +4832,6 @@ export const openApiDocument: OpenApiDocument = {
         },
         responses: {
           "201": createdJson("#/components/schemas/AtaItem"),
-          ...defaultErrorResponses,
-        },
-        "x-permissions": ["atas.manage"],
-      },
-    },
-    "/atas/{id}/external-balance": {
-      get: {
-        tags: ["atas"],
-        summary: "Ler snapshot local de saldo externo da ATA",
-        description:
-          "Retorna apenas snapshots externos persistidos localmente para os itens da ATA. Nao consulta o Compras.gov.br e nao altera saldo local.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaId" }],
-        responses: {
-          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparison"),
-          ...defaultErrorResponses,
-        },
-      },
-    },
-    "/atas/{id}/sync-external-balance": {
-      post: {
-        tags: ["atas"],
-        summary: "Sincronizar snapshot externo de saldo Compras.gov.br",
-        description:
-          "Consulta o Compras.gov.br somente neste POST e atualiza snapshots externos persistidos para os itens processados. Nao altera movimentos nem saldo local.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaId" }],
-        responses: {
-          "200": okJson("#/components/schemas/ComprasGovExternalBalanceSyncResponse"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["atas.manage"],
@@ -4532,41 +4897,12 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
-    "/ata-items/{id}/balance-comparison": {
-      get: {
-        tags: ["ata-items"],
-        summary: "Ler snapshot local de saldo externo do item",
-        description:
-          "Retorna a comparacao entre saldo local e o ultimo snapshot externo persistido do item. Se nao existir snapshot, retorna `NAO_SINCRONIZADO`. Nao consulta o Compras.gov.br.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        responses: {
-          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparisonItem"),
-          ...defaultErrorResponses,
-        },
-      },
-    },
-    "/ata-items/{id}/sync-external-balance": {
-      post: {
-        tags: ["ata-items"],
-        summary: "Sincronizar snapshot externo de saldo Compras.gov.br do item",
-        description:
-          "Consulta o Compras.gov.br somente neste POST para o item informado e atualiza o snapshot persistido desse item. Nao altera movimentos nem saldo local.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        responses: {
-          "200": okJson("#/components/schemas/ComprasGovExternalBalanceComparisonItem"),
-          ...defaultErrorResponses,
-        },
-        "x-permissions": ["atas.manage"],
-      },
-    },
     "/ata-items/{id}/register-external-consumption": {
       post: {
         tags: ["ata-items"],
-        summary: "Registrar consumo externo manualmente",
+        summary: "Registrar consumo externo de saldo",
         description:
-          "Registra internamente um consumo externo confirmado manualmente pelo usuario, com justificativa obrigatoria e sem consultar o Compras.gov.br.",
+          "Registra consumo confirmado fora do fluxo local, preservando justificativa, origem, referência externa e trilha de auditoria.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
         requestBody: {
@@ -4577,6 +4913,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/AtaItemRegisterExternalConsumptionResponse"),
           ...defaultErrorResponses,
         },
+        "x-permissions": ["atas.manage"],
       },
     },
     "/ata-items/{id}": {
@@ -4613,7 +4950,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "Item removido"),
+          "200": okJson("#/components/schemas/MessageResponse", "Item removido"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["atas.manage"],
@@ -4694,7 +5031,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/MilitaryOrganizationCode" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "OM removida"),
+          "200": okJson("#/components/schemas/MessageResponse", "OM removida"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["military_organizations.manage"],
@@ -4732,7 +5069,7 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/MilitaryOrganizationId" }],
         responses: {
-          "200": okJson("#/components/schemas/ErrorResponse", "OM removida"),
+          "200": okJson("#/components/schemas/MessageResponse", "OM removida"),
           ...defaultErrorResponses,
         },
         "x-permissions": ["military_organizations.manage"],
@@ -4740,6 +5077,53 @@ export const openApiDocument: OpenApiDocument = {
     },
   },
 };
+
+const httpMethods = ["get", "post", "put", "patch", "delete"] as const;
+
+function normalizeOperationToken(value: string) {
+  return value
+    .replace(/[{}]/g, "")
+    .replace(/[^a-zA-Z0-9]+(.)/g, (_match, next: string) => next.toUpperCase())
+    .replace(/^[A-Z]/, (first) => first.toLowerCase());
+}
+
+function buildOperationId(
+  method: (typeof httpMethods)[number],
+  path: string,
+  operation: Record<string, unknown>,
+) {
+  const tags = operation.tags as string[] | undefined;
+  const tag = normalizeOperationToken(tags?.[0] ?? path.split("/").filter(Boolean)[0] ?? "api");
+  const tokens = path
+    .split("/")
+    .filter(Boolean)
+    .map((token) => (token.startsWith("{") ? `by-${token.slice(1, -1)}` : token))
+    .map(normalizeOperationToken);
+
+  if (tokens[0] === tag) {
+    tokens.shift();
+  }
+
+  const resource = tokens.length > 0 ? tokens.join("_") : "collection";
+  return `${tag}_${method}_${resource}`;
+}
+
+function applyOperationIds(document: OpenApiDocument) {
+  const paths = (document.paths as Record<string, Record<string, unknown>> | undefined) ?? {};
+
+  for (const [path, pathItem] of Object.entries(paths)) {
+    for (const method of httpMethods) {
+      const operation = pathItem[method] as Record<string, unknown> | undefined;
+      if (!operation) {
+        continue;
+      }
+
+      operation.operationId = buildOperationId(method, path, operation);
+    }
+  }
+}
+
+applyOperationIds(openApiDocument);
 
 export function buildOpenApiDocsHtml(specUrl: string) {
   return `<!DOCTYPE html>

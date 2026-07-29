@@ -57,6 +57,7 @@ export const updateTaskSchema = z
     assigneeUserCode: optionalTaskAssigneeUserCode,
     clearAssignee: optionalBoolean,
     dueDate: optionalDate,
+    clearDueDate: optionalBoolean,
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "Informe pelo menos um campo para atualizar",
@@ -68,6 +69,10 @@ export const updateTaskSchema = z
   .refine((data) => !(data.clearAssignee && (data.assigneeId || data.assigneeUserCode)), {
     message: "Use clearAssignee ou informe um responsável, não ambos",
     path: ["clearAssignee"],
+  })
+  .refine((data) => !(data.clearDueDate && data.dueDate), {
+    message: "Use clearDueDate ou informe uma data de prazo, não ambos",
+    path: ["clearDueDate"],
   });
 
 export const updateTaskStatusSchema = z.object({

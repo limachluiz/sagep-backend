@@ -15,6 +15,10 @@ export const dashboardOverviewQuerySchema = z
     startDate: optionalDate,
     endDate: optionalDate,
     asOfDate: optionalDate,
+    stateUf: z.enum(["AM", "RO", "RR", "AC"]).optional(),
+    omId: z.string().trim().min(1).optional(),
+    projectType: z.enum(["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"]).optional(),
+    ownerId: z.string().trim().min(1).optional(),
   })
   .refine(
     (data) =>

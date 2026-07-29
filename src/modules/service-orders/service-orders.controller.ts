@@ -3,6 +3,7 @@ import {
   archivedServiceOrdersQuerySchema,
   createServiceOrderSchema,
   listServiceOrdersQuerySchema,
+  ganttServiceOrdersQuerySchema,
   serviceOrderCodeParamSchema,
   serviceOrderIdParamSchema,
   serviceOrderNumberParamSchema,
@@ -37,6 +38,16 @@ export class ServiceOrdersController {
         path: req.originalUrl,
       }),
     );
+  }
+
+  async gantt(req: Request, res: Response) {
+    const filters = ganttServiceOrdersQuerySchema.parse(req.query);
+    return res.status(200).json(await serviceOrdersService.gantt(filters, req.user!));
+  }
+
+  async ganttById(req: Request, res: Response) {
+    const { id } = serviceOrderIdParamSchema.parse(req.params);
+    return res.status(200).json(await serviceOrdersService.ganttById(id, req.user!));
   }
 
   async findById(req: Request, res: Response) {
@@ -81,6 +92,12 @@ export class ServiceOrdersController {
     const { id } = serviceOrderIdParamSchema.parse(req.params);
     const options = restoreOptionsSchema.parse(req.body ?? {});
     const result = await serviceOrdersService.restore(id, req.user!, options);
+    return res.status(200).json(result);
+  }
+
+  async softDelete(req: Request, res: Response) {
+    const { id } = serviceOrderIdParamSchema.parse(req.params);
+    const result = await serviceOrdersService.softDelete(id, req.user!);
     return res.status(200).json(result);
   }
     async documentHtml(req: Request, res: Response) {

@@ -81,6 +81,12 @@ export class EstimatesController {
     return res.status(200).json(result);
   }
 
+  async softDelete(req: Request, res: Response) {
+    const { id } = estimateIdParamSchema.parse(req.params);
+    const result = await estimatesService.softDelete(id, req.user!);
+    return res.status(200).json(result);
+  }
+
   async documentHtml(req: Request, res: Response) {
     const { id } = estimateIdParamSchema.parse(req.params);
 

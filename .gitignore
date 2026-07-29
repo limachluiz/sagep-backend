@@ -2,6 +2,9 @@ node_modules/
 /generated/prisma
 dist
 generated
+!src/generated/
+src/generated/prisma/
+!src/generated/openapi.ts
 coverage
 .env
 .codex

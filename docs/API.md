@@ -57,7 +57,7 @@ Autenticação, sessão, refresh token e autogestão de sessões.
 
 #### `POST /auth/register`
 
-- Autenticação: não
+- Autenticação: não; disponível somente com `ALLOW_PUBLIC_REGISTRATION=true`
 - Permissão: não
 - Body exemplo:
 
@@ -377,14 +377,15 @@ Entidade principal do sistema. Representa o ciclo de vida completo do projeto.
 - Permissão: `projects.edit_own` ou `projects.edit_all`
 - Regras:
   - somente disponível quando o projeto estiver em `ANALISANDO_AS_BUILT`;
-  - se aprovado, o projeto avança para `ATESTAR_NF`;
-  - se reprovado, exige motivo, limpa `asBuiltReceivedAt` e retorna para `SERVICO_EM_EXECUCAO`.
+  - se aprovado, exige um link válido do arquivo ou pasta em nuvem e avança para `ATESTAR_NF`;
+  - se reprovado, exige motivo, limpa `asBuiltReceivedAt` e `asBuiltLink` e retorna para `SERVICO_EM_EXECUCAO`.
 - Body exemplo para aprovação:
 
 ```json
 {
   "approved": true,
-  "reviewedAt": "2026-05-06T10:00:00.000Z"
+  "reviewedAt": "2026-05-06T10:00:00.000Z",
+  "asBuiltLink": "https://drive.example.mil.br/pastas/as-built-prj-123"
 }
 ```
 
@@ -460,6 +461,9 @@ Entidade principal do sistema. Representa o ciclo de vida completo do projeto.
 - Permissão: gestão do projeto
 - Observação:
   - arquiva o projeto, não remove fisicamente
+  - permite arquivamento até a etapa `OS_LIBERADA`, mesmo com membros, tarefas ou estimativas vinculados
+  - bloqueia a operação a partir de `SERVICO_EM_EXECUCAO`
+  - preserva todos os vínculos e o histórico para restauração posterior
 
 #### `POST /projects/:id/restore`
 
@@ -631,24 +635,12 @@ Importar ATA de Registro de Preços e itens a partir da API pública do Compras.
 }
 ```
 
-#### Saldos externos Compras.gov.br
+#### Regra após a importação
 
-- `GET /atas/:id/external-balance`: le apenas snapshots externos persistidos no banco; nao consulta Compras.gov.br.
-- `POST /atas/:id/sync-external-balance`: consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
-- `GET /ata-items/:id/balance-comparison`: le apenas o ultimo snapshot persistido do item; se nao existir, retorna `NAO_SINCRONIZADO`.
-- `POST /ata-items/:id/sync-external-balance`: consulta Compras.gov.br e atualiza apenas o snapshot persistido do item informado, sem sincronizar os demais itens da ATA.
-- `GET /ata-items` e leituras de item podem expor `latestExternalBalanceSnapshot` com resumo local do ultimo snapshot salvo (`source`, `status`, `externalBalance`, `difference`, `lastSyncAt`, `warnings`).
-- Quando existir snapshot salvo, os GET locais devolvem `externalBalance` completo com `source`, `externalItemNumber`, `registeredQuantity`, `committedQuantity`, `availableQuantity`, `commitments`, `lastUpdatedAt` e `rawRecords`.
-- Status: `OK`, `DIVERGENTE`, `CONSUMO_OFICIAL_DETECTADO`, `NAO_SINCRONIZADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`.
-- HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
-- A consulta externa da ATA tenta primeiro `4_consultarEmpenhosSaldoItem` por `numeroAta` e `unidadeGerenciadora`. Se o endpoint oficial retornar vazio, o backend usa o `externalItemId`/`externalItemNumber` do item para consultar `2.1_consultarARPItem_Id` e `3_consultarUnidadesItem`, casando por `numeroItem` com zeros a esquerda normalizados.
-- `Ata.externalUasg` e a UASG principal. O backend so considera a linha dessa UASG para quantidade registrada, empenhada, saldo disponivel e empenhos.
-- Linhas de outras UASGs, adesoes, caronas e orgaos nao participantes sao ignoradas integralmente.
-- Snapshot persistido por item: `AtaItemExternalBalanceSnapshot` com `source`, `status`, `externalBalance`, `difference`, `lastSyncAt` e `warnings`.
-- Valores estimados de empenhos saem apenas em `estimatedAmount`; o backend nao inventa `numeroEmpenho`.
-- Os aliases revisados cobrem `numeroEmpenho`, `fornecedor`, `dataEmpenho`, `quantidadeEmpenhada` e `estimatedAmount` a partir dos endpoints `3_consultarUnidadesItem`, `4_consultarEmpenhosSaldoItem` e `2.1_consultarARPItem_Id`.
-- Em `development`, cada empenho pode incluir `rawKeyDebug` com chaves brutas disponiveis, endpoint de origem, item e unidade para facilitar diagnostico.
-- Se a API retornar `200` sem registros, itens importados do Compras.gov.br exibem fallback baseado na quantidade registrada importada (`COMPRAS_GOV_IMPORT_FALLBACK`).
+O Compras.gov.br é consultado somente na prévia e na importação inicial. Depois
+da confirmação, itens, preços e quantidades ficam persistidos no SAGEP. Não há
+sincronização posterior, comparação de snapshots nem consulta individual de
+item. Reservas, consumos e estornos usam exclusivamente o razão de saldo local.
 
 ---
 
@@ -677,16 +669,6 @@ Itens precificáveis da ATA, agora com saldo inicial e saldo efetivo calculado p
 }
 ```
 
-#### `POST /ata-items/:id/register-external-consumption`
-
-- Autenticação: sim
-- Acesso: `ADMIN`, `GESTOR` ou usuário com `atas.manage`
-- Uso: registra manualmente um consumo externo no saldo interno do SAGEP com justificativa obrigatória. Não consulta o Compras.gov.br e não altera `initialQuantity`.
-- Regras:
-  - `quantity` deve ser maior que zero
-  - `quantity` não pode ultrapassar o saldo disponível local
-  - cria movimentação `EXTERNAL_CONSUMPTION`
-  - grava audit log `REGISTER_EXTERNAL_CONSUMPTION`
 
 #### `GET /atas/:id/items`
 
@@ -966,6 +948,24 @@ Ordem de Serviço derivada do projeto com NE informada.
 #### `PATCH /service-orders/:id`
 
 - Autenticação: sim
+
+#### `PATCH /projects/:id/service-order/signature`
+
+- Autenticação: sim
+- Registra a versão da OS assinada pela contratada antes do início da execução.
+- Body:
+
+```json
+{
+  "signedServiceOrderLink": "https://drive.example.mil.br/os/assinada.pdf",
+  "signedServiceOrderReceivedAt": "2026-07-28T00:00:00.000Z",
+  "signedServiceOrderNotes": "Recebida após assinatura digital no GOV.BR."
+}
+```
+
+- Avança de `AGUARDANDO_OS_ASSINADA` para `AGUARDANDO_INICIO_EXECUCAO`.
+- O link e a data são obrigatórios; a observação é opcional.
+- A ação registra responsável, timeline e auditoria.
 
 #### `GET /service-orders/:id/document/html`
 

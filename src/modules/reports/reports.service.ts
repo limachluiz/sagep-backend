@@ -115,6 +115,12 @@ export class ReportsService {
       `OS ${details.workflow.milestones.serviceOrderNumber ?? details.documents.serviceOrders?.[0]?.serviceOrderNumber ?? ""} emitida`.trim(),
     );
     add(
+      "OS_ASSINADA_RECEBIDA",
+      details.workflow.milestones.signedServiceOrderReceivedAt,
+      "OS assinada recebida",
+      "Ordem de Serviço assinada pela contratada recebida e vinculada",
+    );
+    add(
       "EXECUCAO_INICIADA",
       details.workflow.milestones.executionStartedAt,
       "Execução iniciada",

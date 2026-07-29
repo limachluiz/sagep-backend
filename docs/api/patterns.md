@@ -11,12 +11,75 @@ Authorization: Bearer <accessToken>
 Erros comuns:
 
 ```json
-{ "message": "Token não informado" }
+{
+  "code": "AUTH_TOKEN_MISSING",
+  "message": "Token não informado",
+  "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+}
 ```
 
 ```json
-{ "message": "Você não tem permissão para acessar este recurso" }
+{
+  "code": "PERMISSION_DENIED",
+  "message": "Você não tem permissão para acessar este recurso",
+  "details": { "requiredPermissions": ["projects.edit_all"] },
+  "requiredPermissions": ["projects.edit_all"],
+  "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+}
 ```
+
+## Contrato De Erro
+
+Toda falha processada pela API retorna `code`, `message` e `requestId`.
+`details` contem contexto estruturado opcional. O `requestId` tambem e
+devolvido no header `X-Request-Id` para correlacao com logs e suporte.
+
+Falhas de validacao Zod preservam temporariamente o campo legado `errors` e
+tambem retornam `details.fieldErrors` e `details.formErrors`.
+Falhas de permissao preservam temporariamente `requiredPermissions` no nivel
+superior e tambem retornam `details.requiredPermissions`.
+
+Codigos genericos derivados do status incluem `BAD_REQUEST`, `UNAUTHORIZED`,
+`FORBIDDEN`, `NOT_FOUND`, `CONFLICT`, `BAD_GATEWAY` e `INTERNAL_ERROR`.
+Middlewares usam codigos mais especificos, como
+`AUTH_TOKEN_INVALID_OR_EXPIRED` e `PERMISSION_DENIED`.
+
+Erros de dominio recorrentes possuem codigos estaveis para o frontend tomar
+decisoes sem depender do texto da mensagem:
+
+| Dominio | Codigos principais |
+|---|---|
+| Projetos | `PROJECT_NOT_FOUND`, `PROJECT_ACCESS_DENIED` |
+| Estimativas | `ESTIMATE_NOT_FOUND`, `ESTIMATE_ACCESS_DENIED` |
+| ATAs e saldo | `ATA_NOT_FOUND`, `ATA_ITEM_NOT_FOUND`, `ATA_COVERAGE_GROUP_NOT_FOUND`, `ATA_BALANCE_NOT_FOUND`, `ATA_BALANCE_INSUFFICIENT`, `ATA_BALANCE_INCONSISTENT` |
+| DIEx | `DIEX_NOT_FOUND`, `DIEX_ACCESS_DENIED` |
+| Ordens de servico | `SERVICE_ORDER_NOT_FOUND`, `SERVICE_ORDER_ACCESS_DENIED` |
+| Fluxo | `WORKFLOW_INVALID_TRANSITION` e codigos `WORKFLOW_*_REQUIRED` para cada pre-requisito ausente |
+
+O campo `message` continua apropriado para exibicao humana. Integracoes devem
+usar `code` para ramificacao logica e `requestId` para suporte.
+
+Falhas conhecidas de persistencia tambem sao normalizadas. Unicidade e vinculos
+invalidos retornam `409` com `DATABASE_UNIQUE_CONSTRAINT` ou
+`DATABASE_RELATION_CONSTRAINT`; registros ausentes retornam `404` com
+`RESOURCE_NOT_FOUND`. Conflitos transacionais retornam
+`DATABASE_TRANSACTION_CONFLICT` com `details.retryable: true`. Metadados e
+mensagens internas do banco nunca fazem parte da resposta.
+
+## CORS
+
+Origens de navegador sao autorizadas exclusivamente por
+`CORS_ALLOWED_ORIGINS`, em lista separada por virgulas. Requisicoes sem header
+`Origin`, como health checks, scripts, Docker e clientes REST, continuam
+permitidas.
+
+```env
+CORS_ALLOWED_ORIGINS="http://localhost:4200,https://sagep.exemplo.mil.br"
+CORS_ALLOW_CREDENTIALS=false
+```
+
+Origem nao autorizada recebe `403` com `CORS_ORIGIN_DENIED`. Em producao,
+lista vazia significa que nenhuma origem de navegador externa esta autorizada.
 
 ## Listagens Com Envelope
 
@@ -58,6 +121,24 @@ Listagens com envelope/legacy:
 - `GET /estimates`
 - `GET /diex`
 - `GET /service-orders`
+- `GET /users`
+- `GET /atas`
+- `GET /ata-items` e `GET /atas/{ataId}/items`
+- `GET /military-organizations`
+- listagens de sessoes em `/auth`
+
+## Representacao de dados
+
+- Datas e instantes nas respostas usam strings ISO 8601; datas sem horario usam
+  `YYYY-MM-DD` quando o dominio nao exige fuso.
+- Valores monetarios, precos e quantidades decimais usam strings decimais para
+  evitar perda de precisao no JavaScript, por exemplo `"1250.50"`.
+- Identificadores internos usam string; codigos sequenciais amigaveis usam
+  numero inteiro.
+- Enums usam os valores em caixa alta declarados no OpenAPI. O frontend nao
+  deve derivar novos valores a partir dos textos exibidos.
+- Campos opcionais sem valor sao representados por `null` quando fazem parte do
+  recurso; propriedades de filtros nao enviados podem ser omitidas.
 
 ## Filtros De Arquivamento
 
@@ -114,8 +195,9 @@ Observacoes:
 
 - `onlyArchived=true` continua retornando apenas arquivados com `deletedAt = null`.
 - `onlyArchived=true` e `onlyDeleted=true` nao devem ser combinados.
-- nesta fase, nao existe endpoint publico dedicado para marcar `deletedAt`; a
-  base foi preparada para leitura, filtro e comportamento consistente.
+- a exclusao logica e feita por `DELETE /:id/permanent` nos modulos
+  suportados, exige permissao especifica e somente aceita registros
+  previamente arquivados.
 
 Quando uma listagem administrativa retorna itens arquivados, cada item arquivado
 pode trazer `archiveContext` com `archivedAt`, `auditLogId`, `summary`,

@@ -366,6 +366,7 @@ export class PermissionsService {
         cpf: true,
         active: true,
         createdAt: true,
+        updatedAt: true,
       },
     });
 
@@ -374,6 +375,28 @@ export class PermissionsService {
     }
 
     return user;
+  }
+
+  async listUsersAdministration() {
+    const users = await prisma.user.findMany({
+      select: {
+        id: true,
+        userCode: true,
+        name: true,
+        email: true,
+        role: true,
+        rank: true,
+        cpf: true,
+        active: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+      orderBy: {
+        userCode: "asc",
+      },
+    });
+
+    return { items: users };
   }
 
   async getUserPermissionsAdministration(userId: string) {

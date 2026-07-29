@@ -171,16 +171,23 @@ export class EstimatesService {
       archivedUntil?: Date;
     },
   ) {
-    if (
-      (filters.includeArchived ||
-        filters.onlyArchived ||
-        filters.includeDeleted ||
-        filters.onlyDeleted ||
-        filters.archivedFrom ||
-        filters.archivedUntil) &&
-      !this.isAdmin(user.role)
-    ) {
-      throw new AppError("Apenas ADMIN pode consultar estimativas arquivadas", 403);
+    const canAccessArchived =
+      permissionsService.hasPermission(user, "estimates.restore") ||
+      permissionsService.hasPermission(user, "estimates.delete");
+    const requestsArchived = Boolean(
+      filters.includeArchived ||
+      filters.onlyArchived ||
+      filters.archivedFrom ||
+      filters.archivedUntil,
+    );
+    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+
+    if (requestsArchived && !canAccessArchived) {
+      throw new AppError("Você não tem permissão para consultar estimativas arquivadas", 403);
+    }
+
+    if (requestsDeleted && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar estimativas excluídas", 403);
     }
 
     if (filters.onlyArchived && filters.onlyDeleted) {
@@ -188,8 +195,8 @@ export class EstimatesService {
     }
 
     return {
-      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
-      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeArchived: Boolean(filters.includeArchived && canAccessArchived),
+      onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
       includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
@@ -629,10 +636,10 @@ export class EstimatesService {
     return estimate;
   }
 
-  private async ensureCanManage(estimateId: string, user: CurrentUser) {
+  private async ensureCanManage(estimateId: string, user: CurrentUser, includeArchived = false) {
     const estimate = await this.getEstimateAccessData(estimateId);
 
-    if (estimate.archivedAt) {
+    if (!includeArchived && estimate.archivedAt) {
       throw new AppError("Estimativa arquivada não pode ser alterada", 409);
     }
 
@@ -1507,7 +1514,7 @@ export class EstimatesService {
     });
 
     if (!currentEstimate) {
-      throw new AppError("Estimativa nÃ£o encontrada", 404);
+      throw new AppError("Estimativa não encontrada", 404);
     }
 
     if (data.status === "FINALIZADA") {
@@ -1648,6 +1655,68 @@ export class EstimatesService {
       message: "Estimativa arquivada com sucesso",
       permissionUsed: "estimates.archive" as const,
       estimate,
+    };
+  }
+
+  async softDelete(estimateId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "estimates.delete")) {
+      throw new AppError("Você não tem permissão para excluir esta estimativa", 403);
+    }
+
+    const before = await this.ensureCanManage(estimateId, user, true);
+
+    if (!before.archivedAt) {
+      throw new AppError("A estimativa precisa estar arquivada antes da exclusão", 409);
+    }
+
+    const deletedAt = new Date();
+    const deleted = await prisma.$transaction(async (tx) => {
+      const [diexRequests, serviceOrders] = await Promise.all([
+        tx.diexRequest.updateMany({
+          where: { estimateId, deletedAt: null },
+          data: { deletedAt },
+        }),
+        tx.serviceOrder.updateMany({
+          where: { estimateId, deletedAt: null },
+          data: { deletedAt },
+        }),
+      ]);
+
+      const estimate = await tx.estimate.update({
+        where: { id: estimateId },
+        data: { deletedAt },
+        include: estimateInclude,
+      });
+
+      return {
+        estimate,
+        dependents: {
+          diexRequests: diexRequests.count,
+          serviceOrders: serviceOrders.count,
+        },
+      };
+    });
+
+    await auditService.log({
+      entityType: "ESTIMATE",
+      entityId: before.id,
+      action: "DELETE",
+      actor: this.getAuditActor(user),
+      summary: `Estimativa EST-${before.estimateCode} excluída logicamente`,
+      before: this.buildEstimateAuditSnapshot(before),
+      after: this.buildEstimateAuditSnapshot(deleted.estimate),
+      metadata: {
+        permissionUsed: "estimates.delete",
+        softDelete: true,
+        dependents: deleted.dependents,
+      },
+    });
+
+    return {
+      message: "Estimativa excluída com sucesso",
+      permissionUsed: "estimates.delete" as const,
+      deletedAt,
+      deleted: deleted.dependents,
     };
   }
 

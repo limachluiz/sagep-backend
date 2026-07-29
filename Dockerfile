@@ -5,7 +5,7 @@ ENV DATABASE_URL=postgresql://sagep:sagep123@postgres:5432/sagep?schema=public
 
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci
 
 COPY prisma ./prisma
@@ -57,7 +57,7 @@ RUN apt-get update \
     wget \
   && rm -rf /var/lib/apt/lists/*
 
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --omit=dev
 
 COPY prisma ./prisma

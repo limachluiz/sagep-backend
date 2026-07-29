@@ -2,28 +2,101 @@ import { NextFunction, Request, Response } from "express";
 import { ZodError } from "zod";
 import { AppError } from "../shared/app-error.js";
 
+type PrismaRequestError = Error & { code: string; meta?: unknown };
+
+function isPrismaRequestError(error: unknown): error is PrismaRequestError {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    typeof error.code === "string" &&
+    /^P\d{4}$/.test(error.code)
+  );
+}
+
+const prismaHttpErrors: Record<string, { status: number; code: string; message: string }> = {
+  P2002: {
+    status: 409,
+    code: "DATABASE_UNIQUE_CONSTRAINT",
+    message: "Já existe um registro com estes dados",
+  },
+  P2003: {
+    status: 409,
+    code: "DATABASE_RELATION_CONSTRAINT",
+    message: "A operação viola um vínculo entre registros",
+  },
+  P2025: {
+    status: 404,
+    code: "RESOURCE_NOT_FOUND",
+    message: "Registro não encontrado",
+  },
+  P2034: {
+    status: 409,
+    code: "DATABASE_TRANSACTION_CONFLICT",
+    message: "A operação entrou em conflito com outra alteração; tente novamente",
+  },
+};
+
 export function errorMiddleware(
   error: unknown,
   _req: Request,
   res: Response,
   _next: NextFunction
 ) {
+  const requestId = String(res.locals.requestId ?? "unavailable");
+
   if (error instanceof AppError) {
+    const structuredDetails =
+      error.details && typeof error.details === "object"
+        ? (error.details as Record<string, unknown>)
+        : null;
+    const requiredPermissions = Array.isArray(structuredDetails?.requiredPermissions)
+      ? structuredDetails.requiredPermissions
+      : undefined;
+
     return res.status(error.statusCode).json({
-      message: error.message
+      code: error.code,
+      message: error.message,
+      ...(error.details !== undefined ? { details: error.details } : {}),
+      // Compatibilidade temporaria com consumidores anteriores ao contrato estruturado.
+      ...(requiredPermissions ? { requiredPermissions } : {}),
+      requestId,
     });
   }
 
   if (error instanceof ZodError) {
+    const flattened = error.flatten();
+
     return res.status(400).json({
+      code: "VALIDATION_ERROR",
       message: "Dados inválidos",
-      errors: error.flatten().fieldErrors
+      details: {
+        fieldErrors: flattened.fieldErrors,
+        formErrors: flattened.formErrors,
+      },
+      // Compatibilidade com consumidores que ja leem `errors`.
+      errors: flattened.fieldErrors,
+      requestId,
     });
   }
 
-  console.error(error);
+  if (isPrismaRequestError(error)) {
+    const mappedError = prismaHttpErrors[error.code];
+
+    if (mappedError) {
+      return res.status(mappedError.status).json({
+        code: mappedError.code,
+        message: mappedError.message,
+        ...(error.code === "P2034" ? { details: { retryable: true } } : {}),
+        requestId,
+      });
+    }
+  }
+
+  console.error("Erro HTTP não tratado", { requestId, error });
 
   return res.status(500).json({
-    message: "Erro interno do servidor"
+    code: "INTERNAL_ERROR",
+    message: "Erro interno do servidor",
+    requestId,
   });
 }

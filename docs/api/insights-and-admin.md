@@ -295,7 +295,7 @@ Resposta tipica:
 | `id` | requests de update e respostas | UUID/cuid interno do usuario. |
 | `userCode` | respostas | Codigo sequencial amigavel para exibicao. |
 | `role` | create/list/update | Perfil funcional do usuario. |
-| `active` | list/responses | Hoje so pode ser filtrado; nao ha rota administrativa dedicada para alterar esse campo. |
+| `active` | list/responses | Pode ser filtrado na listagem e alterado por `PATCH /users/:id/status`. |
 | `rank`, `cpf` | create e filtro de busca | Relevantes para cadastro e busca textual; nem sempre retornam nos selects atuais. |
 
 ### Roles Aceitos
@@ -619,7 +619,11 @@ Observacoes:
 - itens sao criados/atualizados por `ataId`, grupo e `referenceCode`.
 - a integracao grava os campos externos em `Ata` e `AtaItem`, mas nao altera movimentos de saldo local.
 
-Comparacao de saldo externo:
+### Funcionalidades externas descontinuadas
+
+As rotas de comparação, sincronização de saldo por ATA/item e registro de
+consumo externo foram removidas. A lista abaixo fica apenas como referência
+histórica e não representa endpoints disponíveis:
 
 - `GET /api/atas/{id}/external-balance` le apenas snapshots externos persistidos localmente para os itens da ATA; nao consulta Compras.gov.br.
 - `POST /api/atas/{id}/sync-external-balance` consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.

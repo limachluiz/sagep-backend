@@ -21,7 +21,7 @@ Base:
 | `GET` | `/projects/:id/next-action` | Proxima acao do workflow. | Pode ver projeto. |
 | `PATCH` | `/projects/:id` | Atualiza dados basicos. | `projects.edit_all` ou `projects.edit_own` em escopo. |
 | `PATCH` | `/projects/:id/flow` | Atualiza etapa/marcos documentais. | Regras de edicao e workflow. |
-| `DELETE` | `/projects/:id` | Arquiva projeto. | Regras de edicao; bloqueia se houver vinculos. |
+| `DELETE` | `/projects/:id` | Arquiva projeto. | Regras de edicao; permitido ate `OS_LIBERADA` e bloqueado a partir de `SERVICO_EM_EXECUCAO`. Vinculos sao preservados. |
 | `POST` | `/projects/:id/restore` | Restaura projeto. | `projects.restore`. |
 
 ### Listagem
@@ -53,11 +53,17 @@ POST /api/projects
 {
   "title": "Projeto CFTV Manaus",
   "description": "Projeto de instalacao",
+  "projectType": "CFTV",
+  "omId": "cmom123",
   "status": "PLANEJAMENTO",
-  "startDate": "2026-04-01T00:00:00.000Z",
-  "endDate": "2026-05-01T00:00:00.000Z"
+  "startDate": "2026-04-01T00:00:00.000Z"
 }
 ```
+
+`projectType` aceita `CFTV` ou `FIBRA_OPTICA_PONTO_LOGICO`. Quando a classificação
+for informada, `projectType` e `omId` devem ser enviados juntos. Projetos de CFTV
+são aceitos somente para OMs ativas situadas em Manaus/AM; projetos de fibra e
+ponto lógico podem utilizar OMs ativas de AM, RO, RR e AC.
 
 ### Atualizar Fluxo
 
@@ -85,6 +91,14 @@ Campos aceitos:
 }
 ```
 
+### Revisão do As-Built
+
+`PATCH /projects/:id/as-built/review` finaliza a análise. Na aprovação, o body
+deve conter `approved: true`, `reviewedAt` e `asBuiltLink` com uma URL válida
+para o arquivo ou pasta em nuvem. Sem o link, a etapa não avança para
+`ATESTAR_NF`. Na reprovação, o motivo é obrigatório e qualquer link anterior é
+limpo junto com a data de recebimento.
+
 ### Details
 
 `GET /projects/:id/details` e o endpoint recomendado para a tela principal do projeto. Retorna:
@@ -94,10 +108,12 @@ Campos aceitos:
 - `pendingActions`: pendencias calculadas.
 - `timeline`: timeline unificada com auditoria do projeto e entidades relacionadas
   (`PROJECT`, `ESTIMATE`, `DIEX_REQUEST`, `SERVICE_ORDER`, `TASK`). Cada item
-  mantem `id`, `at`, `action`, `label`, `summary`, `actorName`, `before`,
-  `after` e `metadata`, e tambem informa `entityType`, `entityId`, `source` e
-  `context` para a UI identificar o recurso de origem.
-- `documents`: ultimas estimativas, DIEx e OS.
+  mantem `id`, `at`, `action`, `label`, `summary`, `actorName`, `entityType`,
+  `entityId`, `source` e `context` para a UI identificar o recurso de origem.
+- `auditTrail`: estados técnicos `before`, `after` e `metadata` das mesmas
+  entidades, retornados apenas quando o usuário possui `audit.view`; caso
+  contrário, o campo é `null`.
+- `documents`: estimativas, DIEx e OS vinculados ao projeto.
 - `financialSummary`: totais financeiros sem arquivados por padrao.
 - `operationalSummary`: contagens, incluindo `openTasksCount` sem arquivadas.
 
@@ -135,6 +151,7 @@ Base:
 | `PATCH` | `/tasks/:id` | Atualiza dados. | `tasks.edit_all`, `tasks.edit_own`; mudanca de responsavel exige `tasks.assign`. |
 | `DELETE` | `/tasks/:id` | Arquiva tarefa. | `tasks.archive`. |
 | `POST` | `/tasks/:id/restore` | Restaura tarefa. | `tasks.restore`. |
+| `DELETE` | `/tasks/:id/permanent` | Exclui logicamente uma tarefa arquivada. | `tasks.delete`; exige arquivamento previo. |
 
 ### Filtros
 
@@ -149,8 +166,8 @@ GET /api/tasks?projectCode=1&status=PENDENTE&page=1&pageSize=20
 | `assigneeCode` | number |
 | `status` | `PENDENTE`, `EM_ANDAMENTO`, `REVISAO`, `CONCLUIDA`, `CANCELADA` |
 | `search` | string |
-| `includeArchived`, `onlyArchived` | boolean, apenas `ADMIN` |
-| `archivedFrom`, `archivedUntil` | datas ISO, apenas `ADMIN`; filtram por periodo de arquivamento |
+| `includeArchived`, `onlyArchived` | boolean; exige `tasks.restore` ou `tasks.delete` |
+| `archivedFrom`, `archivedUntil` | datas ISO; exigem acesso aos arquivados e filtram por periodo |
 | `format` | `envelope` ou `legacy` |
 
 ### Criar Tarefa
@@ -168,6 +185,10 @@ GET /api/tasks?projectCode=1&status=PENDENTE&page=1&pageSize=20
 ```
 
 `projectId` ou `projectCode` e obrigatorio. `assigneeId` ou `assigneeUserCode` sao opcionais, mas atribuir exige `tasks.assign`.
+
+Na atualizacao, use `clearAssignee: true` para remover o responsavel e
+`clearDueDate: true` para remover o prazo. Esses campos nao podem ser enviados
+junto com um novo responsavel ou uma nova data, respectivamente.
 
 ## Estimates
 

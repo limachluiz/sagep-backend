@@ -15,10 +15,22 @@ const envSchema = z
   PDF_RENDER_MODE: z.enum(["mock", "real"]).optional(),
   COMPRAS_GOV_DEBUG: z.coerce.boolean().optional(),
   PORTAL_TRANSPARENCIA_API_TOKEN: z.string().optional(),
+  CORS_ALLOWED_ORIGINS: z.string().default(""),
+  CORS_ALLOW_CREDENTIALS: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  ALLOW_PUBLIC_REGISTRATION: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
 })
   .transform((env) => ({
     ...env,
     JWT_ACCESS_SECRET: env.JWT_ACCESS_SECRET ?? env.JWT_SECRET ?? "",
+    CORS_ALLOWED_ORIGINS: env.CORS_ALLOWED_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
   }))
   .refine((env) => Boolean(env.JWT_ACCESS_SECRET), {
     message: "JWT_SECRET ou JWT_ACCESS_SECRET precisa ser informado",

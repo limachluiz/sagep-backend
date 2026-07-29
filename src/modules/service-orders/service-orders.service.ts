@@ -24,6 +24,8 @@ type ProjectStageValue =
   | "DIEX_REQUISITORIO"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "OS_LIBERADA"
+  | "AGUARDANDO_OS_ASSINADA"
+  | "AGUARDANDO_INICIO_EXECUCAO"
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
@@ -130,6 +132,34 @@ const serviceOrderInclude = {
       title: true,
       stage: true,
       status: true,
+      projectType: true,
+      serviceOrderSignatureRequired: true,
+      signedServiceOrderLink: true,
+      signedServiceOrderReceivedAt: true,
+      signedServiceOrderNotes: true,
+      signedServiceOrderRegisteredBy: {
+        select: {
+          id: true,
+          userCode: true,
+          name: true,
+          email: true,
+          role: true,
+        },
+      },
+      owner: {
+        select: {
+          id: true,
+          name: true,
+        },
+      },
+      om: {
+        select: {
+          id: true,
+          sigla: true,
+          cityName: true,
+          stateUf: true,
+        },
+      },
     },
   },
   estimate: {
@@ -216,6 +246,44 @@ const serviceOrderInclude = {
 } satisfies Prisma.ServiceOrderInclude;
 
 export class ServiceOrdersService {
+  private toGanttItem(serviceOrder: Awaited<ReturnType<ServiceOrdersService["findById"]>>) {
+    const now = new Date();
+    const start = serviceOrder.plannedStartDate;
+    const end = serviceOrder.plannedEndDate;
+    const progressPercent = serviceOrder.project.stage === "SERVICO_CONCLUIDO" ? 100 :
+      serviceOrder.project.stage === "SERVICO_EM_EXECUCAO" || serviceOrder.project.stage === "ANALISANDO_AS_BUILT" || serviceOrder.project.stage === "ATESTAR_NF" ? 50 : 0;
+    return {
+      id: serviceOrder.id, serviceOrderCode: serviceOrder.serviceOrderCode,
+      serviceOrderNumber: serviceOrder.serviceOrderNumber, project: serviceOrder.project,
+      plannedStartDate: start, plannedEndDate: end, progressPercent,
+      isDelayed: Boolean(end && end < now && progressPercent < 100),
+      tasks: serviceOrder.scheduleItems.map((item) => ({ ...item })),
+    };
+  }
+
+  async gantt(filters: {
+    projectCode?: number;
+    from?: Date;
+    until?: Date;
+    stateUf?: "AM" | "RO" | "RR" | "AC";
+    projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+    ownerId?: string;
+  }, user: CurrentUser) {
+    const items = await this.list({ projectCode: filters.projectCode }, user);
+    const selected = items.filter((item) =>
+      (!filters.from || !item.plannedEndDate || item.plannedEndDate >= filters.from) &&
+      (!filters.until || !item.plannedStartDate || item.plannedStartDate <= filters.until) &&
+      (!filters.stateUf || item.project.om?.stateUf === filters.stateUf) &&
+      (!filters.projectType || item.project.projectType === filters.projectType) &&
+      (!filters.ownerId || item.project.owner.id === filters.ownerId));
+    const ganttItems = selected.map((item) => this.toGanttItem(item));
+    const dates = ganttItems.flatMap((item) => [item.plannedStartDate, item.plannedEndDate]).filter(Boolean) as Date[];
+    return { range: { start: dates.length ? new Date(Math.min(...dates.map(Number))) : null, end: dates.length ? new Date(Math.max(...dates.map(Number))) : null }, serviceOrders: ganttItems };
+  }
+
+  async ganttById(id: string, user: CurrentUser) {
+    return this.toGanttItem(await this.findById(id, user, {}));
+  }
   private async generateServiceOrderNumber(issuedAt: Date, db: DbClient = prisma) {
     const year = issuedAt.getUTCFullYear();
     const prefix = `OS-${year}-`;
@@ -273,7 +341,11 @@ export class ServiceOrdersService {
   }
 
   private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
-    return Boolean(includeArchived && this.isPrivileged(user.role));
+    return Boolean(
+      includeArchived &&
+      (permissionsService.hasPermission(user, "service_orders.restore") ||
+        permissionsService.hasPermission(user, "service_orders.delete")),
+    );
   }
 
   private resolveArchivedAccess(
@@ -287,16 +359,23 @@ export class ServiceOrdersService {
       archivedUntil?: Date;
     },
   ) {
-    if (
-      (filters.includeArchived ||
-        filters.onlyArchived ||
-        filters.includeDeleted ||
-        filters.onlyDeleted ||
-        filters.archivedFrom ||
-        filters.archivedUntil) &&
-      !this.isAdmin(user.role)
-    ) {
-      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    const canAccessArchived =
+      permissionsService.hasPermission(user, "service_orders.restore") ||
+      permissionsService.hasPermission(user, "service_orders.delete");
+    const requestsArchived = Boolean(
+      filters.includeArchived ||
+      filters.onlyArchived ||
+      filters.archivedFrom ||
+      filters.archivedUntil,
+    );
+    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+
+    if (requestsArchived && !canAccessArchived) {
+      throw new AppError("Você não tem permissão para consultar Ordens de Serviço arquivadas", 403);
+    }
+
+    if (requestsDeleted && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar Ordens de Serviço excluídas", 403);
     }
 
     if (filters.onlyArchived && filters.onlyDeleted) {
@@ -304,8 +383,8 @@ export class ServiceOrdersService {
     }
 
     return {
-      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
-      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeArchived: Boolean(filters.includeArchived && canAccessArchived),
+      onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
       includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
@@ -396,6 +475,7 @@ export class ServiceOrdersService {
           title: true,
           ownerId: true,
           stage: true,
+          status: true,
           commitmentNoteNumber: true,
           commitmentNoteReceivedAt: true,
           archivedAt: true,
@@ -427,6 +507,7 @@ export class ServiceOrdersService {
           title: true,
           ownerId: true,
           stage: true,
+          status: true,
           commitmentNoteNumber: true,
           commitmentNoteReceivedAt: true,
           archivedAt: true,
@@ -777,8 +858,8 @@ export class ServiceOrdersService {
     return serviceOrder;
   }
 
-  private async ensureCanManage(serviceOrderId: string, user: CurrentUser) {
-    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId);
+  private async ensureCanManage(serviceOrderId: string, user: CurrentUser, includeArchived = false) {
+    const serviceOrder = await this.getServiceOrderAccessData(serviceOrderId, includeArchived);
 
     if (!this.canManageProject(serviceOrder.project, user)) {
       throw new AppError("Você não tem permissão para gerenciar esta OS", 403);
@@ -1140,7 +1221,7 @@ private buildWorkflowSnapshot(project: {
         id: project.id,
         projectCode: project.projectCode,
         stage: project.stage,
-        status: "PLANEJAMENTO",
+        status: project.status,
         serviceOrderNumber: null,
         serviceOrderIssuedAt: null,
       }),
@@ -1736,6 +1817,78 @@ private buildWorkflowSnapshot(project: {
 
     return {
       message: "OS arquivada com sucesso",
+    };
+  }
+
+  async softDelete(serviceOrderId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "service_orders.delete")) {
+      throw new AppError("Você não tem permissão para excluir esta Ordem de Serviço", 403);
+    }
+
+    await this.ensureCanManage(serviceOrderId, user, true);
+
+    const before = await prisma.serviceOrder.findUnique({
+      where: { id: serviceOrderId },
+      select: {
+        id: true,
+        serviceOrderCode: true,
+        projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderNumber: true,
+        issuedAt: true,
+        contractorName: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("OS não encontrada", 404);
+    }
+
+    if (!before.archivedAt) {
+      throw new AppError("A Ordem de Serviço precisa estar arquivada antes da exclusão", 409);
+    }
+
+    const deletedAt = new Date();
+    const serviceOrder = await prisma.serviceOrder.update({
+      where: { id: serviceOrderId },
+      data: { deletedAt },
+      select: {
+        id: true,
+        serviceOrderCode: true,
+        projectId: true,
+        estimateId: true,
+        diexRequestId: true,
+        serviceOrderNumber: true,
+        issuedAt: true,
+        contractorName: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: before.id,
+      action: "DELETE",
+      actor: this.getAuditActor(user),
+      summary: `OS ${before.serviceOrderNumber ?? `#${before.serviceOrderCode}`} excluída logicamente`,
+      before: this.buildServiceOrderAuditSnapshot(before),
+      after: this.buildServiceOrderAuditSnapshot(serviceOrder),
+      metadata: {
+        permissionUsed: "service_orders.delete",
+        softDelete: true,
+      },
+    });
+
+    return {
+      message: "Ordem de Serviço excluída com sucesso",
+      permissionUsed: "service_orders.delete" as const,
+      deletedAt,
     };
   }
 

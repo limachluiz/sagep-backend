@@ -137,6 +137,15 @@ export const listServiceOrdersQuerySchema = paginationQuerySchema.extend({
   archivedUntil: optionalDate,
 });
 
+export const ganttServiceOrdersQuerySchema = z.object({
+  projectCode: z.coerce.number().int().positive().optional(),
+  from: optionalDate,
+  until: optionalDate,
+  stateUf: z.enum(["AM", "RO", "RR", "AC"]).optional(),
+  projectType: z.enum(["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"]).optional(),
+  ownerId: z.string().trim().min(1).optional(),
+});
+
 export const archivedServiceOrdersQuerySchema = z.object({
   includeArchived: z.coerce.boolean().optional(),
 });
