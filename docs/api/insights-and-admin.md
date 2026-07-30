@@ -125,16 +125,19 @@ GET /api/reports/projects/:id/dossier.pdf
 
 Permissao: `reports.export`.
 
-### Relatorio executivo dos projetos em andamento
+### Relatorio executivo da Secao de Projetos
 
 ```http
 GET /api/reports/projects/executive-summary
 GET /api/reports/projects/executive-summary.pdf?staleDays=15
+GET /api/reports/projects/executive-summary.pdf?projectType=CFTV
 ```
 
-O PDF A4 paisagem consolida cards gerenciais, graficos por etapa e estado,
-pontos de atencao e a carteira detalhada. Projetos concluidos, cancelados,
-arquivados ou removidos nao entram no documento.
+O PDF A4 paisagem consolida projetos em andamento e concluidos, valores da
+carteira, empenhos, graficos por etapa e estado, saude dos prazos, pontos de
+atencao e o detalhamento dos projetos abertos. O filtro `projectType` aceita
+`CFTV` ou `FIBRA_OPTICA_PONTO_LOGICO`. Projetos cancelados, arquivados ou
+removidos nao entram no documento.
 
 Permissoes: `reports.export` e `dashboard.view_executive`.
 

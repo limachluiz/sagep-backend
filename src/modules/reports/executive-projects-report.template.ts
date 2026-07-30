@@ -144,23 +144,22 @@ export function renderExecutiveProjectsReportHtml(report: any) {
   const critical = attention.find((item: any) => item.label === "Críticos")?.count ?? 0;
   const warning = attention.find((item: any) => item.label === "Atenção")?.count ?? 0;
   const regular = attention.find((item: any) => item.label === "Regulares")?.count ?? 0;
-  const criticalDegrees = attentionTotal ? (critical / attentionTotal) * 360 : 0;
-  const warningDegrees = attentionTotal
-    ? criticalDegrees + (warning / attentionTotal) * 360
-    : 0;
+  const healthPercentage = (value: number) =>
+    attentionTotal ? Number(((value / attentionTotal) * 100).toFixed(0)) : 0;
 
   return `<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <title>Relatório Executivo de Projetos em Andamento</title>
+  <title>Relatório Executivo da Seção de Projetos</title>
   <style>
     * { box-sizing: border-box; }
     @page { size: A4 landscape; margin: 10mm 9mm 11mm; }
     body { margin: 0; color: #25301d; font-family: Arial, Helvetica, sans-serif; font-size: 10px; line-height: 1.35; background: #fff; }
     header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 16px 18px; color: #fff; border-radius: 12px; background: linear-gradient(135deg, #26321d, #4f5e31 70%, #6e7747); }
     .brand { display: flex; align-items: center; gap: 14px; }
-    .brand-mark { display: grid; width: 54px; height: 54px; place-items: center; border: 1px solid rgba(255,255,255,.45); border-radius: 12px; font-size: 17px; font-weight: 800; letter-spacing: .4px; }
+    .brand-mark { display: grid; width: 58px; height: 66px; flex: 0 0 auto; place-items: center; overflow: hidden; border: 1px solid rgba(255,255,255,.35); border-radius: 12px; background: rgba(255,255,255,.96); }
+    .brand-mark img { display: block; max-width: 47px; max-height: 58px; object-fit: contain; }
     .eyebrow { color: #dce3c0; font-size: 8px; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase; }
     h1 { margin: 3px 0 2px; font-size: 22px; line-height: 1.1; }
     header p { margin: 0; color: #e5ead5; }
@@ -176,7 +175,7 @@ export function renderExecutiveProjectsReportHtml(report: any) {
     .section-title { display: flex; align-items: end; justify-content: space-between; margin: 16px 0 7px; }
     .section-title h2 { margin: 0; font-size: 14px; }
     .section-title p { margin: 0; color: #707969; font-size: 9px; }
-    .charts { display: grid; grid-template-columns: 1.25fr 1.15fr .75fr; gap: 9px; }
+    .charts { display: grid; grid-template-columns: 1.15fr 1.05fr .9fr; gap: 9px; }
     .panel { padding: 12px; border: 1px solid #e0e4d8; border-radius: 10px; break-inside: avoid; }
     .panel h3 { margin: 0 0 9px; font-size: 11px; }
     .bar-row + .bar-row { margin-top: 7px; }
@@ -185,12 +184,14 @@ export function renderExecutiveProjectsReportHtml(report: any) {
     .bar-track, .progress-track { height: 6px; overflow: hidden; border-radius: 20px; background: #edf0e8; }
     .bar-track span, .progress-track span { display: block; height: 100%; border-radius: inherit; background: #65733d; }
     .bar-track.gold span { background: #b38c36; }
-    .donut-wrap { display: flex; align-items: center; gap: 14px; }
-    .donut { width: 92px; height: 92px; flex: 0 0 auto; border-radius: 50%; background: conic-gradient(#a83f37 0 ${criticalDegrees}deg, #cf9730 ${criticalDegrees}deg ${warningDegrees}deg, #66733c ${warningDegrees}deg 360deg); position: relative; }
-    .donut::after { content: "${summary.projectsOpen}"; display: grid; position: absolute; inset: 20px; place-items: center; border-radius: 50%; color: #28331e; font-size: 17px; font-weight: 800; background: #fff; }
-    .legend { flex: 1; }
-    .legend div { display: flex; justify-content: space-between; gap: 10px; padding: 5px 0; border-bottom: 1px solid #ecefe7; }
-    .legend i { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border-radius: 50%; }
+    .health-stack { display: flex; height: 9px; overflow: hidden; border-radius: 20px; background: #edf0e8; }
+    .health-stack span { min-width: 0; height: 100%; }
+    .health-list { display: grid; gap: 5px; margin-top: 10px; }
+    .health-item { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 6px; padding: 5px 7px; border-radius: 6px; background: #f8faf5; }
+    .health-item i { width: 8px; height: 8px; border-radius: 2px; }
+    .health-item span { color: #616a59; font-size: 8px; }
+    .health-item strong { font-size: 10px; }
+    .health-note { margin: 8px 0 0; color: #737b6c; font-size: 7.5px; }
     .attention-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
     .attention-item { display: flex; justify-content: space-between; gap: 12px; padding: 7px 9px; border-left: 3px solid #cf9730; border-radius: 6px; background: #fff9ea; break-inside: avoid; }
     .attention-item.critical { border-color: #a83f37; background: #fff3f2; }
@@ -219,10 +220,10 @@ export function renderExecutiveProjectsReportHtml(report: any) {
 <body>
   <header>
     <div class="brand">
-      <div class="brand-mark">4º CTA</div>
+      <div class="brand-mark">${report.branding?.ctaLogo ? `<img src="${report.branding.ctaLogo}" alt="Brasão do 4º CTA" />` : "4º CTA"}</div>
       <div>
-        <div class="eyebrow">Comando Militar da Amazônia · Divisão Técnica</div>
-        <h1>Relatório Executivo de Projetos em Andamento</h1>
+        <div class="eyebrow">4º Centro de Telemática de Área · Seção de Projetos</div>
+        <h1>Relatório Executivo da Seção de Projetos</h1>
         <p>SAGEP · Sistema de Apoio à Gestão de Projetos</p>
       </div>
     </div>
@@ -235,27 +236,30 @@ export function renderExecutiveProjectsReportHtml(report: any) {
   </header>
 
   <section class="summary">
-    <div class="metric"><span>Projetos em andamento</span><strong>${summary.projectsOpen}</strong><small>carteira ativa</small></div>
-    <div class="metric"><span>Valor da carteira</span><strong>${formatAmount(summary.totalEstimatedAmount)}</strong><small>estimativas vigentes</small></div>
+    <div class="metric"><span>Total de projetos</span><strong>${summary.projectsTotal}</strong><small>andamento + concluídos</small></div>
+    <div class="metric"><span>Em andamento</span><strong>${summary.projectsOpen}</strong><small>carteira ativa</small></div>
+    <div class="metric"><span>Concluídos</span><strong>${summary.projectsCompleted}</strong><small>entregas finalizadas</small></div>
+    <div class="metric"><span>Valor em andamento</span><strong>${formatAmount(summary.totalInProgressAmount)}</strong><small>projetos abertos</small></div>
+    <div class="metric"><span>Valor concluído</span><strong>${formatAmount(summary.totalCompletedAmount)}</strong><small>projetos entregues</small></div>
     <div class="metric"><span>Valor empenhado</span><strong>${formatAmount(summary.totalCommittedAmount)}</strong><small>${summary.commitmentRate}% da carteira</small></div>
-    <div class="metric"><span>Em execução</span><strong>${summary.projectsInExecution}</strong><small>execução e encerramento</small></div>
-    <div class="metric critical"><span>Situações críticas</span><strong>${summary.projectsCritical}</strong><small>prazos vencidos</small></div>
-    <div class="metric warn"><span>Avanço médio</span><strong>${summary.averageProgress}%</strong><small>fluxo documental</small></div>
   </section>
 
-  <div class="section-title"><h2>Visão consolidada</h2><p>Distribuição da carteira ativa por etapa, região e situação operacional.</p></div>
+  <div class="section-title"><h2>Visão consolidada</h2><p>Onde estão os projetos, quanto representam e quais exigem ação.</p></div>
   <section class="charts">
-    <div class="panel"><h3>Projetos por etapa</h3>${renderBars(report.charts.byStage)}</div>
-    <div class="panel"><h3>Valor por estado</h3>${renderRegionBars(report.charts.byRegion)}</div>
-    <div class="panel"><h3>Situação operacional</h3>
-      <div class="donut-wrap">
-        <div class="donut"></div>
-        <div class="legend">
-          <div><span><i style="background:#a83f37"></i>Críticos</span><strong>${critical}</strong></div>
-          <div><span><i style="background:#cf9730"></i>Atenção</span><strong>${warning}</strong></div>
-          <div><span><i style="background:#66733c"></i>Regulares</span><strong>${regular}</strong></div>
-        </div>
+    <div class="panel"><h3>Projetos em andamento por etapa</h3>${renderBars(report.charts.byStage)}</div>
+    <div class="panel"><h3>Valor em andamento por estado</h3>${renderRegionBars(report.charts.byRegion)}</div>
+    <div class="panel"><h3>Saúde dos projetos em andamento</h3>
+      <div class="health-stack">
+        <span style="width:${healthPercentage(critical)}%;background:#a83f37"></span>
+        <span style="width:${healthPercentage(warning)}%;background:#cf9730"></span>
+        <span style="width:${healthPercentage(regular)}%;background:#66733c"></span>
       </div>
+      <div class="health-list">
+        <div class="health-item"><i style="background:#a83f37"></i><span>Críticos · prazo vencido</span><strong>${critical}</strong></div>
+        <div class="health-item"><i style="background:#cf9730"></i><span>Atenção · sem atualização</span><strong>${warning}</strong></div>
+        <div class="health-item"><i style="background:#66733c"></i><span>Em dia · fluxo regular</span><strong>${regular}</strong></div>
+      </div>
+      <p class="health-note">Atenção considera ${report.filter.staleDays} dias ou mais sem atualização.</p>
     </div>
   </section>
 

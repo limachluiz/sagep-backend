@@ -11007,8 +11007,8 @@
         "tags": [
           "reports"
         ],
-        "summary": "Gerar relatório executivo dos projetos em andamento em JSON",
-        "description": "Consolida cards gerenciais, gráficos, valores, avanço do fluxo, pontos de atenção e a carteira detalhada. Exclui projetos concluídos, cancelados, arquivados ou removidos.",
+        "summary": "Gerar relatório executivo da Seção de Projetos em JSON",
+        "description": "Consolida projetos em andamento e concluídos, valores, saúde dos prazos, pontos de atenção e a carteira aberta detalhada. Exclui projetos cancelados, arquivados ou removidos.",
         "security": [
           {
             "bearerAuth": []
@@ -11172,7 +11172,7 @@
         "tags": [
           "reports"
         ],
-        "summary": "Gerar relatório executivo dos projetos em andamento em PDF",
+        "summary": "Gerar relatório executivo da Seção de Projetos em PDF",
         "security": [
           {
             "bearerAuth": []
@@ -11189,6 +11189,19 @@
               "minimum": 1,
               "maximum": 365,
               "default": 15
+            }
+          },
+          {
+            "name": "projectType",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por tipo de projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA_PONTO_LOGICO"
+              ]
             }
           }
         ],

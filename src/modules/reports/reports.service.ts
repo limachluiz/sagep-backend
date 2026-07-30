@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { prisma } from "../../config/prisma.js";
 import { pdfService } from "../../shared/pdf.service.js";
 import {
@@ -21,6 +24,9 @@ type CurrentUser = {
 };
 
 const projectsService = new ProjectsService();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, "../../..");
 
 const ACTIVE_TASK_STATUSES = ["PENDENTE", "EM_ANDAMENTO", "REVISAO"] as const;
 const EXECUTION_STAGES = new Set([
@@ -57,6 +63,11 @@ type TimelineSummaryItem = {
 };
 
 export class ReportsService {
+  private async fileToDataUrl(relativePath: string) {
+    const fileBuffer = await fs.readFile(path.resolve(projectRoot, relativePath));
+    return `data:image/png;base64,${fileBuffer.toString("base64")}`;
+  }
+
   private daysBetween(start: Date, end: Date) {
     return Math.max(
       0,
@@ -89,16 +100,16 @@ export class ReportsService {
     const createdAt = this.reportCreatedAtWhere(filterContext);
     const now = new Date();
 
-    const [projects, reportUser] = await Promise.all([
+    const [portfolioProjects, reportUser] = await Promise.all([
       prisma.project.findMany({
         where: {
           archivedAt: null,
           deletedAt: null,
           stage: {
-            notIn: ["SERVICO_CONCLUIDO", "CANCELADO"],
+            not: "CANCELADO",
           },
           status: {
-            notIn: ["CONCLUIDO", "CANCELADO"],
+            not: "CANCELADO",
           },
           ...(createdAt && { createdAt }),
           ...(filters.stateUf && { om: { stateUf: filters.stateUf } }),
@@ -198,16 +209,31 @@ export class ReportsService {
       }),
     ]);
 
-    const items = projects.map((project) => {
+    const activeProjects = portfolioProjects.filter(
+      (project) =>
+        project.status !== "CONCLUIDO" &&
+        project.stage !== "SERVICO_CONCLUIDO",
+    );
+    const completedProjects = portfolioProjects.filter(
+      (project) =>
+        project.status === "CONCLUIDO" ||
+        project.stage === "SERVICO_CONCLUIDO",
+    );
+    const projectAmount = (project: (typeof portfolioProjects)[number]) => {
       const finalizedAmount = project.estimates
         .filter((estimate) => estimate.status === "FINALIZADA")
         .reduce((sum, estimate) => sum + Number(estimate.totalAmount), 0);
-      const estimatedAmount =
+      return (
         finalizedAmount ||
         project.estimates.reduce(
           (sum, estimate) => sum + Number(estimate.totalAmount),
           0,
-        );
+        )
+      );
+    };
+
+    const items = activeProjects.map((project) => {
+      const estimatedAmount = projectAmount(project);
       const latestServiceOrder = project.serviceOrders[0] ?? null;
       const plannedEndDate = latestServiceOrder?.plannedEndDate ?? project.endDate;
       const openTasks = project.tasks.filter((task) =>
@@ -270,12 +296,20 @@ export class ReportsService {
       };
     });
 
-    const totalEstimatedAmount = items.reduce(
+    const totalInProgressAmount = items.reduce(
       (sum, project) => sum + Number(project.estimatedAmount),
       0,
     );
-    const totalCommittedAmount = items.reduce(
-      (sum, project) => sum + Number(project.committedAmount),
+    const totalCompletedAmount = completedProjects.reduce(
+      (sum, project) => sum + projectAmount(project),
+      0,
+    );
+    const totalCommittedAmount = portfolioProjects.reduce(
+      (sum, project) =>
+        sum +
+        (project.commitmentNoteNumber || project.commitmentNoteReceivedAt
+          ? projectAmount(project)
+          : 0),
       0,
     );
     const criticalProjects = items.filter(
@@ -311,8 +345,8 @@ export class ReportsService {
         label,
         count: value.count,
         totalAmount: value.totalAmount.toFixed(2),
-        percentage: totalEstimatedAmount
-          ? Number(((value.totalAmount / totalEstimatedAmount) * 100).toFixed(1))
+        percentage: totalInProgressAmount
+          ? Number(((value.totalAmount / totalInProgressAmount) * 100).toFixed(1))
           : 0,
       }))
       .sort((a, b) => Number(b.totalAmount) - Number(a.totalAmount));
@@ -341,19 +375,33 @@ export class ReportsService {
         projectType: filters.projectType ?? null,
         ownerId: filters.ownerId ?? null,
         staleDays,
-        scope: "Projetos em andamento",
+        scope:
+          filters.projectType === "CFTV"
+            ? "Projetos de CFTV"
+            : filters.projectType === "FIBRA_OPTICA_PONTO_LOGICO"
+              ? "Projetos de Fibra Óptica"
+              : "Visão geral da Seção de Projetos",
       },
       summary: {
+        projectsTotal: portfolioProjects.length,
         projectsOpen: items.length,
+        projectsCompleted: completedProjects.length,
         projectsInExecution: items.filter((project) =>
           EXECUTION_STAGES.has(project.stage),
         ).length,
         projectsCritical: criticalProjects.length,
         projectsWarning: warningProjects.length,
-        totalEstimatedAmount: totalEstimatedAmount.toFixed(2),
+        totalInProgressAmount: totalInProgressAmount.toFixed(2),
+        totalCompletedAmount: totalCompletedAmount.toFixed(2),
         totalCommittedAmount: totalCommittedAmount.toFixed(2),
-        commitmentRate: totalEstimatedAmount
-          ? Number(((totalCommittedAmount / totalEstimatedAmount) * 100).toFixed(1))
+        commitmentRate: totalInProgressAmount + totalCompletedAmount
+          ? Number(
+              (
+                (totalCommittedAmount /
+                  (totalInProgressAmount + totalCompletedAmount)) *
+                100
+              ).toFixed(1),
+            )
           : 0,
         averageProgress: items.length
           ? Number(
@@ -385,8 +433,14 @@ export class ReportsService {
     filters: ExecutiveProjectsReportFilters,
     user: CurrentUser,
   ) {
-    const report = await this.getExecutiveProjectsReport(filters, user);
-    return renderExecutiveProjectsReportHtml(report);
+    const [report, ctaLogo] = await Promise.all([
+      this.getExecutiveProjectsReport(filters, user),
+      this.fileToDataUrl("src/assets/logos/cta-logo.png"),
+    ]);
+    return renderExecutiveProjectsReportHtml({
+      ...report,
+      branding: { ctaLogo },
+    });
   }
 
   async generateExecutiveProjectsReportPdf(

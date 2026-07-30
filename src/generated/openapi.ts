@@ -1228,8 +1228,8 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Gerar relatório executivo dos projetos em andamento em JSON
-         * @description Consolida cards gerenciais, gráficos, valores, avanço do fluxo, pontos de atenção e a carteira detalhada. Exclui projetos concluídos, cancelados, arquivados ou removidos.
+         * Gerar relatório executivo da Seção de Projetos em JSON
+         * @description Consolida projetos em andamento e concluídos, valores, saúde dos prazos, pontos de atenção e a carteira aberta detalhada. Exclui projetos cancelados, arquivados ou removidos.
          */
         get: operations["reports_get_projects_executiveSummary"];
         put?: never;
@@ -1247,7 +1247,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Gerar relatório executivo dos projetos em andamento em PDF */
+        /** Gerar relatório executivo da Seção de Projetos em PDF */
         get: operations["reports_get_projects_executiveSummaryPdf"];
         put?: never;
         post?: never;
@@ -6661,6 +6661,8 @@ export interface operations {
             query?: {
                 /** @description Dias sem atualização para sinalizar atenção. */
                 staleDays?: number;
+                /** @description Filtrar por tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
             };
             header?: never;
             path?: never;

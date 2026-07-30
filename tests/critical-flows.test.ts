@@ -5374,8 +5374,14 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(executiveReport.body.filter.scope).toBe("Projetos em andamento");
+    expect(executiveReport.body.filter.scope).toBe(
+      "Visão geral da Seção de Projetos",
+    );
     expect(executiveReport.body.filter.staleDays).toBe(30);
+    expect(executiveReport.body.summary.projectsTotal).toBeGreaterThanOrEqual(1);
+    expect(executiveReport.body.summary.projectsOpen).toBeGreaterThanOrEqual(1);
+    expect(executiveReport.body.summary).toHaveProperty("totalInProgressAmount");
+    expect(executiveReport.body.summary).toHaveProperty("totalCompletedAmount");
     expect(
       executiveReport.body.projects.some(
         (item: { id: string }) => item.id === project.id,

@@ -4,6 +4,9 @@ import { renderExecutiveProjectsReportHtml } from "../src/modules/reports/execut
 describe("executive projects report template", () => {
   it("renders command indicators, charts and ongoing project details", () => {
     const html = renderExecutiveProjectsReportHtml({
+      branding: {
+        ctaLogo: "data:image/png;base64,dGVzdGU=",
+      },
       generatedAt: "2026-07-29T20:00:00.000Z",
       generatedBy: {
         displayName: "2º Ten Luiz",
@@ -14,10 +17,13 @@ describe("executive projects report template", () => {
         staleDays: 15,
       },
       summary: {
+        projectsTotal: 3,
         projectsOpen: 1,
+        projectsCompleted: 2,
         projectsInExecution: 1,
         projectsCritical: 1,
-        totalEstimatedAmount: "67718.00",
+        totalInProgressAmount: "67718.00",
+        totalCompletedAmount: "32000.00",
         totalCommittedAmount: "67718.00",
         commitmentRate: 100,
         averageProgress: 80,
@@ -75,14 +81,19 @@ describe("executive projects report template", () => {
       ],
     });
 
-    expect(html).toContain("Relatório Executivo de Projetos em Andamento");
+    expect(html).toContain("Relatório Executivo da Seção de Projetos");
+    expect(html).toContain('alt="Brasão do 4º CTA"');
+    expect(html).not.toContain("Comando Militar da Amazônia");
+    expect(html).toContain("Total de projetos");
+    expect(html).toContain("Valor concluído");
+    expect(html).toContain("Saúde dos projetos em andamento");
     expect(html).toContain("2º Ten Luiz");
     expect(html).toContain("PRJ-12");
     expect(html).toContain("Interligação óptica");
     expect(html).toMatch(/R\$\s67\.718,00/);
     expect(html).toContain("Serviço em execução");
     expect(html).toContain("Prazo vencido");
-    expect(html).toContain("conic-gradient");
+    expect(html).not.toContain("Situação operacional");
   });
 
   it("renders a clear empty state", () => {
@@ -95,10 +106,13 @@ describe("executive projects report template", () => {
         staleDays: 15,
       },
       summary: {
+        projectsTotal: 0,
         projectsOpen: 0,
+        projectsCompleted: 0,
         projectsInExecution: 0,
         projectsCritical: 0,
-        totalEstimatedAmount: "0.00",
+        totalInProgressAmount: "0.00",
+        totalCompletedAmount: "0.00",
         totalCommittedAmount: "0.00",
         commitmentRate: 0,
         averageProgress: 0,

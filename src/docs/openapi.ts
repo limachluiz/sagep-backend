@@ -4403,9 +4403,9 @@ export const openApiDocument: OpenApiDocument = {
     "/reports/projects/executive-summary": {
       get: {
         tags: ["reports"],
-        summary: "Gerar relatório executivo dos projetos em andamento em JSON",
+        summary: "Gerar relatório executivo da Seção de Projetos em JSON",
         description:
-          "Consolida cards gerenciais, gráficos, valores, avanço do fluxo, pontos de atenção e a carteira detalhada. Exclui projetos concluídos, cancelados, arquivados ou removidos.",
+          "Consolida projetos em andamento e concluídos, valores, saúde dos prazos, pontos de atenção e a carteira aberta detalhada. Exclui projetos cancelados, arquivados ou removidos.",
         security: bearerSecurity,
         parameters: [
           queryParameter("staleDays", "Dias sem atualização para sinalizar atenção.", {
@@ -4465,7 +4465,7 @@ export const openApiDocument: OpenApiDocument = {
     "/reports/projects/executive-summary.pdf": {
       get: {
         tags: ["reports"],
-        summary: "Gerar relatório executivo dos projetos em andamento em PDF",
+        summary: "Gerar relatório executivo da Seção de Projetos em PDF",
         security: bearerSecurity,
         parameters: [
           queryParameter("staleDays", "Dias sem atualização para sinalizar atenção.", {
@@ -4473,6 +4473,10 @@ export const openApiDocument: OpenApiDocument = {
             minimum: 1,
             maximum: 365,
             default: 15,
+          }),
+          queryParameter("projectType", "Filtrar por tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
           }),
         ],
         responses: {
