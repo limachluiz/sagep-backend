@@ -236,12 +236,12 @@ export function renderExecutiveProjectsReportHtml(report: any) {
   </header>
 
   <section class="summary">
-    <div class="metric"><span>Total de projetos</span><strong>${summary.projectsTotal}</strong><small>andamento + concluídos</small></div>
     <div class="metric"><span>Em andamento</span><strong>${summary.projectsOpen}</strong><small>carteira ativa</small></div>
+    <div class="metric"><span>Em execução</span><strong>${summary.projectsInExecution}</strong><small>serviços em campo</small></div>
     <div class="metric"><span>Concluídos</span><strong>${summary.projectsCompleted}</strong><small>entregas finalizadas</small></div>
     <div class="metric"><span>Valor em andamento</span><strong>${formatAmount(summary.totalInProgressAmount)}</strong><small>projetos abertos</small></div>
-    <div class="metric"><span>Valor concluído</span><strong>${formatAmount(summary.totalCompletedAmount)}</strong><small>projetos entregues</small></div>
     <div class="metric"><span>Valor empenhado</span><strong>${formatAmount(summary.totalCommittedAmount)}</strong><small>${summary.commitmentRate}% da carteira</small></div>
+    <div class="metric"><span>Valor concluído</span><strong>${formatAmount(summary.totalCompletedAmount)}</strong><small>projetos entregues</small></div>
   </section>
 
   <div class="section-title"><h2>Visão consolidada</h2><p>Onde estão os projetos, quanto representam e quais exigem ação.</p></div>
