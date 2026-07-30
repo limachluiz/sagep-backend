@@ -1220,6 +1220,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/projects/executive-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gerar relatório executivo dos projetos em andamento em JSON
+         * @description Consolida cards gerenciais, gráficos, valores, avanço do fluxo, pontos de atenção e a carteira detalhada. Exclui projetos concluídos, cancelados, arquivados ou removidos.
+         */
+        get: operations["reports_get_projects_executiveSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reports/projects/executive-summary.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gerar relatório executivo dos projetos em andamento em PDF */
+        get: operations["reports_get_projects_executiveSummaryPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/projects/{id}/dossier": {
         parameters: {
             query?: never;
@@ -6560,6 +6597,84 @@ export interface operations {
                 };
                 content: {
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reports_get_projects_executiveSummary: {
+        parameters: {
+            query?: {
+                /** @description Dias sem atualização para sinalizar atenção. */
+                staleDays?: number;
+                /** @description Período de referência. */
+                periodType?: "month" | "quarter" | "semester" | "year";
+                /** @description Data de referência do período. */
+                referenceDate?: string;
+                /** @description Início do intervalo manual. */
+                startDate?: string;
+                /** @description Fim do intervalo manual. */
+                endDate?: string;
+                /** @description Posição acumulada até a data. */
+                asOfDate?: string;
+                /** @description Filtrar por estado. */
+                stateUf?: "AM" | "RO" | "RR" | "AC";
+                /** @description Filtrar por OM. */
+                omId?: string;
+                /** @description Filtrar por tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+                /** @description Filtrar por responsável. */
+                ownerId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatório executivo consolidado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reports_get_projects_executiveSummaryPdf: {
+        parameters: {
+            query?: {
+                /** @description Dias sem atualização para sinalizar atenção. */
+                staleDays?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatório executivo em PDF A4 paisagem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             400: components["responses"]["BadRequest"];

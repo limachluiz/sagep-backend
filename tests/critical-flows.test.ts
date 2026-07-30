@@ -537,6 +537,11 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
       .expect(403);
 
+    await request(app)
+      .get("/api/reports/projects/executive-summary.pdf")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(403);
+
     const permission = await prisma.permission.findUniqueOrThrow({
       where: {
         code: "dashboard.view_executive",
@@ -5363,6 +5368,29 @@ describe("critical flows", () => {
     expect(String(projectRow!.getCell(6).value)).toContain("OMT");
     expect(projectRow!.getCell(7).value).toBe("Manaus");
     expect(projectRow!.getCell(10).value).toBe(200);
+
+    const executiveReport = await request(app)
+      .get("/api/reports/projects/executive-summary?staleDays=30")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(executiveReport.body.filter.scope).toBe("Projetos em andamento");
+    expect(executiveReport.body.filter.staleDays).toBe(30);
+    expect(
+      executiveReport.body.projects.some(
+        (item: { id: string }) => item.id === project.id,
+      ),
+    ).toBe(true);
+
+    const executivePdf = await request(app)
+      .get("/api/reports/projects/executive-summary.pdf?staleDays=30")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .buffer(true)
+      .parse(binaryParser)
+      .expect(200);
+
+    expect(executivePdf.headers["content-type"]).toContain("application/pdf");
+    expect(executivePdf.body.subarray(0, 4).toString("utf8")).toBe("%PDF");
 
     const dossier = await request(app)
       .get(`/api/reports/projects/${project.id}/dossier`)

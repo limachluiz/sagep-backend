@@ -4400,6 +4400,91 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["reports.export"],
       },
     },
+    "/reports/projects/executive-summary": {
+      get: {
+        tags: ["reports"],
+        summary: "Gerar relatório executivo dos projetos em andamento em JSON",
+        description:
+          "Consolida cards gerenciais, gráficos, valores, avanço do fluxo, pontos de atenção e a carteira detalhada. Exclui projetos concluídos, cancelados, arquivados ou removidos.",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("staleDays", "Dias sem atualização para sinalizar atenção.", {
+            type: "integer",
+            minimum: 1,
+            maximum: 365,
+            default: 15,
+          }),
+          queryParameter("periodType", "Período de referência.", {
+            type: "string",
+            enum: ["month", "quarter", "semester", "year"],
+          }),
+          queryParameter("referenceDate", "Data de referência do período.", {
+            type: "string",
+            format: "date",
+          }),
+          queryParameter("startDate", "Início do intervalo manual.", {
+            type: "string",
+            format: "date",
+          }),
+          queryParameter("endDate", "Fim do intervalo manual.", {
+            type: "string",
+            format: "date",
+          }),
+          queryParameter("asOfDate", "Posição acumulada até a data.", {
+            type: "string",
+            format: "date",
+          }),
+          queryParameter("stateUf", "Filtrar por estado.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("omId", "Filtrar por OM.", { type: "string" }),
+          queryParameter("projectType", "Filtrar por tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("ownerId", "Filtrar por responsável.", { type: "string" }),
+        ],
+        responses: {
+          "200": {
+            description: "Relatório executivo consolidado.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["reports.export", "dashboard.view_executive"],
+      },
+    },
+    "/reports/projects/executive-summary.pdf": {
+      get: {
+        tags: ["reports"],
+        summary: "Gerar relatório executivo dos projetos em andamento em PDF",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("staleDays", "Dias sem atualização para sinalizar atenção.", {
+            type: "integer",
+            minimum: 1,
+            maximum: 365,
+            default: 15,
+          }),
+        ],
+        responses: {
+          "200": {
+            description: "Relatório executivo em PDF A4 paisagem.",
+            content: binaryContent("application/pdf"),
+          },
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["reports.export", "dashboard.view_executive"],
+      },
+    },
     "/reports/projects/{id}/dossier": {
       get: {
         tags: ["reports"],

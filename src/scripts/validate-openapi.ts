@@ -28,6 +28,7 @@ const requiredPaths = [
   "/search",
   "/operational-alerts",
   "/exports/projects.xlsx",
+  "/reports/projects/executive-summary.pdf",
   "/reports/projects/{id}/dossier",
   "/users",
   "/atas",

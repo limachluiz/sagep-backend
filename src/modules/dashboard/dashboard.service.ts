@@ -84,7 +84,7 @@ type DashboardAtaItemSnapshot = {
   };
 };
 
-type FilterContext =
+export type FilterContext =
   | {
       mode: "all";
       label: string;
@@ -210,7 +210,9 @@ function getPeriodRange(periodType: DashboardPeriodType, referenceDate: Date) {
   };
 }
 
-function buildFilterContext(filters: DashboardOverviewQuery): FilterContext {
+export function buildDashboardFilterContext(
+  filters: DashboardOverviewQuery,
+): FilterContext {
   if (filters.startDate && filters.endDate) {
     return {
       mode: "interval",
@@ -714,7 +716,7 @@ export class DashboardService {
   }
 
   async overview(filters: DashboardOverviewQuery = {}) {
-    const filterContext = buildFilterContext(filters);
+    const filterContext = buildDashboardFilterContext(filters);
 
     const [
       usersTotal,
@@ -1425,7 +1427,7 @@ export class DashboardService {
   }
 
   async executive(filters: DashboardExecutiveQuery = {}) {
-    const filterContext = buildFilterContext(filters);
+    const filterContext = buildDashboardFilterContext(filters);
     const portfolioWhere: Prisma.ProjectWhereInput = {
       ...(filters.stateUf && { om: { stateUf: filters.stateUf } }),
       ...(filters.omId && { omId: filters.omId }),

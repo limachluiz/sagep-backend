@@ -125,6 +125,19 @@ GET /api/reports/projects/:id/dossier.pdf
 
 Permissao: `reports.export`.
 
+### Relatorio executivo dos projetos em andamento
+
+```http
+GET /api/reports/projects/executive-summary
+GET /api/reports/projects/executive-summary.pdf?staleDays=15
+```
+
+O PDF A4 paisagem consolida cards gerenciais, graficos por etapa e estado,
+pontos de atencao e a carteira detalhada. Projetos concluidos, cancelados,
+arquivados ou removidos nao entram no documento.
+
+Permissoes: `reports.export` e `dashboard.view_executive`.
+
 Uso: gerar dossie consolidado do projeto em JSON ou PDF.
 
 ## Users
