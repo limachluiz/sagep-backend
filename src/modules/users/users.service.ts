@@ -12,6 +12,7 @@ type CurrentUser = {
 
 type CreateUserByAdminInput = {
   name: string;
+  warName?: string;
   email: string;
   password: string;
   role: "PROJETISTA" | "GESTOR" | "CONSULTA";
@@ -27,6 +28,7 @@ type UpdateUserRoleInput = {
 
 type UpdateUserInput = {
   name?: string;
+  warName?: string | null;
   email?: string;
   rank?: string;
   cpf?: string;
@@ -51,6 +53,7 @@ const adminUserSelect = {
   id: true,
   userCode: true,
   name: true,
+  warName: true,
   email: true,
   role: true,
   rank: true,
@@ -109,6 +112,7 @@ export class UsersService {
         id: true,
         userCode: true,
         name: true,
+        warName: true,
         email: true,
         role: true,
         rank: true,
@@ -135,6 +139,7 @@ export class UsersService {
     const user = await prisma.user.create({
       data: {
         name: data.name,
+        warName: data.warName?.trim(),
         email: data.email,
         passwordHash,
         role: data.role,
@@ -157,6 +162,7 @@ export class UsersService {
         ...(filters.search && {
           OR: [
             { name: { contains: filters.search, mode: "insensitive" } },
+            { warName: { contains: filters.search, mode: "insensitive" } },
             { email: { contains: filters.search, mode: "insensitive" } },
             { rank: { contains: filters.search, mode: "insensitive" } },
             { cpf: { contains: filters.search, mode: "insensitive" } },
@@ -212,6 +218,7 @@ export class UsersService {
       where: { id: userId },
       data: {
         ...(data.name !== undefined && { name: data.name.trim() }),
+        ...(data.warName !== undefined && { warName: data.warName?.trim() || null }),
         ...(normalizedEmail !== undefined && { email: normalizedEmail }),
         ...(data.rank !== undefined && { rank: data.rank?.trim() }),
         ...(data.cpf !== undefined && { cpf: data.cpf?.trim() }),

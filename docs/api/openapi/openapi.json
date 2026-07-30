@@ -922,6 +922,10 @@
           "name": {
             "type": "string"
           },
+          "warName": {
+            "type": "string",
+            "nullable": true
+          },
           "email": {
             "type": "string",
             "format": "email"
@@ -1025,6 +1029,10 @@
           "name": {
             "type": "string"
           },
+          "warName": {
+            "type": "string",
+            "nullable": true
+          },
           "email": {
             "type": "string",
             "format": "email"
@@ -1055,6 +1063,11 @@
             "type": "string",
             "minLength": 3,
             "maxLength": 120
+          },
+          "warName": {
+            "type": "string",
+            "maxLength": 80,
+            "nullable": true
           },
           "rank": {
             "type": "string",
@@ -1167,6 +1180,10 @@
           "name": {
             "type": "string",
             "minLength": 3
+          },
+          "warName": {
+            "type": "string",
+            "nullable": true
           },
           "email": {
             "type": "string",
@@ -3747,6 +3764,10 @@
             "type": "string",
             "minLength": 3
           },
+          "warName": {
+            "type": "string",
+            "nullable": true
+          },
           "email": {
             "type": "string",
             "format": "email"
@@ -3798,6 +3819,7 @@
         },
         "example": {
           "name": "1 Ten Maria Souza",
+          "warName": "Souza",
           "email": "maria.souza@sagep.mil.br",
           "password": "123456",
           "role": "GESTOR",
@@ -11048,7 +11070,7 @@
           "users"
         ],
         "summary": "Listar usuarios",
-        "description": "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `email`, `rank` e `cpf`.",
+        "description": "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `warName`, `email`, `rank` e `cpf`.",
         "security": [
           {
             "bearerAuth": []
@@ -11327,7 +11349,7 @@
           "users"
         ],
         "summary": "Atualizar dados cadastrais de usuario",
-        "description": "Atualiza name, email, rank e cpf. Somente ADMIN.",
+        "description": "Atualiza name, warName, email, rank e cpf. Somente ADMIN.",
         "security": [
           {
             "bearerAuth": []

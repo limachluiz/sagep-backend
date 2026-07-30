@@ -4,6 +4,7 @@ import { optionalBoolean, optionalString } from "../../shared/zod-helpers.js";
 
 export const createUserByAdminSchema = z.object({
   name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  warName: optionalString,
   email: z.email("E-mail inválido"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
   role: z.enum(["PROJETISTA", "GESTOR", "CONSULTA"]),
@@ -20,6 +21,7 @@ export const updateUserRoleSchema = z.object({
 export const updateUserSchema = z
   .object({
     name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").optional(),
+    warName: z.string().trim().max(80).nullable().optional(),
     email: z.email("E-mail invalido").optional(),
     rank: optionalString,
     cpf: optionalString,

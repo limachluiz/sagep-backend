@@ -560,6 +560,7 @@ export const openApiDocument: OpenApiDocument = {
           id: { type: "string" },
           userCode: { type: "integer" },
           name: { type: "string" },
+          warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
           role: {
             type: "string",
@@ -600,6 +601,7 @@ export const openApiDocument: OpenApiDocument = {
           id: { type: "string" },
           userCode: { type: "integer" },
           name: { type: "string" },
+          warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
           role: {
             type: "string",
@@ -615,6 +617,7 @@ export const openApiDocument: OpenApiDocument = {
           "Atualiza somente dados e preferencias da propria conta. E-mail, papel e permissoes nao podem ser alterados por esta operacao.",
         properties: {
           name: { type: "string", minLength: 3, maxLength: 120 },
+          warName: { type: "string", maxLength: 80, nullable: true },
           rank: { type: "string", maxLength: 80, nullable: true },
           cpf: {
             type: "string",
@@ -679,6 +682,7 @@ export const openApiDocument: OpenApiDocument = {
         description: "Atualiza dados cadastrais do usuario. Somente ADMIN.",
         properties: {
           name: { type: "string", minLength: 3 },
+          warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
           rank: { type: "string", nullable: true },
           cpf: { type: "string", nullable: true },
@@ -2013,6 +2017,7 @@ export const openApiDocument: OpenApiDocument = {
         required: ["name", "email", "password"],
         properties: {
           name: { type: "string", minLength: 3 },
+          warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
           password: { type: "string", minLength: 6 },
         },
@@ -2035,6 +2040,7 @@ export const openApiDocument: OpenApiDocument = {
         },
         example: {
           name: "1 Ten Maria Souza",
+          warName: "Souza",
           email: "maria.souza@sagep.mil.br",
           password: "123456",
           role: "GESTOR",
@@ -4433,7 +4439,7 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["users"],
         summary: "Listar usuarios",
         description:
-          "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `email`, `rank` e `cpf`.",
+          "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `warName`, `email`, `rank` e `cpf`.",
         security: bearerSecurity,
         parameters: [
           ...paginationParameters,
@@ -4513,7 +4519,7 @@ export const openApiDocument: OpenApiDocument = {
       patch: {
         tags: ["users"],
         summary: "Atualizar dados cadastrais de usuario",
-        description: "Atualiza name, email, rank e cpf. Somente ADMIN.",
+        description: "Atualiza name, warName, email, rank e cpf. Somente ADMIN.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/UserId" }],
         requestBody: {

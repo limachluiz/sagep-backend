@@ -1263,7 +1263,7 @@ export interface paths {
         };
         /**
          * Listar usuarios
-         * @description Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `email`, `rank` e `cpf`.
+         * @description Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `warName`, `email`, `rank` e `cpf`.
          */
         get: operations["users_get_collection"];
         put?: never;
@@ -1317,7 +1317,7 @@ export interface paths {
         head?: never;
         /**
          * Atualizar dados cadastrais de usuario
-         * @description Atualiza name, email, rank e cpf. Somente ADMIN.
+         * @description Atualiza name, warName, email, rank e cpf. Somente ADMIN.
          */
         patch: operations["users_patch_byId"];
         trace?: never;
@@ -1982,6 +1982,7 @@ export interface components {
             id: string;
             userCode: number;
             name: string;
+            warName?: string | null;
             /** Format: email */
             email: string;
             /** @enum {string} */
@@ -2011,6 +2012,7 @@ export interface components {
             id: string;
             userCode: number;
             name: string;
+            warName?: string | null;
             /** Format: email */
             email: string;
             /** @enum {string} */
@@ -2021,6 +2023,7 @@ export interface components {
         /** @description Atualiza somente dados e preferencias da propria conta. E-mail, papel e permissoes nao podem ser alterados por esta operacao. */
         OwnProfileUpdateRequest: {
             name?: string;
+            warName?: string | null;
             rank?: string | null;
             cpf?: string | null;
             phone?: string | null;
@@ -2050,6 +2053,7 @@ export interface components {
         /** @description Atualiza dados cadastrais do usuario. Somente ADMIN. */
         UserUpdateRequest: {
             name?: string;
+            warName?: string | null;
             /** Format: email */
             email?: string;
             rank?: string | null;
@@ -2888,6 +2892,7 @@ export interface components {
         };
         PublicRegisterRequest: {
             name: string;
+            warName?: string | null;
             /** Format: email */
             email: string;
             password: string;
@@ -2896,6 +2901,7 @@ export interface components {
          * @description Cadastro administrativo de usuario. Na criacao administrativa atual, `ADMIN` nao e aceito como role de entrada.
          * @example {
          *       "name": "1 Ten Maria Souza",
+         *       "warName": "Souza",
          *       "email": "maria.souza@sagep.mil.br",
          *       "password": "123456",
          *       "role": "GESTOR",

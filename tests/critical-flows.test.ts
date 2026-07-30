@@ -929,6 +929,7 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${profileAuth.accessToken}`)
       .send({
         name: "Usuario Perfil Atualizado",
+        warName: "Perfil",
         rank: "1 Ten",
         cpf: "99988877766",
         phone: "92999998888",
@@ -944,6 +945,7 @@ describe("critical flows", () => {
     expect(updatedProfile.body).toMatchObject({
       id: profileUser.id,
       name: "Usuario Perfil Atualizado",
+      warName: "Perfil",
       email: profileUser.email,
       role: "CONSULTA",
       rank: "1 Ten",

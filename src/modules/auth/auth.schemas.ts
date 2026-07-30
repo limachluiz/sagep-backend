@@ -35,6 +35,7 @@ const avatarDataUrlSchema = z
 export const updateOwnProfileSchema = z
   .object({
     name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").max(120).optional(),
+    warName: z.string().trim().max(80).nullable().optional(),
     rank: z.string().trim().max(80).nullable().optional(),
     cpf: z
       .string()

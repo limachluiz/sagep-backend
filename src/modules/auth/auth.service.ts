@@ -24,6 +24,7 @@ type LoginInput = {
 
 type UpdateOwnProfileInput = {
   name?: string;
+  warName?: string | null;
   rank?: string | null;
   cpf?: string | null;
   phone?: string | null;
@@ -556,6 +557,7 @@ export class AuthService {
         id: user.id,
         userCode: user.userCode,
         name: user.name,
+        warName: user.warName,
         email: user.email,
         role: user.role,
         rank: user.rank,
@@ -744,6 +746,7 @@ export class AuthService {
         id: true,
         userCode: true,
         name: true,
+        warName: true,
         email: true,
         role: true,
         rank: true,
@@ -798,6 +801,7 @@ export class AuthService {
       select: {
         id: true,
         name: true,
+        warName: true,
         rank: true,
         cpf: true,
         phone: true,
@@ -817,6 +821,7 @@ export class AuthService {
       where: { id: currentUser.id },
       data: {
         ...(data.name !== undefined && { name: data.name.trim() }),
+        ...(data.warName !== undefined && { warName: data.warName?.trim() || null }),
         ...(data.rank !== undefined && { rank: data.rank?.trim() || null }),
         ...(data.cpf !== undefined && { cpf: data.cpf }),
         ...(data.phone !== undefined && { phone: data.phone }),
@@ -842,6 +847,7 @@ export class AuthService {
       summary: `Perfil pessoal atualizado por ${updated.email}`,
       before: {
         name: before.name,
+        warName: before.warName,
         rank: before.rank,
         cpfConfigured: Boolean(before.cpf),
         phoneConfigured: Boolean(before.phone),
@@ -855,6 +861,7 @@ export class AuthService {
       },
       after: {
         name: updated.name,
+        warName: updated.warName,
         rank: updated.rank,
         cpfConfigured: Boolean(updated.cpf),
         phoneConfigured: Boolean(updated.phone),
