@@ -84,7 +84,9 @@ describe("executive projects report template", () => {
     expect(html).toContain("Relatório Executivo da Seção de Projetos");
     expect(html).toContain('alt="Brasão do 4º CTA"');
     expect(html).not.toContain("Comando Militar da Amazônia");
-    expect(html).toContain("Total de projetos");
+    expect(html).not.toContain("Total de projetos");
+    expect(html).toContain("<span>Em execução</span>");
+    expect(html).toContain("Valor empenhado");
     expect(html).toContain("Valor concluído");
     expect(html).toContain("Saúde dos projetos em andamento");
     expect(html).toContain("2º Ten Luiz");
