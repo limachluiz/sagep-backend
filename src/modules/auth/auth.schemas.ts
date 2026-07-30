@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../../shared/pagination.js";
+import { MILITARY_RANKS } from "../../shared/military-ranks.js";
 
 export const registerSchema = z.object({
   name: z.string().trim().min(3, "Nome inválido"),
@@ -36,7 +37,7 @@ export const updateOwnProfileSchema = z
   .object({
     name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").max(120).optional(),
     warName: z.string().trim().max(80).nullable().optional(),
-    rank: z.string().trim().max(80).nullable().optional(),
+    rank: z.enum(MILITARY_RANKS).nullable().optional(),
     cpf: z
       .string()
       .trim()

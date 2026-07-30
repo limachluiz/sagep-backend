@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import type { MilitaryRank } from "../../shared/military-ranks.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 
 type CurrentUser = {
@@ -16,13 +17,13 @@ type CreateUserByAdminInput = {
   email: string;
   password: string;
   role: "PROJETISTA" | "GESTOR" | "CONSULTA";
-  rank?: string;
+  rank?: MilitaryRank;
   cpf?: string;
 };
 
 type UpdateUserRoleInput = {
   role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
-  rank?: string;
+  rank?: MilitaryRank;
   cpf?: string;
 };
 
@@ -30,7 +31,7 @@ type UpdateUserInput = {
   name?: string;
   warName?: string | null;
   email?: string;
-  rank?: string;
+  rank?: MilitaryRank | null;
   cpf?: string;
 };
 
@@ -220,7 +221,7 @@ export class UsersService {
         ...(data.name !== undefined && { name: data.name.trim() }),
         ...(data.warName !== undefined && { warName: data.warName?.trim() || null }),
         ...(normalizedEmail !== undefined && { email: normalizedEmail }),
-        ...(data.rank !== undefined && { rank: data.rank?.trim() }),
+        ...(data.rank !== undefined && { rank: data.rank }),
         ...(data.cpf !== undefined && { cpf: data.cpf?.trim() }),
       },
       select: adminUserSelect,

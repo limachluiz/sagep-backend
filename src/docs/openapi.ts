@@ -1,3 +1,5 @@
+import { MILITARY_RANKS } from "../shared/military-ranks.js";
+
 type OpenApiDocument = Record<string, unknown>;
 
 const bearerSecurity = [{ bearerAuth: [] }];
@@ -618,7 +620,7 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           name: { type: "string", minLength: 3, maxLength: 120 },
           warName: { type: "string", maxLength: 80, nullable: true },
-          rank: { type: "string", maxLength: 80, nullable: true },
+          rank: { type: "string", enum: [...MILITARY_RANKS], nullable: true },
           cpf: {
             type: "string",
             pattern: "^\\d{11}$",
@@ -684,7 +686,7 @@ export const openApiDocument: OpenApiDocument = {
           name: { type: "string", minLength: 3 },
           warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
-          rank: { type: "string", nullable: true },
+          rank: { type: "string", enum: [...MILITARY_RANKS], nullable: true },
           cpf: { type: "string", nullable: true },
         },
       },
@@ -2044,7 +2046,7 @@ export const openApiDocument: OpenApiDocument = {
           email: "maria.souza@sagep.mil.br",
           password: "123456",
           role: "GESTOR",
-          rank: "1 Ten",
+          rank: "1º Ten",
           cpf: "12345678900",
         },
       },
@@ -2058,12 +2060,12 @@ export const openApiDocument: OpenApiDocument = {
             type: "string",
             enum: ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"],
           },
-          rank: { type: "string", nullable: true },
+          rank: { type: "string", enum: [...MILITARY_RANKS], nullable: true },
           cpf: { type: "string", nullable: true },
         },
         example: {
           role: "CONSULTA",
-          rank: "1 Ten",
+          rank: "1º Ten",
           cpf: "12345678900",
         },
       },

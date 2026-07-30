@@ -2024,7 +2024,8 @@ export interface components {
         OwnProfileUpdateRequest: {
             name?: string;
             warName?: string | null;
-            rank?: string | null;
+            /** @enum {string|null} */
+            rank?: "Sd" | "Cb" | "3º Sgt" | "2º Sgt" | "1º Sgt" | "St" | "Asp" | "2º Ten" | "1º Ten" | "Cap" | "Maj" | "TC" | "Cel" | null;
             cpf?: string | null;
             phone?: string | null;
             /** @description Imagem PNG, JPEG ou WebP em data URL, limitada a 256 KB. */
@@ -2056,7 +2057,8 @@ export interface components {
             warName?: string | null;
             /** Format: email */
             email?: string;
-            rank?: string | null;
+            /** @enum {string|null} */
+            rank?: "Sd" | "Cb" | "3º Sgt" | "2º Sgt" | "1º Sgt" | "St" | "Asp" | "2º Ten" | "1º Ten" | "Cap" | "Maj" | "TC" | "Cel" | null;
             cpf?: string | null;
         };
         UserStatusUpdateRequest: {
@@ -2905,7 +2907,7 @@ export interface components {
          *       "email": "maria.souza@sagep.mil.br",
          *       "password": "123456",
          *       "role": "GESTOR",
-         *       "rank": "1 Ten",
+         *       "rank": "1º Ten",
          *       "cpf": "12345678900"
          *     }
          */
@@ -2923,14 +2925,15 @@ export interface components {
          * @description O schema aceita `rank` e `cpf`, mas o backend atual persiste apenas a alteracao de `role` nesta rota.
          * @example {
          *       "role": "CONSULTA",
-         *       "rank": "1 Ten",
+         *       "rank": "1º Ten",
          *       "cpf": "12345678900"
          *     }
          */
         UserRoleUpdateRequest: {
             /** @enum {string} */
             role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
-            rank?: string | null;
+            /** @enum {string|null} */
+            rank?: "Sd" | "Cb" | "3º Sgt" | "2º Sgt" | "1º Sgt" | "St" | "Asp" | "2º Ten" | "1º Ten" | "Cap" | "Maj" | "TC" | "Cel" | null;
             cpf?: string | null;
         };
         UserListEnvelope: {

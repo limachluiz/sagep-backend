@@ -1071,7 +1071,21 @@
           },
           "rank": {
             "type": "string",
-            "maxLength": 80,
+            "enum": [
+              "Sd",
+              "Cb",
+              "3º Sgt",
+              "2º Sgt",
+              "1º Sgt",
+              "St",
+              "Asp",
+              "2º Ten",
+              "1º Ten",
+              "Cap",
+              "Maj",
+              "TC",
+              "Cel"
+            ],
             "nullable": true
           },
           "cpf": {
@@ -1191,6 +1205,21 @@
           },
           "rank": {
             "type": "string",
+            "enum": [
+              "Sd",
+              "Cb",
+              "3º Sgt",
+              "2º Sgt",
+              "1º Sgt",
+              "St",
+              "Asp",
+              "2º Ten",
+              "1º Ten",
+              "Cap",
+              "Maj",
+              "TC",
+              "Cel"
+            ],
             "nullable": true
           },
           "cpf": {
@@ -3823,7 +3852,7 @@
           "email": "maria.souza@sagep.mil.br",
           "password": "123456",
           "role": "GESTOR",
-          "rank": "1 Ten",
+          "rank": "1º Ten",
           "cpf": "12345678900"
         }
       },
@@ -3845,6 +3874,21 @@
           },
           "rank": {
             "type": "string",
+            "enum": [
+              "Sd",
+              "Cb",
+              "3º Sgt",
+              "2º Sgt",
+              "1º Sgt",
+              "St",
+              "Asp",
+              "2º Ten",
+              "1º Ten",
+              "Cap",
+              "Maj",
+              "TC",
+              "Cel"
+            ],
             "nullable": true
           },
           "cpf": {
@@ -3854,7 +3898,7 @@
         },
         "example": {
           "role": "CONSULTA",
-          "rank": "1 Ten",
+          "rank": "1º Ten",
           "cpf": "12345678900"
         }
       },
