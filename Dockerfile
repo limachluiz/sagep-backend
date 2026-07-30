@@ -63,6 +63,7 @@ RUN npm ci --omit=dev
 COPY prisma ./prisma
 COPY prisma.config.ts ./
 COPY --from=build /app/dist ./dist
+COPY --from=build /app/src/assets ./src/assets
 COPY --from=build /app/src/generated ./src/generated
 COPY --from=build /root/.cache/puppeteer /root/.cache/puppeteer
 
