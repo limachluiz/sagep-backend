@@ -20,6 +20,58 @@ export const logoutSchema = z.object({
   refreshToken: z.string().min(1, "Refresh token é obrigatório"),
 });
 
+const avatarDataUrlSchema = z
+  .string()
+  .max(360_000, "A imagem do avatar deve ter no máximo 256 KB")
+  .regex(
+    /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+={0,2}$/,
+    "Use uma imagem PNG, JPEG ou WebP válida",
+  )
+  .refine(
+    (value) => Buffer.byteLength(value.slice(value.indexOf(",") + 1), "base64") <= 256 * 1024,
+    "A imagem do avatar deve ter no máximo 256 KB",
+  );
+
+export const updateOwnProfileSchema = z
+  .object({
+    name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").max(120).optional(),
+    rank: z.string().trim().max(80).nullable().optional(),
+    cpf: z
+      .string()
+      .trim()
+      .regex(/^\d{11}$/, "CPF deve conter 11 dígitos")
+      .nullable()
+      .optional(),
+    phone: z
+      .string()
+      .trim()
+      .regex(/^\d{10,11}$/, "Telefone deve conter 10 ou 11 dígitos")
+      .nullable()
+      .optional(),
+    avatarDataUrl: avatarDataUrlSchema.nullable().optional(),
+    themePreference: z.enum(["LIGHT", "DARK", "SYSTEM"]).optional(),
+    notifications: z
+      .object({
+        taskAssignments: z.boolean(),
+        deadlines: z.boolean(),
+        workflowUpdates: z.boolean(),
+      })
+      .optional(),
+  })
+  .refine((data) => Object.keys(data).length > 0, {
+    message: "Informe pelo menos um campo para atualizar",
+  });
+
+export const changeOwnPasswordSchema = z
+  .object({
+    currentPassword: z.string().min(1, "Informe a senha atual"),
+    newPassword: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres").max(128),
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: "A nova senha deve ser diferente da senha atual",
+    path: ["newPassword"],
+  });
+
 export const sessionStatusSchema = z.enum(["ACTIVE", "REVOKED", "EXPIRED", "ALL"]);
 
 export const listSessionsQuerySchema = paginationQuerySchema.extend({

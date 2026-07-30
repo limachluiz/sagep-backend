@@ -567,6 +567,21 @@ export const openApiDocument: OpenApiDocument = {
           },
           rank: { type: "string", nullable: true },
           cpf: { type: "string", nullable: true },
+          phone: { type: "string", nullable: true },
+          avatarDataUrl: { type: "string", nullable: true },
+          themePreference: {
+            type: "string",
+            enum: ["LIGHT", "DARK", "SYSTEM"],
+          },
+          notifications: {
+            type: "object",
+            required: ["taskAssignments", "deadlines", "workflowUpdates"],
+            properties: {
+              taskAssignments: { type: "boolean" },
+              deadlines: { type: "boolean" },
+              workflowUpdates: { type: "boolean" },
+            },
+          },
           active: { type: "boolean" },
           createdAt: { type: "string", format: "date-time" },
           lastLoginAt: { type: "string", format: "date-time", nullable: true },
@@ -592,6 +607,61 @@ export const openApiDocument: OpenApiDocument = {
           },
           rank: { type: "string", nullable: true },
           active: { type: "boolean" },
+        },
+      },
+      OwnProfileUpdateRequest: {
+        type: "object",
+        description:
+          "Atualiza somente dados e preferencias da propria conta. E-mail, papel e permissoes nao podem ser alterados por esta operacao.",
+        properties: {
+          name: { type: "string", minLength: 3, maxLength: 120 },
+          rank: { type: "string", maxLength: 80, nullable: true },
+          cpf: {
+            type: "string",
+            pattern: "^\\d{11}$",
+            nullable: true,
+          },
+          phone: {
+            type: "string",
+            pattern: "^\\d{10,11}$",
+            nullable: true,
+          },
+          avatarDataUrl: {
+            type: "string",
+            maxLength: 360000,
+            nullable: true,
+            description: "Imagem PNG, JPEG ou WebP em data URL, limitada a 256 KB.",
+          },
+          themePreference: {
+            type: "string",
+            enum: ["LIGHT", "DARK", "SYSTEM"],
+          },
+          notifications: {
+            type: "object",
+            required: ["taskAssignments", "deadlines", "workflowUpdates"],
+            properties: {
+              taskAssignments: { type: "boolean" },
+              deadlines: { type: "boolean" },
+              workflowUpdates: { type: "boolean" },
+            },
+          },
+        },
+      },
+      ChangeOwnPasswordRequest: {
+        type: "object",
+        required: ["currentPassword", "newPassword"],
+        properties: {
+          currentPassword: { type: "string", minLength: 1 },
+          newPassword: { type: "string", minLength: 8, maxLength: 128 },
+        },
+      },
+      ChangeOwnPasswordResponse: {
+        type: "object",
+        required: ["message", "revokedSessions", "logoutRequired"],
+        properties: {
+          message: { type: "string" },
+          revokedSessions: { type: "integer" },
+          logoutRequired: { type: "boolean", enum: [true] },
         },
       },
       UserOptionsResponse: {
@@ -2887,6 +2957,40 @@ export const openApiDocument: OpenApiDocument = {
         responses: {
           "200": okJson("#/components/schemas/UserSummary"),
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/auth/profile": {
+      patch: {
+        tags: ["auth"],
+        summary: "Atualizar o proprio perfil",
+        description:
+          "Permite alterar dados pessoais e preferencias. Nao altera e-mail, papel RBAC ou permissoes.",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/OwnProfileUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/UserSummary"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/auth/change-password": {
+      post: {
+        tags: ["auth"],
+        summary: "Alterar a propria senha",
+        description:
+          "Valida a senha atual, define a nova senha e revoga todas as sessoes do usuario.",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ChangeOwnPasswordRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/ChangeOwnPasswordResponse"),
+          ...defaultErrorResponses,
         },
       },
     },

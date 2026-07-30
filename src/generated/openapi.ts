@@ -75,6 +75,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Atualizar o proprio perfil
+         * @description Permite alterar dados pessoais e preferencias. Nao altera e-mail, papel RBAC ou permissoes.
+         */
+        patch: operations["auth_patch_profile"];
+        trace?: never;
+    };
+    "/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alterar a propria senha
+         * @description Valida a senha atual, define a nova senha e revoga todas as sessoes do usuario.
+         */
+        post: operations["auth_post_changePassword"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/refresh": {
         parameters: {
             query?: never;
@@ -1948,6 +1988,15 @@ export interface components {
             role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
             rank?: string | null;
             cpf?: string | null;
+            phone?: string | null;
+            avatarDataUrl?: string | null;
+            /** @enum {string} */
+            themePreference?: "LIGHT" | "DARK" | "SYSTEM";
+            notifications?: {
+                taskAssignments: boolean;
+                deadlines: boolean;
+                workflowUpdates: boolean;
+            };
             active: boolean;
             /** Format: date-time */
             createdAt: string;
@@ -1968,6 +2017,32 @@ export interface components {
             role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
             rank?: string | null;
             active: boolean;
+        };
+        /** @description Atualiza somente dados e preferencias da propria conta. E-mail, papel e permissoes nao podem ser alterados por esta operacao. */
+        OwnProfileUpdateRequest: {
+            name?: string;
+            rank?: string | null;
+            cpf?: string | null;
+            phone?: string | null;
+            /** @description Imagem PNG, JPEG ou WebP em data URL, limitada a 256 KB. */
+            avatarDataUrl?: string | null;
+            /** @enum {string} */
+            themePreference?: "LIGHT" | "DARK" | "SYSTEM";
+            notifications?: {
+                taskAssignments: boolean;
+                deadlines: boolean;
+                workflowUpdates: boolean;
+            };
+        };
+        ChangeOwnPasswordRequest: {
+            currentPassword: string;
+            newPassword: string;
+        };
+        ChangeOwnPasswordResponse: {
+            message: string;
+            revokedSessions: number;
+            /** @enum {boolean} */
+            logoutRequired: true;
         };
         UserOptionsResponse: {
             items: components["schemas"]["UserOption"][];
@@ -3759,6 +3834,66 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    auth_patch_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    auth_post_changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeOwnPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeOwnPasswordResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     auth_post_refresh: {

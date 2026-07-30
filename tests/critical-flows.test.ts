@@ -916,6 +916,80 @@ describe("critical flows", () => {
     expect(metadata.tokenHash).toBeUndefined();
   });
 
+  it("auth profile: updates only personal fields and changes password with session revocation", async () => {
+    const profileUser = await createUser(
+      "Usuario Perfil",
+      `perfil-${Date.now()}@sagep.local`,
+      "CONSULTA",
+    );
+    const profileAuth = await login(profileUser.email, "sagep-profile-device");
+
+    const updatedProfile = await request(app)
+      .patch("/api/auth/profile")
+      .set("Authorization", `Bearer ${profileAuth.accessToken}`)
+      .send({
+        name: "Usuario Perfil Atualizado",
+        rank: "1 Ten",
+        cpf: "99988877766",
+        phone: "92999998888",
+        themePreference: "SYSTEM",
+        notifications: {
+          taskAssignments: false,
+          deadlines: true,
+          workflowUpdates: false,
+        },
+      })
+      .expect(200);
+
+    expect(updatedProfile.body).toMatchObject({
+      id: profileUser.id,
+      name: "Usuario Perfil Atualizado",
+      email: profileUser.email,
+      role: "CONSULTA",
+      rank: "1 Ten",
+      cpf: "99988877766",
+      phone: "92999998888",
+      themePreference: "SYSTEM",
+      notifications: {
+        taskAssignments: false,
+        deadlines: true,
+        workflowUpdates: false,
+      },
+    });
+
+    const forbiddenRoleChange = await request(app)
+      .patch("/api/auth/profile")
+      .set("Authorization", `Bearer ${profileAuth.accessToken}`)
+      .send({ role: "ADMIN" })
+      .expect(400);
+    expect(forbiddenRoleChange.body.message).toBeTruthy();
+
+    await request(app)
+      .post("/api/auth/change-password")
+      .set("Authorization", `Bearer ${profileAuth.accessToken}`)
+      .send({ currentPassword: "senha-incorreta", newPassword: "nova-senha-123" })
+      .expect(401);
+
+    const changedPassword = await request(app)
+      .post("/api/auth/change-password")
+      .set("Authorization", `Bearer ${profileAuth.accessToken}`)
+      .send({ currentPassword: password, newPassword: "nova-senha-123" })
+      .expect(200);
+
+    expect(changedPassword.body.logoutRequired).toBe(true);
+    expect(changedPassword.body.revokedSessions).toBeGreaterThanOrEqual(1);
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ email: profileUser.email, password })
+      .expect(401);
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ email: profileUser.email, password: "nova-senha-123" })
+      .expect(200);
+  });
+
   it("auth sessions: supports own and administrative management with differentiated status", async () => {
     const secondAdminAuth = await login(admin.email, "sagep-admin-device-2");
     const secondConsultaAuth = await login(consulta.email, "sagep-consulta-device-2");

@@ -120,6 +120,12 @@ enum PermissionOverrideEffect {
   DENY
 }
 
+enum UserThemePreference {
+  LIGHT
+  DARK
+  SYSTEM
+}
+
 enum AtaItemBalanceMovementType {
   RESERVE
   RELEASE
@@ -138,6 +144,12 @@ model User {
   role                          UserRole                 @default(CONSULTA)
   rank                          String?
   cpf                           String?
+  phone                         String?
+  avatarDataUrl                 String?
+  themePreference               UserThemePreference      @default(DARK)
+  notifyTaskAssignments         Boolean                  @default(true)
+  notifyDeadlines               Boolean                  @default(true)
+  notifyWorkflowUpdates         Boolean                  @default(true)
   active                        Boolean                  @default(true)
   ownedProjects                 Project[]                @relation("ProjectOwner")
   signedServiceOrdersRegistered Project[]                @relation("SignedServiceOrderRegistrar")

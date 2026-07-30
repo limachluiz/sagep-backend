@@ -43,6 +43,7 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 
 - autenticação com JWT e refresh token;
 - sessões do usuário e revogação administrativa;
+- perfil pessoal com edição restrita de dados, avatar, preferências e alteração segura de senha;
 - RBAC governado pelo banco com permissões por role e overrides por usuário;
 - projetos com workflow documental;
 - Kanban de projetos com movimentação protegida pelo workflow;
