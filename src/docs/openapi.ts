@@ -1,3 +1,5 @@
+import { MILITARY_RANKS } from "../shared/military-ranks.js";
+
 type OpenApiDocument = Record<string, unknown>;
 
 const bearerSecurity = [{ bearerAuth: [] }];
@@ -512,9 +514,31 @@ export const openApiDocument: OpenApiDocument = {
           links: { $ref: "#/components/schemas/ListLinks" },
         },
       },
+      EffectivePermission: {
+        type: "object",
+        required: ["code", "module", "action", "description", "critical"],
+        properties: {
+          code: { type: "string" },
+          module: { type: "string" },
+          action: { type: "string" },
+          description: { type: "string" },
+          critical: { type: "boolean" },
+        },
+      },
+      PermissionGroup: {
+        type: "object",
+        required: ["name", "permissions"],
+        properties: {
+          name: { type: "string" },
+          permissions: {
+            type: "array",
+            items: { $ref: "#/components/schemas/EffectivePermission" },
+          },
+        },
+      },
       AccessProfile: {
         type: "object",
-        required: ["role", "permissions", "isAdmin"],
+        required: ["role", "permissions", "isAdmin", "groups"],
         properties: {
           role: {
             type: "string",
@@ -525,6 +549,10 @@ export const openApiDocument: OpenApiDocument = {
             items: { type: "string" },
           },
           isAdmin: { type: "boolean" },
+          groups: {
+            type: "array",
+            items: { $ref: "#/components/schemas/PermissionGroup" },
+          },
         },
       },
       UserSummary: {
@@ -534,6 +562,7 @@ export const openApiDocument: OpenApiDocument = {
           id: { type: "string" },
           userCode: { type: "integer" },
           name: { type: "string" },
+          warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
           role: {
             type: "string",
@@ -541,8 +570,25 @@ export const openApiDocument: OpenApiDocument = {
           },
           rank: { type: "string", nullable: true },
           cpf: { type: "string", nullable: true },
+          phone: { type: "string", nullable: true },
+          avatarDataUrl: { type: "string", nullable: true },
+          themePreference: {
+            type: "string",
+            enum: ["LIGHT", "DARK", "SYSTEM"],
+          },
+          notifications: {
+            type: "object",
+            required: ["taskAssignments", "deadlines", "workflowUpdates"],
+            properties: {
+              taskAssignments: { type: "boolean" },
+              deadlines: { type: "boolean" },
+              workflowUpdates: { type: "boolean" },
+            },
+          },
           active: { type: "boolean" },
           createdAt: { type: "string", format: "date-time" },
+          lastLoginAt: { type: "string", format: "date-time", nullable: true },
+          updatedAt: { type: "string", format: "date-time" },
           permissions: {
             type: "array",
             items: { type: "string" },
@@ -557,6 +603,7 @@ export const openApiDocument: OpenApiDocument = {
           id: { type: "string" },
           userCode: { type: "integer" },
           name: { type: "string" },
+          warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
           role: {
             type: "string",
@@ -564,6 +611,62 @@ export const openApiDocument: OpenApiDocument = {
           },
           rank: { type: "string", nullable: true },
           active: { type: "boolean" },
+        },
+      },
+      OwnProfileUpdateRequest: {
+        type: "object",
+        description:
+          "Atualiza somente dados e preferencias da propria conta. E-mail, papel e permissoes nao podem ser alterados por esta operacao.",
+        properties: {
+          name: { type: "string", minLength: 3, maxLength: 120 },
+          warName: { type: "string", maxLength: 80, nullable: true },
+          rank: { type: "string", enum: [...MILITARY_RANKS], nullable: true },
+          cpf: {
+            type: "string",
+            pattern: "^\\d{11}$",
+            nullable: true,
+          },
+          phone: {
+            type: "string",
+            pattern: "^\\d{10,11}$",
+            nullable: true,
+          },
+          avatarDataUrl: {
+            type: "string",
+            maxLength: 360000,
+            nullable: true,
+            description: "Imagem PNG, JPEG ou WebP em data URL, limitada a 256 KB.",
+          },
+          themePreference: {
+            type: "string",
+            enum: ["LIGHT", "DARK", "SYSTEM"],
+          },
+          notifications: {
+            type: "object",
+            required: ["taskAssignments", "deadlines", "workflowUpdates"],
+            properties: {
+              taskAssignments: { type: "boolean" },
+              deadlines: { type: "boolean" },
+              workflowUpdates: { type: "boolean" },
+            },
+          },
+        },
+      },
+      ChangeOwnPasswordRequest: {
+        type: "object",
+        required: ["currentPassword", "newPassword"],
+        properties: {
+          currentPassword: { type: "string", minLength: 1 },
+          newPassword: { type: "string", minLength: 8, maxLength: 128 },
+        },
+      },
+      ChangeOwnPasswordResponse: {
+        type: "object",
+        required: ["message", "revokedSessions", "logoutRequired"],
+        properties: {
+          message: { type: "string" },
+          revokedSessions: { type: "integer" },
+          logoutRequired: { type: "boolean", enum: [true] },
         },
       },
       UserOptionsResponse: {
@@ -581,8 +684,9 @@ export const openApiDocument: OpenApiDocument = {
         description: "Atualiza dados cadastrais do usuario. Somente ADMIN.",
         properties: {
           name: { type: "string", minLength: 3 },
+          warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
-          rank: { type: "string", nullable: true },
+          rank: { type: "string", enum: [...MILITARY_RANKS], nullable: true },
           cpf: { type: "string", nullable: true },
         },
       },
@@ -1915,6 +2019,7 @@ export const openApiDocument: OpenApiDocument = {
         required: ["name", "email", "password"],
         properties: {
           name: { type: "string", minLength: 3 },
+          warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
           password: { type: "string", minLength: 6 },
         },
@@ -1937,10 +2042,11 @@ export const openApiDocument: OpenApiDocument = {
         },
         example: {
           name: "1 Ten Maria Souza",
+          warName: "Souza",
           email: "maria.souza@sagep.mil.br",
-          password: "123456",
+          password: "<senha-forte-do-usuario>",
           role: "GESTOR",
-          rank: "1 Ten",
+          rank: "1º Ten",
           cpf: "12345678900",
         },
       },
@@ -1954,12 +2060,12 @@ export const openApiDocument: OpenApiDocument = {
             type: "string",
             enum: ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"],
           },
-          rank: { type: "string", nullable: true },
+          rank: { type: "string", enum: [...MILITARY_RANKS], nullable: true },
           cpf: { type: "string", nullable: true },
         },
         example: {
           role: "CONSULTA",
-          rank: "1 Ten",
+          rank: "1º Ten",
           cpf: "12345678900",
         },
       },
@@ -2796,6 +2902,61 @@ export const openApiDocument: OpenApiDocument = {
           timestamp: { type: "string", format: "date-time" },
         },
       },
+      HealthComponent: {
+        type: "object",
+        required: ["id", "name", "description", "status", "latencyMs", "critical", "message"],
+        properties: {
+          id: { type: "string", enum: ["api", "database", "pgadmin"] },
+          name: { type: "string" },
+          description: { type: "string" },
+          status: { type: "string", enum: ["operational", "degraded", "unavailable", "not_monitored"] },
+          latencyMs: { type: "number", nullable: true },
+          critical: { type: "boolean" },
+          message: { type: "string" },
+        },
+      },
+      SystemHealthSnapshot: {
+        type: "object",
+        required: ["status", "checkedAt", "uptimeSeconds", "availabilityPercent", "observationWindowStartedAt", "components", "summary", "history"],
+        properties: {
+          status: { type: "string", enum: ["operational", "degraded", "unavailable"] },
+          checkedAt: { type: "string", format: "date-time" },
+          uptimeSeconds: { type: "integer", minimum: 0 },
+          availabilityPercent: { type: "number", minimum: 0, maximum: 100 },
+          observationWindowStartedAt: { type: "string", format: "date-time" },
+          components: { type: "array", items: { $ref: "#/components/schemas/HealthComponent" } },
+          summary: {
+            type: "object",
+            properties: {
+              operational: { type: "integer" }, degraded: { type: "integer" },
+              unavailable: { type: "integer" }, notMonitored: { type: "integer" },
+            },
+          },
+          history: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                timestamp: { type: "string", format: "date-time" },
+                status: { type: "string", enum: ["operational", "degraded", "unavailable"] },
+                apiLatencyMs: { type: "number" },
+                databaseLatencyMs: { type: "number", nullable: true },
+              },
+            },
+          },
+        },
+      },
+      SystemHealthDetails: {
+        allOf: [
+          { $ref: "#/components/schemas/SystemHealthSnapshot" },
+          {
+            type: "object",
+            properties: {
+              diagnostics: { type: "object", additionalProperties: true },
+            },
+          },
+        ],
+      },
     },
   },
   paths: {
@@ -2805,6 +2966,29 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Health check publico",
         responses: {
           "200": okJson("#/components/schemas/HealthResponse"),
+        },
+      },
+    },
+    "/health/status": {
+      get: {
+        tags: ["health"],
+        summary: "Consultar o estado sanitizado dos servicos essenciais",
+        description: "Endpoint publico para permanecer acessivel durante falhas do banco. Nao expoe credenciais, hosts ou versoes.",
+        parameters: [queryParameter("refresh", "Ignora o cache curto e executa novas sondas.", { type: "boolean", default: false })],
+        responses: { "200": okJson("#/components/schemas/SystemHealthSnapshot") },
+      },
+    },
+    "/health/details": {
+      get: {
+        tags: ["health"],
+        summary: "Consultar diagnostico tecnico do ambiente",
+        security: bearerSecurity,
+        "x-permissions": ["system_health.view_details"],
+        parameters: [queryParameter("refresh", "Ignora o cache curto e executa novas sondas.", { type: "boolean", default: false })],
+        responses: {
+          "200": okJson("#/components/schemas/SystemHealthDetails"),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
         },
       },
     },
@@ -2859,6 +3043,40 @@ export const openApiDocument: OpenApiDocument = {
         responses: {
           "200": okJson("#/components/schemas/UserSummary"),
           "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/auth/profile": {
+      patch: {
+        tags: ["auth"],
+        summary: "Atualizar o proprio perfil",
+        description:
+          "Permite alterar dados pessoais e preferencias. Nao altera e-mail, papel RBAC ou permissoes.",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/OwnProfileUpdateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/UserSummary"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/auth/change-password": {
+      post: {
+        tags: ["auth"],
+        summary: "Alterar a propria senha",
+        description:
+          "Valida a senha atual, define a nova senha e revoga todas as sessoes do usuario.",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ChangeOwnPasswordRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/ChangeOwnPasswordResponse"),
+          ...defaultErrorResponses,
         },
       },
     },
@@ -4260,6 +4478,135 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["reports.export"],
       },
     },
+    "/reports/projects/executive-summary": {
+      get: {
+        tags: ["reports"],
+        summary: "Gerar relatório executivo da Seção de Projetos em JSON",
+        description:
+          "Consolida projetos em andamento e concluídos, valores, saúde dos prazos, pontos de atenção e a carteira aberta detalhada. Exclui projetos cancelados, arquivados ou removidos.",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("staleDays", "Dias sem atualização para sinalizar atenção.", {
+            type: "integer",
+            minimum: 1,
+            maximum: 365,
+            default: 15,
+          }),
+          queryParameter("periodType", "Período de referência.", {
+            type: "string",
+            enum: ["month", "quarter", "semester", "year"],
+          }),
+          queryParameter("referenceDate", "Data de referência do período.", {
+            type: "string",
+            format: "date",
+          }),
+          queryParameter("startDate", "Início do intervalo manual.", {
+            type: "string",
+            format: "date",
+          }),
+          queryParameter("endDate", "Fim do intervalo manual.", {
+            type: "string",
+            format: "date",
+          }),
+          queryParameter("asOfDate", "Posição acumulada até a data.", {
+            type: "string",
+            format: "date",
+          }),
+          queryParameter("stateUf", "Filtrar por estado.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("omId", "Filtrar por OM.", { type: "string" }),
+          queryParameter("projectType", "Filtrar por tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("ownerId", "Filtrar por responsável.", { type: "string" }),
+        ],
+        responses: {
+          "200": {
+            description: "Relatório executivo consolidado.",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  additionalProperties: true,
+                },
+              },
+            },
+          },
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["reports.export", "dashboard.view_executive"],
+      },
+    },
+    "/reports/projects/executive-summary.pdf": {
+      get: {
+        tags: ["reports"],
+        summary: "Gerar relatório executivo da Seção de Projetos em PDF",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("staleDays", "Dias sem atualização para sinalizar atenção.", {
+            type: "integer",
+            minimum: 1,
+            maximum: 365,
+            default: 15,
+          }),
+          queryParameter("projectType", "Filtrar por tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+        ],
+        responses: {
+          "200": {
+            description: "Relatório executivo em PDF A4 paisagem.",
+            content: binaryContent("application/pdf"),
+          },
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["reports.export", "dashboard.view_executive"],
+      },
+    },
+    "/reports/projects/consolidated-summary.pdf": {
+      get: {
+        tags: ["reports"],
+        summary: "Gerar relatório consolidado Executivo, Operacional ou Financeiro",
+        description:
+          "Produz PDF profissional com indicadores, gráficos e detalhamento adequados à finalidade selecionada, combinável com o recorte Geral, CFTV ou Fibra Óptica.",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("reportType", "Finalidade do relatório.", {
+            type: "string",
+            enum: ["executive", "operational", "financial"],
+            default: "executive",
+          }),
+          queryParameter("staleDays", "Dias sem atualização para sinalizar atenção.", {
+            type: "integer",
+            minimum: 1,
+            maximum: 365,
+            default: 15,
+          }),
+          queryParameter("projectType", "Recorte por tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("stateUf", "Filtrar por estado.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("omId", "Filtrar por OM.", { type: "string" }),
+          queryParameter("ownerId", "Filtrar por responsável.", { type: "string" }),
+        ],
+        responses: {
+          "200": {
+            description: "Relatório consolidado em PDF A4 paisagem.",
+            content: binaryContent("application/pdf"),
+          },
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["reports.export"],
+      },
+    },
     "/reports/projects/{id}/dossier": {
       get: {
         tags: ["reports"],
@@ -4301,7 +4648,7 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["users"],
         summary: "Listar usuarios",
         description:
-          "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `email`, `rank` e `cpf`.",
+          "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `warName`, `email`, `rank` e `cpf`.",
         security: bearerSecurity,
         parameters: [
           ...paginationParameters,
@@ -4381,7 +4728,7 @@ export const openApiDocument: OpenApiDocument = {
       patch: {
         tags: ["users"],
         summary: "Atualizar dados cadastrais de usuario",
-        description: "Atualiza name, email, rank e cpf. Somente ADMIN.",
+        description: "Atualiza name, warName, email, rank e cpf. Somente ADMIN.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/UserId" }],
         requestBody: {

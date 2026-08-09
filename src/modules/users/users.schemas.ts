@@ -1,27 +1,32 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../../shared/pagination.js";
 import { optionalBoolean, optionalString } from "../../shared/zod-helpers.js";
+import { MILITARY_RANKS } from "../../shared/military-ranks.js";
+
+const optionalMilitaryRank = z.enum(MILITARY_RANKS).optional();
 
 export const createUserByAdminSchema = z.object({
   name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres"),
+  warName: optionalString,
   email: z.email("E-mail inválido"),
   password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
   role: z.enum(["PROJETISTA", "GESTOR", "CONSULTA"]),
-  rank: optionalString,
+  rank: optionalMilitaryRank,
   cpf: optionalString,
 });
 
 export const updateUserRoleSchema = z.object({
   role: z.enum(["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"]),
-  rank: optionalString,
+  rank: optionalMilitaryRank,
   cpf: optionalString,
 });
 
 export const updateUserSchema = z
   .object({
     name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").optional(),
+    warName: z.string().trim().max(80).nullable().optional(),
     email: z.email("E-mail invalido").optional(),
-    rank: optionalString,
+    rank: z.enum(MILITARY_RANKS).nullable().optional(),
     cpf: optionalString,
   })
   .refine((data) => Object.keys(data).length > 0, {

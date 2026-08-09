@@ -1,11 +1,15 @@
 import { Router } from "express";
+import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { requirePermission } from "../../middlewares/permission.middleware.js";
+import { healthController } from "./health.controller.js";
 
 export const healthRoutes = Router();
 
-healthRoutes.get("/", (_req, res) => {
-  return res.status(200).json({
-    message: "SAGEP backend online",
-    status: "ok",
-    timestamp: new Date().toISOString()
-  });
-});
+healthRoutes.get("/", healthController.liveness);
+healthRoutes.get("/status", healthController.status);
+healthRoutes.get(
+  "/details",
+  authMiddleware,
+  requirePermission("system_health.view_details"),
+  healthController.details,
+);

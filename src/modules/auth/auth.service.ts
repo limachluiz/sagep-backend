@@ -22,6 +22,26 @@ type LoginInput = {
   password: string;
 };
 
+type UpdateOwnProfileInput = {
+  name?: string;
+  warName?: string | null;
+  rank?: string | null;
+  cpf?: string | null;
+  phone?: string | null;
+  avatarDataUrl?: string | null;
+  themePreference?: "LIGHT" | "DARK" | "SYSTEM";
+  notifications?: {
+    taskAssignments: boolean;
+    deadlines: boolean;
+    workflowUpdates: boolean;
+  };
+};
+
+type ChangeOwnPasswordInput = {
+  currentPassword: string;
+  newPassword: string;
+};
+
 type AuthRequestContext = {
   ipAddress?: string;
   userAgent?: string;
@@ -97,6 +117,46 @@ type SerializedSession = {
 };
 
 export class AuthService {
+  private buildAccessProfile(role: string, permissions: string[]) {
+    const permissionSet = new Set(permissions);
+    const groupedPermissions = new Map<
+      string,
+      Array<{
+        code: string;
+        module: string;
+        action: string;
+        description: string;
+        critical: boolean;
+      }>
+    >();
+
+    for (const item of permissionsService.getPermissionCatalog()) {
+      if (!permissionSet.has(item.code)) {
+        continue;
+      }
+
+      const group = groupedPermissions.get(item.group) ?? [];
+      group.push({
+        code: item.code,
+        module: item.module,
+        action: item.action,
+        description: item.description,
+        critical: item.critical,
+      });
+      groupedPermissions.set(item.group, group);
+    }
+
+    return {
+      role,
+      permissions,
+      isAdmin: role === "ADMIN",
+      groups: [...groupedPermissions.entries()].map(([name, items]) => ({
+        name,
+        permissions: items,
+      })),
+    };
+  }
+
   private getSessionStatus(token: Pick<SessionRecord, "expiresAt" | "revokedAt">, now = new Date()) {
     if (token.revokedAt) {
       return "REVOKED" as const;
@@ -497,18 +557,25 @@ export class AuthService {
         id: user.id,
         userCode: user.userCode,
         name: user.name,
+        warName: user.warName,
         email: user.email,
         role: user.role,
         rank: user.rank,
         cpf: user.cpf,
+        phone: user.phone,
+        avatarDataUrl: user.avatarDataUrl,
+        themePreference: user.themePreference,
+        notifications: {
+          taskAssignments: user.notifyTaskAssignments,
+          deadlines: user.notifyDeadlines,
+          workflowUpdates: user.notifyWorkflowUpdates,
+        },
         active: user.active,
         createdAt: user.createdAt,
+        lastLoginAt: loginAt,
+        updatedAt: user.updatedAt,
         permissions: effectivePermissions,
-        access: {
-          role: user.role,
-          permissions: effectivePermissions,
-          isAdmin: user.role === "ADMIN",
-        },
+        access: this.buildAccessProfile(user.role, effectivePermissions),
       },
     };
   }
@@ -679,12 +746,21 @@ export class AuthService {
         id: true,
         userCode: true,
         name: true,
+        warName: true,
         email: true,
         role: true,
         rank: true,
         cpf: true,
+        phone: true,
+        avatarDataUrl: true,
+        themePreference: true,
+        notifyTaskAssignments: true,
+        notifyDeadlines: true,
+        notifyWorkflowUpdates: true,
         active: true,
         createdAt: true,
+        lastLoginAt: true,
+        updatedAt: true,
       },
     });
 
@@ -696,15 +772,186 @@ export class AuthService {
       user.id,
       user.role,
     );
+    const {
+      notifyTaskAssignments,
+      notifyDeadlines,
+      notifyWorkflowUpdates,
+      ...profile
+    } = user;
 
     return {
-      ...user,
-      permissions: effectivePermissions,
-      access: {
-        role: user.role,
-        permissions: effectivePermissions,
-        isAdmin: user.role === "ADMIN",
+      ...profile,
+      notifications: {
+        taskAssignments: notifyTaskAssignments,
+        deadlines: notifyDeadlines,
+        workflowUpdates: notifyWorkflowUpdates,
       },
+      permissions: effectivePermissions,
+      access: this.buildAccessProfile(user.role, effectivePermissions),
+    };
+  }
+
+  async updateOwnProfile(
+    currentUser: CurrentUser,
+    data: UpdateOwnProfileInput,
+    context?: AuthRequestContext,
+  ) {
+    const before = await prisma.user.findUnique({
+      where: { id: currentUser.id },
+      select: {
+        id: true,
+        name: true,
+        warName: true,
+        rank: true,
+        cpf: true,
+        phone: true,
+        avatarDataUrl: true,
+        themePreference: true,
+        notifyTaskAssignments: true,
+        notifyDeadlines: true,
+        notifyWorkflowUpdates: true,
+      },
+    });
+
+    if (!before) {
+      throw new AppError("Usuário não encontrado", 404);
+    }
+
+    await prisma.user.update({
+      where: { id: currentUser.id },
+      data: {
+        ...(data.name !== undefined && { name: data.name.trim() }),
+        ...(data.warName !== undefined && { warName: data.warName?.trim() || null }),
+        ...(data.rank !== undefined && { rank: data.rank?.trim() || null }),
+        ...(data.cpf !== undefined && { cpf: data.cpf }),
+        ...(data.phone !== undefined && { phone: data.phone }),
+        ...(data.avatarDataUrl !== undefined && { avatarDataUrl: data.avatarDataUrl }),
+        ...(data.themePreference !== undefined && {
+          themePreference: data.themePreference,
+        }),
+        ...(data.notifications && {
+          notifyTaskAssignments: data.notifications.taskAssignments,
+          notifyDeadlines: data.notifications.deadlines,
+          notifyWorkflowUpdates: data.notifications.workflowUpdates,
+        }),
+      },
+    });
+
+    const updated = await this.me(currentUser.id);
+
+    await auditService.log({
+      entityType: "USER",
+      entityId: currentUser.id,
+      action: "UPDATE",
+      actor: { id: currentUser.id, name: updated.name },
+      summary: `Perfil pessoal atualizado por ${updated.email}`,
+      before: {
+        name: before.name,
+        warName: before.warName,
+        rank: before.rank,
+        cpfConfigured: Boolean(before.cpf),
+        phoneConfigured: Boolean(before.phone),
+        avatarConfigured: Boolean(before.avatarDataUrl),
+        themePreference: before.themePreference,
+        notifications: {
+          taskAssignments: before.notifyTaskAssignments,
+          deadlines: before.notifyDeadlines,
+          workflowUpdates: before.notifyWorkflowUpdates,
+        },
+      },
+      after: {
+        name: updated.name,
+        warName: updated.warName,
+        rank: updated.rank,
+        cpfConfigured: Boolean(updated.cpf),
+        phoneConfigured: Boolean(updated.phone),
+        avatarConfigured: Boolean(updated.avatarDataUrl),
+        themePreference: updated.themePreference,
+        notifications: updated.notifications,
+      },
+      metadata: {
+        ipAddress: context?.ipAddress ?? null,
+        userAgent: context?.userAgent ?? null,
+      },
+    });
+
+    return updated;
+  }
+
+  async changeOwnPassword(
+    currentUser: CurrentUser,
+    data: ChangeOwnPasswordInput,
+    context?: AuthRequestContext,
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        passwordHash: true,
+        active: true,
+      },
+    });
+
+    if (!user || !user.active) {
+      throw new AppError("Usuário não encontrado ou inativo", 404);
+    }
+
+    const currentPasswordMatches = await bcrypt.compare(
+      data.currentPassword,
+      user.passwordHash,
+    );
+    if (!currentPasswordMatches) {
+      throw new AppError("A senha atual está incorreta", 401, "AUTH_CURRENT_PASSWORD_INVALID");
+    }
+
+    const newPasswordMatchesCurrent = await bcrypt.compare(
+      data.newPassword,
+      user.passwordHash,
+    );
+    if (newPasswordMatchesCurrent) {
+      throw new AppError("A nova senha deve ser diferente da senha atual", 400);
+    }
+
+    const passwordHash = await bcrypt.hash(data.newPassword, 10);
+    const changedAt = new Date();
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      });
+
+      return tx.refreshToken.updateMany({
+        where: {
+          userId: user.id,
+          revokedAt: null,
+        },
+        data: {
+          revokedAt: changedAt,
+          revokedReason: "SECURITY",
+          revokedByUserId: user.id,
+        },
+      });
+    });
+
+    await auditService.log({
+      entityType: "AUTH",
+      entityId: user.id,
+      action: "UPDATE",
+      actor: { id: user.id, name: user.name },
+      summary: `Senha alterada por ${user.email}`,
+      metadata: {
+        revokedSessions: result.count,
+        ipAddress: context?.ipAddress ?? null,
+        userAgent: context?.userAgent ?? null,
+      },
+    });
+
+    return {
+      message: "Senha alterada com sucesso. Entre novamente para continuar.",
+      revokedSessions: result.count,
+      logoutRequired: true,
     };
   }
 

@@ -21,6 +21,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/health/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar o estado sanitizado dos servicos essenciais
+         * @description Endpoint publico para permanecer acessivel durante falhas do banco. Nao expoe credenciais, hosts ou versoes.
+         */
+        get: operations["health_get_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar diagnostico tecnico do ambiente */
+        get: operations["health_get_details"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -69,6 +106,46 @@ export interface paths {
         get: operations["auth_get_me"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Atualizar o proprio perfil
+         * @description Permite alterar dados pessoais e preferencias. Nao altera e-mail, papel RBAC ou permissoes.
+         */
+        patch: operations["auth_patch_profile"];
+        trace?: never;
+    };
+    "/auth/change-password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Alterar a propria senha
+         * @description Valida a senha atual, define a nova senha e revoga todas as sessoes do usuario.
+         */
+        post: operations["auth_post_changePassword"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1180,6 +1257,63 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/projects/executive-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gerar relatório executivo da Seção de Projetos em JSON
+         * @description Consolida projetos em andamento e concluídos, valores, saúde dos prazos, pontos de atenção e a carteira aberta detalhada. Exclui projetos cancelados, arquivados ou removidos.
+         */
+        get: operations["reports_get_projects_executiveSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reports/projects/executive-summary.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gerar relatório executivo da Seção de Projetos em PDF */
+        get: operations["reports_get_projects_executiveSummaryPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reports/projects/consolidated-summary.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gerar relatório consolidado Executivo, Operacional ou Financeiro
+         * @description Produz PDF profissional com indicadores, gráficos e detalhamento adequados à finalidade selecionada, combinável com o recorte Geral, CFTV ou Fibra Óptica.
+         */
+        get: operations["reports_get_projects_consolidatedSummaryPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/projects/{id}/dossier": {
         parameters: {
             query?: never;
@@ -1223,7 +1357,7 @@ export interface paths {
         };
         /**
          * Listar usuarios
-         * @description Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `email`, `rank` e `cpf`.
+         * @description Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `warName`, `email`, `rank` e `cpf`.
          */
         get: operations["users_get_collection"];
         put?: never;
@@ -1277,7 +1411,7 @@ export interface paths {
         head?: never;
         /**
          * Atualizar dados cadastrais de usuario
-         * @description Atualiza name, email, rank e cpf. Somente ADMIN.
+         * @description Atualiza name, warName, email, rank e cpf. Somente ADMIN.
          */
         patch: operations["users_patch_byId"];
         trace?: never;
@@ -1920,25 +2054,51 @@ export interface components {
             };
             links?: components["schemas"]["ListLinks"];
         };
+        EffectivePermission: {
+            code: string;
+            module: string;
+            action: string;
+            description: string;
+            critical: boolean;
+        };
+        PermissionGroup: {
+            name: string;
+            permissions: components["schemas"]["EffectivePermission"][];
+        };
         AccessProfile: {
             /** @enum {string} */
             role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
             permissions: string[];
             isAdmin: boolean;
+            groups: components["schemas"]["PermissionGroup"][];
         };
         UserSummary: {
             id: string;
             userCode: number;
             name: string;
+            warName?: string | null;
             /** Format: email */
             email: string;
             /** @enum {string} */
             role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
             rank?: string | null;
             cpf?: string | null;
+            phone?: string | null;
+            avatarDataUrl?: string | null;
+            /** @enum {string} */
+            themePreference?: "LIGHT" | "DARK" | "SYSTEM";
+            notifications?: {
+                taskAssignments: boolean;
+                deadlines: boolean;
+                workflowUpdates: boolean;
+            };
             active: boolean;
             /** Format: date-time */
             createdAt: string;
+            /** Format: date-time */
+            lastLoginAt?: string | null;
+            /** Format: date-time */
+            updatedAt?: string;
             permissions?: string[];
             access?: components["schemas"]["AccessProfile"];
         };
@@ -1946,6 +2106,7 @@ export interface components {
             id: string;
             userCode: number;
             name: string;
+            warName?: string | null;
             /** Format: email */
             email: string;
             /** @enum {string} */
@@ -1953,15 +2114,45 @@ export interface components {
             rank?: string | null;
             active: boolean;
         };
+        /** @description Atualiza somente dados e preferencias da propria conta. E-mail, papel e permissoes nao podem ser alterados por esta operacao. */
+        OwnProfileUpdateRequest: {
+            name?: string;
+            warName?: string | null;
+            /** @enum {string|null} */
+            rank?: "Sd" | "Cb" | "3º Sgt" | "2º Sgt" | "1º Sgt" | "St" | "Asp" | "2º Ten" | "1º Ten" | "Cap" | "Maj" | "TC" | "Cel" | null;
+            cpf?: string | null;
+            phone?: string | null;
+            /** @description Imagem PNG, JPEG ou WebP em data URL, limitada a 256 KB. */
+            avatarDataUrl?: string | null;
+            /** @enum {string} */
+            themePreference?: "LIGHT" | "DARK" | "SYSTEM";
+            notifications?: {
+                taskAssignments: boolean;
+                deadlines: boolean;
+                workflowUpdates: boolean;
+            };
+        };
+        ChangeOwnPasswordRequest: {
+            currentPassword: string;
+            newPassword: string;
+        };
+        ChangeOwnPasswordResponse: {
+            message: string;
+            revokedSessions: number;
+            /** @enum {boolean} */
+            logoutRequired: true;
+        };
         UserOptionsResponse: {
             items: components["schemas"]["UserOption"][];
         };
         /** @description Atualiza dados cadastrais do usuario. Somente ADMIN. */
         UserUpdateRequest: {
             name?: string;
+            warName?: string | null;
             /** Format: email */
             email?: string;
-            rank?: string | null;
+            /** @enum {string|null} */
+            rank?: "Sd" | "Cb" | "3º Sgt" | "2º Sgt" | "1º Sgt" | "St" | "Asp" | "2º Ten" | "1º Ten" | "Cap" | "Maj" | "TC" | "Cel" | null;
             cpf?: string | null;
         };
         UserStatusUpdateRequest: {
@@ -2797,6 +2988,7 @@ export interface components {
         };
         PublicRegisterRequest: {
             name: string;
+            warName?: string | null;
             /** Format: email */
             email: string;
             password: string;
@@ -2805,10 +2997,11 @@ export interface components {
          * @description Cadastro administrativo de usuario. Na criacao administrativa atual, `ADMIN` nao e aceito como role de entrada.
          * @example {
          *       "name": "1 Ten Maria Souza",
+         *       "warName": "Souza",
          *       "email": "maria.souza@sagep.mil.br",
-         *       "password": "123456",
+         *       "password": "<senha-forte-do-usuario>",
          *       "role": "GESTOR",
-         *       "rank": "1 Ten",
+         *       "rank": "1º Ten",
          *       "cpf": "12345678900"
          *     }
          */
@@ -2826,14 +3019,15 @@ export interface components {
          * @description O schema aceita `rank` e `cpf`, mas o backend atual persiste apenas a alteracao de `role` nesta rota.
          * @example {
          *       "role": "CONSULTA",
-         *       "rank": "1 Ten",
+         *       "rank": "1º Ten",
          *       "cpf": "12345678900"
          *     }
          */
         UserRoleUpdateRequest: {
             /** @enum {string} */
             role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
-            rank?: string | null;
+            /** @enum {string|null} */
+            rank?: "Sd" | "Cb" | "3º Sgt" | "2º Sgt" | "1º Sgt" | "St" | "Asp" | "2º Ten" | "1º Ten" | "Cap" | "Maj" | "TC" | "Cel" | null;
             cpf?: string | null;
         };
         UserListEnvelope: {
@@ -3469,6 +3663,47 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
         };
+        HealthComponent: {
+            /** @enum {string} */
+            id: "api" | "database" | "pgadmin";
+            name: string;
+            description: string;
+            /** @enum {string} */
+            status: "operational" | "degraded" | "unavailable" | "not_monitored";
+            latencyMs: number | null;
+            critical: boolean;
+            message: string;
+        };
+        SystemHealthSnapshot: {
+            /** @enum {string} */
+            status: "operational" | "degraded" | "unavailable";
+            /** Format: date-time */
+            checkedAt: string;
+            uptimeSeconds: number;
+            availabilityPercent: number;
+            /** Format: date-time */
+            observationWindowStartedAt: string;
+            components: components["schemas"]["HealthComponent"][];
+            summary: {
+                operational?: number;
+                degraded?: number;
+                unavailable?: number;
+                notMonitored?: number;
+            };
+            history: {
+                /** Format: date-time */
+                timestamp?: string;
+                /** @enum {string} */
+                status?: "operational" | "degraded" | "unavailable";
+                apiLatencyMs?: number;
+                databaseLatencyMs?: number | null;
+            }[];
+        };
+        SystemHealthDetails: components["schemas"]["SystemHealthSnapshot"] & {
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+        };
     };
     responses: {
         /** @description Requisicao invalida. */
@@ -3668,6 +3903,54 @@ export interface operations {
             };
         };
     };
+    health_get_status: {
+        parameters: {
+            query?: {
+                /** @description Ignora o cache curto e executa novas sondas. */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemHealthSnapshot"];
+                };
+            };
+        };
+    };
+    health_get_details: {
+        parameters: {
+            query?: {
+                /** @description Ignora o cache curto e executa novas sondas. */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemHealthDetails"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+        };
+    };
     auth_post_register: {
         parameters: {
             query?: never;
@@ -3743,6 +4026,66 @@ export interface operations {
                 };
             };
             401: components["responses"]["Unauthorized"];
+        };
+    };
+    auth_patch_profile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OwnProfileUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserSummary"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    auth_post_changePassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangeOwnPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChangeOwnPasswordResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     auth_post_refresh: {
@@ -6400,6 +6743,125 @@ export interface operations {
                 };
                 content: {
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reports_get_projects_executiveSummary: {
+        parameters: {
+            query?: {
+                /** @description Dias sem atualização para sinalizar atenção. */
+                staleDays?: number;
+                /** @description Período de referência. */
+                periodType?: "month" | "quarter" | "semester" | "year";
+                /** @description Data de referência do período. */
+                referenceDate?: string;
+                /** @description Início do intervalo manual. */
+                startDate?: string;
+                /** @description Fim do intervalo manual. */
+                endDate?: string;
+                /** @description Posição acumulada até a data. */
+                asOfDate?: string;
+                /** @description Filtrar por estado. */
+                stateUf?: "AM" | "RO" | "RR" | "AC";
+                /** @description Filtrar por OM. */
+                omId?: string;
+                /** @description Filtrar por tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+                /** @description Filtrar por responsável. */
+                ownerId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatório executivo consolidado. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reports_get_projects_executiveSummaryPdf: {
+        parameters: {
+            query?: {
+                /** @description Dias sem atualização para sinalizar atenção. */
+                staleDays?: number;
+                /** @description Filtrar por tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatório executivo em PDF A4 paisagem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reports_get_projects_consolidatedSummaryPdf: {
+        parameters: {
+            query?: {
+                /** @description Finalidade do relatório. */
+                reportType?: "executive" | "operational" | "financial";
+                /** @description Dias sem atualização para sinalizar atenção. */
+                staleDays?: number;
+                /** @description Recorte por tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+                /** @description Filtrar por estado. */
+                stateUf?: "AM" | "RO" | "RR" | "AC";
+                /** @description Filtrar por OM. */
+                omId?: string;
+                /** @description Filtrar por responsável. */
+                ownerId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatório consolidado em PDF A4 paisagem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             400: components["responses"]["BadRequest"];

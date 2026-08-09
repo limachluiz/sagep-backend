@@ -821,12 +821,58 @@
           }
         }
       },
+      "EffectivePermission": {
+        "type": "object",
+        "required": [
+          "code",
+          "module",
+          "action",
+          "description",
+          "critical"
+        ],
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "action": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "critical": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PermissionGroup": {
+        "type": "object",
+        "required": [
+          "name",
+          "permissions"
+        ],
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "permissions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffectivePermission"
+            }
+          }
+        }
+      },
       "AccessProfile": {
         "type": "object",
         "required": [
           "role",
           "permissions",
-          "isAdmin"
+          "isAdmin",
+          "groups"
         ],
         "properties": {
           "role": {
@@ -846,6 +892,12 @@
           },
           "isAdmin": {
             "type": "boolean"
+          },
+          "groups": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PermissionGroup"
+            }
           }
         }
       },
@@ -870,6 +922,10 @@
           "name": {
             "type": "string"
           },
+          "warName": {
+            "type": "string",
+            "nullable": true
+          },
           "email": {
             "type": "string",
             "format": "email"
@@ -891,10 +947,54 @@
             "type": "string",
             "nullable": true
           },
+          "phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "avatarDataUrl": {
+            "type": "string",
+            "nullable": true
+          },
+          "themePreference": {
+            "type": "string",
+            "enum": [
+              "LIGHT",
+              "DARK",
+              "SYSTEM"
+            ]
+          },
+          "notifications": {
+            "type": "object",
+            "required": [
+              "taskAssignments",
+              "deadlines",
+              "workflowUpdates"
+            ],
+            "properties": {
+              "taskAssignments": {
+                "type": "boolean"
+              },
+              "deadlines": {
+                "type": "boolean"
+              },
+              "workflowUpdates": {
+                "type": "boolean"
+              }
+            }
+          },
           "active": {
             "type": "boolean"
           },
           "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastLoginAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "updatedAt": {
             "type": "string",
             "format": "date-time"
           },
@@ -929,6 +1029,10 @@
           "name": {
             "type": "string"
           },
+          "warName": {
+            "type": "string",
+            "nullable": true
+          },
           "email": {
             "type": "string",
             "format": "email"
@@ -948,6 +1052,124 @@
           },
           "active": {
             "type": "boolean"
+          }
+        }
+      },
+      "OwnProfileUpdateRequest": {
+        "type": "object",
+        "description": "Atualiza somente dados e preferencias da propria conta. E-mail, papel e permissoes nao podem ser alterados por esta operacao.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 120
+          },
+          "warName": {
+            "type": "string",
+            "maxLength": 80,
+            "nullable": true
+          },
+          "rank": {
+            "type": "string",
+            "enum": [
+              "Sd",
+              "Cb",
+              "3º Sgt",
+              "2º Sgt",
+              "1º Sgt",
+              "St",
+              "Asp",
+              "2º Ten",
+              "1º Ten",
+              "Cap",
+              "Maj",
+              "TC",
+              "Cel"
+            ],
+            "nullable": true
+          },
+          "cpf": {
+            "type": "string",
+            "pattern": "^\\d{11}$",
+            "nullable": true
+          },
+          "phone": {
+            "type": "string",
+            "pattern": "^\\d{10,11}$",
+            "nullable": true
+          },
+          "avatarDataUrl": {
+            "type": "string",
+            "maxLength": 360000,
+            "nullable": true,
+            "description": "Imagem PNG, JPEG ou WebP em data URL, limitada a 256 KB."
+          },
+          "themePreference": {
+            "type": "string",
+            "enum": [
+              "LIGHT",
+              "DARK",
+              "SYSTEM"
+            ]
+          },
+          "notifications": {
+            "type": "object",
+            "required": [
+              "taskAssignments",
+              "deadlines",
+              "workflowUpdates"
+            ],
+            "properties": {
+              "taskAssignments": {
+                "type": "boolean"
+              },
+              "deadlines": {
+                "type": "boolean"
+              },
+              "workflowUpdates": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      },
+      "ChangeOwnPasswordRequest": {
+        "type": "object",
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ],
+        "properties": {
+          "currentPassword": {
+            "type": "string",
+            "minLength": 1
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 128
+          }
+        }
+      },
+      "ChangeOwnPasswordResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "revokedSessions",
+          "logoutRequired"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "revokedSessions": {
+            "type": "integer"
+          },
+          "logoutRequired": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
           }
         }
       },
@@ -973,12 +1195,31 @@
             "type": "string",
             "minLength": 3
           },
+          "warName": {
+            "type": "string",
+            "nullable": true
+          },
           "email": {
             "type": "string",
             "format": "email"
           },
           "rank": {
             "type": "string",
+            "enum": [
+              "Sd",
+              "Cb",
+              "3º Sgt",
+              "2º Sgt",
+              "1º Sgt",
+              "St",
+              "Asp",
+              "2º Ten",
+              "1º Ten",
+              "Cap",
+              "Maj",
+              "TC",
+              "Cel"
+            ],
             "nullable": true
           },
           "cpf": {
@@ -3552,6 +3793,10 @@
             "type": "string",
             "minLength": 3
           },
+          "warName": {
+            "type": "string",
+            "nullable": true
+          },
           "email": {
             "type": "string",
             "format": "email"
@@ -3603,10 +3848,11 @@
         },
         "example": {
           "name": "1 Ten Maria Souza",
+          "warName": "Souza",
           "email": "maria.souza@sagep.mil.br",
-          "password": "123456",
+          "password": "<senha-forte-do-usuario>",
           "role": "GESTOR",
-          "rank": "1 Ten",
+          "rank": "1º Ten",
           "cpf": "12345678900"
         }
       },
@@ -3628,6 +3874,21 @@
           },
           "rank": {
             "type": "string",
+            "enum": [
+              "Sd",
+              "Cb",
+              "3º Sgt",
+              "2º Sgt",
+              "1º Sgt",
+              "St",
+              "Asp",
+              "2º Ten",
+              "1º Ten",
+              "Cap",
+              "Maj",
+              "TC",
+              "Cel"
+            ],
             "nullable": true
           },
           "cpf": {
@@ -3637,7 +3898,7 @@
         },
         "example": {
           "role": "CONSULTA",
-          "rank": "1 Ten",
+          "rank": "1º Ten",
           "cpf": "12345678900"
         }
       },
@@ -5310,6 +5571,159 @@
             "format": "date-time"
           }
         }
+      },
+      "HealthComponent": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "description",
+          "status",
+          "latencyMs",
+          "critical",
+          "message"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "enum": [
+              "api",
+              "database",
+              "pgadmin"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "operational",
+              "degraded",
+              "unavailable",
+              "not_monitored"
+            ]
+          },
+          "latencyMs": {
+            "type": "number",
+            "nullable": true
+          },
+          "critical": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "SystemHealthSnapshot": {
+        "type": "object",
+        "required": [
+          "status",
+          "checkedAt",
+          "uptimeSeconds",
+          "availabilityPercent",
+          "observationWindowStartedAt",
+          "components",
+          "summary",
+          "history"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "operational",
+              "degraded",
+              "unavailable"
+            ]
+          },
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "uptimeSeconds": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "availabilityPercent": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "observationWindowStartedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "components": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HealthComponent"
+            }
+          },
+          "summary": {
+            "type": "object",
+            "properties": {
+              "operational": {
+                "type": "integer"
+              },
+              "degraded": {
+                "type": "integer"
+              },
+              "unavailable": {
+                "type": "integer"
+              },
+              "notMonitored": {
+                "type": "integer"
+              }
+            }
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "timestamp": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "operational",
+                    "degraded",
+                    "unavailable"
+                  ]
+                },
+                "apiLatencyMs": {
+                  "type": "number"
+                },
+                "databaseLatencyMs": {
+                  "type": "number",
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "SystemHealthDetails": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/SystemHealthSnapshot"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "diagnostics": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        ]
       }
     }
   },
@@ -5333,6 +5747,87 @@
           }
         },
         "operationId": "health_get_collection"
+      }
+    },
+    "/health/status": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Consultar o estado sanitizado dos servicos essenciais",
+        "description": "Endpoint publico para permanecer acessivel durante falhas do banco. Nao expoe credenciais, hosts ou versoes.",
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "description": "Ignora o cache curto e executa novas sondas.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHealthSnapshot"
+                }
+              }
+            }
+          }
+        },
+        "operationId": "health_get_status"
+      }
+    },
+    "/health/details": {
+      "get": {
+        "tags": [
+          "health"
+        ],
+        "summary": "Consultar diagnostico tecnico do ambiente",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-permissions": [
+          "system_health.view_details"
+        ],
+        "parameters": [
+          {
+            "name": "refresh",
+            "in": "query",
+            "required": false,
+            "description": "Ignora o cache curto e executa novas sondas.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemHealthDetails"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          }
+        },
+        "operationId": "health_get_details"
       }
     },
     "/auth/register": {
@@ -5451,6 +5946,116 @@
           }
         },
         "operationId": "auth_get_me"
+      }
+    },
+    "/auth/profile": {
+      "patch": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Atualizar o proprio perfil",
+        "description": "Permite alterar dados pessoais e preferencias. Nao altera e-mail, papel RBAC ou permissoes.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OwnProfileUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserSummary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "auth_patch_profile"
+      }
+    },
+    "/auth/change-password": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Alterar a propria senha",
+        "description": "Valida a senha atual, define a nova senha e revoga todas as sessoes do usuario.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChangeOwnPasswordRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChangeOwnPasswordResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "auth_post_changePassword"
       }
     },
     "/auth/refresh": {
@@ -10631,6 +11236,371 @@
         "operationId": "exports_get_projectsXlsx"
       }
     },
+    "/reports/projects/executive-summary": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Gerar relatório executivo da Seção de Projetos em JSON",
+        "description": "Consolida projetos em andamento e concluídos, valores, saúde dos prazos, pontos de atenção e a carteira aberta detalhada. Exclui projetos cancelados, arquivados ou removidos.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "staleDays",
+            "in": "query",
+            "required": false,
+            "description": "Dias sem atualização para sinalizar atenção.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "default": 15
+            }
+          },
+          {
+            "name": "periodType",
+            "in": "query",
+            "required": false,
+            "description": "Período de referência.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "month",
+                "quarter",
+                "semester",
+                "year"
+              ]
+            }
+          },
+          {
+            "name": "referenceDate",
+            "in": "query",
+            "required": false,
+            "description": "Data de referência do período.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "startDate",
+            "in": "query",
+            "required": false,
+            "description": "Início do intervalo manual.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "endDate",
+            "in": "query",
+            "required": false,
+            "description": "Fim do intervalo manual.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "asOfDate",
+            "in": "query",
+            "required": false,
+            "description": "Posição acumulada até a data.",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "stateUf",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por estado.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "AM",
+                "RO",
+                "RR",
+                "AC"
+              ]
+            }
+          },
+          {
+            "name": "omId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por OM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectType",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por tipo de projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA_PONTO_LOGICO"
+              ]
+            }
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por responsável.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Relatório executivo consolidado.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "reports.export",
+          "dashboard.view_executive"
+        ],
+        "operationId": "reports_get_projects_executiveSummary"
+      }
+    },
+    "/reports/projects/executive-summary.pdf": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Gerar relatório executivo da Seção de Projetos em PDF",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "staleDays",
+            "in": "query",
+            "required": false,
+            "description": "Dias sem atualização para sinalizar atenção.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "default": 15
+            }
+          },
+          {
+            "name": "projectType",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por tipo de projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA_PONTO_LOGICO"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Relatório executivo em PDF A4 paisagem.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "reports.export",
+          "dashboard.view_executive"
+        ],
+        "operationId": "reports_get_projects_executiveSummaryPdf"
+      }
+    },
+    "/reports/projects/consolidated-summary.pdf": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Gerar relatório consolidado Executivo, Operacional ou Financeiro",
+        "description": "Produz PDF profissional com indicadores, gráficos e detalhamento adequados à finalidade selecionada, combinável com o recorte Geral, CFTV ou Fibra Óptica.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "reportType",
+            "in": "query",
+            "required": false,
+            "description": "Finalidade do relatório.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "executive",
+                "operational",
+                "financial"
+              ],
+              "default": "executive"
+            }
+          },
+          {
+            "name": "staleDays",
+            "in": "query",
+            "required": false,
+            "description": "Dias sem atualização para sinalizar atenção.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "default": 15
+            }
+          },
+          {
+            "name": "projectType",
+            "in": "query",
+            "required": false,
+            "description": "Recorte por tipo de projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA_PONTO_LOGICO"
+              ]
+            }
+          },
+          {
+            "name": "stateUf",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por estado.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "AM",
+                "RO",
+                "RR",
+                "AC"
+              ]
+            }
+          },
+          {
+            "name": "omId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por OM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por responsável.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Relatório consolidado em PDF A4 paisagem.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "reports.export"
+        ],
+        "operationId": "reports_get_projects_consolidatedSummaryPdf"
+      }
+    },
     "/reports/projects/{id}/dossier": {
       "get": {
         "tags": [
@@ -10743,7 +11713,7 @@
           "users"
         ],
         "summary": "Listar usuarios",
-        "description": "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `email`, `rank` e `cpf`.",
+        "description": "Endpoint administrativo. Usa envelope paginado por padrao e `legacy` para compatibilidade. A busca textual atual cobre `name`, `warName`, `email`, `rank` e `cpf`.",
         "security": [
           {
             "bearerAuth": []
@@ -11022,7 +11992,7 @@
           "users"
         ],
         "summary": "Atualizar dados cadastrais de usuario",
-        "description": "Atualiza name, email, rank e cpf. Somente ADMIN.",
+        "description": "Atualiza name, warName, email, rank e cpf. Somente ADMIN.",
         "security": [
           {
             "bearerAuth": []

@@ -389,6 +389,21 @@ describe("critical flows", () => {
     expect(me.body.permissions).toContain("military_organizations.manage");
     expect(me.body.access.role).toBe("ADMIN");
     expect(me.body.access.isAdmin).toBe(true);
+    expect(me.body.access.groups).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: "Tarefas",
+          permissions: expect.arrayContaining([
+            expect.objectContaining({
+              code: "tasks.create",
+              description: expect.any(String),
+            }),
+          ]),
+        }),
+      ]),
+    );
+    expect(me.body.lastLoginAt).toBeTruthy();
+    expect(me.body.updatedAt).toBeTruthy();
     expect(adminAuth.user.permissions).toContain("tasks.create");
 
     const loggedUser = await prisma.user.findUnique({
@@ -519,6 +534,11 @@ describe("critical flows", () => {
   it("permissions persistence: override ALLOW adds permission outside the role base", async () => {
     await request(app)
       .get("/api/dashboard/executive")
+      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+      .expect(403);
+
+    await request(app)
+      .get("/api/reports/projects/executive-summary.pdf")
       .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
       .expect(403);
 
@@ -899,6 +919,82 @@ describe("critical flows", () => {
     expect(metadata.password).toBeUndefined();
     expect(metadata.token).toBeUndefined();
     expect(metadata.tokenHash).toBeUndefined();
+  });
+
+  it("auth profile: updates only personal fields and changes password with session revocation", async () => {
+    const profileUser = await createUser(
+      "Usuario Perfil",
+      `perfil-${Date.now()}@sagep.local`,
+      "CONSULTA",
+    );
+    const profileAuth = await login(profileUser.email, "sagep-profile-device");
+
+    const updatedProfile = await request(app)
+      .patch("/api/auth/profile")
+      .set("Authorization", `Bearer ${profileAuth.accessToken}`)
+      .send({
+        name: "Usuario Perfil Atualizado",
+        warName: "Perfil",
+        rank: "1 Ten",
+        cpf: "99988877766",
+        phone: "92999998888",
+        themePreference: "SYSTEM",
+        notifications: {
+          taskAssignments: false,
+          deadlines: true,
+          workflowUpdates: false,
+        },
+      })
+      .expect(200);
+
+    expect(updatedProfile.body).toMatchObject({
+      id: profileUser.id,
+      name: "Usuario Perfil Atualizado",
+      warName: "Perfil",
+      email: profileUser.email,
+      role: "CONSULTA",
+      rank: "1 Ten",
+      cpf: "99988877766",
+      phone: "92999998888",
+      themePreference: "SYSTEM",
+      notifications: {
+        taskAssignments: false,
+        deadlines: true,
+        workflowUpdates: false,
+      },
+    });
+
+    const forbiddenRoleChange = await request(app)
+      .patch("/api/auth/profile")
+      .set("Authorization", `Bearer ${profileAuth.accessToken}`)
+      .send({ role: "ADMIN" })
+      .expect(400);
+    expect(forbiddenRoleChange.body.message).toBeTruthy();
+
+    await request(app)
+      .post("/api/auth/change-password")
+      .set("Authorization", `Bearer ${profileAuth.accessToken}`)
+      .send({ currentPassword: "senha-incorreta", newPassword: "nova-senha-123" })
+      .expect(401);
+
+    const changedPassword = await request(app)
+      .post("/api/auth/change-password")
+      .set("Authorization", `Bearer ${profileAuth.accessToken}`)
+      .send({ currentPassword: password, newPassword: "nova-senha-123" })
+      .expect(200);
+
+    expect(changedPassword.body.logoutRequired).toBe(true);
+    expect(changedPassword.body.revokedSessions).toBeGreaterThanOrEqual(1);
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ email: profileUser.email, password })
+      .expect(401);
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ email: profileUser.email, password: "nova-senha-123" })
+      .expect(200);
   });
 
   it("auth sessions: supports own and administrative management with differentiated status", async () => {
@@ -5272,6 +5368,35 @@ describe("critical flows", () => {
     expect(String(projectRow!.getCell(6).value)).toContain("OMT");
     expect(projectRow!.getCell(7).value).toBe("Manaus");
     expect(projectRow!.getCell(10).value).toBe(200);
+
+    const executiveReport = await request(app)
+      .get("/api/reports/projects/executive-summary?staleDays=30")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(executiveReport.body.filter.scope).toBe(
+      "Visão geral da Seção de Projetos",
+    );
+    expect(executiveReport.body.filter.staleDays).toBe(30);
+    expect(executiveReport.body.summary.projectsTotal).toBeGreaterThanOrEqual(1);
+    expect(executiveReport.body.summary.projectsOpen).toBeGreaterThanOrEqual(1);
+    expect(executiveReport.body.summary).toHaveProperty("totalInProgressAmount");
+    expect(executiveReport.body.summary).toHaveProperty("totalCompletedAmount");
+    expect(
+      executiveReport.body.projects.some(
+        (item: { id: string }) => item.id === project.id,
+      ),
+    ).toBe(true);
+
+    const executivePdf = await request(app)
+      .get("/api/reports/projects/executive-summary.pdf?staleDays=30")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .buffer(true)
+      .parse(binaryParser)
+      .expect(200);
+
+    expect(executivePdf.headers["content-type"]).toContain("application/pdf");
+    expect(executivePdf.body.subarray(0, 4).toString("utf8")).toBe("%PDF");
 
     const dossier = await request(app)
       .get(`/api/reports/projects/${project.id}/dossier`)

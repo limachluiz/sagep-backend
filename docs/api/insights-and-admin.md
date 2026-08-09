@@ -125,6 +125,22 @@ GET /api/reports/projects/:id/dossier.pdf
 
 Permissao: `reports.export`.
 
+### Relatorio executivo da Secao de Projetos
+
+```http
+GET /api/reports/projects/executive-summary
+GET /api/reports/projects/executive-summary.pdf?staleDays=15
+GET /api/reports/projects/executive-summary.pdf?projectType=CFTV
+```
+
+O PDF A4 paisagem consolida projetos em andamento e concluidos, valores da
+carteira, empenhos, graficos por etapa e estado, saude dos prazos, pontos de
+atencao e o detalhamento dos projetos abertos. O filtro `projectType` aceita
+`CFTV` ou `FIBRA_OPTICA_PONTO_LOGICO`. Projetos cancelados, arquivados ou
+removidos nao entram no documento.
+
+Permissoes: `reports.export` e `dashboard.view_executive`.
+
 Uso: gerar dossie consolidado do projeto em JSON ou PDF.
 
 ## Users
@@ -224,7 +240,7 @@ Payload:
 {
   "name": "1 Ten Maria Souza",
   "email": "maria.souza@sagep.mil.br",
-  "password": "123456",
+  "password": "<senha-forte-do-usuario>",
   "role": "GESTOR",
   "rank": "1 Ten",
   "cpf": "12345678900"
@@ -922,3 +938,19 @@ GET /api/health
 ```
 
 Endpoint publico para verificacao basica da API.
+
+```http
+GET /api/health/status
+```
+
+Resumo publico sanitizado com API, PostgreSQL, pgAdmin, latencias e historico
+observado. Permanece independente da autenticacao persistida para diagnosticar
+falhas do banco.
+
+```http
+GET /api/health/details
+Authorization: Bearer <token>
+```
+
+Diagnostico de runtime, memoria e unidades de infraestrutura. Requer
+`system_health.view_details`, concedida por padrao somente a `ADMIN`.

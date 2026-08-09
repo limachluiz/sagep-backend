@@ -43,6 +43,7 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 
 - autenticação com JWT e refresh token;
 - sessões do usuário e revogação administrativa;
+- perfil pessoal com edição restrita de dados, avatar, preferências e alteração segura de senha;
 - RBAC governado pelo banco com permissões por role e overrides por usuário;
 - projetos com workflow documental;
 - Kanban de projetos com movimentação protegida pelo workflow;
@@ -61,6 +62,7 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - auditoria e timeline.
 - contrato OpenAPI com cliente TypeScript gerado;
 - códigos de erro estáveis e `requestId` para suporte.
+- centro de saúde com sondas da API, PostgreSQL e pgAdmin, histórico de latência e diagnóstico administrativo.
 
 ## Fluxo documental resumido
 
@@ -114,6 +116,7 @@ Variáveis usadas atualmente:
 | Variável | Obrigatória | Descrição |
 | --- | --- | --- |
 | `PORT` | sim | Porta HTTP da aplicação |
+| `API_PORT` | nao | Porta publicada pelo Docker no host. Padrao `3000`, igual ao proxy do frontend |
 | `NODE_ENV` | sim | Ambiente de execução |
 | `DATABASE_URL` | sim | String de conexão PostgreSQL |
 | `JWT_SECRET` | sim | Segredo do access token |
@@ -128,15 +131,20 @@ Variáveis usadas atualmente:
 | `JWT_ACCESS_EXPIRES_IN` | sim | Expiração do access token |
 | `JWT_REFRESH_EXPIRES_IN` | sim | Expiração do refresh token |
 | `ALLOW_PUBLIC_REGISTRATION` | nao | Habilita `POST /auth/register`. Padrao seguro: `false` |
+| `HEALTH_PGADMIN_URL` | nao | Endpoint interno de ping do pgAdmin. No Compose: `http://pgadmin/misc/ping` |
+| `HEALTH_PROBE_TIMEOUT_MS` | nao | Timeout das sondas internas. Padrao `2000` ms |
 
 Exemplo:
 
 ```env
 PORT=3000
 NODE_ENV=development
-DATABASE_URL="postgresql://sagep:sagep123@localhost:5432/sagep?schema=public"
-JWT_SECRET="Senha forte aqui"
-JWT_REFRESH_SECRET="Outra senha forte aqui"
+DATABASE_URL="postgresql://sagep:<senha-postgres>@localhost:5432/sagep?schema=public"
+DOCKER_DATABASE_URL="postgresql://sagep:<senha-postgres>@postgres:5432/sagep?schema=public"
+POSTGRES_PASSWORD=<defina-uma-senha-forte>
+PGADMIN_DEFAULT_PASSWORD=<defina-outra-senha-forte>
+JWT_SECRET="<gere-um-segredo-aleatorio-forte>"
+JWT_REFRESH_SECRET="<gere-outro-segredo-aleatorio-forte>"
 JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 PDF_TIMEOUT_MS=60000
@@ -146,6 +154,8 @@ PORTAL_TRANSPARENCIA_API_TOKEN=
 CORS_ALLOWED_ORIGINS="http://localhost:4200"
 CORS_ALLOW_CREDENTIALS=false
 ALLOW_PUBLIC_REGISTRATION=false
+HEALTH_PGADMIN_URL="http://pgadmin/misc/ping"
+HEALTH_PROBE_TIMEOUT_MS=2000
 ```
 
 Requisicoes sem header `Origin`, como scripts, health checks e comunicacao
@@ -156,11 +166,11 @@ URLs oficiais do frontend.
 
 O ambiente Docker sobe `api`, `postgres` e `pgadmin`. O PostgreSQL usa o volume nomeado `sagep_postgres_data`, montado em `/var/lib/postgresql/data`, para preservar ATAs importadas, usuários, projetos e demais dados entre reinícios.
 
-Dentro do Docker, a API sempre usa `DATABASE_URL=postgresql://sagep:sagep123@postgres:5432/sagep?schema=public`. Nao use `localhost` dentro do container da API: nesse contexto, `localhost` e o proprio container, nao o Postgres.
+Dentro do Docker, defina `DOCKER_DATABASE_URL` usando o host `postgres` e a mesma senha informada em `POSTGRES_PASSWORD`. Nao use `localhost` dentro do container da API: nesse contexto, `localhost` e o proprio container, nao o Postgres.
 
-Fora do Docker, para desenvolvimento local, use `DATABASE_URL=postgresql://sagep:sagep123@localhost:5432/sagep?schema=public`.
+Fora do Docker, para desenvolvimento local, use `DATABASE_URL` com o host `localhost` e a senha definida para o PostgreSQL.
 
-No pgAdmin rodando no Docker, cadastre o servidor PostgreSQL com host `postgres`, porta `5432`, usuario `sagep`, senha `sagep123` e banco `sagep`.
+No pgAdmin rodando no Docker, cadastre o servidor PostgreSQL com host `postgres`, porta `5432`, usuario `sagep`, a senha definida em `POSTGRES_PASSWORD` e banco `sagep`.
 
 Subir tudo:
 
@@ -191,6 +201,17 @@ Servicos padrao:
 - OpenAPI: `http://localhost:3000/api/docs`
 - pgAdmin: `http://localhost:5050`
 - PostgreSQL: `localhost:5432`
+
+### Centro de saude e observabilidade
+
+- `GET /api/health`: liveness simples da API;
+- `GET /api/health/status`: resumo publico e sanitizado, inclusive quando o banco estiver indisponivel;
+- `GET /api/health/details`: runtime, memoria e unidades monitoradas, protegido por `system_health.view_details`.
+
+O monitoramento usa sondas de servico e nao monta `/var/run/docker.sock` no
+container da API. Isso permite verificar o funcionamento real de API,
+PostgreSQL e pgAdmin sem conceder ao processo web acesso administrativo ao host.
+O historico de ate 120 amostras fica em memoria e reinicia junto com a API.
 
 Parar sem perder dados:
 
@@ -320,19 +341,10 @@ npm run prisma:studio
 
 ## Usuário admin do seed
 
-Seed local padrão:
-
-- e-mail: `admin@sagep.com`
-- senha: `123456`
-- role: `ADMIN`
-
-Outros usuários seeded:
-
-- `gestor@sagep.com`
-- `projetista@sagep.com`
-- `consulta@sagep.com`
-
-Essas credenciais são para desenvolvimento local.
+O seed local cria perfis de desenvolvimento para validar os níveis de acesso.
+As credenciais não são documentadas nem devem ser reutilizadas em produção.
+Defina usuários e senhas próprios no ambiente local e altere qualquer acesso
+provisório antes de disponibilizar a aplicação em rede.
 
 ## Documentação detalhada
 

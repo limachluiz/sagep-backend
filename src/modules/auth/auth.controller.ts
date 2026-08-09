@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { AuthService } from "./auth.service.js";
 import {
   authUserIdParamSchema,
+  changeOwnPasswordSchema,
   cleanupSessionsSchema,
   listSessionsQuerySchema,
   loginSchema,
@@ -9,6 +10,7 @@ import {
   refreshTokenSchema,
   registerSchema,
   sessionIdParamSchema,
+  updateOwnProfileSchema,
 } from "./auth.schemas.js";
 import { buildListResponse } from "../../shared/pagination.js";
 
@@ -41,6 +43,28 @@ export class AuthController {
     const user = await authService.me(userId);
 
     return res.status(200).json(user);
+  }
+
+  async updateOwnProfile(req: Request, res: Response) {
+    const data = updateOwnProfileSchema.parse(req.body);
+    const user = await authService.updateOwnProfile(
+      req.user!,
+      data,
+      getRequestContext(req),
+    );
+
+    return res.status(200).json(user);
+  }
+
+  async changeOwnPassword(req: Request, res: Response) {
+    const data = changeOwnPasswordSchema.parse(req.body);
+    const result = await authService.changeOwnPassword(
+      req.user!,
+      data,
+      getRequestContext(req),
+    );
+
+    return res.status(200).json(result);
   }
 
   async refresh(req: Request, res: Response) {
