@@ -2044,7 +2044,7 @@ export const openApiDocument: OpenApiDocument = {
           name: "1 Ten Maria Souza",
           warName: "Souza",
           email: "maria.souza@sagep.mil.br",
-          password: "123456",
+          password: "<senha-forte-do-usuario>",
           role: "GESTOR",
           rank: "1º Ten",
           cpf: "12345678900",
@@ -2902,6 +2902,61 @@ export const openApiDocument: OpenApiDocument = {
           timestamp: { type: "string", format: "date-time" },
         },
       },
+      HealthComponent: {
+        type: "object",
+        required: ["id", "name", "description", "status", "latencyMs", "critical", "message"],
+        properties: {
+          id: { type: "string", enum: ["api", "database", "pgadmin"] },
+          name: { type: "string" },
+          description: { type: "string" },
+          status: { type: "string", enum: ["operational", "degraded", "unavailable", "not_monitored"] },
+          latencyMs: { type: "number", nullable: true },
+          critical: { type: "boolean" },
+          message: { type: "string" },
+        },
+      },
+      SystemHealthSnapshot: {
+        type: "object",
+        required: ["status", "checkedAt", "uptimeSeconds", "availabilityPercent", "observationWindowStartedAt", "components", "summary", "history"],
+        properties: {
+          status: { type: "string", enum: ["operational", "degraded", "unavailable"] },
+          checkedAt: { type: "string", format: "date-time" },
+          uptimeSeconds: { type: "integer", minimum: 0 },
+          availabilityPercent: { type: "number", minimum: 0, maximum: 100 },
+          observationWindowStartedAt: { type: "string", format: "date-time" },
+          components: { type: "array", items: { $ref: "#/components/schemas/HealthComponent" } },
+          summary: {
+            type: "object",
+            properties: {
+              operational: { type: "integer" }, degraded: { type: "integer" },
+              unavailable: { type: "integer" }, notMonitored: { type: "integer" },
+            },
+          },
+          history: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                timestamp: { type: "string", format: "date-time" },
+                status: { type: "string", enum: ["operational", "degraded", "unavailable"] },
+                apiLatencyMs: { type: "number" },
+                databaseLatencyMs: { type: "number", nullable: true },
+              },
+            },
+          },
+        },
+      },
+      SystemHealthDetails: {
+        allOf: [
+          { $ref: "#/components/schemas/SystemHealthSnapshot" },
+          {
+            type: "object",
+            properties: {
+              diagnostics: { type: "object", additionalProperties: true },
+            },
+          },
+        ],
+      },
     },
   },
   paths: {
@@ -2911,6 +2966,29 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Health check publico",
         responses: {
           "200": okJson("#/components/schemas/HealthResponse"),
+        },
+      },
+    },
+    "/health/status": {
+      get: {
+        tags: ["health"],
+        summary: "Consultar o estado sanitizado dos servicos essenciais",
+        description: "Endpoint publico para permanecer acessivel durante falhas do banco. Nao expoe credenciais, hosts ou versoes.",
+        parameters: [queryParameter("refresh", "Ignora o cache curto e executa novas sondas.", { type: "boolean", default: false })],
+        responses: { "200": okJson("#/components/schemas/SystemHealthSnapshot") },
+      },
+    },
+    "/health/details": {
+      get: {
+        tags: ["health"],
+        summary: "Consultar diagnostico tecnico do ambiente",
+        security: bearerSecurity,
+        "x-permissions": ["system_health.view_details"],
+        parameters: [queryParameter("refresh", "Ignora o cache curto e executa novas sondas.", { type: "boolean", default: false })],
+        responses: {
+          "200": okJson("#/components/schemas/SystemHealthDetails"),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+          "403": { $ref: "#/components/responses/Forbidden" },
         },
       },
     },

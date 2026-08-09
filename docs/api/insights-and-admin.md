@@ -240,7 +240,7 @@ Payload:
 {
   "name": "1 Ten Maria Souza",
   "email": "maria.souza@sagep.mil.br",
-  "password": "123456",
+  "password": "<senha-forte-do-usuario>",
   "role": "GESTOR",
   "rank": "1 Ten",
   "cpf": "12345678900"
@@ -938,3 +938,19 @@ GET /api/health
 ```
 
 Endpoint publico para verificacao basica da API.
+
+```http
+GET /api/health/status
+```
+
+Resumo publico sanitizado com API, PostgreSQL, pgAdmin, latencias e historico
+observado. Permanece independente da autenticacao persistida para diagnosticar
+falhas do banco.
+
+```http
+GET /api/health/details
+Authorization: Bearer <token>
+```
+
+Diagnostico de runtime, memoria e unidades de infraestrutura. Requer
+`system_health.view_details`, concedida por padrao somente a `ADMIN`.

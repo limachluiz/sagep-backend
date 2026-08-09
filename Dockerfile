@@ -1,7 +1,9 @@
 FROM node:22-bookworm-slim AS build
 
 ENV PUPPETEER_CACHE_DIR=/root/.cache/puppeteer
-ENV DATABASE_URL=postgresql://sagep:sagep123@postgres:5432/sagep?schema=public
+# URL sintaticamente valida usada apenas pelo Prisma durante a geracao.
+# A URL real e injetada em tempo de execucao pelo ambiente.
+ENV DATABASE_URL=postgresql://localhost:5432/sagep?schema=public
 
 WORKDIR /app
 
@@ -19,7 +21,6 @@ FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 ENV PUPPETEER_CACHE_DIR=/root/.cache/puppeteer
-ENV DATABASE_URL=postgresql://sagep:sagep123@postgres:5432/sagep?schema=public
 
 WORKDIR /app
 

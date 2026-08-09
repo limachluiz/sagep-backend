@@ -24,6 +24,8 @@ const envSchema = z
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  HEALTH_PGADMIN_URL: z.string().url().optional(),
+  HEALTH_PROBE_TIMEOUT_MS: z.coerce.number().int().min(250).max(10000).default(2000),
 })
   .transform((env) => ({
     ...env,

@@ -50,9 +50,24 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(133);
+    expect(operationIds).toHaveLength(135);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
+  });
+
+  it("separa a saude publica sanitizada do diagnostico tecnico administrativo", () => {
+    expect(rolePermissions.ADMIN).toEqual(expect.arrayContaining([
+      "system_health.view",
+      "system_health.view_details",
+    ]));
+    expect(rolePermissions.CONSULTA).toContain("system_health.view");
+    expect(rolePermissions.CONSULTA).not.toContain("system_health.view_details");
+
+    const paths = openApiDocument.paths as Record<string, any>;
+    expect(paths["/health/status"].get.security).toBeUndefined();
+    expect(paths["/health/details"].get["x-permissions"]).toEqual([
+      "system_health.view_details",
+    ]);
   });
 
   it("documenta tarefas no detalhe contextual do projeto", () => {

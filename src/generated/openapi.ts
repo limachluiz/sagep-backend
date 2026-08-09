@@ -21,6 +21,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/health/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar o estado sanitizado dos servicos essenciais
+         * @description Endpoint publico para permanecer acessivel durante falhas do banco. Nao expoe credenciais, hosts ou versoes.
+         */
+        get: operations["health_get_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/health/details": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar diagnostico tecnico do ambiente */
+        get: operations["health_get_details"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -2942,7 +2979,7 @@ export interface components {
          *       "name": "1 Ten Maria Souza",
          *       "warName": "Souza",
          *       "email": "maria.souza@sagep.mil.br",
-         *       "password": "123456",
+         *       "password": "<senha-forte-do-usuario>",
          *       "role": "GESTOR",
          *       "rank": "1º Ten",
          *       "cpf": "12345678900"
@@ -3606,6 +3643,47 @@ export interface components {
             /** Format: date-time */
             timestamp: string;
         };
+        HealthComponent: {
+            /** @enum {string} */
+            id: "api" | "database" | "pgadmin";
+            name: string;
+            description: string;
+            /** @enum {string} */
+            status: "operational" | "degraded" | "unavailable" | "not_monitored";
+            latencyMs: number | null;
+            critical: boolean;
+            message: string;
+        };
+        SystemHealthSnapshot: {
+            /** @enum {string} */
+            status: "operational" | "degraded" | "unavailable";
+            /** Format: date-time */
+            checkedAt: string;
+            uptimeSeconds: number;
+            availabilityPercent: number;
+            /** Format: date-time */
+            observationWindowStartedAt: string;
+            components: components["schemas"]["HealthComponent"][];
+            summary: {
+                operational?: number;
+                degraded?: number;
+                unavailable?: number;
+                notMonitored?: number;
+            };
+            history: {
+                /** Format: date-time */
+                timestamp?: string;
+                /** @enum {string} */
+                status?: "operational" | "degraded" | "unavailable";
+                apiLatencyMs?: number;
+                databaseLatencyMs?: number | null;
+            }[];
+        };
+        SystemHealthDetails: components["schemas"]["SystemHealthSnapshot"] & {
+            diagnostics?: {
+                [key: string]: unknown;
+            };
+        };
     };
     responses: {
         /** @description Requisicao invalida. */
@@ -3803,6 +3881,54 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
+        };
+    };
+    health_get_status: {
+        parameters: {
+            query?: {
+                /** @description Ignora o cache curto e executa novas sondas. */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemHealthSnapshot"];
+                };
+            };
+        };
+    };
+    health_get_details: {
+        parameters: {
+            query?: {
+                /** @description Ignora o cache curto e executa novas sondas. */
+                refresh?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemHealthDetails"];
+                };
+            };
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
         };
     };
     auth_post_register: {

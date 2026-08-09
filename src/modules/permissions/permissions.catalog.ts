@@ -42,7 +42,9 @@ export type Permission =
   | "dashboard.view_executive"
   | "dashboard.financial_view"
   | "reports.export"
-  | "users.manage";
+  | "users.manage"
+  | "system_health.view"
+  | "system_health.view_details";
 
 export const roleValues = ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"] as const;
 
@@ -108,6 +110,8 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "dashboard.financial_view",
     "reports.export",
     "users.manage",
+    "system_health.view",
+    "system_health.view_details",
   ],
   GESTOR: [
     "audit.view",
@@ -132,6 +136,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "dashboard.view_executive",
     "dashboard.financial_view",
     "reports.export",
+    "system_health.view",
   ],
   PROJETISTA: [
     "projects.edit_own",
@@ -148,12 +153,14 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "sessions.manage_own",
     "dashboard.view_operational",
     "reports.export",
+    "system_health.view",
   ],
   CONSULTA: [
     "tasks.view_all",
     "estimates.view_all",
     "sessions.manage_own",
     "dashboard.view_operational",
+    "system_health.view",
   ],
 };
 
@@ -204,6 +211,8 @@ export const permissionDescriptions: Record<Permission, string> = {
   "dashboard.financial_view": "Permite visualizar dashboards financeiros",
   "reports.export": "Permite exportar relatorios e artefatos",
   "users.manage": "Permite administrar usuarios",
+  "system_health.view": "Permite consultar o estado geral de saude do SAGEP",
+  "system_health.view_details": "Permite consultar diagnosticos tecnicos do ambiente",
 };
 
 export const allPermissions = Object.keys(permissionDescriptions) as Permission[];
@@ -222,6 +231,7 @@ const permissionGroupLabels: Record<string, string> = {
   dashboard: "Dashboards",
   reports: "Relatorios",
   users: "Usuarios",
+  system_health: "Saude do sistema",
 };
 
 export type PermissionCatalogItem = {
@@ -242,6 +252,7 @@ export const criticalPermissions: Permission[] = [
   "sessions.manage_all",
   "atas.manage",
   "military_organizations.manage",
+  "system_health.view_details",
 ];
 
 export const allRoles = [...roleValues];

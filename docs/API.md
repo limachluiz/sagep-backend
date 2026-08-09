@@ -26,7 +26,8 @@ Documentação viva:
 
 ### Objetivo
 
-Verificar se a API está de pé.
+Verificar liveness, comunicação com o PostgreSQL e disponibilidade dos serviços
+de apoio sem expor credenciais ou endereços internos.
 
 ### Endpoints
 
@@ -44,6 +45,19 @@ Verificar se a API está de pé.
 
 - Erros comuns:
   - `500` em falha inesperada do servidor
+
+#### `GET /health/status`
+
+- Autenticação: não
+- Uso: resumo sanitizado para a tela de configurações, mantido público para continuar útil quando o banco cair.
+- Retorna estado geral, componentes, latências, disponibilidade observada e até 120 amostras em memória.
+
+#### `GET /health/details`
+
+- Autenticação: sim
+- Permissão: `system_health.view_details`
+- Uso: diagnóstico administrativo de runtime, memória e unidades monitoradas.
+- Segurança: usa sondas de serviço e não expõe o socket do Docker.
 
 ---
 
@@ -65,7 +79,7 @@ Autenticação, sessão, refresh token e autogestão de sessões.
 {
   "name": "Usuário Exemplo",
   "email": "usuario@sagep.com",
-  "password": "123456"
+  "password": "<senha-forte-do-usuario>"
 }
 ```
 
@@ -91,8 +105,8 @@ Autenticação, sessão, refresh token e autogestão de sessões.
 
 ```json
 {
-  "email": "admin@sagep.com",
-  "password": "123456"
+  "email": "usuario.admin@example.invalid",
+  "password": "<senha-forte-do-usuario>"
 }
 ```
 
@@ -252,7 +266,7 @@ Administração de usuários do sistema.
 {
   "name": "Novo Gestor",
   "email": "novo.gestor@sagep.com",
-  "password": "123456",
+  "password": "<senha-forte-do-usuario>",
   "role": "GESTOR"
 }
 ```
