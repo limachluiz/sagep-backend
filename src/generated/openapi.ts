@@ -1710,8 +1710,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Excluir ata inativa sem histórico
-         * @description Exige inativação prévia e bloqueia a exclusão quando houver estimativas ou movimentações de saldo vinculadas, preservando a rastreabilidade operacional.
+         * Excluir ou arquivar ATA com segurança
+         * @description Exclui fisicamente a ATA apenas quando nao houver vinculos importantes. Quando houver itens, estimativas, movimentacoes, snapshots externos ou documentos vinculados, marca a ATA como arquivada/inativa e preserva o historico.
          */
         delete: operations["atas_delete_byId"];
         options?: never;
@@ -3111,6 +3111,8 @@ export interface components {
             externalAtaNumber?: string | null;
             /** Format: date-time */
             externalLastSyncAt?: string | null;
+            /** Format: date-time */
+            archivedAt?: string | null;
             coverageGroups?: components["schemas"]["AtaCoverageGroup"][];
         };
         /**
@@ -3169,6 +3171,25 @@ export interface components {
             notes?: string | null;
             isActive?: boolean | null;
             coverageGroups?: components["schemas"]["AtaCoverageGroup"][];
+        };
+        AtaDeleteRequest: {
+            /** @description Motivo opcional registrado na auditoria. */
+            reason?: string;
+        };
+        /**
+         * @example {
+         *       "action": "DELETED",
+         *       "message": "ATA excluída com sucesso."
+         *     }
+         * @example {
+         *       "action": "ARCHIVED",
+         *       "message": "ATA possui vínculos e foi arquivada com segurança."
+         *     }
+         */
+        AtaDeleteResponse: {
+            /** @enum {string} */
+            action: "DELETED" | "ARCHIVED";
+            message: string;
         };
         AtaListEnvelope: {
             items?: components["schemas"]["Ata"][];
@@ -7450,6 +7471,8 @@ export interface operations {
                 stateUf?: "AM" | "RO" | "RR" | "AC";
                 /** @description Filtrar atas ativas. */
                 active?: boolean;
+                /** @description Incluir atas arquivadas na listagem. */
+                includeArchived?: boolean;
                 /** @description Busca textual. */
                 search?: string;
             };
@@ -7648,15 +7671,19 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["AtaDeleteRequest"];
+            };
+        };
         responses: {
-            /** @description Ata removida */
+            /** @description OK */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["MessageResponse"];
+                    "application/json": components["schemas"]["AtaDeleteResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

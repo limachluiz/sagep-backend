@@ -114,7 +114,7 @@ async function createUser(
       passwordHash,
       role,
       active: true,
-      rank: "2 Ten",
+      rank: "2º Ten",
       cpf: "11122233344",
     },
     select: {
@@ -923,9 +923,9 @@ describe("critical flows", () => {
 
   it("auth profile: updates only personal fields and changes password with session revocation", async () => {
     const profileUser = await createUser(
-      "Usuario Perfil",
       `perfil-${Date.now()}@sagep.local`,
       "CONSULTA",
+      "Usuario Perfil",
     );
     const profileAuth = await login(profileUser.email, "sagep-profile-device");
 
@@ -935,7 +935,7 @@ describe("critical flows", () => {
       .send({
         name: "Usuario Perfil Atualizado",
         warName: "Perfil",
-        rank: "1 Ten",
+        rank: "1º Ten",
         cpf: "99988877766",
         phone: "92999998888",
         themePreference: "SYSTEM",
@@ -953,7 +953,7 @@ describe("critical flows", () => {
       warName: "Perfil",
       email: profileUser.email,
       role: "CONSULTA",
-      rank: "1 Ten",
+      rank: "1º Ten",
       cpf: "99988877766",
       phone: "92999998888",
       themePreference: "SYSTEM",
@@ -3826,7 +3826,7 @@ describe("critical flows", () => {
       .expect(200);
 
     expect(userDetail.body.id).toBe(gestor.id);
-    expect(userDetail.body.rank).toBe("2 Ten");
+    expect(userDetail.body.rank).toBe("2º Ten");
     expect(userDetail.body.cpf).toBe("11122233344");
 
     const updatedUser = await request(app)
@@ -3835,14 +3835,14 @@ describe("critical flows", () => {
       .send({
         name: "Gestor Atualizado",
         email: "gestor.atualizado@sagep.com",
-        rank: "1 Ten",
+        rank: "1º Ten",
         cpf: "99988877766",
       })
       .expect(200);
 
     expect(updatedUser.body.name).toBe("Gestor Atualizado");
     expect(updatedUser.body.email).toBe("gestor.atualizado@sagep.com");
-    expect(updatedUser.body.rank).toBe("1 Ten");
+    expect(updatedUser.body.rank).toBe("1º Ten");
     expect(updatedUser.body.cpf).toBe("99988877766");
 
     const inactiveUser = await request(app)
