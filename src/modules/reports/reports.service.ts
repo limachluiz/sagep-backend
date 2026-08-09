@@ -11,6 +11,10 @@ import type { DashboardExecutiveQuery } from "../dashboard/dashboard.schemas.js"
 import { ProjectsService } from "../projects/projects.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { renderExecutiveProjectsReportHtml } from "./executive-projects-report.template.js";
+import {
+  renderConsolidatedProjectsReportHtml,
+  type ConsolidatedReportType,
+} from "./consolidated-projects-report.template.js";
 import { renderProjectDossierHtml } from "./project-dossier.template.js";
 
 type CurrentUser = {
@@ -231,6 +235,13 @@ export class ReportsService {
         )
       );
     };
+    const projectCommittedAmount = (project: (typeof portfolioProjects)[number]) => {
+      return project.commitmentNoteNumber || project.commitmentNoteReceivedAt
+        ? projectAmount(project)
+        : 0;
+    };
+    const projectOrderedAmount = (project: (typeof portfolioProjects)[number]) =>
+      Number(project.serviceOrders[0]?.totalAmount ?? 0);
 
     const items = activeProjects.map((project) => {
       const estimatedAmount = projectAmount(project);
@@ -262,9 +273,8 @@ export class ReportsService {
         progress: STAGE_PROGRESS[project.stage] ?? 0,
         estimatedAmount: estimatedAmount.toFixed(2),
         committedAmount:
-          project.commitmentNoteNumber || project.commitmentNoteReceivedAt
-          ? estimatedAmount.toFixed(2)
-          : "0.00",
+          projectCommittedAmount(project).toFixed(2),
+        orderedAmount: projectOrderedAmount(project).toFixed(2),
         om: project.om,
         owner: {
           ...project.owner,
@@ -305,11 +315,11 @@ export class ReportsService {
       0,
     );
     const totalCommittedAmount = portfolioProjects.reduce(
-      (sum, project) =>
-        sum +
-        (project.commitmentNoteNumber || project.commitmentNoteReceivedAt
-          ? projectAmount(project)
-          : 0),
+      (sum, project) => sum + projectCommittedAmount(project),
+      0,
+    );
+    const totalOrderedAmount = portfolioProjects.reduce(
+      (sum, project) => sum + projectOrderedAmount(project),
       0,
     );
     const criticalProjects = items.filter(
@@ -350,6 +360,42 @@ export class ReportsService {
           : 0,
       }))
       .sort((a, b) => Number(b.totalAmount) - Number(a.totalAmount));
+    const byOwner = Object.entries(
+      items.reduce<Record<string, { count: number; critical: number; overdueTasks: number }>>(
+        (counts, project) => {
+          const label = project.owner.displayName;
+          const current = counts[label] ?? { count: 0, critical: 0, overdueTasks: 0 };
+          current.count += 1;
+          current.critical += project.attention.level === "CRITICAL" ? 1 : 0;
+          current.overdueTasks += project.tasks.overdue;
+          counts[label] = current;
+          return counts;
+        },
+        {},
+      ),
+    )
+      .map(([label, value]) => ({ label, ...value }))
+      .sort((a, b) => b.count - a.count || b.critical - a.critical);
+    const byType = Object.entries(
+      portfolioProjects.reduce<Record<string, { count: number; totalAmount: number }>>(
+        (counts, project) => {
+          const label = project.projectType ?? "NAO_INFORMADO";
+          const current = counts[label] ?? { count: 0, totalAmount: 0 };
+          current.count += 1;
+          current.totalAmount += projectAmount(project);
+          counts[label] = current;
+          return counts;
+        },
+        {},
+      ),
+    ).map(([label, value]) => ({
+      label,
+      count: value.count,
+      totalAmount: value.totalAmount.toFixed(2),
+    }));
+    const totalPortfolioAmount = totalInProgressAmount + totalCompletedAmount;
+    const totalOpenTasks = items.reduce((sum, project) => sum + project.tasks.open, 0);
+    const totalOverdueTasks = items.reduce((sum, project) => sum + project.tasks.overdue, 0);
 
     return {
       generatedAt: new Date().toISOString(),
@@ -394,6 +440,12 @@ export class ReportsService {
         totalInProgressAmount: totalInProgressAmount.toFixed(2),
         totalCompletedAmount: totalCompletedAmount.toFixed(2),
         totalCommittedAmount: totalCommittedAmount.toFixed(2),
+        totalOrderedAmount: totalOrderedAmount.toFixed(2),
+        totalPortfolioAmount: totalPortfolioAmount.toFixed(2),
+        totalUncommittedAmount: Math.max(
+          totalPortfolioAmount - totalCommittedAmount,
+          0,
+        ).toFixed(2),
         commitmentRate: totalInProgressAmount + totalCompletedAmount
           ? Number(
               (
@@ -415,6 +467,8 @@ export class ReportsService {
       charts: {
         byStage,
         byRegion,
+        byOwner,
+        byType,
         attention: [
           { label: "Críticos", count: criticalProjects.length },
           { label: "Atenção", count: warningProjects.length },
@@ -425,8 +479,85 @@ export class ReportsService {
         ],
       },
       commandAttention: [...criticalProjects, ...warningProjects].slice(0, 12),
+      operationalSummary: {
+        openTasks: totalOpenTasks,
+        overdueTasks: totalOverdueTasks,
+        overdueProjects: items.filter((project) => project.attention.overdue).length,
+        staleProjects: items.filter((project) => project.attention.stale).length,
+        projectsWithoutOpenTasks: items.filter((project) => project.tasks.open === 0).length,
+      },
+      completedProjects: completedProjects.map((project) => ({
+        id: project.id,
+        projectCode: project.projectCode,
+        title: project.title,
+        projectType: project.projectType,
+        amount: projectAmount(project).toFixed(2),
+        committedAmount: projectCommittedAmount(project).toFixed(2),
+        orderedAmount: projectOrderedAmount(project).toFixed(2),
+        completedAt: project.serviceCompletedAt,
+        om: project.om,
+        owner: {
+          displayName:
+            [project.owner.rank, project.owner.warName].filter(Boolean).join(" ") ||
+            project.owner.name,
+        },
+      })),
       projects: items,
     };
+  }
+
+  async generateConsolidatedProjectsReportHtml(
+    reportType: ConsolidatedReportType,
+    filters: ExecutiveProjectsReportFilters,
+    user: CurrentUser,
+  ) {
+    const [report, ctaLogo] = await Promise.all([
+      this.getExecutiveProjectsReport(filters, user),
+      this.fileToDataUrl("src/assets/logos/cta-logo.png"),
+    ]);
+
+    return renderConsolidatedProjectsReportHtml({
+      ...report,
+      reportType,
+      branding: { ctaLogo },
+    });
+  }
+
+  async generateConsolidatedProjectsReportPdf(
+    reportType: ConsolidatedReportType,
+    filters: ExecutiveProjectsReportFilters,
+    user: CurrentUser,
+  ) {
+    const reportLabels: Record<ConsolidatedReportType, string> = {
+      executive: "Executivo",
+      operational: "Operacional",
+      financial: "Financeiro",
+    };
+
+    return pdfService.renderPdf({
+      label: `consolidated-${reportType}-projects-report`,
+      buildHtml: () =>
+        this.generateConsolidatedProjectsReportHtml(reportType, filters, user),
+      pdfOptions: {
+        format: "A4",
+        landscape: true,
+        printBackground: true,
+        displayHeaderFooter: true,
+        headerTemplate: "<span></span>",
+        footerTemplate: `
+          <div style="width:100%;padding:0 10mm;color:#737b6c;font-family:Arial,sans-serif;font-size:7px;display:flex;justify-content:space-between;">
+            <span>SAGEP · Relatório ${reportLabels[reportType]} de Projetos</span>
+            <span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span>
+          </div>
+        `,
+        margin: {
+          top: "9mm",
+          right: "9mm",
+          bottom: "14mm",
+          left: "9mm",
+        },
+      },
+    });
   }
 
   async generateExecutiveProjectsReportHtml(

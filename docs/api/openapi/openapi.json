@@ -11477,6 +11477,130 @@
         "operationId": "reports_get_projects_executiveSummaryPdf"
       }
     },
+    "/reports/projects/consolidated-summary.pdf": {
+      "get": {
+        "tags": [
+          "reports"
+        ],
+        "summary": "Gerar relatório consolidado Executivo, Operacional ou Financeiro",
+        "description": "Produz PDF profissional com indicadores, gráficos e detalhamento adequados à finalidade selecionada, combinável com o recorte Geral, CFTV ou Fibra Óptica.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "reportType",
+            "in": "query",
+            "required": false,
+            "description": "Finalidade do relatório.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "executive",
+                "operational",
+                "financial"
+              ],
+              "default": "executive"
+            }
+          },
+          {
+            "name": "staleDays",
+            "in": "query",
+            "required": false,
+            "description": "Dias sem atualização para sinalizar atenção.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "default": 15
+            }
+          },
+          {
+            "name": "projectType",
+            "in": "query",
+            "required": false,
+            "description": "Recorte por tipo de projeto.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA_PONTO_LOGICO"
+              ]
+            }
+          },
+          {
+            "name": "stateUf",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por estado.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "AM",
+                "RO",
+                "RR",
+                "AC"
+              ]
+            }
+          },
+          {
+            "name": "omId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por OM.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "ownerId",
+            "in": "query",
+            "required": false,
+            "description": "Filtrar por responsável.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Relatório consolidado em PDF A4 paisagem.",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "reports.export"
+        ],
+        "operationId": "reports_get_projects_consolidatedSummaryPdf"
+      }
+    },
     "/reports/projects/{id}/dossier": {
       "get": {
         "tags": [

@@ -1294,6 +1294,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/projects/consolidated-summary.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Gerar relatório consolidado Executivo, Operacional ou Financeiro
+         * @description Produz PDF profissional com indicadores, gráficos e detalhamento adequados à finalidade selecionada, combinável com o recorte Geral, CFTV ou Fibra Óptica.
+         */
+        get: operations["reports_get_projects_consolidatedSummaryPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/projects/{id}/dossier": {
         parameters: {
             query?: never;
@@ -6797,6 +6817,45 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Relatório executivo em PDF A4 paisagem. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    reports_get_projects_consolidatedSummaryPdf: {
+        parameters: {
+            query?: {
+                /** @description Finalidade do relatório. */
+                reportType?: "executive" | "operational" | "financial";
+                /** @description Dias sem atualização para sinalizar atenção. */
+                staleDays?: number;
+                /** @description Recorte por tipo de projeto. */
+                projectType?: "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+                /** @description Filtrar por estado. */
+                stateUf?: "AM" | "RO" | "RR" | "AC";
+                /** @description Filtrar por OM. */
+                omId?: string;
+                /** @description Filtrar por responsável. */
+                ownerId?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatório consolidado em PDF A4 paisagem. */
             200: {
                 headers: {
                     [name: string]: unknown;

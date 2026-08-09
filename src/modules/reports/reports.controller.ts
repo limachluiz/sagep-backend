@@ -44,6 +44,32 @@ export class ReportsController {
     return res.status(200).send(pdf);
   }
 
+  async consolidatedProjectsReportPdf(req: Request, res: Response) {
+    const reportType = z
+      .enum(["executive", "operational", "financial"])
+      .default("executive")
+      .parse(req.query.reportType);
+    const pdf = await reportsService.generateConsolidatedProjectsReportPdf(
+      reportType,
+      this.executiveFilters(req),
+      req.user!,
+    );
+
+    const date = new Date().toISOString().slice(0, 10);
+    const reportNames = {
+      executive: "executivo",
+      operational: "operacional",
+      financial: "financeiro",
+    } as const;
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="relatorio-${reportNames[reportType]}-projetos-${date}.pdf"`,
+    );
+
+    return res.status(200).send(pdf);
+  }
+
   async projectDossier(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
     const dossier = await reportsService.getProjectDossier(id, req.user!);

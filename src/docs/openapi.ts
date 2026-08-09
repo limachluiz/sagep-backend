@@ -4567,6 +4567,46 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["reports.export", "dashboard.view_executive"],
       },
     },
+    "/reports/projects/consolidated-summary.pdf": {
+      get: {
+        tags: ["reports"],
+        summary: "Gerar relatório consolidado Executivo, Operacional ou Financeiro",
+        description:
+          "Produz PDF profissional com indicadores, gráficos e detalhamento adequados à finalidade selecionada, combinável com o recorte Geral, CFTV ou Fibra Óptica.",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("reportType", "Finalidade do relatório.", {
+            type: "string",
+            enum: ["executive", "operational", "financial"],
+            default: "executive",
+          }),
+          queryParameter("staleDays", "Dias sem atualização para sinalizar atenção.", {
+            type: "integer",
+            minimum: 1,
+            maximum: 365,
+            default: 15,
+          }),
+          queryParameter("projectType", "Recorte por tipo de projeto.", {
+            type: "string",
+            enum: ["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"],
+          }),
+          queryParameter("stateUf", "Filtrar por estado.", {
+            type: "string",
+            enum: ["AM", "RO", "RR", "AC"],
+          }),
+          queryParameter("omId", "Filtrar por OM.", { type: "string" }),
+          queryParameter("ownerId", "Filtrar por responsável.", { type: "string" }),
+        ],
+        responses: {
+          "200": {
+            description: "Relatório consolidado em PDF A4 paisagem.",
+            content: binaryContent("application/pdf"),
+          },
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["reports.export"],
+      },
+    },
     "/reports/projects/{id}/dossier": {
       get: {
         tags: ["reports"],

@@ -21,6 +21,11 @@ reportsRoutes.get(
   (req, res) => controller.executiveProjectsReportPdf(req, res),
 );
 reportsRoutes.get(
+  "/projects/consolidated-summary.pdf",
+  requirePermission("reports.export"),
+  (req, res) => controller.consolidatedProjectsReportPdf(req, res),
+);
+reportsRoutes.get(
   "/projects/:id/dossier",
   requirePermission("reports.export"),
   (req, res) => controller.projectDossier(req, res),
