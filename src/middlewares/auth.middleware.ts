@@ -3,6 +3,7 @@ import { env } from "../config/env.js";
 import { prisma } from "../config/prisma.js";
 import { permissionsService } from "../modules/permissions/permissions.service.js";
 import { verifyAccessToken } from "../shared/auth-tokens.js";
+import { AppError } from "../shared/app-error.js";
 
 type JwtPayload = {
   sub: string;
@@ -18,13 +19,13 @@ export async function authMiddleware(
   const authHeader = req.headers.authorization;
 
   if (!authHeader) {
-    return res.status(401).json({ message: "Token não informado" });
+    return next(new AppError("Token não informado", 401, "AUTH_TOKEN_MISSING"));
   }
 
   const [, token] = authHeader.split(" ");
 
   if (!token) {
-    return res.status(401).json({ message: "Token inválido" });
+    return next(new AppError("Token inválido", 401, "AUTH_TOKEN_INVALID"));
   }
 
   try {
@@ -44,7 +45,13 @@ export async function authMiddleware(
     });
 
     if (!user || !user.active) {
-      return res.status(401).json({ message: "Usuário não encontrado ou inativo" });
+      return next(
+        new AppError(
+          "Usuário não encontrado ou inativo",
+          401,
+          "AUTH_USER_INACTIVE_OR_NOT_FOUND",
+        ),
+      );
     }
 
     const effectivePermissions = await permissionsService.getEffectivePermissionsForUser(
@@ -64,6 +71,12 @@ export async function authMiddleware(
 
     return next();
   } catch {
-    return res.status(401).json({ message: "Token inválido ou expirado" });
+    return next(
+      new AppError(
+        "Token inválido ou expirado",
+        401,
+        "AUTH_TOKEN_INVALID_OR_EXPIRED",
+      ),
+    );
   }
 }

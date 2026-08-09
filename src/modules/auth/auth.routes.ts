@@ -1,13 +1,31 @@
 import { Router } from "express";
 import { AuthController } from "./auth.controller.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { env } from "../../config/env.js";
+import { AppError } from "../../shared/app-error.js";
 
 export const authRoutes = Router();
 const controller = new AuthController();
 
-authRoutes.post("/register", (req, res) => controller.register(req, res));
+authRoutes.post("/register", (req, res, next) => {
+  if (!env.ALLOW_PUBLIC_REGISTRATION) {
+    return next(
+      new AppError(
+        "Cadastro público desativado",
+        403,
+        "AUTH_PUBLIC_REGISTRATION_DISABLED",
+      ),
+    );
+  }
+
+  return controller.register(req, res);
+});
 authRoutes.post("/login", (req, res) => controller.login(req, res));
 authRoutes.get("/me", authMiddleware, (req, res) => controller.me(req, res));
+authRoutes.patch("/profile", authMiddleware, (req, res) => controller.updateOwnProfile(req, res));
+authRoutes.post("/change-password", authMiddleware, (req, res) =>
+  controller.changeOwnPassword(req, res),
+);
 authRoutes.get("/sessions", authMiddleware, (req, res) => controller.listOwnSessions(req, res));
 authRoutes.post("/sessions/revoke-all", authMiddleware, (req, res) =>
   controller.revokeAllOwnSessions(req, res),

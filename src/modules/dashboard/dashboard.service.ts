@@ -1,4 +1,5 @@
 import { prisma } from "../../config/prisma.js";
+import type { Prisma } from "../../generated/prisma/client.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 import { OperationalAlertsService } from "../operational-alerts/operational-alerts.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
@@ -22,6 +23,8 @@ type ProjectStage =
   | "DIEX_REQUISITORIO"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "OS_LIBERADA"
+  | "AGUARDANDO_OS_ASSINADA"
+  | "AGUARDANDO_INICIO_EXECUCAO"
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
@@ -81,7 +84,7 @@ type DashboardAtaItemSnapshot = {
   };
 };
 
-type FilterContext =
+export type FilterContext =
   | {
       mode: "all";
       label: string;
@@ -116,6 +119,8 @@ const STAGE_ORDER: ProjectStage[] = [
   "DIEX_REQUISITORIO",
   "AGUARDANDO_NOTA_EMPENHO",
   "OS_LIBERADA",
+  "AGUARDANDO_OS_ASSINADA",
+  "AGUARDANDO_INICIO_EXECUCAO",
   "SERVICO_EM_EXECUCAO",
   "ANALISANDO_AS_BUILT",
   "ATESTAR_NF",
@@ -205,7 +210,9 @@ function getPeriodRange(periodType: DashboardPeriodType, referenceDate: Date) {
   };
 }
 
-function buildFilterContext(filters: DashboardOverviewQuery): FilterContext {
+export function buildDashboardFilterContext(
+  filters: DashboardOverviewQuery,
+): FilterContext {
   if (filters.startDate && filters.endDate) {
     return {
       mode: "interval",
@@ -372,7 +379,15 @@ function mapAttentionReason(stage: ProjectStage, hasDraftDiex: boolean) {
   }
 
   if (stage === "OS_LIBERADA") {
-    return "OS emitida, aguardando início da execução";
+    return "Nota de Empenho registrada, aguardando emissão da OS";
+  }
+
+  if (stage === "AGUARDANDO_OS_ASSINADA") {
+    return "OS emitida, aguardando devolução assinada";
+  }
+
+  if (stage === "AGUARDANDO_INICIO_EXECUCAO") {
+    return "OS assinada recebida, aguardando início da execução";
   }
 
   if (stage === "SERVICO_EM_EXECUCAO") {
@@ -400,6 +415,8 @@ function mapStatusFromStage(stage: ProjectStage) {
 
   if (
     stage === "OS_LIBERADA" ||
+    stage === "AGUARDANDO_OS_ASSINADA" ||
+    stage === "AGUARDANDO_INICIO_EXECUCAO" ||
     stage === "SERVICO_EM_EXECUCAO" ||
     stage === "ANALISANDO_AS_BUILT" ||
     stage === "ATESTAR_NF"
@@ -430,6 +447,8 @@ function getProjectSnapshotAsOf(
     diexIssuedAt: Date | null;
     commitmentNoteReceivedAt: Date | null;
     serviceOrderIssuedAt: Date | null;
+    serviceOrderSignatureRequired: boolean;
+    signedServiceOrderReceivedAt: Date | null;
     executionStartedAt: Date | null;
     asBuiltReceivedAt: Date | null;
     invoiceAttestedAt: Date | null;
@@ -458,8 +477,15 @@ function getProjectSnapshotAsOf(
     snapshotStage = "ANALISANDO_AS_BUILT";
   } else if (project.executionStartedAt && project.executionStartedAt <= asOfDate) {
     snapshotStage = "SERVICO_EM_EXECUCAO";
+  } else if (
+    project.signedServiceOrderReceivedAt &&
+    project.signedServiceOrderReceivedAt <= asOfDate
+  ) {
+    snapshotStage = "AGUARDANDO_INICIO_EXECUCAO";
   } else if (project.serviceOrderIssuedAt && project.serviceOrderIssuedAt <= asOfDate) {
-    snapshotStage = "OS_LIBERADA";
+    snapshotStage = project.serviceOrderSignatureRequired
+      ? "AGUARDANDO_OS_ASSINADA"
+      : "OS_LIBERADA";
   } else if (
     project.commitmentNoteReceivedAt &&
     project.commitmentNoteReceivedAt <= asOfDate
@@ -690,7 +716,7 @@ export class DashboardService {
   }
 
   async overview(filters: DashboardOverviewQuery = {}) {
-    const filterContext = buildFilterContext(filters);
+    const filterContext = buildDashboardFilterContext(filters);
 
     const [
       usersTotal,
@@ -726,6 +752,8 @@ export class DashboardService {
           diexIssuedAt: true,
           commitmentNoteReceivedAt: true,
           serviceOrderIssuedAt: true,
+          serviceOrderSignatureRequired: true,
+          signedServiceOrderReceivedAt: true,
           executionStartedAt: true,
           asBuiltReceivedAt: true,
           invoiceAttestedAt: true,
@@ -1115,7 +1143,12 @@ export class DashboardService {
           (project) => project.stage === "AGUARDANDO_NOTA_EMPENHO"
         ).length,
         awaitingExecutionStart: scopedProjects.filter(
-          (project) => project.stage === "OS_LIBERADA"
+          (project) =>
+            project.stage === "OS_LIBERADA" ||
+            project.stage === "AGUARDANDO_INICIO_EXECUCAO"
+        ).length,
+        awaitingSignedServiceOrder: scopedProjects.filter(
+          (project) => project.stage === "AGUARDANDO_OS_ASSINADA"
         ).length,
         awaitingAsBuiltAnalysis: scopedProjects.filter(
           (project) => project.stage === "ANALISANDO_AS_BUILT"
@@ -1283,6 +1316,8 @@ export class DashboardService {
           commitmentNoteReceivedAt: true,
           serviceOrderNumber: true,
           serviceOrderIssuedAt: true,
+          serviceOrderSignatureRequired: true,
+          signedServiceOrderReceivedAt: true,
           executionStartedAt: true,
           asBuiltReceivedAt: true,
           invoiceAttestedAt: true,
@@ -1327,6 +1362,8 @@ export class DashboardService {
         commitmentNoteReceivedAt: project.commitmentNoteReceivedAt,
         serviceOrderNumber: project.serviceOrderNumber,
         serviceOrderIssuedAt: project.serviceOrderIssuedAt,
+        serviceOrderSignatureRequired: project.serviceOrderSignatureRequired,
+        signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt,
         executionStartedAt: project.executionStartedAt,
         asBuiltReceivedAt: project.asBuiltReceivedAt,
         invoiceAttestedAt: project.invoiceAttestedAt,
@@ -1344,7 +1381,7 @@ export class DashboardService {
         updatedAt: project.updatedAt,
         owner: project.owner,
         nextAction,
-        detailsPath: `/api/projects/${project.id}/details`,
+        detailsPath: `/projects/${project.id}`,
       };
     });
 
@@ -1368,6 +1405,8 @@ export class DashboardService {
         awaitingDiex: alerts.groups.byCategory.AGUARDANDO_DIEX.length,
         awaitingCommitmentNote: alerts.groups.byCategory.AGUARDANDO_NOTA_EMPENHO.length,
         awaitingServiceOrder: alerts.groups.byCategory.AGUARDANDO_ORDEM_SERVICO.length,
+        awaitingSignedServiceOrder:
+          alerts.groups.byCategory.AGUARDANDO_OS_ASSINADA.length,
         awaitingExecutionStart: alerts.groups.byCategory.AGUARDANDO_INICIO_EXECUCAO.length,
         awaitingAsBuilt: alerts.groups.byCategory.AGUARDANDO_AS_BUILT.length,
         awaitingInvoiceAttestation: alerts.groups.byCategory.AGUARDANDO_ATESTO_NF.length,
@@ -1388,13 +1427,20 @@ export class DashboardService {
   }
 
   async executive(filters: DashboardExecutiveQuery = {}) {
-    const filterContext = buildFilterContext(filters);
+    const filterContext = buildDashboardFilterContext(filters);
+    const portfolioWhere: Prisma.ProjectWhereInput = {
+      ...(filters.stateUf && { om: { stateUf: filters.stateUf } }),
+      ...(filters.omId && { omId: filters.omId }),
+      ...(filters.projectType && { projectType: filters.projectType }),
+      ...(filters.ownerId && { ownerId: filters.ownerId }),
+    };
     const [projects, estimates, diexRequests, serviceOrders, ataItems, ataItemMovements] =
       await Promise.all([
       prisma.project.findMany({
         where: {
           archivedAt: null,
           deletedAt: null,
+          ...portfolioWhere,
         },
         select: {
           id: true,
@@ -1415,6 +1461,7 @@ export class DashboardService {
           deletedAt: null,
           project: {
             deletedAt: null,
+            ...portfolioWhere,
           },
         },
         select: {
@@ -1433,6 +1480,8 @@ export class DashboardService {
               title: true,
               stage: true,
               status: true,
+              commitmentNoteNumber: true,
+              commitmentNoteReceivedAt: true,
             },
           },
           ata: {
@@ -1448,6 +1497,7 @@ export class DashboardService {
           deletedAt: null,
           project: {
             deletedAt: null,
+            ...portfolioWhere,
           },
           estimate: {
             deletedAt: null,
@@ -1467,6 +1517,7 @@ export class DashboardService {
           deletedAt: null,
           project: {
             deletedAt: null,
+            ...portfolioWhere,
           },
           estimate: {
             deletedAt: null,
@@ -1548,6 +1599,26 @@ export class DashboardService {
     const finalizedEstimates = scopedEstimates.filter(
       (estimate) => estimate.status === "FINALIZADA",
     );
+    const committedEstimates = scopedEstimates.filter(
+      (estimate) =>
+        estimate.status === "FINALIZADA" &&
+        (!!estimate.project.commitmentNoteNumber ||
+          !!estimate.project.commitmentNoteReceivedAt),
+    );
+    const completedProjectEstimates = scopedEstimates.filter(
+      (estimate) =>
+        estimate.status === "FINALIZADA" &&
+        (estimate.project.status === "CONCLUIDO" ||
+          estimate.project.stage === "SERVICO_CONCLUIDO"),
+    );
+    const totalCommittedAmount = committedEstimates.reduce(
+      (sum, estimate) => sum + toNumber(estimate.totalAmount),
+      0,
+    );
+    const totalCompletedProjectsAmount = completedProjectEstimates.reduce(
+      (sum, estimate) => sum + toNumber(estimate.totalAmount),
+      0,
+    );
     const inventory = this.buildInventoryExecutiveBlock(ataItems, ataItemMovements, filterContext);
 
     return {
@@ -1560,6 +1631,10 @@ export class DashboardService {
         startDate: serializeDate(filterContext.startDate),
         endDate: serializeDate(filterContext.endDate),
         asOfDate: serializeDate(filterContext.asOfDate),
+        stateUf: filters.stateUf ?? null,
+        omId: filters.omId ?? null,
+        projectType: filters.projectType ?? null,
+        ownerId: filters.ownerId ?? null,
       },
       summary: {
         projectsTotal: scopedProjects.length,
@@ -1583,6 +1658,8 @@ export class DashboardService {
             0,
           ),
         ),
+        totalCommittedAmount: formatAmount(totalCommittedAmount),
+        totalCompletedProjectsAmount: formatAmount(totalCompletedProjectsAmount),
         totalWithDiex: formatAmount(totalWithDiex),
         totalWithServiceOrder: formatAmount(totalWithServiceOrder),
         ataItemsAtRisk: inventory.snapshot.itemsAtRisk,
@@ -1601,6 +1678,8 @@ export class DashboardService {
       },
       financial: {
         totalEstimatedAmount: formatAmount(totalEstimatedAmount),
+        totalCommittedAmount: formatAmount(totalCommittedAmount),
+        totalCompletedProjectsAmount: formatAmount(totalCompletedProjectsAmount),
         totalWithDiex: formatAmount(totalWithDiex),
         totalWithServiceOrder: formatAmount(totalWithServiceOrder),
         inventoryCurrentReservedAmount: inventory.snapshot.totalReservedAmount,

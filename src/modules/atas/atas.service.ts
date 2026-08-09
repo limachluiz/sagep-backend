@@ -589,7 +589,6 @@ export class AtasService {
         where: { serviceOrder: { estimate: { ataId } } },
       }),
     ]);
-
     return {
       items,
       estimates,

@@ -18,4 +18,49 @@ describe("normalizeMojibakeText", () => {
     expect(normalizeMojibakeText("identifica\ufffd\ufffdo")).toBe("identifica\u00e7\u00e3o");
     expect(normalizeMojibakeText("SERVI\ufffdO")).toBe("SERVI\u00c7O");
   });
+
+  it("repairs a technical ATA description without corrupting valid accents", () => {
+    const damaged =
+      "Serviço TIPO I-B de lan�amento e instalação de cabo de fibra �ptica tipo DROP, " +
+      "incluindo material para fixação, terminação SC/UPC Rosca e identificação: Cab o com uma " +
+      "Fibra �ptica monomodo, contemplando: acess�rios para fixação e ident ificação do cabo; " +
+      "utilizando m�todo de CABEAMENTO SUBTERR�NEO ou MND (M�todo n �o Destrut�vel).";
+
+    expect(normalizeMojibakeText(damaged)).toBe(
+      "Serviço TIPO I-B de lançamento e instalação de cabo de fibra óptica tipo DROP, " +
+      "incluindo material para fixação, terminação SC/UPC Rosca e identificação: Cabo com uma " +
+      "Fibra óptica monomodo, contemplando: acessórios para fixação e identificação do cabo; " +
+      "utilizando método de CABEAMENTO SUBTERRÂNEO ou MND (Método não Destrutível).",
+    );
+  });
+
+  it("repairs descriptions from items 2 through 6 of ARP 00001/2026", () => {
+    const damagedDescriptions = [
+      "Servi�o TIPO I-B de lan�amento e instala��o de cabo de fibra �ptica tipo DROP, " +
+        "utilizando m�todo de CABEAMENTO SUBTERR�NEO ou MND (M�todo n �o Destrut�vel). " +
+        "Demais caracter�sticas conforme Termo de Refer�ncia.",
+      "Servi�o de instala��o com fornecimento de C�mera IP PoE do tipo Bullet para mo nitoramento " +
+        "Convencional. Demais caracter�sticas conforme Termo de Refer�ncia.",
+      "Servi�o de instala��o com fornecimento de C�mera IP PoE do tipo Dome para moni toramento " +
+        "Convencional. Demais caracter�sticas conforme Termo de Refer�ncia.",
+      "Servi�o de instala��o com fornecimento de C�mera IP PoE do tipo Bullet para mo nitoramento " +
+        "Inteligente. Demais caracter�sticas conforme Termo de Refer�ncia.",
+      "Servi�o de instala��o com fornecimento de C�mera IP do tipo Speed Dome de long o alcance. " +
+        "Demais caracter�sticas conforme Termo de Refer�ncia.",
+    ];
+
+    expect(damagedDescriptions.map(normalizeMojibakeText)).toEqual([
+      "Serviço TIPO I-B de lançamento e instalação de cabo de fibra óptica tipo DROP, " +
+        "utilizando método de CABEAMENTO SUBTERRÂNEO ou MND (Método não Destrutível). " +
+        "Demais características conforme Termo de Referência.",
+      "Serviço de instalação com fornecimento de Câmera IP PoE do tipo Bullet para monitoramento " +
+        "Convencional. Demais características conforme Termo de Referência.",
+      "Serviço de instalação com fornecimento de Câmera IP PoE do tipo Dome para monitoramento " +
+        "Convencional. Demais características conforme Termo de Referência.",
+      "Serviço de instalação com fornecimento de Câmera IP PoE do tipo Bullet para monitoramento " +
+        "Inteligente. Demais características conforme Termo de Referência.",
+      "Serviço de instalação com fornecimento de Câmera IP do tipo Speed Dome de longo alcance. " +
+        "Demais características conforme Termo de Referência.",
+    ]);
+  });
 });

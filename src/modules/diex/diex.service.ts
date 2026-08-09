@@ -23,6 +23,8 @@ type ProjectStageValue =
   | "DIEX_REQUISITORIO"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "OS_LIBERADA"
+  | "AGUARDANDO_OS_ASSINADA"
+  | "AGUARDANDO_INICIO_EXECUCAO"
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
@@ -168,7 +170,11 @@ export class DiexService {
   }
 
   private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
-    return Boolean(includeArchived && this.isPrivileged(user.role));
+    return Boolean(
+      includeArchived &&
+      (permissionsService.hasPermission(user, "diex.restore") ||
+        permissionsService.hasPermission(user, "diex.delete")),
+    );
   }
 
   private resolveArchivedAccess(
@@ -182,16 +188,23 @@ export class DiexService {
       archivedUntil?: Date;
     },
   ) {
-    if (
-      (filters.includeArchived ||
-        filters.onlyArchived ||
-        filters.includeDeleted ||
-        filters.onlyDeleted ||
-        filters.archivedFrom ||
-        filters.archivedUntil) &&
-      !this.isAdmin(user.role)
-    ) {
-      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    const canAccessArchived =
+      permissionsService.hasPermission(user, "diex.restore") ||
+      permissionsService.hasPermission(user, "diex.delete");
+    const requestsArchived = Boolean(
+      filters.includeArchived ||
+      filters.onlyArchived ||
+      filters.archivedFrom ||
+      filters.archivedUntil,
+    );
+    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+
+    if (requestsArchived && !canAccessArchived) {
+      throw new AppError("Você não tem permissão para consultar DIEx arquivados", 403);
+    }
+
+    if (requestsDeleted && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar DIEx excluídos", 403);
     }
 
     if (filters.onlyArchived && filters.onlyDeleted) {
@@ -199,8 +212,8 @@ export class DiexService {
     }
 
     return {
-      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
-      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeArchived: Boolean(filters.includeArchived && canAccessArchived),
+      onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
       includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
@@ -220,6 +233,7 @@ export class DiexService {
           title: true,
           ownerId: true,
           stage: true,
+          status: true,
           creditNoteNumber: true,
           creditNoteReceivedAt: true,
           archivedAt: true,
@@ -252,6 +266,7 @@ export class DiexService {
           title: true,
           ownerId: true,
           stage: true,
+          status: true,
           creditNoteNumber: true,
           creditNoteReceivedAt: true,
           archivedAt: true,
@@ -495,8 +510,8 @@ export class DiexService {
     return diex;
   }
 
-  private async ensureCanManage(diexId: string, user: CurrentUser) {
-    const diex = await this.getDiexAccessData(diexId);
+  private async ensureCanManage(diexId: string, user: CurrentUser, includeArchived = false) {
+    const diex = await this.getDiexAccessData(diexId, includeArchived);
 
     if (!this.canManageProject(diex.project, user)) {
       throw new AppError("Você não tem permissão para gerenciar este DIEx", 403);
@@ -809,7 +824,7 @@ export class DiexService {
         id: project.id,
         projectCode: project.projectCode,
         stage: project.stage,
-        status: "PLANEJAMENTO",
+        status: project.status,
         diexNumber: null,
         diexIssuedAt: null,
       }),
@@ -1284,6 +1299,83 @@ export class DiexService {
       return {
         message: "DIEx arquivado com sucesso",
       };
+  }
+
+  async softDelete(diexId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "diex.delete")) {
+      throw new AppError("Você não tem permissão para excluir este DIEx", 403);
+    }
+
+    await this.ensureCanManage(diexId, user, true);
+
+    const before = await prisma.diexRequest.findUnique({
+      where: { id: diexId },
+      select: {
+        id: true,
+        diexCode: true,
+        projectId: true,
+        estimateId: true,
+        diexNumber: true,
+        issuedAt: true,
+        totalAmount: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("DIEx não encontrado", 404);
+    }
+
+    if (!before.archivedAt) {
+      throw new AppError("O DIEx precisa estar arquivado antes da exclusão", 409);
+    }
+
+    const deletedAt = new Date();
+    const deleted = await prisma.$transaction(async (tx) => {
+      const serviceOrders = await tx.serviceOrder.updateMany({
+        where: { diexRequestId: diexId, deletedAt: null },
+        data: { deletedAt },
+      });
+      const diex = await tx.diexRequest.update({
+        where: { id: diexId },
+        data: { deletedAt },
+        select: {
+          id: true,
+          diexCode: true,
+          projectId: true,
+          estimateId: true,
+          diexNumber: true,
+          issuedAt: true,
+          totalAmount: true,
+          archivedAt: true,
+          deletedAt: true,
+        },
+      });
+      return { diex, serviceOrders: serviceOrders.count };
+    });
+
+    await auditService.log({
+      entityType: "DIEX_REQUEST",
+      entityId: before.id,
+      action: "DELETE",
+      actor: this.getAuditActor(user),
+      summary: `DIEx ${before.diexNumber ?? `#${before.diexCode}`} excluído logicamente`,
+      before: this.buildDiexAuditSnapshot(before),
+      after: this.buildDiexAuditSnapshot(deleted.diex),
+      metadata: {
+        permissionUsed: "diex.delete",
+        softDelete: true,
+        serviceOrdersDeleted: deleted.serviceOrders,
+      },
+    });
+
+    return {
+      message: "DIEx excluído com sucesso",
+      permissionUsed: "diex.delete" as const,
+      deletedAt,
+      deleted: { serviceOrders: deleted.serviceOrders },
+    };
   }
 
   async restore(diexId: string, user: CurrentUser, options: RestoreOptions = {}) {

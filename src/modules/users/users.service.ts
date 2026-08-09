@@ -1,32 +1,37 @@
 import bcrypt from "bcryptjs";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import type { MilitaryRank } from "../../shared/military-ranks.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 
 type CurrentUser = {
   id: string;
   email: string;
   role: string;
+  permissions?: string[];
 };
 
 type CreateUserByAdminInput = {
   name: string;
+  warName?: string;
   email: string;
   password: string;
   role: "PROJETISTA" | "GESTOR" | "CONSULTA";
-  rank?: string;
+  rank?: MilitaryRank;
   cpf?: string;
 };
 
 type UpdateUserRoleInput = {
   role: "ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA";
-  rank?: string;
+  rank?: MilitaryRank;
   cpf?: string;
 };
 
 type UpdateUserInput = {
   name?: string;
+  warName?: string | null;
   email?: string;
-  rank?: string;
+  rank?: MilitaryRank | null;
   cpf?: string;
 };
 
@@ -40,10 +45,16 @@ type ListUsersFilters = {
   search?: string;
 };
 
+type ListUserOptionsFilters = {
+  projectId?: string;
+  projectCode?: number;
+};
+
 const adminUserSelect = {
   id: true,
   userCode: true,
   name: true,
+  warName: true,
   email: true,
   role: true,
   rank: true,
@@ -54,6 +65,67 @@ const adminUserSelect = {
 } as const;
 
 export class UsersService {
+  async listOptions(filters: ListUserOptionsFilters, currentUser: CurrentUser) {
+    let eligibleUserIds: string[] | undefined;
+
+    if (filters.projectId || filters.projectCode) {
+      const project = await prisma.project.findFirst({
+        where: {
+          ...(filters.projectId && { id: filters.projectId }),
+          ...(filters.projectCode && { projectCode: filters.projectCode }),
+          deletedAt: null,
+        },
+        select: {
+          ownerId: true,
+          members: {
+            select: {
+              userId: true,
+            },
+          },
+        },
+      });
+
+      if (!project) {
+        throw new AppError("Projeto não encontrado", 404);
+      }
+
+      const canViewAll = permissionsService.hasPermission(currentUser, "projects.view_all");
+      const belongsToProject =
+        project.ownerId === currentUser.id ||
+        project.members.some((member) => member.userId === currentUser.id);
+
+      if (!canViewAll && !belongsToProject) {
+        throw new AppError("Você não tem acesso a este projeto", 403);
+      }
+
+      eligibleUserIds = [
+        project.ownerId,
+        ...project.members.map((member) => member.userId),
+      ];
+    }
+
+    return prisma.user.findMany({
+      where: {
+        active: true,
+        ...(eligibleUserIds && { id: { in: eligibleUserIds } }),
+      },
+      select: {
+        id: true,
+        userCode: true,
+        name: true,
+        warName: true,
+        email: true,
+        role: true,
+        rank: true,
+        active: true,
+      },
+      orderBy: [
+        { name: "asc" },
+        { userCode: "asc" },
+      ],
+    });
+  }
+
   async create(data: CreateUserByAdminInput) {
     const userExists = await prisma.user.findUnique({
       where: { email: data.email },
@@ -68,6 +140,7 @@ export class UsersService {
     const user = await prisma.user.create({
       data: {
         name: data.name,
+        warName: data.warName?.trim(),
         email: data.email,
         passwordHash,
         role: data.role,
@@ -90,6 +163,7 @@ export class UsersService {
         ...(filters.search && {
           OR: [
             { name: { contains: filters.search, mode: "insensitive" } },
+            { warName: { contains: filters.search, mode: "insensitive" } },
             { email: { contains: filters.search, mode: "insensitive" } },
             { rank: { contains: filters.search, mode: "insensitive" } },
             { cpf: { contains: filters.search, mode: "insensitive" } },
@@ -145,8 +219,9 @@ export class UsersService {
       where: { id: userId },
       data: {
         ...(data.name !== undefined && { name: data.name.trim() }),
+        ...(data.warName !== undefined && { warName: data.warName?.trim() || null }),
         ...(normalizedEmail !== undefined && { email: normalizedEmail }),
-        ...(data.rank !== undefined && { rank: data.rank?.trim() }),
+        ...(data.rank !== undefined && { rank: data.rank }),
         ...(data.cpf !== undefined && { cpf: data.cpf?.trim() }),
       },
       select: adminUserSelect,

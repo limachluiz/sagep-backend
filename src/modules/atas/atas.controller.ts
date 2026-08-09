@@ -12,7 +12,6 @@ import {
 } from "./atas.schemas.js";
 import { AtasService } from "./atas.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
-import { comprasGovBalanceService } from "../compras-gov/compras-gov-balance.service.js";
 
 const atasService = new AtasService();
 
@@ -57,18 +56,6 @@ export class AtasController {
     const data = updateAtaSchema.parse(req.body);
     const ata = await atasService.update(id, data);
     return res.status(200).json(ata);
-  }
-
-  async externalBalance(req: Request, res: Response) {
-    const { id } = ataIdParamSchema.parse(req.params);
-    const comparison = await comprasGovBalanceService.compareAta(id);
-    return res.status(200).json(comparison);
-  }
-
-  async syncExternalBalance(req: Request, res: Response) {
-    const { id } = ataIdParamSchema.parse(req.params);
-    const result = await comprasGovBalanceService.syncAta(id);
-    return res.status(200).json(result);
   }
 
   async createCoverageGroup(req: Request, res: Response) {

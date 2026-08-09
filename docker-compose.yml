@@ -5,7 +5,7 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-sagep}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sagep123}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Defina POSTGRES_PASSWORD no arquivo .env}
       POSTGRES_DB: ${POSTGRES_DB:-sagep}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
@@ -29,7 +29,7 @@ services:
     environment:
       NODE_ENV: ${DOCKER_NODE_ENV:-production}
       PORT: ${PORT:-3000}
-      DATABASE_URL: postgresql://sagep:sagep123@postgres:5432/sagep?schema=public
+      DATABASE_URL: ${DOCKER_DATABASE_URL:?Defina DOCKER_DATABASE_URL no arquivo .env}
       JWT_SECRET: ${JWT_SECRET:-troque-este-segredo}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-troque-este-refresh-secret}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
@@ -38,6 +38,10 @@ services:
       PDF_RENDER_MODE: ${PDF_RENDER_MODE:-real}
       COMPRAS_GOV_DEBUG: ${COMPRAS_GOV_DEBUG:-false}
       PORTAL_TRANSPARENCIA_API_TOKEN: ${PORTAL_TRANSPARENCIA_API_TOKEN:-}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-}
+      CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-false}
+      HEALTH_PGADMIN_URL: ${HEALTH_PGADMIN_URL:-http://pgadmin/misc/ping}
+      HEALTH_PROBE_TIMEOUT_MS: ${HEALTH_PROBE_TIMEOUT_MS:-2000}
     ports:
       - "${API_PORT:-3000}:${PORT:-3000}"
 
@@ -50,7 +54,7 @@ services:
         condition: service_healthy
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-admin@sagep.com}
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-sagep123}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Defina PGADMIN_DEFAULT_PASSWORD no arquivo .env}
     ports:
       - "${PGADMIN_PORT:-5050}:80"
 

@@ -1,10 +1,12 @@
 export type Permission =
+  | "audit.view"
   | "permissions.view"
   | "permissions.manage_user_overrides"
   | "permissions.manage_role_permissions"
   | "projects.view_all"
   | "projects.edit_own"
   | "projects.edit_all"
+  | "projects.delete"
   | "projects.restore"
   | "projects.complete"
   | "projects.reopen"
@@ -15,18 +17,22 @@ export type Permission =
   | "tasks.assign"
   | "tasks.complete"
   | "tasks.archive"
+  | "tasks.delete"
   | "tasks.restore"
   | "estimates.view_all"
   | "estimates.create"
   | "estimates.edit"
   | "estimates.finalize"
   | "estimates.archive"
+  | "estimates.delete"
   | "estimates.restore"
   | "diex.issue"
   | "diex.cancel"
+  | "diex.delete"
   | "diex.restore"
   | "service_orders.issue"
   | "service_orders.cancel"
+  | "service_orders.delete"
   | "service_orders.restore"
   | "atas.manage"
   | "military_organizations.manage"
@@ -36,7 +42,9 @@ export type Permission =
   | "dashboard.view_executive"
   | "dashboard.financial_view"
   | "reports.export"
-  | "users.manage";
+  | "users.manage"
+  | "system_health.view"
+  | "system_health.view_details";
 
 export const roleValues = ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"] as const;
 
@@ -50,6 +58,7 @@ const taskPermissions: Permission[] = [
   "tasks.assign",
   "tasks.complete",
   "tasks.archive",
+  "tasks.delete",
   "tasks.restore",
 ];
 
@@ -59,17 +68,28 @@ const estimatePermissions: Permission[] = [
   "estimates.edit",
   "estimates.finalize",
   "estimates.archive",
+  "estimates.delete",
   "estimates.restore",
+];
+
+const deletionPermissions: Permission[] = [
+  "projects.delete",
+  "tasks.delete",
+  "estimates.delete",
+  "diex.delete",
+  "service_orders.delete",
 ];
 
 export const rolePermissions: Record<UserRole, Permission[]> = {
   ADMIN: [
+    "audit.view",
     "permissions.view",
     "permissions.manage_user_overrides",
     "permissions.manage_role_permissions",
     "projects.view_all",
     "projects.edit_own",
     "projects.edit_all",
+    ...deletionPermissions,
     "projects.restore",
     "projects.complete",
     "projects.reopen",
@@ -90,12 +110,16 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "dashboard.financial_view",
     "reports.export",
     "users.manage",
+    "system_health.view",
+    "system_health.view_details",
   ],
   GESTOR: [
+    "audit.view",
     "permissions.view",
     "projects.view_all",
     "projects.edit_own",
     "projects.edit_all",
+    ...deletionPermissions,
     "projects.restore",
     "projects.complete",
     "projects.reopen",
@@ -112,9 +136,11 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "dashboard.view_executive",
     "dashboard.financial_view",
     "reports.export",
+    "system_health.view",
   ],
   PROJETISTA: [
     "projects.edit_own",
+    ...deletionPermissions,
     "projects.complete",
     "tasks.create",
     "tasks.edit_own",
@@ -127,16 +153,19 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "sessions.manage_own",
     "dashboard.view_operational",
     "reports.export",
+    "system_health.view",
   ],
   CONSULTA: [
     "tasks.view_all",
     "estimates.view_all",
     "sessions.manage_own",
     "dashboard.view_operational",
+    "system_health.view",
   ],
 };
 
 export const permissionDescriptions: Record<Permission, string> = {
+  "audit.view": "Permite visualizar detalhes tecnicos dos registros de auditoria",
   "permissions.view": "Permite consultar a governanca administrativa de permissoes",
   "permissions.manage_user_overrides":
     "Permite administrar overrides de permissoes por usuario",
@@ -145,6 +174,7 @@ export const permissionDescriptions: Record<Permission, string> = {
   "projects.view_all": "Permite visualizar projetos de qualquer responsavel",
   "projects.edit_own": "Permite editar projetos proprios",
   "projects.edit_all": "Permite editar qualquer projeto",
+  "projects.delete": "Permite excluir logicamente projetos arquivados",
   "projects.restore": "Permite restaurar projetos arquivados",
   "projects.complete": "Permite concluir projetos",
   "projects.reopen": "Permite reabrir projetos concluidos",
@@ -155,18 +185,22 @@ export const permissionDescriptions: Record<Permission, string> = {
   "tasks.assign": "Permite atribuir tarefas a usuarios",
   "tasks.complete": "Permite concluir tarefas",
   "tasks.archive": "Permite arquivar tarefas",
+  "tasks.delete": "Permite excluir logicamente tarefas arquivadas",
   "tasks.restore": "Permite restaurar tarefas arquivadas",
   "estimates.view_all": "Permite visualizar estimativas de qualquer projeto",
   "estimates.create": "Permite criar estimativas",
   "estimates.edit": "Permite editar estimativas",
   "estimates.finalize": "Permite finalizar estimativas",
   "estimates.archive": "Permite arquivar estimativas",
+  "estimates.delete": "Permite excluir logicamente estimativas arquivadas",
   "estimates.restore": "Permite restaurar estimativas arquivadas",
   "diex.issue": "Permite emitir DIEx",
   "diex.cancel": "Permite arquivar ou cancelar DIEx",
+  "diex.delete": "Permite excluir logicamente DIEx arquivados",
   "diex.restore": "Permite restaurar DIEx arquivados",
   "service_orders.issue": "Permite emitir ordens de servico",
   "service_orders.cancel": "Permite arquivar ou cancelar ordens de servico",
+  "service_orders.delete": "Permite excluir logicamente ordens de servico arquivadas",
   "service_orders.restore": "Permite restaurar ordens de servico arquivadas",
   "atas.manage": "Permite administrar atas e itens de ata",
   "military_organizations.manage": "Permite administrar organizacoes militares",
@@ -177,11 +211,14 @@ export const permissionDescriptions: Record<Permission, string> = {
   "dashboard.financial_view": "Permite visualizar dashboards financeiros",
   "reports.export": "Permite exportar relatorios e artefatos",
   "users.manage": "Permite administrar usuarios",
+  "system_health.view": "Permite consultar o estado geral de saude do SAGEP",
+  "system_health.view_details": "Permite consultar diagnosticos tecnicos do ambiente",
 };
 
 export const allPermissions = Object.keys(permissionDescriptions) as Permission[];
 
 const permissionGroupLabels: Record<string, string> = {
+  audit: "Auditoria",
   projects: "Projetos",
   tasks: "Tarefas",
   estimates: "Estimativas",
@@ -194,6 +231,7 @@ const permissionGroupLabels: Record<string, string> = {
   dashboard: "Dashboards",
   reports: "Relatorios",
   users: "Usuarios",
+  system_health: "Saude do sistema",
 };
 
 export type PermissionCatalogItem = {
@@ -207,12 +245,14 @@ export type PermissionCatalogItem = {
 };
 
 export const criticalPermissions: Permission[] = [
+  "audit.view",
   "permissions.manage_role_permissions",
   "permissions.manage_user_overrides",
   "users.manage",
   "sessions.manage_all",
   "atas.manage",
   "military_organizations.manage",
+  "system_health.view_details",
 ];
 
 export const allRoles = [...roleValues];

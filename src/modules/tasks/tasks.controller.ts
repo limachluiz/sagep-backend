@@ -78,4 +78,10 @@ export class TasksController {
     const result = await tasksService.restore(id, req.user!, options);
     return res.status(200).json(result);
   }
+
+  async softDelete(req: Request, res: Response) {
+    const { id } = taskIdParamSchema.parse(req.params);
+    const result = await tasksService.softDelete(id, req.user!);
+    return res.status(200).json(result);
+  }
 }

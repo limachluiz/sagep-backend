@@ -18,6 +18,7 @@ type CurrentUser = {
   name?: string;
   email: string;
   role: string;
+  permissions?: string[];
   rank?: string | null;
   cpf?: string | null;
 };
@@ -28,16 +29,21 @@ type ProjectStageValue =
   | "DIEX_REQUISITORIO"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "OS_LIBERADA"
+  | "AGUARDANDO_OS_ASSINADA"
+  | "AGUARDANDO_INICIO_EXECUCAO"
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
+type ProjectTypeValue = "CFTV" | "FIBRA_OPTICA_PONTO_LOGICO";
+
 type CreateProjectInput = {
   title: string;
   description?: string;
-  status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
+  projectType?: ProjectTypeValue;
+  omId?: string;
   startDate?: Date;
   endDate?: Date;
 };
@@ -45,7 +51,8 @@ type CreateProjectInput = {
 type UpdateProjectInput = {
   title?: string;
   description?: string;
-  status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
+  projectType?: ProjectTypeValue;
+  omId?: string;
   startDate?: Date;
   endDate?: Date;
 };
@@ -70,12 +77,19 @@ type ReviewAsBuiltInput =
   | {
       approved: true;
       reviewedAt: Date;
+      asBuiltLink: string;
     }
   | {
       approved: false;
       reviewedAt: Date;
       rejectionReason: string;
     };
+
+type RegisterSignedServiceOrderInput = {
+  signedServiceOrderLink: string;
+  signedServiceOrderReceivedAt: Date;
+  signedServiceOrderNotes?: string;
+};
 
 type CancelCommitmentNoteInput = {
   reason: string;
@@ -108,6 +122,17 @@ type TimelineEntityInput = {
 };
 
 const projectInclude = {
+  om: {
+    select: {
+      id: true,
+      omCode: true,
+      sigla: true,
+      name: true,
+      cityName: true,
+      stateUf: true,
+      isActive: true,
+    },
+  },
   owner: {
     select: {
       id: true,
@@ -140,6 +165,111 @@ const diexService = new DiexService();
 const serviceOrdersService = new ServiceOrdersService();
 
 export class ProjectsService {
+  private async validateProjectClassification(projectType?: ProjectTypeValue | null, omId?: string | null) {
+    if (!projectType && !omId) return null;
+
+    if (!projectType || !omId) {
+      throw new AppError("Informe o tipo do projeto e a OM de destino", 400);
+    }
+
+    const om = await prisma.militaryOrganization.findUnique({
+      where: { id: omId },
+      select: {
+        id: true,
+        sigla: true,
+        cityName: true,
+        stateUf: true,
+        isActive: true,
+      },
+    });
+
+    if (!om) {
+      throw new AppError("OM não encontrada", 404);
+    }
+
+    if (!om.isActive) {
+      throw new AppError("Não é possível vincular uma OM inativa ao projeto", 409);
+    }
+
+    if (projectType === "CFTV" && (om.stateUf !== "AM" || om.cityName.trim().toLocaleLowerCase("pt-BR") !== "manaus")) {
+      throw new AppError("Projetos de CFTV estão restritos às OMs de Manaus/AM", 400);
+    }
+
+    return om;
+  }
+
+  async kanban(
+    filters: {
+      ownerId?: string;
+      stage?: ProjectStageValue;
+      projectType?: ProjectTypeValue;
+      omId?: string;
+      stateUf?: "AM" | "RO" | "RR" | "AC";
+      search?: string;
+      onlyMine?: boolean;
+    },
+    user: CurrentUser,
+  ) {
+    const where: Prisma.ProjectWhereInput = {
+      archivedAt: null,
+      deletedAt: null,
+      ...(filters.ownerId && { ownerId: filters.ownerId }),
+      ...(filters.onlyMine && { ownerId: user.id }),
+      ...(filters.stage && { stage: filters.stage }),
+      ...(filters.projectType && { projectType: filters.projectType }),
+      ...(filters.omId && { omId: filters.omId }),
+      ...(filters.stateUf && { om: { stateUf: filters.stateUf } }),
+      ...(filters.search && {
+        OR: [
+          { title: { contains: filters.search, mode: "insensitive" } },
+          { description: { contains: filters.search, mode: "insensitive" } },
+        ],
+      }),
+      ...(!this.isPrivileged(user.role) && {
+        OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }],
+      }),
+    };
+    const projects = await prisma.project.findMany({
+      where,
+      orderBy: [{ stage: "asc" }, { updatedAt: "desc" }],
+      include: {
+        owner: { select: { id: true, name: true, email: true } },
+        om: { select: { id: true, sigla: true, cityName: true, stateUf: true } },
+        serviceOrders: {
+          where: { archivedAt: null, deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true, serviceOrderNumber: true, plannedEndDate: true },
+        },
+      },
+    });
+    const labels: Record<ProjectStageValue, string> = {
+      ESTIMATIVA_PRECO: "Estimativa de preço", AGUARDANDO_NOTA_CREDITO: "Aguardando nota de crédito",
+      DIEX_REQUISITORIO: "DIEx requisitório", AGUARDANDO_NOTA_EMPENHO: "Aguardando nota de empenho",
+      OS_LIBERADA: "OS liberada",
+      AGUARDANDO_OS_ASSINADA: "Aguardando OS assinada",
+      AGUARDANDO_INICIO_EXECUCAO: "Aguardando início da execução",
+      SERVICO_EM_EXECUCAO: "Serviço em execução",
+      ANALISANDO_AS_BUILT: "Analisando As-Built", ATESTAR_NF: "Atestar NF",
+      SERVICO_CONCLUIDO: "Serviço concluído", CANCELADO: "Cancelado",
+    };
+    return {
+      generatedAt: new Date().toISOString(),
+      columns: (Object.keys(labels) as ProjectStageValue[]).map((stage) => {
+        const cards = projects.filter((project) => project.stage === stage).map((project) => {
+          const os = project.serviceOrders[0];
+          return {
+            id: project.id, projectCode: project.projectCode, title: project.title,
+            status: project.status, stage: project.stage, projectType: project.projectType,
+            om: project.om, owner: project.owner,
+            updatedAt: project.updatedAt, plannedEndDate: os?.plannedEndDate ?? project.endDate,
+            serviceOrder: os ?? null,
+          };
+        });
+        return { stage, label: labels[stage], count: cards.length, cards };
+      }),
+    };
+  }
   private isAdmin(role: string) {
     return role === "ADMIN";
   }
@@ -167,7 +297,11 @@ export class ProjectsService {
   }
 
   private canIncludeArchived(user: CurrentUser, includeArchived?: boolean) {
-    return Boolean(includeArchived && this.isPrivileged(user.role));
+    return Boolean(
+      includeArchived &&
+      (permissionsService.hasPermission(user, "projects.restore") ||
+        permissionsService.hasPermission(user, "projects.delete")),
+    );
   }
 
   private resolveArchivedAccess(
@@ -181,16 +315,23 @@ export class ProjectsService {
       archivedUntil?: Date;
     },
   ) {
-    if (
-      (filters.includeArchived ||
-        filters.onlyArchived ||
-        filters.includeDeleted ||
-        filters.onlyDeleted ||
-        filters.archivedFrom ||
-        filters.archivedUntil) &&
-      !this.isAdmin(user.role)
-    ) {
-      throw new AppError("Apenas ADMIN pode consultar itens arquivados", 403);
+    const canAccessArchived =
+      permissionsService.hasPermission(user, "projects.restore") ||
+      permissionsService.hasPermission(user, "projects.delete");
+    const requestsArchived = Boolean(
+      filters.includeArchived ||
+      filters.onlyArchived ||
+      filters.archivedFrom ||
+      filters.archivedUntil,
+    );
+    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+
+    if (requestsArchived && !canAccessArchived) {
+      throw new AppError("Você não tem permissão para consultar projetos arquivados", 403);
+    }
+
+    if (requestsDeleted && !this.isAdmin(user.role)) {
+      throw new AppError("Apenas ADMIN pode consultar projetos excluídos", 403);
     }
 
     if (filters.onlyArchived && filters.onlyDeleted) {
@@ -198,8 +339,8 @@ export class ProjectsService {
     }
 
     return {
-      includeArchived: Boolean(filters.includeArchived && this.isAdmin(user.role)),
-      onlyArchived: Boolean(filters.onlyArchived && this.isAdmin(user.role)),
+      includeArchived: Boolean(filters.includeArchived && canAccessArchived),
+      onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
       includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
@@ -344,6 +485,8 @@ export class ProjectsService {
     projectCode?: number | null;
     title?: string | null;
     description?: string | null;
+    projectType?: ProjectTypeValue | null;
+    omId?: string | null;
     status?: string | null;
     stage?: ProjectStageValue | null;
     ownerId?: string | null;
@@ -357,10 +500,16 @@ export class ProjectsService {
     commitmentNoteReceivedAt?: Date | null;
     serviceOrderNumber?: string | null;
     serviceOrderIssuedAt?: Date | null;
+    serviceOrderSignatureRequired?: boolean;
+    signedServiceOrderLink?: string | null;
+    signedServiceOrderReceivedAt?: Date | null;
+    signedServiceOrderNotes?: string | null;
+    signedServiceOrderRegisteredById?: string | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
     asBuiltReviewedAt?: Date | null;
     asBuiltApprovedAt?: Date | null;
+    asBuiltLink?: string | null;
     asBuiltRejectedAt?: Date | null;
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
@@ -371,6 +520,8 @@ export class ProjectsService {
       projectCode: project.projectCode ?? null,
       title: project.title ?? null,
       description: project.description ?? null,
+      projectType: project.projectType ?? null,
+      omId: project.omId ?? null,
       status: project.status ?? null,
       stage: project.stage ?? null,
       ownerId: project.ownerId ?? null,
@@ -384,10 +535,17 @@ export class ProjectsService {
       commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
       serviceOrderNumber: project.serviceOrderNumber ?? null,
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+      serviceOrderSignatureRequired: project.serviceOrderSignatureRequired ?? false,
+      signedServiceOrderLink: project.signedServiceOrderLink ?? null,
+      signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt ?? null,
+      signedServiceOrderNotes: project.signedServiceOrderNotes ?? null,
+      signedServiceOrderRegisteredById:
+        project.signedServiceOrderRegisteredById ?? null,
       executionStartedAt: project.executionStartedAt ?? null,
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
       asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
       asBuiltApprovedAt: project.asBuiltApprovedAt ?? null,
+      asBuiltLink: project.asBuiltLink ?? null,
       asBuiltRejectedAt: project.asBuiltRejectedAt ?? null,
       asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
@@ -407,10 +565,14 @@ export class ProjectsService {
     commitmentNoteReceivedAt?: Date | null;
     serviceOrderNumber?: string | null;
     serviceOrderIssuedAt?: Date | null;
+    serviceOrderSignatureRequired?: boolean;
+    signedServiceOrderLink?: string | null;
+    signedServiceOrderReceivedAt?: Date | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
     asBuiltReviewedAt?: Date | null;
     asBuiltApprovedAt?: Date | null;
+    asBuiltLink?: string | null;
     asBuiltRejectedAt?: Date | null;
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
@@ -428,10 +590,14 @@ export class ProjectsService {
       commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
       serviceOrderNumber: project.serviceOrderNumber ?? null,
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
+      serviceOrderSignatureRequired: project.serviceOrderSignatureRequired ?? false,
+      signedServiceOrderLink: project.signedServiceOrderLink ?? null,
+      signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt ?? null,
       executionStartedAt: project.executionStartedAt ?? null,
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
       asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
       asBuiltApprovedAt: project.asBuiltApprovedAt ?? null,
+      asBuiltLink: project.asBuiltLink ?? null,
       asBuiltRejectedAt: project.asBuiltRejectedAt ?? null,
       asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
@@ -446,6 +612,10 @@ export class ProjectsService {
 
     const parsed = Number(value.toString());
     return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  private getAsBuiltLink(project: object) {
+    return (project as { asBuiltLink?: string | null }).asBuiltLink ?? null;
   }
 
   private sumAmounts(items: { totalAmount: { toString(): string } | string | number }[]) {
@@ -465,6 +635,9 @@ export class ProjectsService {
     commitmentNoteReceivedAt?: Date | null;
     serviceOrderNumber?: string | null;
     serviceOrderIssuedAt?: Date | null;
+    serviceOrderSignatureRequired?: boolean;
+    signedServiceOrderLink?: string | null;
+    signedServiceOrderReceivedAt?: Date | null;
     executionStartedAt?: Date | null;
     asBuiltReceivedAt?: Date | null;
     asBuiltReviewedAt?: Date | null;
@@ -563,6 +736,19 @@ export class ProjectsService {
     }
 
     if (
+      project.stage === "AGUARDANDO_OS_ASSINADA" &&
+      project.serviceOrderSignatureRequired &&
+      (!project.signedServiceOrderLink || !project.signedServiceOrderReceivedAt)
+    ) {
+      pendingActions.push({
+        code: "REGISTRAR_OS_ASSINADA",
+        label: "Registrar recebimento da OS assinada",
+        severity: "BLOCKER",
+        targetStage: "AGUARDANDO_INICIO_EXECUCAO",
+      });
+    }
+
+    if (
       workflowService.isStageAtOrBeyond(project.stage, "OS_LIBERADA") &&
       !project.serviceOrderNumber &&
       !project.serviceOrderIssuedAt &&
@@ -576,7 +762,12 @@ export class ProjectsService {
       });
     }
 
-    if (project.stage === "OS_LIBERADA" && project.serviceOrders.length > 0 && !project.executionStartedAt) {
+    if (
+      (project.stage === "OS_LIBERADA" ||
+        project.stage === "AGUARDANDO_INICIO_EXECUCAO") &&
+      project.serviceOrders.length > 0 &&
+      !project.executionStartedAt
+    ) {
       pendingActions.push({
         code: "INICIAR_EXECUCAO",
         label: "Registrar início da execução",
@@ -855,12 +1046,31 @@ export class ProjectsService {
     );
   }
 
+  private toPublicTimelineItem(item: Awaited<ReturnType<typeof auditService.listTimelineForEntities>>[number]) {
+    return {
+      id: item.id,
+      at: item.at,
+      entityType: item.entityType,
+      entityId: item.entityId,
+      action: item.action,
+      label: item.label,
+      actorName: item.actorName,
+      summary: item.summary,
+      source: item.source,
+      context: item.context ?? null,
+    };
+  }
+
   async create(data: CreateProjectInput, user: CurrentUser) {
+    await this.validateProjectClassification(data.projectType, data.omId);
+
     const project = await prisma.project.create({
       data: {
         title: data.title,
         description: data.description,
-        status: data.status ?? "PLANEJAMENTO",
+        projectType: data.projectType,
+        omId: data.omId,
+        status: workflowService.getMacroStatusFromStage("ESTIMATIVA_PRECO"),
         stage: "ESTIMATIVA_PRECO",
         startDate: data.startDate,
         endDate: data.endDate,
@@ -880,6 +1090,8 @@ export class ProjectsService {
         projectCode: project.projectCode,
         title: project.title,
         description: project.description,
+        projectType: project.projectType,
+        omId: project.omId,
         status: project.status,
         stage: project.stage,
         ownerId: project.ownerId,
@@ -991,6 +1203,17 @@ export class ProjectsService {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       include: {
+        om: {
+          select: {
+            id: true,
+            omCode: true,
+            sigla: true,
+            name: true,
+            cityName: true,
+            stateUf: true,
+            isActive: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -1118,6 +1341,19 @@ export class ProjectsService {
         projectCode: true,
         title: true,
         description: true,
+        projectType: true,
+        omId: true,
+        om: {
+          select: {
+            id: true,
+            omCode: true,
+            sigla: true,
+            name: true,
+            cityName: true,
+            stateUf: true,
+            isActive: true,
+          },
+        },
         status: true,
         stage: true,
         startDate: true,
@@ -1130,10 +1366,25 @@ export class ProjectsService {
         commitmentNoteReceivedAt: true,
         serviceOrderNumber: true,
         serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
+        signedServiceOrderNotes: true,
+        signedServiceOrderRegisteredById: true,
+        signedServiceOrderRegisteredBy: {
+          select: {
+            id: true,
+            userCode: true,
+            name: true,
+            email: true,
+            role: true,
+          },
+        },
         executionStartedAt: true,
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
         asBuiltApprovedAt: true,
+        asBuiltLink: true,
         asBuiltRejectedAt: true,
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
@@ -1183,6 +1434,17 @@ export class ProjectsService {
             priority: true,
             dueDate: true,
             archivedAt: true,
+            createdAt: true,
+            updatedAt: true,
+            assignee: {
+              select: {
+                id: true,
+                userCode: true,
+                name: true,
+                email: true,
+                role: true,
+              },
+            },
           },
           orderBy: {
             createdAt: "desc",
@@ -1312,7 +1574,9 @@ export class ProjectsService {
 
     const workflowSnapshot = this.buildWorkflowSnapshot(project);
     const nextAction = workflowService.getNextAction(workflowSnapshot);
-    const timeline = await this.buildUnifiedTimeline(project);
+    const auditTrail = await this.buildUnifiedTimeline(project);
+    const canViewAudit = permissionsService.hasPermission(user, "audit.view");
+    const timeline = auditTrail.map((item) => this.toPublicTimelineItem(item));
     const finalizedEstimates = project.estimates.filter(
       (estimate) => estimate.status === "FINALIZADA",
     );
@@ -1326,6 +1590,9 @@ export class ProjectsService {
         projectCode: project.projectCode,
         title: project.title,
         description: project.description,
+        projectType: project.projectType,
+        omId: project.omId,
+        om: project.om,
         owner: project.owner,
         members: project.members,
         startDate: project.startDate,
@@ -1348,22 +1615,34 @@ export class ProjectsService {
           commitmentNoteReceivedAt: project.commitmentNoteReceivedAt,
           serviceOrderNumber: project.serviceOrderNumber,
           serviceOrderIssuedAt: project.serviceOrderIssuedAt,
+          signedServiceOrderLink: project.signedServiceOrderLink,
+          signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt,
           executionStartedAt: project.executionStartedAt,
           asBuiltReceivedAt: project.asBuiltReceivedAt,
           asBuiltReviewedAt: project.asBuiltReviewedAt,
           asBuiltApprovedAt: project.asBuiltApprovedAt,
+          asBuiltLink: project.asBuiltLink,
           asBuiltRejectedAt: project.asBuiltRejectedAt,
           asBuiltRejectionReason: project.asBuiltRejectionReason,
           invoiceAttestedAt: project.invoiceAttestedAt,
           serviceCompletedAt: project.serviceCompletedAt,
         },
+        serviceOrderSignature: {
+          required: project.serviceOrderSignatureRequired,
+          link: project.signedServiceOrderLink,
+          receivedAt: project.signedServiceOrderReceivedAt,
+          notes: project.signedServiceOrderNotes,
+          registeredBy: project.signedServiceOrderRegisteredBy,
+        },
       },
       pendingActions: this.buildPendingActions(project),
       timeline,
+      auditTrail: canViewAudit ? auditTrail : null,
+      tasks: project.tasks,
       documents: {
-        estimates: project.estimates.slice(0, 5),
-        diexRequests: project.diexRequests.slice(0, 5),
-        serviceOrders: project.serviceOrders.slice(0, 5),
+        estimates: project.estimates,
+        diexRequests: project.diexRequests,
+        serviceOrders: project.serviceOrders,
       },
       financialSummary: {
         estimatesCount: project.estimates.length,
@@ -1397,6 +1676,17 @@ export class ProjectsService {
     const project = await prisma.project.findUnique({
       where: { projectCode },
       include: {
+        om: {
+          select: {
+            id: true,
+            omCode: true,
+            sigla: true,
+            name: true,
+            cityName: true,
+            stateUf: true,
+            isActive: true,
+          },
+        },
         owner: {
           select: {
             id: true,
@@ -1483,6 +1773,8 @@ export class ProjectsService {
         projectCode: true,
         title: true,
         description: true,
+        projectType: true,
+        omId: true,
         status: true,
         stage: true,
         ownerId: true,
@@ -1496,10 +1788,16 @@ export class ProjectsService {
         commitmentNoteReceivedAt: true,
         serviceOrderNumber: true,
         serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
+        signedServiceOrderNotes: true,
+        signedServiceOrderRegisteredById: true,
         executionStartedAt: true,
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
         asBuiltApprovedAt: true,
+        asBuiltLink: true,
         asBuiltRejectedAt: true,
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
@@ -1511,12 +1809,20 @@ export class ProjectsService {
       throw new AppError("Projeto não encontrado", 404);
     }
 
+    if (data.projectType !== undefined || data.omId !== undefined) {
+      await this.validateProjectClassification(
+        data.projectType ?? before.projectType,
+        data.omId ?? before.omId,
+      );
+    }
+
     const project = await prisma.project.update({
       where: { id: projectId },
       data: {
         ...(data.title !== undefined && { title: data.title }),
         ...(data.description !== undefined && { description: data.description }),
-        ...(data.status !== undefined && { status: data.status }),
+        ...(data.projectType !== undefined && { projectType: data.projectType }),
+        ...(data.omId !== undefined && { omId: data.omId }),
         ...(data.startDate !== undefined && { startDate: data.startDate }),
         ...(data.endDate !== undefined && { endDate: data.endDate }),
       },
@@ -1535,6 +1841,8 @@ export class ProjectsService {
         projectCode: project.projectCode,
         title: project.title,
         description: project.description,
+        projectType: project.projectType,
+        omId: project.omId,
         status: project.status,
         stage: project.stage,
         ownerId: project.ownerId,
@@ -1585,10 +1893,16 @@ export class ProjectsService {
         commitmentNoteReceivedAt: true,
         serviceOrderNumber: true,
         serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
+        signedServiceOrderNotes: true,
+        signedServiceOrderRegisteredById: true,
         executionStartedAt: true,
         asBuiltReceivedAt: true,
         asBuiltReviewedAt: true,
         asBuiltApprovedAt: true,
+        asBuiltLink: true,
         asBuiltRejectedAt: true,
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
@@ -1646,10 +1960,14 @@ export class ProjectsService {
       serviceOrderNumber: data.serviceOrderNumber ?? currentProject.serviceOrderNumber,
       serviceOrderIssuedAt:
         data.serviceOrderIssuedAt ?? currentProject.serviceOrderIssuedAt,
+      serviceOrderSignatureRequired: currentProject.serviceOrderSignatureRequired,
+      signedServiceOrderLink: currentProject.signedServiceOrderLink,
+      signedServiceOrderReceivedAt: currentProject.signedServiceOrderReceivedAt,
       executionStartedAt: data.executionStartedAt ?? currentProject.executionStartedAt,
       asBuiltReceivedAt: data.asBuiltReceivedAt ?? currentProject.asBuiltReceivedAt,
       asBuiltReviewedAt: currentProject.asBuiltReviewedAt,
       asBuiltApprovedAt: currentProject.asBuiltApprovedAt,
+      asBuiltLink: this.getAsBuiltLink(currentProject),
       asBuiltRejectedAt: currentProject.asBuiltRejectedAt,
       asBuiltRejectionReason: currentProject.asBuiltRejectionReason,
       invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
@@ -1766,6 +2084,7 @@ export class ProjectsService {
       asBuiltReceivedAt: project.asBuiltReceivedAt,
       asBuiltReviewedAt: project.asBuiltReviewedAt,
       asBuiltApprovedAt: project.asBuiltApprovedAt,
+      asBuiltLink: this.getAsBuiltLink(project),
       asBuiltRejectedAt: project.asBuiltRejectedAt,
       asBuiltRejectionReason: project.asBuiltRejectionReason,
       invoiceAttestedAt: project.invoiceAttestedAt,
@@ -1803,12 +2122,167 @@ export class ProjectsService {
             asBuiltReceivedAt: project.asBuiltReceivedAt,
             asBuiltReviewedAt: project.asBuiltReviewedAt,
             asBuiltApprovedAt: project.asBuiltApprovedAt,
+            asBuiltLink: this.getAsBuiltLink(project),
             asBuiltRejectedAt: project.asBuiltRejectedAt,
             asBuiltRejectionReason: project.asBuiltRejectionReason,
             invoiceAttestedAt: project.invoiceAttestedAt,
             serviceCompletedAt: project.serviceCompletedAt,
           }),
         ).code,
+      },
+    });
+
+    return project;
+  }
+
+  async registerSignedServiceOrder(
+    projectId: string,
+    data: RegisterSignedServiceOrderInput,
+    user: CurrentUser,
+  ) {
+    await this.ensureCanManage(projectId, user);
+
+    const currentProject = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        ownerId: true,
+        startDate: true,
+        endDate: true,
+        creditNoteNumber: true,
+        creditNoteReceivedAt: true,
+        diexNumber: true,
+        diexIssuedAt: true,
+        commitmentNoteNumber: true,
+        commitmentNoteReceivedAt: true,
+        serviceOrderNumber: true,
+        serviceOrderIssuedAt: true,
+        serviceOrderSignatureRequired: true,
+        signedServiceOrderLink: true,
+        signedServiceOrderReceivedAt: true,
+        signedServiceOrderNotes: true,
+        signedServiceOrderRegisteredById: true,
+        executionStartedAt: true,
+        asBuiltReceivedAt: true,
+        asBuiltReviewedAt: true,
+        asBuiltApprovedAt: true,
+        asBuiltLink: true,
+        asBuiltRejectedAt: true,
+        asBuiltRejectionReason: true,
+        invoiceAttestedAt: true,
+        serviceCompletedAt: true,
+        serviceOrders: {
+          where: { archivedAt: null, deletedAt: null },
+          select: { id: true, issuedAt: true },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+        },
+      },
+    });
+
+    if (!currentProject) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (currentProject.stage !== "AGUARDANDO_OS_ASSINADA") {
+      throw new AppError(
+        "A OS assinada só pode ser registrada quando o projeto estiver aguardando sua devolução",
+        409,
+      );
+    }
+
+    const activeServiceOrder = currentProject.serviceOrders[0];
+    if (!activeServiceOrder) {
+      throw new AppError("O projeto não possui Ordem de Serviço ativa", 409);
+    }
+
+    if (data.signedServiceOrderReceivedAt < activeServiceOrder.issuedAt) {
+      throw new AppError(
+        "A data de recebimento da OS assinada não pode ser anterior à emissão",
+        400,
+      );
+    }
+
+    if (data.signedServiceOrderReceivedAt > new Date()) {
+      throw new AppError(
+        "A data de recebimento da OS assinada não pode estar no futuro",
+        400,
+      );
+    }
+
+    const targetStage = "AGUARDANDO_INICIO_EXECUCAO" as const;
+    workflowService.assertStageTransition(currentProject.stage, targetStage);
+    const finalizedEstimateCount = await prisma.estimate.count({
+      where: {
+        projectId,
+        status: "FINALIZADA",
+        archivedAt: null,
+        deletedAt: null,
+      },
+    });
+    workflowService.validateStageRequirements(
+      targetStage,
+      this.buildWorkflowSnapshot({
+        ...currentProject,
+        stage: targetStage,
+        signedServiceOrderLink: data.signedServiceOrderLink.trim(),
+        signedServiceOrderReceivedAt: data.signedServiceOrderReceivedAt,
+      }),
+      finalizedEstimateCount,
+    );
+
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        stage: targetStage,
+        status: workflowService.getMacroStatusFromStage(targetStage),
+        signedServiceOrderLink: data.signedServiceOrderLink.trim(),
+        signedServiceOrderReceivedAt: data.signedServiceOrderReceivedAt,
+        signedServiceOrderNotes: data.signedServiceOrderNotes?.trim() || null,
+        signedServiceOrderRegisteredById: user.id,
+      },
+      include: projectInclude,
+    });
+
+    const beforeSnapshot = this.buildProjectAuditSnapshot(currentProject);
+    const afterSnapshot = this.buildProjectAuditSnapshot(project);
+
+    await auditService.log({
+      entityType: "SERVICE_ORDER",
+      entityId: activeServiceOrder.id,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `OS do projeto PRJ-${project.projectCode} recebida assinada pela contratada`,
+      before: beforeSnapshot,
+      after: afterSnapshot,
+      metadata: {
+        source: "project.service-order.signature",
+        projectId,
+        receivedAt: data.signedServiceOrderReceivedAt,
+        signedServiceOrderLink: data.signedServiceOrderLink.trim(),
+        notes: data.signedServiceOrderNotes?.trim() || null,
+      },
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: project.id,
+      action: "STAGE_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${project.projectCode} liberado para início após recebimento da OS assinada`,
+      before: beforeSnapshot,
+      after: afterSnapshot,
+      metadata: {
+        source: "project.service-order.signature",
+        previousStage: currentProject.stage,
+        newStage: project.stage,
+        serviceOrderId: activeServiceOrder.id,
+        nextActionCode: "INICIAR_EXECUCAO",
       },
     });
 
@@ -1893,6 +2367,7 @@ export class ProjectsService {
       asBuiltReceivedAt: data.approved ? currentProject.asBuiltReceivedAt : null,
       asBuiltReviewedAt: reviewedAt,
       asBuiltApprovedAt: data.approved ? reviewedAt : null,
+      asBuiltLink: data.approved ? data.asBuiltLink : null,
       asBuiltRejectedAt: data.approved ? null : reviewedAt,
       asBuiltRejectionReason: rejectionReason,
       invoiceAttestedAt: currentProject.invoiceAttestedAt,
@@ -1918,9 +2393,10 @@ export class ProjectsService {
         status: workflowService.getMacroStatusFromStage(targetStage),
         asBuiltReviewedAt: reviewedAt,
         asBuiltApprovedAt: data.approved ? reviewedAt : null,
+        asBuiltLink: data.approved ? data.asBuiltLink : null,
         asBuiltRejectedAt: data.approved ? null : reviewedAt,
         asBuiltRejectionReason: rejectionReason,
-        ...(data.approved ? {} : { asBuiltReceivedAt: null }),
+        ...(data.approved ? {} : { asBuiltReceivedAt: null, asBuiltLink: null }),
       },
       include: projectInclude,
     });
@@ -1948,6 +2424,7 @@ export class ProjectsService {
       asBuiltReceivedAt: project.asBuiltReceivedAt,
       asBuiltReviewedAt: project.asBuiltReviewedAt,
       asBuiltApprovedAt: project.asBuiltApprovedAt,
+      asBuiltLink: this.getAsBuiltLink(project),
       asBuiltRejectedAt: project.asBuiltRejectedAt,
       asBuiltRejectionReason: project.asBuiltRejectionReason,
       invoiceAttestedAt: project.invoiceAttestedAt,
@@ -1968,6 +2445,7 @@ export class ProjectsService {
         source: "project.as-built.review",
         approved: data.approved,
         reviewedAt,
+        asBuiltLink: data.approved ? data.asBuiltLink : null,
         rejectionReason,
       },
     });
@@ -1988,6 +2466,7 @@ export class ProjectsService {
         previousStage: currentProject.stage,
         newStage: project.stage,
         reviewedAt,
+        asBuiltLink: data.approved ? data.asBuiltLink : null,
         rejectionReason,
         nextActionCode: workflowService.getNextAction(
           this.buildWorkflowSnapshot({
@@ -2006,6 +2485,7 @@ export class ProjectsService {
             asBuiltReceivedAt: project.asBuiltReceivedAt,
             asBuiltReviewedAt: project.asBuiltReviewedAt,
             asBuiltApprovedAt: project.asBuiltApprovedAt,
+            asBuiltLink: this.getAsBuiltLink(project),
             asBuiltRejectedAt: project.asBuiltRejectedAt,
             asBuiltRejectionReason: project.asBuiltRejectionReason,
             invoiceAttestedAt: project.invoiceAttestedAt,
@@ -2195,13 +2675,21 @@ export class ProjectsService {
         where: { id: projectId },
         data: {
           stage: "ESTIMATIVA_PRECO",
-          status: workflowService.getMacroStatusFromStage("ESTIMATIVA_PRECO"),
+          status: workflowService.getMacroStatusFromStage(
+            "ESTIMATIVA_PRECO",
+            currentProject.status,
+          ),
           diexNumber: null,
           diexIssuedAt: null,
           commitmentNoteNumber: null,
           commitmentNoteReceivedAt: null,
           serviceOrderNumber: null,
           serviceOrderIssuedAt: null,
+          serviceOrderSignatureRequired: false,
+          signedServiceOrderLink: null,
+          signedServiceOrderReceivedAt: null,
+          signedServiceOrderNotes: null,
+          signedServiceOrderRegisteredById: null,
           executionStartedAt: null,
           asBuiltReceivedAt: null,
           invoiceAttestedAt: null,
@@ -2320,16 +2808,9 @@ export class ProjectsService {
   async remove(projectId: string, user: CurrentUser) {
     const projectAccess = await this.ensureCanManage(projectId, user);
 
-    if (
-      projectAccess._count.members > 0 ||
-      projectAccess._count.tasks > 0 ||
-      projectAccess._count.estimates > 0
-    ) {
-      throw new AppError(
-        "Não é possível arquivar um projeto que já possui membros, tarefas ou estimativas vinculadas",
-        409,
-      );
-    }
+    workflowService.assertCanArchiveProject(
+      this.buildWorkflowSnapshot(projectAccess),
+    );
 
     const before = await prisma.project.findUnique({
       where: { id: projectId },
@@ -2377,15 +2858,123 @@ export class ProjectsService {
       before: this.buildProjectAuditSnapshot(before),
     });
 
-    await prisma.project.update({
+    const project = await prisma.project.update({
       where: { id: projectId },
       data: {
         archivedAt: new Date(),
       },
+      include: projectInclude,
     });
 
     return {
       message: "Projeto arquivado com sucesso",
+      project,
+    };
+  }
+
+  async softDelete(projectId: string, user: CurrentUser) {
+    if (!permissionsService.hasPermission(user, "projects.delete")) {
+      throw new AppError("Você não tem permissão para excluir este projeto", 403);
+    }
+
+    const projectAccess = await this.ensureCanManage(projectId, user, true);
+    workflowService.assertCanArchiveProject(this.buildWorkflowSnapshot(projectAccess));
+
+    const before = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        status: true,
+        stage: true,
+        ownerId: true,
+        startDate: true,
+        endDate: true,
+        archivedAt: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!before || before.deletedAt) {
+      throw new AppError("Projeto não encontrado", 404);
+    }
+
+    if (!before.archivedAt) {
+      throw new AppError("O projeto precisa estar arquivado antes da exclusão", 409);
+    }
+
+    const deletedAt = new Date();
+    const deleted = await prisma.$transaction(async (tx) => {
+      const [tasks, estimates, diexRequests, serviceOrders] = await Promise.all([
+        tx.task.updateMany({
+          where: { projectId, deletedAt: null },
+          data: { deletedAt },
+        }),
+        tx.estimate.updateMany({
+          where: { projectId, deletedAt: null },
+          data: { deletedAt },
+        }),
+        tx.diexRequest.updateMany({
+          where: { projectId, deletedAt: null },
+          data: { deletedAt },
+        }),
+        tx.serviceOrder.updateMany({
+          where: { projectId, deletedAt: null },
+          data: { deletedAt },
+        }),
+      ]);
+
+      const project = await tx.project.update({
+        where: { id: projectId },
+        data: { deletedAt },
+        select: {
+          id: true,
+          projectCode: true,
+          title: true,
+          description: true,
+          status: true,
+          stage: true,
+          ownerId: true,
+          startDate: true,
+          endDate: true,
+          archivedAt: true,
+          deletedAt: true,
+        },
+      });
+
+      return {
+        project,
+        dependents: {
+          tasks: tasks.count,
+          estimates: estimates.count,
+          diexRequests: diexRequests.count,
+          serviceOrders: serviceOrders.count,
+        },
+      };
+    });
+
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: before.id,
+      action: "DELETE",
+      actor: this.getAuditActor(user),
+      summary: `Projeto PRJ-${before.projectCode} excluído logicamente`,
+      before: this.buildProjectAuditSnapshot(before),
+      after: this.buildProjectAuditSnapshot(deleted.project),
+      metadata: {
+        permissionUsed: "projects.delete",
+        softDelete: true,
+        dependents: deleted.dependents,
+      },
+    });
+
+    return {
+      message: "Projeto excluído com sucesso",
+      permissionUsed: "projects.delete" as const,
+      deletedAt,
+      deleted: deleted.dependents,
     };
   }
 
@@ -2635,7 +3224,8 @@ export class ProjectsService {
       throw new AppError("Projeto não encontrado", 404);
     }
 
-    return this.buildUnifiedTimeline(project);
+    const timeline = await this.buildUnifiedTimeline(project);
+    return timeline.map((item) => this.toPublicTimelineItem(item));
   }
 
   async getNextAction(projectId: string, user: CurrentUser) {

@@ -125,6 +125,22 @@ GET /api/reports/projects/:id/dossier.pdf
 
 Permissao: `reports.export`.
 
+### Relatorio executivo da Secao de Projetos
+
+```http
+GET /api/reports/projects/executive-summary
+GET /api/reports/projects/executive-summary.pdf?staleDays=15
+GET /api/reports/projects/executive-summary.pdf?projectType=CFTV
+```
+
+O PDF A4 paisagem consolida projetos em andamento e concluidos, valores da
+carteira, empenhos, graficos por etapa e estado, saude dos prazos, pontos de
+atencao e o detalhamento dos projetos abertos. O filtro `projectType` aceita
+`CFTV` ou `FIBRA_OPTICA_PONTO_LOGICO`. Projetos cancelados, arquivados ou
+removidos nao entram no documento.
+
+Permissoes: `reports.export` e `dashboard.view_executive`.
+
 Uso: gerar dossie consolidado do projeto em JSON ou PDF.
 
 ## Users
@@ -224,7 +240,7 @@ Payload:
 {
   "name": "1 Ten Maria Souza",
   "email": "maria.souza@sagep.mil.br",
-  "password": "123456",
+  "password": "<senha-forte-do-usuario>",
   "role": "GESTOR",
   "rank": "1 Ten",
   "cpf": "12345678900"
@@ -295,7 +311,7 @@ Resposta tipica:
 | `id` | requests de update e respostas | UUID/cuid interno do usuario. |
 | `userCode` | respostas | Codigo sequencial amigavel para exibicao. |
 | `role` | create/list/update | Perfil funcional do usuario. |
-| `active` | list/responses | Hoje so pode ser filtrado; nao ha rota administrativa dedicada para alterar esse campo. |
+| `active` | list/responses | Pode ser filtrado na listagem e alterado por `PATCH /users/:id/status`. |
 | `rank`, `cpf` | create e filtro de busca | Relevantes para cadastro e busca textual; nem sempre retornam nos selects atuais. |
 
 ### Roles Aceitos
@@ -662,7 +678,11 @@ Observacoes:
 - itens sao criados/atualizados por `ataId`, grupo e `referenceCode`.
 - a integracao grava os campos externos em `Ata` e `AtaItem`, mas nao altera movimentos de saldo local.
 
-Comparacao de saldo externo:
+### Funcionalidades externas descontinuadas
+
+As rotas de comparação, sincronização de saldo por ATA/item e registro de
+consumo externo foram removidas. A lista abaixo fica apenas como referência
+histórica e não representa endpoints disponíveis:
 
 - `GET /api/atas/{id}/external-balance` le apenas snapshots externos persistidos localmente para os itens da ATA; nao consulta Compras.gov.br.
 - `POST /api/atas/{id}/sync-external-balance` consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
@@ -961,3 +981,19 @@ GET /api/health
 ```
 
 Endpoint publico para verificacao basica da API.
+
+```http
+GET /api/health/status
+```
+
+Resumo publico sanitizado com API, PostgreSQL, pgAdmin, latencias e historico
+observado. Permanece independente da autenticacao persistida para diagnosticar
+falhas do banco.
+
+```http
+GET /api/health/details
+Authorization: Bearer <token>
+```
+
+Diagnostico de runtime, memoria e unidades de infraestrutura. Requer
+`system_health.view_details`, concedida por padrao somente a `ADMIN`.

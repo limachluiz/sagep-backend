@@ -10,12 +10,21 @@ const projectStatusEnum = z.enum([
   "CANCELADO",
 ]);
 
+const projectTypeEnum = z.enum(["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"]);
+const federativeUnitEnum = z.enum(["AM", "RO", "RR", "AC"]);
+
+function hasCompleteClassification(data: { projectType?: string; omId?: string }) {
+  return Boolean(data.projectType) === Boolean(data.omId);
+}
+
 const projectStageEnum = z.enum([
   "ESTIMATIVA_PRECO",
   "AGUARDANDO_NOTA_CREDITO",
   "DIEX_REQUISITORIO",
   "AGUARDANDO_NOTA_EMPENHO",
   "OS_LIBERADA",
+  "AGUARDANDO_OS_ASSINADA",
+  "AGUARDANDO_INICIO_EXECUCAO",
   "SERVICO_EM_EXECUCAO",
   "ANALISANDO_AS_BUILT",
   "ATESTAR_NF",
@@ -27,9 +36,14 @@ export const createProjectSchema = z
   .object({
     title: z.string().trim().min(3, "Título deve ter pelo menos 3 caracteres"),
     description: optionalString,
-    status: projectStatusEnum.optional(),
+    projectType: projectTypeEnum.optional(),
+    omId: optionalString,
     startDate: optionalDate,
     endDate: optionalDate,
+  })
+  .refine(hasCompleteClassification, {
+    message: "Informe o tipo do projeto e a OM de destino",
+    path: ["omId"],
   })
   .refine(
     (data) => {
@@ -49,7 +63,8 @@ export const updateProjectSchema = z
   .object({
     title: z.string().trim().min(3, "Título deve ter pelo menos 3 caracteres").optional(),
     description: optionalString,
-    status: projectStatusEnum.optional(),
+    projectType: projectTypeEnum.optional(),
+    omId: optionalString,
     startDate: optionalDate,
     endDate: optionalDate,
   })
@@ -99,6 +114,16 @@ export const listProjectsQuerySchema = paginationQuerySchema.extend({
   archivedUntil: optionalDate,
 });
 
+export const kanbanProjectsQuerySchema = z.object({
+  ownerId: z.string().trim().optional(),
+  stage: projectStageEnum.optional(),
+  projectType: projectTypeEnum.optional(),
+  omId: z.string().trim().optional(),
+  stateUf: federativeUnitEnum.optional(),
+  search: z.string().trim().optional(),
+  onlyMine: z.coerce.boolean().optional(),
+});
+
 export const archivedQuerySchema = z.object({
   includeArchived: z.coerce.boolean().optional(),
 });
@@ -124,6 +149,11 @@ export const reviewAsBuiltSchema = z.discriminatedUnion("approved", [
   z.object({
     approved: z.literal(true),
     reviewedAt: z.coerce.date(),
+    asBuiltLink: z
+      .string()
+      .trim()
+      .url("Informe um link válido para o arquivo ou pasta do As-Built")
+      .max(2048, "Link do As-Built muito longo"),
   }),
   z.object({
     approved: z.literal(false),
@@ -134,3 +164,17 @@ export const reviewAsBuiltSchema = z.discriminatedUnion("approved", [
       .min(3, "Motivo da reprovação do As-Built é obrigatório"),
   }),
 ]);
+
+export const registerSignedServiceOrderSchema = z.object({
+  signedServiceOrderLink: z
+    .string()
+    .trim()
+    .url("Informe um link válido para o arquivo ou pasta da OS assinada")
+    .max(2048, "Link da OS assinada muito longo"),
+  signedServiceOrderReceivedAt: z.coerce.date(),
+  signedServiceOrderNotes: z
+    .string()
+    .trim()
+    .max(2000, "Observação da OS assinada muito longa")
+    .optional(),
+});

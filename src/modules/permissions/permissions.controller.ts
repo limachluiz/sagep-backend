@@ -37,6 +37,12 @@ export class PermissionsController {
     return res.status(200).json(payload);
   }
 
+  async listUsers(_req: Request, res: Response) {
+    const payload = await permissionsService.listUsersAdministration();
+
+    return res.status(200).json(payload);
+  }
+
   async listUserOverrides(req: Request, res: Response) {
     const { id } = permissionUserIdParamSchema.parse(req.params);
     const payload = await permissionsService.listUserPermissionOverrides(id);

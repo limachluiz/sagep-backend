@@ -25,6 +25,9 @@ tasksRoutes.patch(
 tasksRoutes.post("/:id/restore", requirePermission("tasks.restore"), (req, res) =>
   controller.restore(req, res),
 );
+tasksRoutes.delete("/:id/permanent", requirePermission("tasks.delete"), (req, res) =>
+  controller.softDelete(req, res),
+);
 tasksRoutes.delete("/:id", requirePermission("tasks.archive"), (req, res) =>
   controller.remove(req, res),
 );

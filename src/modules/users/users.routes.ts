@@ -7,7 +7,15 @@ import { UsersController } from "./users.controller.js";
 export const usersRoutes = Router();
 const controller = new UsersController();
 
-usersRoutes.use(authMiddleware, requireRole("ADMIN"), requirePermission("users.manage"));
+usersRoutes.use(authMiddleware);
+
+usersRoutes.get(
+  "/options",
+  requirePermission("projects.edit_all", "projects.edit_own", "tasks.assign"),
+  (req, res) => controller.listOptions(req, res),
+);
+
+usersRoutes.use(requireRole("ADMIN"), requirePermission("users.manage"));
 
 usersRoutes.post("/", (req, res) => controller.create(req, res));
 usersRoutes.get("/", (req, res) => controller.list(req, res));
