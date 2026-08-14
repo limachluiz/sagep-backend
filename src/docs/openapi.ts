@@ -15,6 +15,7 @@ const tagExternalDocs = {
   dashboard: "./insights-and-admin.md",
   search: "./insights-and-admin.md",
   "operational-alerts": "./insights-and-admin.md",
+  "financial-execution": "./financial-execution.md",
   exports: "./insights-and-admin.md",
   reports: "./insights-and-admin.md",
   users: "./insights-and-admin.md",
@@ -181,6 +182,7 @@ export const openApiDocument: OpenApiDocument = {
     "dashboard",
     "search",
     "operational-alerts",
+    "financial-execution",
     "exports",
     "reports",
     "users",
@@ -2012,6 +2014,59 @@ export const openApiDocument: OpenApiDocument = {
               },
             },
           },
+        },
+      },
+      CommitmentNoteLookupRequest: {
+        type: "object",
+        required: ["projectId", "number"],
+        properties: {
+          projectId: { type: "string" },
+          number: { type: "string", pattern: "^\\d{4}NE\\d{6}$", example: "2026NE000534" },
+          managementUnit: { type: "string", default: "160016" },
+          management: { type: "string", default: "00001" },
+        },
+      },
+      CommitmentNoteRegisterRequest: {
+        allOf: [
+          { $ref: "#/components/schemas/CommitmentNoteLookupRequest" },
+          {
+            type: "object",
+            required: ["receivedAt"],
+            properties: {
+              receivedAt: { type: "string", format: "date-time" },
+              acceptDivergence: { type: "boolean", default: false },
+            },
+          },
+        ],
+      },
+      CommitmentNoteResponse: {
+        type: "object",
+        additionalProperties: true,
+      },
+      CommitmentNoteListResponse: {
+        type: "object",
+        properties: {
+          items: { type: "array", items: { $ref: "#/components/schemas/CommitmentNoteResponse" } },
+          summary: { type: "object", additionalProperties: true },
+          meta: { type: "object", additionalProperties: true },
+        },
+      },
+      InvoiceCreateRequest: {
+        type: "object",
+        required: ["projectId", "number", "supplierCnpj", "issuedAt", "grossAmount"],
+        properties: {
+          projectId: { type: "string" },
+          commitmentNoteId: { type: "string" },
+          number: { type: "string" },
+          series: { type: "string" },
+          accessKey: { type: "string", minLength: 44, maxLength: 44 },
+          supplierCnpj: { type: "string" },
+          issuedAt: { type: "string", format: "date-time" },
+          grossAmount: { type: "number", format: "double" },
+          attestedAmount: { type: "number", format: "double" },
+          attestedAt: { type: "string", format: "date-time" },
+          documentLink: { type: "string", format: "uri" },
+          notes: { type: "string" },
         },
       },
       PublicRegisterRequest: {
@@ -4430,6 +4485,106 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/OperationalAlertsResponse"),
           ...defaultErrorResponses,
         },
+      },
+      delete: {
+        tags: ["operational-alerts"],
+        summary: "Limpar todas as notificações visíveis do usuário",
+        security: bearerSecurity,
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/operational-alerts/{notificationKey}": {
+      delete: {
+        tags: ["operational-alerts"],
+        summary: "Limpar uma notificação do usuário",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("notificationKey", "Chave estável da notificação")],
+        responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses },
+      },
+    },
+    "/financial-execution/commitment-notes": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Listar Notas de Empenho rastreadas",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/Page" },
+          { $ref: "#/components/parameters/PageSize" },
+          queryParameter("search", "NE, fornecedor, CNPJ ou projeto", { type: "string" }),
+          queryParameter("financialStatus", "Situação financeira", { type: "string", enum: ["NAO_LIQUIDADA", "PARCIALMENTE_LIQUIDADA", "LIQUIDADA", "PARCIALMENTE_PAGA", "PAGA", "PARCIALMENTE_ANULADA", "ANULADA"] }),
+          queryParameter("syncStatus", "Situação da validação externa", { type: "string", enum: ["VALIDADO", "DIVERGENTE", "ERRO"] }),
+        ],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteListResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+      post: {
+        tags: ["financial-execution"],
+        summary: "Validar, vincular e registrar uma Nota de Empenho",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteRegisterRequest") },
+        responses: { "201": createdJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
+      },
+    },
+    "/financial-execution/commitment-notes/preview": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Consultar e comparar uma NE no Portal da Transparência",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteLookupRequest") },
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
+      },
+    },
+    "/financial-execution/commitment-notes/{id}": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Detalhar NE, documentos relacionados e NFe",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("id", "Identificador da Nota de Empenho")],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+    },
+    "/financial-execution/commitment-notes/{id}/sync": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Sincronizar uma NE com o Portal da Transparência",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("id", "Identificador da Nota de Empenho")],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.sync"],
+      },
+    },
+    "/financial-execution/sync": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Sincronizar todas as NEs ativas",
+        security: bearerSecurity,
+        responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.sync"],
+      },
+    },
+    "/financial-execution/summary": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Resumo da execução financeira",
+        security: bearerSecurity,
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+    },
+    "/financial-execution/invoices": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Registrar e conferir NFe do projeto",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/InvoiceCreateRequest") },
+        responses: { "201": createdJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
       },
     },
     "/exports/projects.xlsx": {

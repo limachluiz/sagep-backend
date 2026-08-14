@@ -63,6 +63,7 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - contrato OpenAPI com cliente TypeScript gerado;
 - códigos de erro estáveis e `requestId` para suporte.
 - centro de saúde com sondas da API, PostgreSQL e pgAdmin, histórico de latência e diagnóstico administrativo.
+- execução financeira com validação de NE no Portal da Transparência, rastreio de liquidação/pagamento, NFe e alertas dispensáveis por usuário.
 
 ## Fluxo documental resumido
 
@@ -125,6 +126,8 @@ Variáveis usadas atualmente:
 | `PDF_RENDER_MODE` | nao | `real` para gerar PDF com Chromium; em testes pode ser `mock` |
 | `COMPRAS_GOV_DEBUG` | nao | Flag de diagnostico para integracoes Compras.gov.br |
 | `PORTAL_TRANSPARENCIA_API_TOKEN` | nao | Token da API do Portal da Transparencia, se usado |
+| `PORTAL_TRANSPARENCIA_BASE_URL` | nao | URL base oficial da API do Portal da Transparencia |
+| `PORTAL_TRANSPARENCIA_SYNC_INTERVAL_MINUTES` | nao | Intervalo da sincronizacao automatica das NEs; padrao 1440 minutos |
 | `CORS_ALLOWED_ORIGINS` | nao | Lista de origens de navegador autorizadas, separadas por virgula. Vazia bloqueia origens externas |
 | `CORS_ALLOW_CREDENTIALS` | nao | Habilita credenciais CORS. Padrao `false` no modelo Bearer atual |
 | `JWT_REFRESH_SECRET` | sim | Segredo do refresh token |

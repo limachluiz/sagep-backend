@@ -83,6 +83,9 @@ enum AuditEntityType {
   ATA_ITEM
   USER
   AUTH
+  COMMITMENT_NOTE
+  INVOICE
+  NOTIFICATION
 }
 
 enum AuditActionType {
@@ -105,6 +108,32 @@ enum AuditActionType {
   SESSION_REVOKE_ALL
   SESSION_EXPIRE
   SESSION_CLEANUP
+  SYNC
+  DISMISS
+}
+
+enum CommitmentNoteFinancialStatus {
+  NAO_LIQUIDADA
+  PARCIALMENTE_LIQUIDADA
+  LIQUIDADA
+  PARCIALMENTE_PAGA
+  PAGA
+  PARCIALMENTE_ANULADA
+  ANULADA
+}
+
+enum ExternalSyncStatus {
+  VALIDADO
+  DIVERGENTE
+  ERRO
+}
+
+enum FinancialDocumentPhase {
+  EMPENHO
+  LIQUIDACAO
+  PAGAMENTO
+  ANULACAO
+  OUTRO
 }
 
 enum RefreshTokenRevocationReason {
@@ -159,6 +188,8 @@ model User {
   assignedTasks                 Task[]                   @relation("TaskAssignee")
   refreshTokens                 RefreshToken[]
   permissionOverrides           UserPermissionOverride[]
+  notificationDismissals        NotificationDismissal[]
+  invoicesRegistered            Invoice[]                  @relation("InvoiceRegistrar")
   lastLoginAt                   DateTime?
   createdAt                     DateTime                 @default(now())
   updatedAt                     DateTime                 @updatedAt
@@ -215,6 +246,8 @@ model Project {
   estimates                        Estimate[]
   ataItemBalanceMovements          AtaItemBalanceMovement[]
   serviceOrders                    ServiceOrder[]
+  commitmentNotes                  CommitmentNote[]
+  invoices                         Invoice[]
   startDate                        DateTime?
   endDate                          DateTime?
   creditNoteNumber                 String?
@@ -248,6 +281,100 @@ model Project {
   @@index([projectType])
   @@index([omId])
   @@index([signedServiceOrderRegisteredById])
+}
+
+model CommitmentNote {
+  id                 String                        @id @default(cuid())
+  commitmentNoteCode Int                           @unique @default(autoincrement())
+  projectId          String
+  number             String
+  externalCode       String                        @unique
+  managementUnit     String                        @default("160016")
+  management         String                        @default("00001")
+  source             String                        @default("PORTAL_TRANSPARENCIA")
+  supplierName       String?
+  supplierCnpj       String?
+  issuedAt           DateTime?
+  originalAmount     Decimal                       @default(0) @db.Decimal(14, 2)
+  currentAmount      Decimal                       @default(0) @db.Decimal(14, 2)
+  liquidatedAmount   Decimal                       @default(0) @db.Decimal(14, 2)
+  paidAmount         Decimal                       @default(0) @db.Decimal(14, 2)
+  cancelledAmount    Decimal                       @default(0) @db.Decimal(14, 2)
+  financialStatus    CommitmentNoteFinancialStatus @default(NAO_LIQUIDADA)
+  syncStatus         ExternalSyncStatus            @default(VALIDADO)
+  divergenceReason   String?
+  rawSnapshot        Json?
+  lastSyncAt         DateTime
+  lastSyncError      String?
+  active             Boolean                       @default(true)
+  project            Project                       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  documents          FinancialDocument[]
+  invoices           Invoice[]
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  @@index([projectId, active])
+  @@index([financialStatus])
+  @@index([syncStatus])
+  @@index([lastSyncAt])
+}
+
+model FinancialDocument {
+  id               String                 @id @default(cuid())
+  commitmentNoteId String
+  externalCode     String
+  number           String
+  phase            FinancialDocumentPhase
+  species          String?
+  issuedAt         DateTime?
+  amount           Decimal                @default(0) @db.Decimal(14, 2)
+  supplierName     String?
+  supplierCnpj     String?
+  rawSnapshot      Json?
+  commitmentNote   CommitmentNote         @relation(fields: [commitmentNoteId], references: [id], onDelete: Cascade)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@unique([commitmentNoteId, externalCode])
+  @@index([phase, issuedAt])
+}
+
+model Invoice {
+  id               String          @id @default(cuid())
+  invoiceCode      Int             @unique @default(autoincrement())
+  projectId        String
+  commitmentNoteId String?
+  number           String
+  series           String?
+  accessKey        String?         @unique
+  supplierCnpj     String
+  issuedAt         DateTime
+  grossAmount      Decimal         @db.Decimal(14, 2)
+  attestedAmount   Decimal?        @db.Decimal(14, 2)
+  attestedAt       DateTime?
+  documentLink     String?
+  notes            String?
+  registeredById   String?
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  commitmentNote   CommitmentNote? @relation(fields: [commitmentNoteId], references: [id], onDelete: SetNull)
+  registeredBy     User?           @relation("InvoiceRegistrar", fields: [registeredById], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([projectId, issuedAt])
+  @@index([commitmentNoteId])
+}
+
+model NotificationDismissal {
+  id              String   @id @default(cuid())
+  userId          String
+  notificationKey String
+  sourceUpdatedAt DateTime
+  dismissedAt     DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationKey])
+  @@index([userId, dismissedAt])
 }
 
 model ProjectMember {

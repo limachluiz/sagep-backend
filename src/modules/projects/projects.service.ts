@@ -12,6 +12,7 @@ import { ServiceOrdersService } from "../service-orders/service-orders.service.j
 import { TasksService } from "../tasks/tasks.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
+import type { PortalCommitmentSnapshot } from "../financial-execution/portal-transparencia.client.js";
 
 type CurrentUser = {
   id: string;
@@ -1870,7 +1871,16 @@ export class ProjectsService {
     return project;
   }
   
-  async updateFlow(projectId: string, data: UpdateProjectFlowInput, user: CurrentUser) {
+  async updateFlow(
+    projectId: string,
+    data: UpdateProjectFlowInput,
+    user: CurrentUser,
+    options?: {
+      commitmentNoteSnapshot?: PortalCommitmentSnapshot;
+      commitmentNoteSyncStatus?: "VALIDADO" | "DIVERGENTE";
+      commitmentNoteDivergenceReason?: string | null;
+    },
+  ) {
     await this.ensureCanManage(projectId, user);
 
     const currentProject = await prisma.project.findUnique({
@@ -2056,6 +2066,81 @@ export class ProjectsService {
           updatedProject.commitmentNoteNumber ?? "sem-numero",
           tx,
         );
+      }
+
+      if (options?.commitmentNoteSnapshot) {
+        const snapshot = options.commitmentNoteSnapshot;
+        await tx.commitmentNote.updateMany({
+          where: {
+            projectId,
+            active: true,
+            externalCode: { not: snapshot.externalCode },
+          },
+          data: { active: false },
+        });
+
+        const commitmentNote = await tx.commitmentNote.upsert({
+          where: { externalCode: snapshot.externalCode },
+          create: {
+            projectId,
+            number: snapshot.number,
+            externalCode: snapshot.externalCode,
+            managementUnit: snapshot.managementUnit,
+            management: snapshot.management,
+            source: snapshot.source,
+            supplierName: snapshot.supplierName,
+            supplierCnpj: snapshot.supplierCnpj,
+            issuedAt: snapshot.issuedAt,
+            originalAmount: snapshot.originalAmount,
+            currentAmount: snapshot.currentAmount,
+            liquidatedAmount: snapshot.liquidatedAmount,
+            paidAmount: snapshot.paidAmount,
+            cancelledAmount: snapshot.cancelledAmount,
+            financialStatus: snapshot.financialStatus,
+            syncStatus: options.commitmentNoteSyncStatus ?? "VALIDADO",
+            divergenceReason: options.commitmentNoteDivergenceReason,
+            rawSnapshot: snapshot.rawSnapshot as Prisma.InputJsonValue,
+            lastSyncAt: snapshot.fetchedAt,
+            active: true,
+          },
+          update: {
+            projectId,
+            number: snapshot.number,
+            supplierName: snapshot.supplierName,
+            supplierCnpj: snapshot.supplierCnpj,
+            issuedAt: snapshot.issuedAt,
+            originalAmount: snapshot.originalAmount,
+            currentAmount: snapshot.currentAmount,
+            liquidatedAmount: snapshot.liquidatedAmount,
+            paidAmount: snapshot.paidAmount,
+            cancelledAmount: snapshot.cancelledAmount,
+            financialStatus: snapshot.financialStatus,
+            syncStatus: options.commitmentNoteSyncStatus ?? "VALIDADO",
+            divergenceReason: options.commitmentNoteDivergenceReason,
+            rawSnapshot: snapshot.rawSnapshot as Prisma.InputJsonValue,
+            lastSyncAt: snapshot.fetchedAt,
+            lastSyncError: null,
+            active: true,
+          },
+        });
+
+        await tx.financialDocument.deleteMany({ where: { commitmentNoteId: commitmentNote.id } });
+        if (snapshot.documents.length) {
+          await tx.financialDocument.createMany({
+            data: snapshot.documents.map((document) => ({
+              commitmentNoteId: commitmentNote.id,
+              externalCode: document.externalCode,
+              number: document.number,
+              phase: document.phase,
+              species: document.species,
+              issuedAt: document.issuedAt,
+              amount: document.amount,
+              supplierName: document.supplierName,
+              supplierCnpj: document.supplierCnpj,
+              rawSnapshot: document.rawSnapshot as Prisma.InputJsonValue,
+            })),
+          });
+        }
       }
 
       return updatedProject;
@@ -2696,6 +2781,11 @@ export class ProjectsService {
           serviceCompletedAt: null,
         },
         include: projectInclude,
+      });
+
+      await tx.commitmentNote.updateMany({
+        where: { projectId, active: true },
+        data: { active: false },
       });
 
       return {

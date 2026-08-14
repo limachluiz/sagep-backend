@@ -15,6 +15,8 @@ const envSchema = z
   PDF_RENDER_MODE: z.enum(["mock", "real"]).optional(),
   COMPRAS_GOV_DEBUG: z.coerce.boolean().optional(),
   PORTAL_TRANSPARENCIA_API_TOKEN: z.string().optional(),
+  PORTAL_TRANSPARENCIA_BASE_URL: z.string().url().default("https://api.portaldatransparencia.gov.br/api-de-dados"),
+  PORTAL_TRANSPARENCIA_SYNC_INTERVAL_MINUTES: z.coerce.number().int().min(15).default(1440),
   CORS_ALLOWED_ORIGINS: z.string().default(""),
   CORS_ALLOW_CREDENTIALS: z
     .enum(["true", "false"])

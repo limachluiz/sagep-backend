@@ -44,6 +44,10 @@ async function resetDatabase() {
   await prisma.auditLog.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.userPermissionOverride.deleteMany();
+  await prisma.notificationDismissal.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.financialDocument.deleteMany();
+  await prisma.commitmentNote.deleteMany();
   await prisma.ataItemExternalBalanceSnapshot.deleteMany();
   await prisma.ataItemBalanceMovement.deleteMany();
   await prisma.serviceOrderDeliveredDocument.deleteMany();

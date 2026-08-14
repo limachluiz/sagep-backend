@@ -19,6 +19,7 @@ import { usersRoutes } from "./modules/users/users.routes.js";
 import { diexRoutes } from "./modules/diex/diex.routes.js";
 import { militaryOrganizationsRoutes } from "./modules/military-organizations/military-organizations.routes.js";
 import { serviceOrdersRoutes } from "./modules/service-orders/service-orders.routes.js";
+import { financialExecutionRoutes } from "./modules/financial-execution/financial-execution.routes.js";
 
 export const routes = Router();
 
@@ -42,3 +43,4 @@ routes.use("/reports", reportsRoutes);
 routes.use("/diex", diexRoutes);
 routes.use("/military-organizations", militaryOrganizationsRoutes);
 routes.use("/service-orders", serviceOrdersRoutes);
+routes.use("/financial-execution", financialExecutionRoutes);

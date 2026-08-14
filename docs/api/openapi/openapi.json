@@ -101,6 +101,14 @@
       }
     },
     {
+      "name": "financial-execution",
+      "description": "Modulo financial-execution do backend SAGEP",
+      "externalDocs": {
+        "description": "Documentacao Markdown complementar",
+        "url": "./financial-execution.md"
+      }
+    },
+    {
       "name": "exports",
       "description": "Modulo exports do backend SAGEP",
       "externalDocs": {
@@ -3778,6 +3786,132 @@
                 }
               }
             }
+          }
+        }
+      },
+      "CommitmentNoteLookupRequest": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "number"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string",
+            "pattern": "^\\d{4}NE\\d{6}$",
+            "example": "2026NE000534"
+          },
+          "managementUnit": {
+            "type": "string",
+            "default": "160016"
+          },
+          "management": {
+            "type": "string",
+            "default": "00001"
+          }
+        }
+      },
+      "CommitmentNoteRegisterRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CommitmentNoteLookupRequest"
+          },
+          {
+            "type": "object",
+            "required": [
+              "receivedAt"
+            ],
+            "properties": {
+              "receivedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "acceptDivergence": {
+                "type": "boolean",
+                "default": false
+              }
+            }
+          }
+        ]
+      },
+      "CommitmentNoteResponse": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "CommitmentNoteListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CommitmentNoteResponse"
+            }
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "meta": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "InvoiceCreateRequest": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "number",
+          "supplierCnpj",
+          "issuedAt",
+          "grossAmount"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "commitmentNoteId": {
+            "type": "string"
+          },
+          "number": {
+            "type": "string"
+          },
+          "series": {
+            "type": "string"
+          },
+          "accessKey": {
+            "type": "string",
+            "minLength": 44,
+            "maxLength": 44
+          },
+          "supplierCnpj": {
+            "type": "string"
+          },
+          "issuedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "grossAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "attestedAmount": {
+            "type": "number",
+            "format": "double"
+          },
+          "attestedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "documentLink": {
+            "type": "string",
+            "format": "uri"
+          },
+          "notes": {
+            "type": "string"
           }
         }
       },
@@ -11123,6 +11257,578 @@
           }
         },
         "operationId": "operationalAlerts_get_collection"
+      },
+      "delete": {
+        "tags": [
+          "operational-alerts"
+        ],
+        "summary": "Limpar todas as notificações visíveis do usuário",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "operationalAlerts_delete_collection"
+      }
+    },
+    "/operational-alerts/{notificationKey}": {
+      "delete": {
+        "tags": [
+          "operational-alerts"
+        ],
+        "summary": "Limpar uma notificação do usuário",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "notificationKey",
+            "in": "path",
+            "required": true,
+            "description": "Chave estável da notificação",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "operationId": "operationalAlerts_delete_byNotificationKey"
+      }
+    },
+    "/financial-execution/commitment-notes": {
+      "get": {
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Listar Notas de Empenho rastreadas",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/Page"
+          },
+          {
+            "$ref": "#/components/parameters/PageSize"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "NE, fornecedor, CNPJ ou projeto",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "financialStatus",
+            "in": "query",
+            "required": false,
+            "description": "Situação financeira",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "NAO_LIQUIDADA",
+                "PARCIALMENTE_LIQUIDADA",
+                "LIQUIDADA",
+                "PARCIALMENTE_PAGA",
+                "PAGA",
+                "PARCIALMENTE_ANULADA",
+                "ANULADA"
+              ]
+            }
+          },
+          {
+            "name": "syncStatus",
+            "in": "query",
+            "required": false,
+            "description": "Situação da validação externa",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "VALIDADO",
+                "DIVERGENTE",
+                "ERRO"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitmentNoteListResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "financial_execution.view"
+        ],
+        "operationId": "financialExecution_get_commitmentNotes"
+      },
+      "post": {
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Validar, vincular e registrar uma Nota de Empenho",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitmentNoteRegisterRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitmentNoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "financial_execution.manage"
+        ],
+        "operationId": "financialExecution_post_commitmentNotes"
+      }
+    },
+    "/financial-execution/commitment-notes/preview": {
+      "post": {
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Consultar e comparar uma NE no Portal da Transparência",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CommitmentNoteLookupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitmentNoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "financial_execution.manage"
+        ],
+        "operationId": "financialExecution_post_commitmentNotes_preview"
+      }
+    },
+    "/financial-execution/commitment-notes/{id}": {
+      "get": {
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Detalhar NE, documentos relacionados e NFe",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identificador da Nota de Empenho",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitmentNoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "financial_execution.view"
+        ],
+        "operationId": "financialExecution_get_commitmentNotes_byId"
+      }
+    },
+    "/financial-execution/commitment-notes/{id}/sync": {
+      "post": {
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Sincronizar uma NE com o Portal da Transparência",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "Identificador da Nota de Empenho",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitmentNoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "financial_execution.sync"
+        ],
+        "operationId": "financialExecution_post_commitmentNotes_byId_sync"
+      }
+    },
+    "/financial-execution/sync": {
+      "post": {
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Sincronizar todas as NEs ativas",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "financial_execution.sync"
+        ],
+        "operationId": "financialExecution_post_sync"
+      }
+    },
+    "/financial-execution/summary": {
+      "get": {
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Resumo da execução financeira",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitmentNoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "financial_execution.view"
+        ],
+        "operationId": "financialExecution_get_summary"
+      }
+    },
+    "/financial-execution/invoices": {
+      "post": {
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Registrar e conferir NFe do projeto",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvoiceCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CommitmentNoteResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "financial_execution.manage"
+        ],
+        "operationId": "financialExecution_post_invoices"
       }
     },
     "/exports/projects.xlsx": {
