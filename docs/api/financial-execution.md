@@ -16,6 +16,17 @@ Portal da Transparência nunca é exposto ao navegador.
 4. `POST /financial-execution/invoices` registra a NFe e confronta CNPJ e valor
    com a NE vinculada.
 
+## Sincronização
+
+Com o token configurado, o backend sincroniza todas as NEs ativas assim que o
+servidor inicia e repete o ciclo no intervalo definido por
+`PORTAL_TRANSPARENCIA_SYNC_INTERVAL_MINUTES` (24 horas por padrão). Um novo
+ciclo automático não começa enquanto o anterior ainda estiver em execução.
+
+O usuário com a permissão `financial_execution.sync` também pode atualizar a
+carteira completa por `POST /financial-execution/sync` ou verificar apenas uma
+NE por `POST /financial-execution/commitment-notes/:id/sync`.
+
 O último snapshot válido é preservado quando a fonte externa falha. A falha é
 registrada em `syncStatus=ERRO` e aparece na central de notificações.
 

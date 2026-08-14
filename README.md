@@ -127,7 +127,7 @@ Variáveis usadas atualmente:
 | `COMPRAS_GOV_DEBUG` | nao | Flag de diagnostico para integracoes Compras.gov.br |
 | `PORTAL_TRANSPARENCIA_API_TOKEN` | nao | Token da API do Portal da Transparencia, se usado |
 | `PORTAL_TRANSPARENCIA_BASE_URL` | nao | URL base oficial da API do Portal da Transparencia |
-| `PORTAL_TRANSPARENCIA_SYNC_INTERVAL_MINUTES` | nao | Intervalo da sincronizacao automatica das NEs; padrao 1440 minutos |
+| `PORTAL_TRANSPARENCIA_SYNC_INTERVAL_MINUTES` | nao | Intervalo da sincronizacao automatica das NEs após a consulta executada na inicialização; padrao 1440 minutos |
 | `CORS_ALLOWED_ORIGINS` | nao | Lista de origens de navegador autorizadas, separadas por virgula. Vazia bloqueia origens externas |
 | `CORS_ALLOW_CREDENTIALS` | nao | Habilita credenciais CORS. Padrao `false` no modelo Bearer atual |
 | `JWT_REFRESH_SECRET` | sim | Segredo do refresh token |
