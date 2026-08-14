@@ -2515,10 +2515,33 @@
             "type": "string",
             "nullable": true
           },
+          "completedById": {
+            "type": "string",
+            "nullable": true
+          },
           "dueDate": {
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "completedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "completedBy": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummary"
+              }
+            ],
+            "nullable": true
+          },
+          "activities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TaskActivity"
+            }
           },
           "archivedAt": {
             "type": "string",
@@ -2652,6 +2675,88 @@
               "CONCLUIDA",
               "CANCELADA"
             ]
+          }
+        }
+      },
+      "TaskActivity": {
+        "type": "object",
+        "required": [
+          "id",
+          "type",
+          "content",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "NOTE",
+              "STATUS_CHANGE",
+              "COMPLETION",
+              "REOPENED"
+            ]
+          },
+          "content": {
+            "type": "string"
+          },
+          "fromStatus": {
+            "type": "string",
+            "enum": [
+              "PENDENTE",
+              "EM_ANDAMENTO",
+              "REVISAO",
+              "CONCLUIDA",
+              "CANCELADA"
+            ],
+            "nullable": true
+          },
+          "toStatus": {
+            "type": "string",
+            "enum": [
+              "PENDENTE",
+              "EM_ANDAMENTO",
+              "REVISAO",
+              "CONCLUIDA",
+              "CANCELADA"
+            ],
+            "nullable": true
+          },
+          "author": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/UserSummary"
+              }
+            ],
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TaskActivityCreateRequest": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 4000
+          }
+        }
+      },
+      "TaskCompleteRequest": {
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string",
+            "maxLength": 4000
           }
         }
       },
@@ -8733,6 +8838,136 @@
           "tasks.complete"
         ],
         "operationId": "tasks_patch_byId_status"
+      }
+    },
+    "/tasks/{id}/activities": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Registrar andamento da tarefa",
+        "description": "Registra autor, data e hora. Se a tarefa estiver pendente, inicia automaticamente.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskActivityCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Andamento registrado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "tasks.edit_all",
+          "tasks.edit_own",
+          "tasks.complete"
+        ],
+        "operationId": "tasks_post_byId_activities"
+      }
+    },
+    "/tasks/{id}/complete": {
+      "post": {
+        "tags": [
+          "tasks"
+        ],
+        "summary": "Concluir tarefa",
+        "description": "Encerra a tarefa e registra o responsável, a data, a hora e a observação final.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/TaskId"
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TaskCompleteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tarefa concluída",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Task"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "tasks.complete",
+          "tasks.edit_all",
+          "tasks.edit_own"
+        ],
+        "operationId": "tasks_post_byId_complete"
       }
     },
     "/tasks/{id}/restore": {

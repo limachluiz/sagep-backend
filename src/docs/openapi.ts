@@ -1365,7 +1365,17 @@ export const openApiDocument: OpenApiDocument = {
           priority: { type: "integer", minimum: 1, maximum: 5, nullable: true },
           assigneeId: { type: "string", nullable: true },
           assigneeName: { type: "string", nullable: true },
+          completedById: { type: "string", nullable: true },
           dueDate: { type: "string", format: "date-time", nullable: true },
+          completedAt: { type: "string", format: "date-time", nullable: true },
+          completedBy: {
+            allOf: [{ $ref: "#/components/schemas/UserSummary" }],
+            nullable: true,
+          },
+          activities: {
+            type: "array",
+            items: { $ref: "#/components/schemas/TaskActivity" },
+          },
           archivedAt: { type: "string", format: "date-time", nullable: true },
           deletedAt: { type: "string", format: "date-time", nullable: true },
           archiveContext: { $ref: "#/components/schemas/ArchiveContext" },
@@ -1414,6 +1424,46 @@ export const openApiDocument: OpenApiDocument = {
             type: "string",
             enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
           },
+        },
+      },
+      TaskActivity: {
+        type: "object",
+        required: ["id", "type", "content", "createdAt"],
+        properties: {
+          id: { type: "string" },
+          type: {
+            type: "string",
+            enum: ["NOTE", "STATUS_CHANGE", "COMPLETION", "REOPENED"],
+          },
+          content: { type: "string" },
+          fromStatus: {
+            type: "string",
+            enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
+            nullable: true,
+          },
+          toStatus: {
+            type: "string",
+            enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
+            nullable: true,
+          },
+          author: {
+            allOf: [{ $ref: "#/components/schemas/UserSummary" }],
+            nullable: true,
+          },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      TaskActivityCreateRequest: {
+        type: "object",
+        required: ["content"],
+        properties: {
+          content: { type: "string", minLength: 2, maxLength: 4000 },
+        },
+      },
+      TaskCompleteRequest: {
+        type: "object",
+        properties: {
+          content: { type: "string", maxLength: 4000 },
         },
       },
       TaskListEnvelope: {
@@ -3826,6 +3876,42 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["tasks.edit_all", "tasks.edit_own", "tasks.complete"],
+      },
+    },
+    "/tasks/{id}/activities": {
+      post: {
+        tags: ["tasks"],
+        summary: "Registrar andamento da tarefa",
+        description: "Registra autor, data e hora. Se a tarefa estiver pendente, inicia automaticamente.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/TaskActivityCreateRequest"),
+        },
+        responses: {
+          "201": createdJson("#/components/schemas/Task", "Andamento registrado"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["tasks.edit_all", "tasks.edit_own", "tasks.complete"],
+      },
+    },
+    "/tasks/{id}/complete": {
+      post: {
+        tags: ["tasks"],
+        summary: "Concluir tarefa",
+        description: "Encerra a tarefa e registra o responsável, a data, a hora e a observação final.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/TaskCompleteRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/Task", "Tarefa concluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["tasks.complete", "tasks.edit_all", "tasks.edit_own"],
       },
     },
     "/tasks/{id}/restore": {

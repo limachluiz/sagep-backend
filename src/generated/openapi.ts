@@ -678,6 +678,46 @@ export interface paths {
         patch: operations["tasks_patch_byId_status"];
         trace?: never;
     };
+    "/tasks/{id}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar andamento da tarefa
+         * @description Registra autor, data e hora. Se a tarefa estiver pendente, inicia automaticamente.
+         */
+        post: operations["tasks_post_byId_activities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Concluir tarefa
+         * @description Encerra a tarefa e registra o responsável, a data, a hora e a observação final.
+         */
+        post: operations["tasks_post_byId_complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}/restore": {
         parameters: {
             query?: never;
@@ -2764,8 +2804,13 @@ export interface components {
             priority?: number | null;
             assigneeId?: string | null;
             assigneeName?: string | null;
+            completedById?: string | null;
             /** Format: date-time */
             dueDate?: string | null;
+            /** Format: date-time */
+            completedAt?: string | null;
+            completedBy?: components["schemas"]["UserSummary"] | null;
+            activities?: components["schemas"]["TaskActivity"][];
             /** Format: date-time */
             archivedAt?: string | null;
             /** Format: date-time */
@@ -2801,6 +2846,25 @@ export interface components {
         TaskStatusUpdateRequest: {
             /** @enum {string} */
             status: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA";
+        };
+        TaskActivity: {
+            id: string;
+            /** @enum {string} */
+            type: "NOTE" | "STATUS_CHANGE" | "COMPLETION" | "REOPENED";
+            content: string;
+            /** @enum {string|null} */
+            fromStatus?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA" | null;
+            /** @enum {string|null} */
+            toStatus?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA" | null;
+            author?: components["schemas"]["UserSummary"] | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TaskActivityCreateRequest: {
+            content: string;
+        };
+        TaskCompleteRequest: {
+            content?: string;
         };
         TaskListEnvelope: {
             items?: components["schemas"]["Task"][];
@@ -5635,6 +5699,72 @@ export interface operations {
         };
         responses: {
             /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    tasks_post_byId_activities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da tarefa. */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskActivityCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Andamento registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    tasks_post_byId_complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da tarefa. */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Tarefa concluída */
             200: {
                 headers: {
                     [name: string]: unknown;

@@ -79,6 +79,14 @@ export const updateTaskStatusSchema = z.object({
   status: taskStatusEnum,
 });
 
+export const createTaskActivitySchema = z.object({
+  content: z.string().trim().min(2, "Informe o andamento realizado").max(4000),
+});
+
+export const completeTaskSchema = z.object({
+  content: z.string().trim().max(4000).optional(),
+});
+
 export const listTasksQuerySchema = paginationQuerySchema.extend({
   code: z.coerce.number().int().positive().optional(),
   projectCode: z.coerce.number().int().positive().optional(),

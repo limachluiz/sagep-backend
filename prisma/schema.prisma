@@ -35,6 +35,13 @@ enum TaskStatus {
   CANCELADA
 }
 
+enum TaskActivityType {
+  NOTE
+  STATUS_CHANGE
+  COMPLETION
+  REOPENED
+}
+
 enum AtaType {
   CFTV
   FIBRA_OPTICA
@@ -201,6 +208,8 @@ model User {
   memberships                   ProjectMember[]
   auditLogs                     AuditLog[]
   assignedTasks                 Task[]                       @relation("TaskAssignee")
+  completedTasks                Task[]                       @relation("TaskCompleter")
+  taskActivities                TaskActivity[]               @relation("TaskActivityAuthor")
   refreshTokens                 RefreshToken[]
   permissionOverrides           UserPermissionOverride[]
   notificationDismissals        NotificationDismissal[]
@@ -445,21 +454,41 @@ model ProjectMember {
 }
 
 model Task {
-  id          String     @id @default(cuid())
-  taskCode    Int        @unique @default(autoincrement())
-  title       String
-  description String?
-  status      TaskStatus @default(PENDENTE)
-  priority    Int        @default(3)
-  projectId   String
-  assigneeId  String?
-  dueDate     DateTime?
-  project     Project    @relation(fields: [projectId], references: [id])
-  assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  archivedAt  DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id            String         @id @default(cuid())
+  taskCode      Int            @unique @default(autoincrement())
+  title         String
+  description   String?
+  status        TaskStatus     @default(PENDENTE)
+  priority      Int            @default(3)
+  projectId     String
+  assigneeId    String?
+  completedById String?
+  dueDate       DateTime?
+  project       Project        @relation(fields: [projectId], references: [id])
+  assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  completedBy   User?          @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  activities    TaskActivity[]
+  completedAt   DateTime?
+  archivedAt    DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model TaskActivity {
+  id         String           @id @default(cuid())
+  taskId     String
+  authorId   String?
+  type       TaskActivityType @default(NOTE)
+  content    String
+  fromStatus TaskStatus?
+  toStatus   TaskStatus?
+  task       Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author     User?            @relation("TaskActivityAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt  DateTime         @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([authorId, createdAt])
 }
 
 model Ata {
