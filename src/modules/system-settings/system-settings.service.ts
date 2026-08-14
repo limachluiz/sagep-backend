@@ -145,9 +145,14 @@ export class SystemSettingsService {
   private async probeComprasGov() {
     const settings = await this.getEffective();
     const url = new URL("/modulo-arp/1_consultarARP", settings.comprasGovBaseUrl);
+    const endDate = new Date();
+    const startDate = new Date(endDate);
+    startDate.setUTCDate(startDate.getUTCDate() - 364);
     url.searchParams.set("pagina", "1");
-    url.searchParams.set("tamanhoPagina", "1");
+    url.searchParams.set("tamanhoPagina", "10");
     url.searchParams.set("codigoUnidadeGerenciadora", settings.uasg);
+    url.searchParams.set("dataVigenciaInicialMin", startDate.toISOString().slice(0, 10));
+    url.searchParams.set("dataVigenciaInicialMax", endDate.toISOString().slice(0, 10));
     return this.probeHttp(url, { Accept: "application/json" }, "Compras.gov.br");
   }
 
