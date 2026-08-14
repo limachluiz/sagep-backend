@@ -4,7 +4,7 @@ import { AppError } from "../../shared/app-error.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 
-const COMPRAS_GOV_BASE_URL = "https://dadosabertos.compras.gov.br";
+import { systemSettingsService } from "../system-settings/system-settings.service.js";
 const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
 const REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_PAGE_SIZE = 100;
@@ -568,7 +568,8 @@ export class ComprasGovBalanceService {
       ataNumberTried: context?.ataNumberTried ?? null,
       matchKey: context?.matchKey ?? null,
     });
-    const url = new URL(path, COMPRAS_GOV_BASE_URL);
+    const settings = await systemSettingsService.getEffective();
+    const url = new URL(path, settings.comprasGovBaseUrl);
     for (const [key, value] of Object.entries(params)) {
       if (value === "") continue;
       url.searchParams.set(key, String(value));

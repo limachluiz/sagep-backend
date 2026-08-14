@@ -67,6 +67,8 @@ async function resetDatabase() {
   await prisma.ataCoverageGroup.deleteMany();
   await prisma.ata.deleteMany();
   await prisma.militaryOrganization.deleteMany();
+  await prisma.integrationConnectionCheck.deleteMany();
+  await prisma.systemConfiguration.deleteMany();
   await prisma.user.deleteMany();
   await prisma.permission.deleteMany();
 }

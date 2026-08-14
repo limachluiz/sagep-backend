@@ -1,4 +1,5 @@
 import { env } from "../../config/env.js";
+import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { AppError } from "../../shared/app-error.js";
 
 export type FinancialPhase = "EMPENHO" | "LIQUIDACAO" | "PAGAMENTO" | "ANULACAO" | "OUTRO";
@@ -170,7 +171,8 @@ export class PortalTransparenciaClient {
     }
 
     const externalCode = buildCommitmentExternalCode(managementUnit, management, number);
-    const response = await fetch(`${env.PORTAL_TRANSPARENCIA_BASE_URL}/despesas/documentos/${encodeURIComponent(externalCode)}`, {
+    const settings = await systemSettingsService.getEffective();
+    const response = await fetch(`${settings.portalTransparenciaBaseUrl.replace(/\/$/, "")}/despesas/documentos/${encodeURIComponent(externalCode)}`, {
       headers: { "chave-api-dados": token, Accept: "application/json" },
       signal: AbortSignal.timeout(15_000),
     }).catch((error) => {

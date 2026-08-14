@@ -12,6 +12,10 @@ vi.mock("../src/modules/financial-execution/portal-transparencia.client.js", () 
   portalTransparenciaClient: { isConfigured: () => true },
 }));
 
+vi.mock("../src/modules/system-settings/system-settings.service.js", () => ({
+  systemSettingsService: { getEffective: vi.fn().mockResolvedValue({ portalSyncOnStartup: true, portalSyncIntervalMinutes: 1440 }) },
+}));
+
 import { startFinancialExecutionScheduler } from "../src/modules/financial-execution/financial-execution.scheduler.js";
 
 afterEach(() => {
@@ -24,9 +28,8 @@ describe("agendador da execução financeira", () => {
     vi.useFakeTimers();
 
     const timer = startFinancialExecutionScheduler();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(mocks.syncAll).toHaveBeenCalledTimes(1));
 
-    expect(mocks.syncAll).toHaveBeenCalledTimes(1);
-    if (timer) clearInterval(timer);
+    timer?.stop();
   });
 });

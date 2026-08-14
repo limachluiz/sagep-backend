@@ -9,7 +9,8 @@ export type AuditEntityType =
   | "AUTH"
   | "COMMITMENT_NOTE"
   | "INVOICE"
-  | "NOTIFICATION";
+  | "NOTIFICATION"
+  | "SYSTEM_SETTINGS";
 
 export type AuditActionType =
   | "CREATE"
@@ -32,7 +33,8 @@ export type AuditActionType =
   | "SESSION_EXPIRE"
   | "SESSION_CLEANUP"
   | "SYNC"
-  | "DISMISS";
+  | "DISMISS"
+  | "CONNECTION_TEST";
 
 export type AuditPrimitive = string | number | boolean | null;
 export type AuditValue =

@@ -86,6 +86,7 @@ enum AuditEntityType {
   COMMITMENT_NOTE
   INVOICE
   NOTIFICATION
+  SYSTEM_SETTINGS
 }
 
 enum AuditActionType {
@@ -110,6 +111,20 @@ enum AuditActionType {
   SESSION_CLEANUP
   SYNC
   DISMISS
+  CONNECTION_TEST
+}
+
+enum IntegrationProvider {
+  DATABASE
+  PORTAL_TRANSPARENCIA
+  COMPRAS_GOV
+}
+
+enum IntegrationConnectionStatus {
+  OPERATIONAL
+  DEGRADED
+  UNAVAILABLE
+  NOT_CONFIGURED
 }
 
 enum CommitmentNoteFinancialStatus {
@@ -165,34 +180,74 @@ enum AtaItemBalanceMovementType {
 }
 
 model User {
-  id                            String                   @id @default(cuid())
-  userCode                      Int                      @unique @default(autoincrement())
+  id                            String                       @id @default(cuid())
+  userCode                      Int                          @unique @default(autoincrement())
   name                          String
   warName                       String?
-  email                         String                   @unique
+  email                         String                       @unique
   passwordHash                  String
-  role                          UserRole                 @default(CONSULTA)
+  role                          UserRole                     @default(CONSULTA)
   rank                          String?
   cpf                           String?
   phone                         String?
   avatarDataUrl                 String?
-  themePreference               UserThemePreference      @default(DARK)
-  notifyTaskAssignments         Boolean                  @default(true)
-  notifyDeadlines               Boolean                  @default(true)
-  notifyWorkflowUpdates         Boolean                  @default(true)
-  active                        Boolean                  @default(true)
-  ownedProjects                 Project[]                @relation("ProjectOwner")
-  signedServiceOrdersRegistered Project[]                @relation("SignedServiceOrderRegistrar")
+  themePreference               UserThemePreference          @default(DARK)
+  notifyTaskAssignments         Boolean                      @default(true)
+  notifyDeadlines               Boolean                      @default(true)
+  notifyWorkflowUpdates         Boolean                      @default(true)
+  active                        Boolean                      @default(true)
+  ownedProjects                 Project[]                    @relation("ProjectOwner")
+  signedServiceOrdersRegistered Project[]                    @relation("SignedServiceOrderRegistrar")
   memberships                   ProjectMember[]
   auditLogs                     AuditLog[]
-  assignedTasks                 Task[]                   @relation("TaskAssignee")
+  assignedTasks                 Task[]                       @relation("TaskAssignee")
   refreshTokens                 RefreshToken[]
   permissionOverrides           UserPermissionOverride[]
   notificationDismissals        NotificationDismissal[]
-  invoicesRegistered            Invoice[]                  @relation("InvoiceRegistrar")
+  invoicesRegistered            Invoice[]                    @relation("InvoiceRegistrar")
+  systemConfigurationsUpdated   SystemConfiguration[]        @relation("SystemConfigurationUpdater")
+  integrationChecksPerformed    IntegrationConnectionCheck[] @relation("IntegrationCheckActor")
   lastLoginAt                   DateTime?
-  createdAt                     DateTime                 @default(now())
-  updatedAt                     DateTime                 @updatedAt
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+}
+
+model SystemConfiguration {
+  id                         String   @id @default("default")
+  organizationName           String   @default("4º Centro de Telemática de Área")
+  organizationAcronym        String   @default("4º CTA")
+  uasg                       String   @default("160016")
+  management                 String   @default("00001")
+  timeZone                   String   @default("America/Manaus")
+  commandName                String   @default("COMANDO MILITAR DA AMAZÔNIA")
+  portalTransparenciaBaseUrl String   @default("https://api.portaldatransparencia.gov.br/api-de-dados")
+  portalSyncIntervalMinutes  Int      @default(1440)
+  portalSyncOnStartup        Boolean  @default(true)
+  comprasGovBaseUrl          String   @default("https://dadosabertos.compras.gov.br")
+  defaultBiddingNumber       String?
+  defaultBiddingYear         Int?
+  defaultImmediateCommitment Boolean  @default(true)
+  defaultEstimateGroup       String   @default("3")
+  updatedById                String?
+  updatedBy                  User?    @relation("SystemConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model IntegrationConnectionCheck {
+  id          String                      @id @default(cuid())
+  provider    IntegrationProvider
+  status      IntegrationConnectionStatus
+  latencyMs   Int?
+  httpStatus  Int?
+  message     String
+  details     Json?
+  checkedById String?
+  checkedBy   User?                       @relation("IntegrationCheckActor", fields: [checkedById], references: [id], onDelete: SetNull)
+  checkedAt   DateTime                    @default(now())
+
+  @@index([provider, checkedAt])
+  @@index([checkedById, checkedAt])
 }
 
 model Permission {

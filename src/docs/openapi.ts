@@ -24,6 +24,7 @@ const tagExternalDocs = {
   "ata-items": "./insights-and-admin.md",
   integrations: "./insights-and-admin.md",
   "military-organizations": "./insights-and-admin.md",
+  settings: "./insights-and-admin.md",
   health: "./README.md",
 };
 
@@ -191,6 +192,7 @@ export const openApiDocument: OpenApiDocument = {
     "ata-items",
     "integrations",
     "military-organizations",
+    "settings",
   ].map((name) => ({
     name,
     description: `Modulo ${name} do backend SAGEP`,
@@ -2977,6 +2979,23 @@ export const openApiDocument: OpenApiDocument = {
           timestamp: { type: "string", format: "date-time" },
         },
       },
+      SystemSettings: {
+        type: "object",
+        required: ["organizationName", "organizationAcronym", "uasg", "management", "commandName", "timeZone", "portalTransparenciaBaseUrl", "portalSyncIntervalMinutes", "portalSyncOnStartup", "comprasGovBaseUrl"],
+        properties: {
+          organizationName: { type: "string" }, organizationAcronym: { type: "string" },
+          uasg: { type: "string", pattern: "^\\d{6}$" }, management: { type: "string", pattern: "^\\d{5}$" },
+          commandName: { type: "string" }, timeZone: { type: "string" },
+          portalTransparenciaBaseUrl: { type: "string", format: "uri" }, portalSyncIntervalMinutes: { type: "integer", minimum: 15 }, portalSyncOnStartup: { type: "boolean" },
+          comprasGovBaseUrl: { type: "string", format: "uri" }, defaultBiddingNumber: { type: ["string", "null"] }, defaultBiddingYear: { type: ["integer", "null"] },
+          defaultImmediateCommitment: { type: "boolean" }, defaultEstimateGroup: { type: "string" },
+          portalApiToken: { type: "object", additionalProperties: true }, connections: { type: "object", additionalProperties: true },
+        },
+      },
+      IntegrationConnectionCheck: {
+        type: "object",
+        properties: { provider: { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] }, status: { type: "string", enum: ["OPERATIONAL", "DEGRADED", "UNAVAILABLE", "NOT_CONFIGURED"] }, latencyMs: { type: ["integer", "null"] }, httpStatus: { type: ["integer", "null"] }, message: { type: "string" }, checkedAt: { type: "string", format: "date-time" } },
+      },
       HealthComponent: {
         type: "object",
         required: ["id", "name", "description", "status", "latencyMs", "critical", "message"],
@@ -4524,6 +4543,16 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [pathIdParameter("notificationKey", "Chave estável da notificação")],
         responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses },
       },
+    },
+    "/system-settings": {
+      get: { tags: ["settings"], summary: "Consultar integrações e parâmetros institucionais", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
+      put: { tags: ["settings"], summary: "Atualizar integrações e parâmetros institucionais", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SystemSettings") }, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+    },
+    "/system-settings/connections/test": {
+      post: { tags: ["settings"], summary: "Testar todas as conexões configuradas", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+    },
+    "/system-settings/connections/{provider}/test": {
+      post: { tags: ["settings"], summary: "Testar uma conexão configurada", security: bearerSecurity, parameters: [pathIdParameter("provider", "Integração", { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] })], responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
     },
     "/financial-execution/commitment-notes": {
       get: {

@@ -6,12 +6,12 @@ import { startFinancialExecutionScheduler } from "./modules/financial-execution/
 const server = app.listen(env.PORT, () => {
   console.log(`SAGEP backend rodando em http://localhost:${env.PORT}`);
 });
-const financialExecutionTimer = startFinancialExecutionScheduler();
+const financialExecutionScheduler = startFinancialExecutionScheduler();
 
 async function shutdown(signal: string) {
   console.log(`${signal} recebido, encerrando servidor HTTP e browser de PDF...`);
   server.close(async () => {
-    if (financialExecutionTimer) clearInterval(financialExecutionTimer);
+    financialExecutionScheduler?.stop();
     await pdfService.closeBrowser();
     process.exit(0);
   });

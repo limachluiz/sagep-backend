@@ -9,8 +9,8 @@ const commitmentNumberSchema = z.string().trim().transform((value) =>
 
 const portalLookupFields = {
   number: commitmentNumberSchema,
-  managementUnit: z.string().regex(/^\d{6}$/).default("160016"),
-  management: z.string().regex(/^\d{5}$/).default("00001"),
+  managementUnit: z.string().regex(/^\d{6}$/).optional(),
+  management: z.string().regex(/^\d{5}$/).optional(),
 };
 
 export const standaloneCommitmentNoteLookupSchema = z.object(portalLookupFields);

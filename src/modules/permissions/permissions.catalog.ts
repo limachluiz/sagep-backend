@@ -47,7 +47,9 @@ export type Permission =
   | "reports.export"
   | "users.manage"
   | "system_health.view"
-  | "system_health.view_details";
+  | "system_health.view_details"
+  | "settings.view"
+  | "settings.manage";
 
 export const roleValues = ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"] as const;
 
@@ -118,6 +120,8 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "users.manage",
     "system_health.view",
     "system_health.view_details",
+    "settings.view",
+    "settings.manage",
   ],
   GESTOR: [
     "audit.view",
@@ -146,6 +150,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "financial_execution.sync",
     "reports.export",
     "system_health.view",
+    "settings.view",
   ],
   PROJETISTA: [
     "projects.edit_own",
@@ -163,6 +168,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "dashboard.view_operational",
     "reports.export",
     "system_health.view",
+    "settings.view",
   ],
   CONSULTA: [
     "tasks.view_all",
@@ -170,6 +176,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "sessions.manage_own",
     "dashboard.view_operational",
     "system_health.view",
+    "settings.view",
   ],
 };
 
@@ -225,6 +232,8 @@ export const permissionDescriptions: Record<Permission, string> = {
   "users.manage": "Permite administrar usuarios",
   "system_health.view": "Permite consultar o estado geral de saude do SAGEP",
   "system_health.view_details": "Permite consultar diagnosticos tecnicos do ambiente",
+  "settings.view": "Permite consultar parametros institucionais e integracoes",
+  "settings.manage": "Permite alterar parametros e testar integracoes externas",
 };
 
 export const allPermissions = Object.keys(permissionDescriptions) as Permission[];
@@ -245,6 +254,7 @@ const permissionGroupLabels: Record<string, string> = {
   reports: "Relatorios",
   users: "Usuarios",
   system_health: "Saude do sistema",
+  settings: "Configuracoes do sistema",
 };
 
 export type PermissionCatalogItem = {
@@ -266,6 +276,7 @@ export const criticalPermissions: Permission[] = [
   "atas.manage",
   "military_organizations.manage",
   "system_health.view_details",
+  "settings.manage",
 ];
 
 export const allRoles = [...roleValues];

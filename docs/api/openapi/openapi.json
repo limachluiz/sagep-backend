@@ -171,6 +171,14 @@
         "description": "Documentacao Markdown complementar",
         "url": "./insights-and-admin.md"
       }
+    },
+    {
+      "name": "settings",
+      "description": "Modulo settings do backend SAGEP",
+      "externalDocs": {
+        "description": "Documentacao Markdown complementar",
+        "url": "./insights-and-admin.md"
+      }
     }
   ],
   "components": {
@@ -5743,6 +5751,125 @@
             ]
           },
           "timestamp": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "SystemSettings": {
+        "type": "object",
+        "required": [
+          "organizationName",
+          "organizationAcronym",
+          "uasg",
+          "management",
+          "commandName",
+          "timeZone",
+          "portalTransparenciaBaseUrl",
+          "portalSyncIntervalMinutes",
+          "portalSyncOnStartup",
+          "comprasGovBaseUrl"
+        ],
+        "properties": {
+          "organizationName": {
+            "type": "string"
+          },
+          "organizationAcronym": {
+            "type": "string"
+          },
+          "uasg": {
+            "type": "string",
+            "pattern": "^\\d{6}$"
+          },
+          "management": {
+            "type": "string",
+            "pattern": "^\\d{5}$"
+          },
+          "commandName": {
+            "type": "string"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "portalTransparenciaBaseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "portalSyncIntervalMinutes": {
+            "type": "integer",
+            "minimum": 15
+          },
+          "portalSyncOnStartup": {
+            "type": "boolean"
+          },
+          "comprasGovBaseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "defaultBiddingNumber": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "defaultBiddingYear": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "defaultImmediateCommitment": {
+            "type": "boolean"
+          },
+          "defaultEstimateGroup": {
+            "type": "string"
+          },
+          "portalApiToken": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "connections": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "IntegrationConnectionCheck": {
+        "type": "object",
+        "properties": {
+          "provider": {
+            "type": "string",
+            "enum": [
+              "DATABASE",
+              "PORTAL_TRANSPARENCIA",
+              "COMPRAS_GOV"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "OPERATIONAL",
+              "DEGRADED",
+              "UNAVAILABLE",
+              "NOT_CONFIGURED"
+            ]
+          },
+          "latencyMs": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "httpStatus": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "checkedAt": {
             "type": "string",
             "format": "date-time"
           }
@@ -11396,6 +11523,218 @@
           }
         },
         "operationId": "operationalAlerts_delete_byNotificationKey"
+      }
+    },
+    "/system-settings": {
+      "get": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Consultar integrações e parâmetros institucionais",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.view"
+        ],
+        "operationId": "settings_get_systemSettings"
+      },
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Atualizar integrações e parâmetros institucionais",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SystemSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SystemSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "operationId": "settings_put_systemSettings"
+      }
+    },
+    "/system-settings/connections/test": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Testar todas as conexões configuradas",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationConnectionCheck"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "operationId": "settings_post_systemSettings_connections_test"
+      }
+    },
+    "/system-settings/connections/{provider}/test": {
+      "post": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Testar uma conexão configurada",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "description": "Integração",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "DATABASE",
+                "PORTAL_TRANSPARENCIA",
+                "COMPRAS_GOV"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IntegrationConnectionCheck"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "operationId": "settings_post_systemSettings_connections_byProvider_test"
       }
     },
     "/financial-execution/commitment-notes": {

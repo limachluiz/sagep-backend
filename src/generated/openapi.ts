@@ -1258,6 +1258,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar integrações e parâmetros institucionais */
+        get: operations["settings_get_systemSettings"];
+        /** Atualizar integrações e parâmetros institucionais */
+        put: operations["settings_put_systemSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings/connections/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Testar todas as conexões configuradas */
+        post: operations["settings_post_systemSettings_connections_test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings/connections/{provider}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Testar uma conexão configurada */
+        post: operations["settings_post_systemSettings_connections_byProvider_test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/financial-execution/commitment-notes": {
         parameters: {
             query?: never;
@@ -3878,6 +3930,41 @@ export interface components {
             status: "ok";
             /** Format: date-time */
             timestamp: string;
+        };
+        SystemSettings: {
+            organizationName: string;
+            organizationAcronym: string;
+            uasg: string;
+            management: string;
+            commandName: string;
+            timeZone: string;
+            /** Format: uri */
+            portalTransparenciaBaseUrl: string;
+            portalSyncIntervalMinutes: number;
+            portalSyncOnStartup: boolean;
+            /** Format: uri */
+            comprasGovBaseUrl: string;
+            defaultBiddingNumber?: string | null;
+            defaultBiddingYear?: number | null;
+            defaultImmediateCommitment?: boolean;
+            defaultEstimateGroup?: string;
+            portalApiToken?: {
+                [key: string]: unknown;
+            };
+            connections?: {
+                [key: string]: unknown;
+            };
+        };
+        IntegrationConnectionCheck: {
+            /** @enum {string} */
+            provider?: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV";
+            /** @enum {string} */
+            status?: "OPERATIONAL" | "DEGRADED" | "UNAVAILABLE" | "NOT_CONFIGURED";
+            latencyMs?: number | null;
+            httpStatus?: number | null;
+            message?: string;
+            /** Format: date-time */
+            checkedAt?: string;
         };
         HealthComponent: {
             /** @enum {string} */
@@ -6977,6 +7064,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_get_systemSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_put_systemSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemSettings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_post_systemSettings_connections_test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationConnectionCheck"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_post_systemSettings_connections_byProvider_test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Integração */
+                provider: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationConnectionCheck"];
                 };
             };
             400: components["responses"]["BadRequest"];

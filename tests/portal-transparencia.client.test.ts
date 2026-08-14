@@ -7,12 +7,16 @@ import {
 } from "../src/modules/financial-execution/portal-transparencia.client.js";
 import { standaloneCommitmentNoteLookupSchema } from "../src/modules/financial-execution/financial-execution.schemas.js";
 
+vi.mock("../src/modules/system-settings/system-settings.service.js", () => ({
+  systemSettingsService: { getEffective: vi.fn().mockResolvedValue({ portalTransparenciaBaseUrl: "https://api.portaldatransparencia.gov.br/api-de-dados" }) },
+}));
+
 afterEach(() => vi.unstubAllGlobals());
 
 describe("PortalTransparenciaClient", () => {
   it("aceita consulta avulsa sem identificador de projeto", () => {
     expect(standaloneCommitmentNoteLookupSchema.parse({ number: "2026ne000534" }))
-      .toEqual({ number: "2026NE000534", managementUnit: "160016", management: "00001" });
+      .toEqual({ number: "2026NE000534" });
   });
 
   it("monta o código oficial com UG, gestão e número normalizado", () => {

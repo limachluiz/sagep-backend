@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
+import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { ProjectsService } from "../projects/projects.service.js";
 import type {
   CreateInvoiceInput,
@@ -42,6 +43,14 @@ function serializeNote<T extends Record<string, unknown>>(note: T) {
 }
 
 export class FinancialExecutionService {
+  private async portalCoordinates(input: { managementUnit?: string; management?: string }) {
+    const settings = await systemSettingsService.getEffective();
+    return {
+      managementUnit: input.managementUnit ?? settings.uasg,
+      management: input.management ?? settings.management,
+    };
+  }
+
   private actor(user?: CurrentUser) {
     return user ? { id: user.id, name: user.name ?? user.email } : undefined;
   }
@@ -96,9 +105,10 @@ export class FinancialExecutionService {
   }
 
   async lookup(input: StandaloneCommitmentNoteLookupInput, user: CurrentUser) {
+    const coordinates = await this.portalCoordinates(input);
     const snapshot = await portalTransparenciaClient.fetchCommitmentNote(
-      input.managementUnit,
-      input.management,
+      coordinates.managementUnit,
+      coordinates.management,
       input.number,
     );
     const registered = await prisma.commitmentNote.findFirst({
@@ -145,8 +155,9 @@ export class FinancialExecutionService {
 
   async preview(input: PreviewCommitmentNoteInput, user: CurrentUser) {
     await projectsService.findById(input.projectId, user);
+    const coordinates = await this.portalCoordinates(input);
     const [snapshot, expected] = await Promise.all([
-      portalTransparenciaClient.fetchCommitmentNote(input.managementUnit, input.management, input.number),
+      portalTransparenciaClient.fetchCommitmentNote(coordinates.managementUnit, coordinates.management, input.number),
       this.expectedProjectFinancials(input.projectId),
     ]);
     const divergences = this.compare(snapshot, expected);
