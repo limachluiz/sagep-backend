@@ -7,11 +7,17 @@ const commitmentNumberSchema = z.string().trim().transform((value) =>
   message: "Informe a NE no formato 2026NE000534",
 });
 
-const lookupFields = {
-  projectId: z.string().trim().min(1),
+const portalLookupFields = {
   number: commitmentNumberSchema,
   managementUnit: z.string().regex(/^\d{6}$/).default("160016"),
   management: z.string().regex(/^\d{5}$/).default("00001"),
+};
+
+export const standaloneCommitmentNoteLookupSchema = z.object(portalLookupFields);
+
+const lookupFields = {
+  projectId: z.string().trim().min(1),
+  ...portalLookupFields,
 };
 
 export const previewCommitmentNoteSchema = z.object(lookupFields);
@@ -57,6 +63,7 @@ export const createInvoiceSchema = z.object({
 });
 
 export type PreviewCommitmentNoteInput = z.infer<typeof previewCommitmentNoteSchema>;
+export type StandaloneCommitmentNoteLookupInput = z.infer<typeof standaloneCommitmentNoteLookupSchema>;
 export type RegisterCommitmentNoteInput = z.infer<typeof registerCommitmentNoteSchema>;
 export type ListCommitmentNotesInput = z.infer<typeof listCommitmentNotesSchema>;
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;

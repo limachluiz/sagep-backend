@@ -8,6 +8,7 @@ import type {
   ListCommitmentNotesInput,
   PreviewCommitmentNoteInput,
   RegisterCommitmentNoteInput,
+  StandaloneCommitmentNoteLookupInput,
 } from "./financial-execution.schemas.js";
 import {
   portalTransparenciaClient,
@@ -92,6 +93,43 @@ export class FinancialExecutionService {
       supplierCnpj: serviceOrder?.contractorCnpj ?? diex?.supplierCnpj ?? null,
       expectedAmount: numberValue(serviceOrder?.totalAmount ?? diex?.totalAmount ?? project.estimates[0]?.totalAmount),
     };
+  }
+
+  async lookup(input: StandaloneCommitmentNoteLookupInput, user: CurrentUser) {
+    const snapshot = await portalTransparenciaClient.fetchCommitmentNote(
+      input.managementUnit,
+      input.management,
+      input.number,
+    );
+    const registered = await prisma.commitmentNote.findFirst({
+      where: {
+        externalCode: snapshot.externalCode,
+        project: this.projectAccessWhere(user),
+      },
+      select: {
+        id: true,
+        active: true,
+        financialStatus: true,
+        syncStatus: true,
+        lastSyncAt: true,
+        project: { select: { id: true, projectCode: true, title: true, stage: true, status: true } },
+      },
+    });
+
+    await auditService.log({
+      entityType: "COMMITMENT_NOTE",
+      entityId: snapshot.externalCode,
+      action: "SYNC",
+      actor: this.actor(user),
+      summary: `Consulta avulsa da NE ${snapshot.number}`,
+      metadata: {
+        managementUnit: snapshot.managementUnit,
+        management: snapshot.management,
+        registeredCommitmentNoteId: registered?.id ?? null,
+      },
+    });
+
+    return { snapshot, registered };
   }
 
   private compare(snapshot: PortalCommitmentSnapshot, expected: Awaited<ReturnType<FinancialExecutionService["expectedProjectFinancials"]>>) {

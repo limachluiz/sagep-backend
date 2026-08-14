@@ -1293,6 +1293,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/financial-execution/commitment-notes/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consultar uma NE avulsa sem vinculá-la a projeto
+         * @description Consulta a fonte oficial e informa quando o documento já está cadastrado no SAGEP. Não persiste nem altera o workflow.
+         */
+        post: operations["financialExecution_post_commitmentNotes_lookup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/financial-execution/commitment-notes/{id}": {
         parameters: {
             query?: never;
@@ -3132,6 +3152,18 @@ export interface components {
             managementUnit: string;
             /** @default 00001 */
             management: string;
+        };
+        CommitmentNoteStandaloneLookupRequest: {
+            /** @example 2026NE000534 */
+            number: string;
+            /** @default 160016 */
+            managementUnit: string;
+            /** @default 00001 */
+            management: string;
+        };
+        CommitmentNoteStandaloneLookupResponse: {
+            snapshot: components["schemas"]["CommitmentNoteResponse"];
+            registered?: components["schemas"]["CommitmentNoteResponse"] | null;
         };
         CommitmentNoteRegisterRequest: components["schemas"]["CommitmentNoteLookupRequest"] & {
             /** Format: date-time */
@@ -7042,6 +7074,36 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes_lookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitmentNoteStandaloneLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteStandaloneLookupResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

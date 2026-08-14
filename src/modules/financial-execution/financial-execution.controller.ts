@@ -5,10 +5,15 @@ import {
   listCommitmentNotesSchema,
   previewCommitmentNoteSchema,
   registerCommitmentNoteSchema,
+  standaloneCommitmentNoteLookupSchema,
 } from "./financial-execution.schemas.js";
 import { financialExecutionService } from "./financial-execution.service.js";
 
 export class FinancialExecutionController {
+  async lookup(req: Request, res: Response) {
+    return res.status(200).json(await financialExecutionService.lookup(standaloneCommitmentNoteLookupSchema.parse(req.body), req.user!));
+  }
+
   async preview(req: Request, res: Response) {
     return res.status(200).json(await financialExecutionService.preview(previewCommitmentNoteSchema.parse(req.body), req.user!));
   }

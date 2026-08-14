@@ -6,14 +6,16 @@ Portal da Transparência nunca é exposto ao navegador.
 
 ## Fluxo
 
-1. `POST /financial-execution/commitment-notes/preview` consulta a NE pelo
+1. `POST /financial-execution/commitment-notes/lookup` consulta qualquer NE
+   para conferência, sem persistir, vincular a projeto ou movimentar o workflow.
+2. `POST /financial-execution/commitment-notes/preview` consulta a NE pelo
    código formado por UG, Gestão e número do documento e compara CNPJ/valor com
    os dados do projeto.
-2. `POST /financial-execution/commitment-notes` repete a validação, persiste o
+3. `POST /financial-execution/commitment-notes` repete a validação, persiste o
    snapshot oficial, consome a reserva da ATA e libera a OS.
-3. `POST /financial-execution/commitment-notes/:id/sync` atualiza liquidações,
+4. `POST /financial-execution/commitment-notes/:id/sync` atualiza liquidações,
    pagamentos, anulações e divergências sem movimentar a etapa do projeto.
-4. `POST /financial-execution/invoices` registra a NFe e confronta CNPJ e valor
+5. `POST /financial-execution/invoices` registra a NFe e confronta CNPJ e valor
    com a NE vinculada.
 
 ## Sincronização

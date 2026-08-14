@@ -5,10 +5,16 @@ import {
   buildCommitmentExternalCode,
   portalTransparenciaClient,
 } from "../src/modules/financial-execution/portal-transparencia.client.js";
+import { standaloneCommitmentNoteLookupSchema } from "../src/modules/financial-execution/financial-execution.schemas.js";
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe("PortalTransparenciaClient", () => {
+  it("aceita consulta avulsa sem identificador de projeto", () => {
+    expect(standaloneCommitmentNoteLookupSchema.parse({ number: "2026ne000534" }))
+      .toEqual({ number: "2026NE000534", managementUnit: "160016", management: "00001" });
+  });
+
   it("monta o código oficial com UG, gestão e número normalizado", () => {
     expect(buildCommitmentExternalCode("160016", "00001", "2026ne000534"))
       .toBe("160016000012026NE000534");

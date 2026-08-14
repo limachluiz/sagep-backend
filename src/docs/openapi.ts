@@ -2026,6 +2026,26 @@ export const openApiDocument: OpenApiDocument = {
           management: { type: "string", default: "00001" },
         },
       },
+      CommitmentNoteStandaloneLookupRequest: {
+        type: "object",
+        required: ["number"],
+        properties: {
+          number: { type: "string", pattern: "^\\d{4}NE\\d{6}$", example: "2026NE000534" },
+          managementUnit: { type: "string", pattern: "^\\d{6}$", default: "160016" },
+          management: { type: "string", pattern: "^\\d{5}$", default: "00001" },
+        },
+      },
+      CommitmentNoteStandaloneLookupResponse: {
+        type: "object",
+        required: ["snapshot"],
+        properties: {
+          snapshot: { $ref: "#/components/schemas/CommitmentNoteResponse" },
+          registered: {
+            allOf: [{ $ref: "#/components/schemas/CommitmentNoteResponse" }],
+            nullable: true,
+          },
+        },
+      },
       CommitmentNoteRegisterRequest: {
         allOf: [
           { $ref: "#/components/schemas/CommitmentNoteLookupRequest" },
@@ -4537,6 +4557,17 @@ export const openApiDocument: OpenApiDocument = {
         requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteLookupRequest") },
         responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
         "x-permissions": ["financial_execution.manage"],
+      },
+    },
+    "/financial-execution/commitment-notes/lookup": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Consultar uma NE avulsa sem vinculá-la a projeto",
+        description: "Consulta a fonte oficial e informa quando o documento já está cadastrado no SAGEP. Não persiste nem altera o workflow.",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteStandaloneLookupRequest") },
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteStandaloneLookupResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
       },
     },
     "/financial-execution/commitment-notes/{id}": {
