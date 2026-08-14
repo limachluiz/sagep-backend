@@ -127,6 +127,28 @@ function relatedRecords(record: JsonRecord) {
   return candidates;
 }
 
+function recordsFromPayload(payload: unknown) {
+  if (Array.isArray(payload)) return payload.map(asRecord).filter((item): item is JsonRecord => Boolean(item));
+  const root = asRecord(payload);
+  if (!root) return [];
+  const nested = relatedRecords(root);
+  return nested.length ? nested : [root];
+}
+
+async function fetchPortalJson(url: string, token: string, notFoundMessage: string) {
+  const response = await fetch(url, {
+    headers: { "chave-api-dados": token, Accept: "application/json" },
+    signal: AbortSignal.timeout(15_000),
+  }).catch((error) => {
+    throw new AppError("Portal da Transparência indisponível", 502, "PORTAL_TRANSPARENCIA_UNAVAILABLE", { cause: error instanceof Error ? error.message : String(error) });
+  });
+
+  if (response.status === 404) throw new AppError(notFoundMessage, 404, "PORTAL_TRANSPARENCIA_NOT_FOUND", { url });
+  if (response.status === 429) throw new AppError("Limite de consultas do Portal da Transparência atingido", 429, "PORTAL_TRANSPARENCIA_RATE_LIMIT");
+  if (!response.ok) throw new AppError("Falha ao consultar o Portal da Transparência", 502, "PORTAL_TRANSPARENCIA_ERROR", { status: response.status, url });
+  return response.json() as Promise<unknown>;
+}
+
 function parseDocument(record: JsonRecord, fallbackCode: string): ParsedFinancialDocument {
   const number = stringFor(record, ["numeroDocumento", "documentoResumido", "documento", "numero", "codigoDocumento"]) ?? fallbackCode.slice(11);
   return {
@@ -172,31 +194,46 @@ export class PortalTransparenciaClient {
 
     const externalCode = buildCommitmentExternalCode(managementUnit, management, number);
     const settings = await systemSettingsService.getEffective();
-    const response = await fetch(`${settings.portalTransparenciaBaseUrl.replace(/\/$/, "")}/despesas/documentos/${encodeURIComponent(externalCode)}`, {
-      headers: { "chave-api-dados": token, Accept: "application/json" },
-      signal: AbortSignal.timeout(15_000),
-    }).catch((error) => {
-      throw new AppError("Portal da Transparência indisponível", 502, "PORTAL_TRANSPARENCIA_UNAVAILABLE", { cause: error instanceof Error ? error.message : String(error) });
-    });
-
-    if (response.status === 404) {
-      throw new AppError("Nota de Empenho não localizada no Portal da Transparência", 404, "COMMITMENT_NOTE_NOT_FOUND", { externalCode });
-    }
-    if (response.status === 429) {
-      throw new AppError("Limite de consultas do Portal da Transparência atingido", 429, "PORTAL_TRANSPARENCIA_RATE_LIMIT");
-    }
-    if (!response.ok) {
-      throw new AppError("Falha ao consultar o Portal da Transparência", 502, "PORTAL_TRANSPARENCIA_ERROR", { status: response.status });
-    }
-
-    const payload: unknown = await response.json();
+    const baseUrl = settings.portalTransparenciaBaseUrl.replace(/\/$/, "");
+    const payload = await fetchPortalJson(
+      `${baseUrl}/despesas/documentos/${encodeURIComponent(externalCode)}`,
+      token,
+      "Nota de Empenho não localizada no Portal da Transparência",
+    );
     const root = Array.isArray(payload) ? asRecord(payload[0]) : asRecord(payload);
     if (!root) throw new AppError("Resposta inválida do Portal da Transparência", 502, "PORTAL_TRANSPARENCIA_INVALID_RESPONSE");
 
     const baseDocument = parseDocument(root, externalCode);
     baseDocument.phase = "EMPENHO";
     baseDocument.externalCode = externalCode;
-    const documents = [baseDocument, ...relatedRecords(root).map((item) => parseDocument(item, externalCode))]
+    const relatedUrl = new URL(`${baseUrl}/despesas/documentos-relacionados`);
+    relatedUrl.searchParams.set("codigoDocumento", externalCode);
+    relatedUrl.searchParams.set("fase", "1");
+    const relatedPayload = await fetchPortalJson(
+      relatedUrl.toString(),
+      token,
+      "Documentos relacionados da Nota de Empenho não foram localizados",
+    );
+    const relatedDocuments = await Promise.all(recordsFromPayload(relatedPayload).map(async (relation) => {
+      const summary = parseDocument(relation, externalCode);
+      if (!/^\d{6}\d{5}\d{4}(?:NS|OB|NE)\d{6}$/i.test(summary.externalCode) || summary.externalCode === externalCode) return summary;
+      try {
+        const detailPayload = await fetchPortalJson(
+          `${baseUrl}/despesas/documentos/${encodeURIComponent(summary.externalCode)}`,
+          token,
+          `Documento relacionado ${summary.number} não localizado`,
+        );
+        const detail = Array.isArray(detailPayload) ? asRecord(detailPayload[0]) : asRecord(detailPayload);
+        if (!detail) return summary;
+        const enriched = parseDocument({ ...relation, ...detail }, summary.externalCode);
+        enriched.phase = summary.phase === "OUTRO" ? enriched.phase : summary.phase;
+        enriched.rawSnapshot = { relation, detail };
+        return enriched;
+      } catch {
+        return summary;
+      }
+    }));
+    const documents = [baseDocument, ...relatedDocuments]
       .filter((item, index, all) => all.findIndex((candidate) => candidate.externalCode === item.externalCode) === index);
     const originalAmount = decimalFor(root, ["valorOriginalDoEmpenho", "valorOriginal", "valorEmpenhado", "valor"]);
     const cancelledAmount = documents.filter((item) => item.phase === "ANULACAO").reduce((sum, item) => sum + Math.abs(item.amount), 0);
