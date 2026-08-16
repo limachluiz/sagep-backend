@@ -48,7 +48,6 @@ async function resetDatabase() {
   await prisma.invoice.deleteMany();
   await prisma.financialDocument.deleteMany();
   await prisma.commitmentNote.deleteMany();
-  await prisma.ataItemExternalBalanceSnapshot.deleteMany();
   await prisma.ataItemBalanceMovement.deleteMany();
   await prisma.serviceOrderDeliveredDocument.deleteMany();
   await prisma.serviceOrderScheduleItem.deleteMany();
@@ -1973,107 +1972,6 @@ describe("critical flows", () => {
     expect(response.body[0].createdAt).toBe(newerCreatedAt.toISOString());
   });
 
-  it.skip("legacy: registers external consumption manually", async () => {
-    const catalog = await createCatalog("5.00");
-    await prisma.ata.update({
-      where: { id: catalog.ata.id },
-      data: { externalUasg: "160016" },
-    });
-    const basePayload = {
-      quantity: 2,
-      reason: "Consumo externo confirmado manualmente",
-      source: "COMPRAS_GOV",
-      externalStatus: "CONSUMO_OFICIAL_DETECTADO",
-      externalReference: "SNAPSHOT-001",
-      commitmentNumber: "2026NE000567",
-      unit: "160016",
-      notes: "Conferencia manual",
-    };
-
-    await request(app)
-      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
-      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
-      .send(basePayload)
-      .expect(403);
-
-    await request(app)
-      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .send({ ...basePayload, reason: "" })
-      .expect(400);
-
-    await request(app)
-      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .send({ ...basePayload, quantity: 6 })
-      .expect(409)
-      .expect((response) => {
-        expect(response.body.message).toContain("Saldo insuficiente");
-      });
-
-    await request(app)
-      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .send({ ...basePayload, externalReference: "ADESAO-001" })
-      .expect(400);
-
-    await request(app)
-      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .send({ ...basePayload, unit: "999999" })
-      .expect(400);
-
-    const response = await request(app)
-      .post(`/api/ata-items/${catalog.ataItem.id}/register-external-consumption`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .send(basePayload)
-      .expect(200);
-
-    expect(response.body.message).toBe("Consumo externo registrado manualmente com sucesso");
-    expect(response.body.movement.movementType).toBe("EXTERNAL_CONSUMPTION");
-    expect(response.body.movement.quantity).toBe("2");
-    expect(response.body.localBalance.consumedQuantity).toBe("2");
-    expect(response.body.localBalance.availableQuantity).toBe("3");
-    expect(response.body.item.balance.consumedQuantity).toBe("2");
-    expect(response.body.item.balance.availableQuantity).toBe("3");
-
-    const movement = await prisma.ataItemBalanceMovement.findFirstOrThrow({
-      where: {
-        ataItemId: catalog.ataItem.id,
-        movementType: "EXTERNAL_CONSUMPTION",
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    expect(movement.actorUserId).toBe(gestor.id);
-    expect(movement.summary).toContain("Consumo externo manual");
-    expect(movement.quantity.toString()).toBe("2");
-
-    const refreshedItem = await request(app)
-      .get(`/api/ata-items/${catalog.ataItem.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(refreshedItem.body.balance.consumedQuantity).toBe("2");
-    expect(refreshedItem.body.balance.availableQuantity).toBe("3");
-    expect(refreshedItem.body.initialQuantity).toBe("5");
-
-    const audit = await prisma.auditLog.findFirstOrThrow({
-      where: {
-        entityType: "ATA_ITEM",
-        entityId: catalog.ataItem.id,
-        action: "REGISTER_EXTERNAL_CONSUMPTION",
-      },
-      orderBy: { createdAt: "desc" },
-    });
-    const metadata = audit.metadata as Record<string, any>;
-    expect(audit.actorUserId).toBe(gestor.id);
-    expect(metadata.quantity).toBe("2");
-    expect(metadata.reason).toBe(basePayload.reason);
-    expect(metadata.source).toBe(basePayload.source);
-    expect(metadata.externalStatus).toBe(basePayload.externalStatus);
-    expect(metadata.commitmentNumber).toBe(basePayload.commitmentNumber);
-    expect(metadata.unit).toBe(basePayload.unit);
-  });
-
   it("estimates: blocks quantity above ATA item available balance", async () => {
     const project = await createProject(adminAuth.accessToken, "Projeto sem saldo");
     const catalog = await createCatalog("1.00");
@@ -2828,35 +2726,23 @@ describe("critical flows", () => {
       .expect(403);
   });
 
-  it.skip("legacy: previews, imports and synchronizes external balances", async () => {
+  it("integrations: previews and imports Compras.gov.br ATA without external balance", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = new URL(String(input));
 
       if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
         return new Response(
           JSON.stringify({
-            resultado: [
-              {
-                numeroAtaRegistroPreco: "0001",
-                codigoUnidadeGerenciadora: "120624",
-                nomeUnidadeGerenciadora: "Centro de Tecnologia",
-                numeroCompra: "90001",
-                anoCompra: "2026",
-                dataVigenciaInicial: "2026-01-01",
-                dataVigenciaFinal: "2026-12-31",
-                numeroControlePncpAta: "ATA-PNCP-1",
-              },
-              {
-                numeroAtaRegistroPreco: "0002",
-                codigoUnidadeGerenciadora: "120624",
-                nomeUnidadeGerenciadora: "Centro de Tecnologia",
-                numeroCompra: "90001",
-                anoCompra: "2026",
-                dataVigenciaInicial: "2026-02-01",
-                dataVigenciaFinal: "2027-01-31",
-                numeroControlePncpAta: "ATA-PNCP-2",
-              },
-            ],
+            resultado: [{
+              numeroAtaRegistroPreco: "0001",
+              codigoUnidadeGerenciadora: "120624",
+              nomeUnidadeGerenciadora: "Centro de Tecnologia",
+              numeroCompra: "90001",
+              anoCompra: "2026",
+              dataVigenciaInicial: "2026-01-01",
+              dataVigenciaFinal: "2026-12-31",
+              numeroControlePncpAta: "ATA-PNCP-1",
+            }],
             totalPaginas: 1,
           }),
           { status: 200, headers: { "content-type": "application/json" } },
@@ -2866,75 +2752,20 @@ describe("critical flows", () => {
       if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
         return new Response(
           JSON.stringify({
-            resultado: [
-              {
-                numeroAtaRegistroPreco: "0001",
-                codigoUnidadeGerenciadora: "120624",
-                numeroCompra: "90001",
-                anoCompra: "2026",
-                numeroItem: "1",
-                codigoItem: 123,
-                descricaoItem: "Camera IP 4MP",
-                tipoItem: "UN",
-                quantidadeHomologadaVencedor: 50,
-                valorUnitario: 250.75,
-                nomeRazaoSocialFornecedor: "Fornecedor Compras Gov",
-                numeroControlePncpAta: "ATA-PNCP-1",
-              },
-              {
-                numeroAtaRegistroPreco: "0002",
-                codigoUnidadeGerenciadora: "120624",
-                numeroCompra: "90001",
-                anoCompra: "2026",
-                numeroItem: "2",
-                codigoItem: 456,
-                descricaoItem: "Switch gerenciavel",
-                tipoItem: "UN",
-                quantidadeHomologadaVencedor: 10,
-                valorUnitario: 1000,
-                nomeRazaoSocialFornecedor: "Outro Fornecedor Compras Gov",
-                numeroControlePncpAta: "ATA-PNCP-2",
-              },
-            ],
-            totalPaginas: 1,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      if (url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem")) {
-        if (url.searchParams.get("numeroAta")?.includes("EMPTY")) {
-          return new Response(
-            JSON.stringify({
-              resultado: [],
-              totalPaginas: 0,
-            }),
-            { status: 200, headers: { "content-type": "application/json" } },
-          );
-        }
-
-        return new Response(
-          JSON.stringify({
-            resultado: [
-              {
-                numeroItem: "00001",
-                unidade: "120624",
-                tipo: "saldo",
-                quantidadeRegistrada: 50,
-                quantidadeEmpenhada: 5,
-                saldoEmpenho: 45,
-                dataHoraAtualizacao: "2026-03-01T10:00:00.000Z",
-              },
-              {
-                numeroItem: "00002",
-                unidade: "120624",
-                tipo: "saldo",
-                quantidadeRegistrada: 10,
-                quantidadeEmpenhada: 0,
-                saldoEmpenho: 10,
-                dataHoraAtualizacao: "2026-03-01T10:00:00.000Z",
-              },
-            ],
+            resultado: [{
+              numeroAtaRegistroPreco: "0001",
+              codigoUnidadeGerenciadora: "120624",
+              numeroCompra: "90001",
+              anoCompra: "2026",
+              numeroItem: "1",
+              codigoItem: 123,
+              descricaoItem: "Camera IP 4MP",
+              tipoItem: "UN",
+              quantidadeHomologadaVencedor: 50,
+              valorUnitario: 250.75,
+              nomeRazaoSocialFornecedor: "Fornecedor Compras Gov",
+              numeroControlePncpAta: "ATA-PNCP-1",
+            }],
             totalPaginas: 1,
           }),
           { status: 200, headers: { "content-type": "application/json" } },
@@ -2963,53 +2794,6 @@ describe("critical flows", () => {
       expect(preview.body.ata.vendorName).toBe("Fornecedor Compras Gov");
       expect(preview.body.items).toHaveLength(1);
       expect(preview.body.items[0].referenceCode).toBe("1");
-      expect(preview.body.atasFound).toHaveLength(1);
-      expect(preview.body.selectedAta.ataNumber).toBe("ARP 0001");
-
-      const groupedPreview = await request(app)
-        .get("/api/integrations/compras-gov/atas/preview")
-        .query({
-          uasg: "120624",
-          numeroPregao: "90001",
-          anoPregao: "2026",
-        })
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(groupedPreview.body.ata).toBeNull();
-      expect(groupedPreview.body.items).toHaveLength(0);
-      expect(groupedPreview.body.selectedAta).toBeUndefined();
-      expect(groupedPreview.body.atasFound).toHaveLength(2);
-      expect(groupedPreview.body.atasFound[0].itemCount).toBe(1);
-      expect(groupedPreview.body.atasFound[0].totalAmount).toBe(12537.5);
-      expect(groupedPreview.body.warnings).toContain(
-        "Foram encontradas várias ATAs. Selecione uma ATA para continuar.",
-      );
-
-      const partialPreview = await request(app)
-        .get("/api/integrations/compras-gov/atas/preview")
-        .query({
-          uasg: "120624",
-          numeroPregao: "90001",
-          anoPregao: "2026",
-          numeroAta: "ARP 1/2026/2026",
-        })
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(partialPreview.body.ata.number).toBe("ARP 0001/2026");
-      expect(partialPreview.body.items).toHaveLength(1);
-
-      await request(app)
-        .get("/api/integrations/compras-gov/atas/preview")
-        .query({
-          uasg: "120624",
-          numeroPregao: "90001",
-          anoPregao: "2026",
-          numeroAta: "0001",
-        })
-        .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-        .expect(403);
 
       const imported = await request(app)
         .post("/api/integrations/compras-gov/atas/import")
@@ -3028,247 +2812,25 @@ describe("critical flows", () => {
         .expect(201);
 
       expect(imported.body.imported.createdItems).toBe(1);
-      expect(imported.body.itemsCreated).toBe(1);
       expect(imported.body.coverageGroup.code).toBe("MAO");
-      expect(imported.body.coverageGroup.name).toBe("Manaus");
-      expect(imported.body.coverageGroup.localities).toEqual([
-        { cityName: "Manaus", stateUf: "AM" },
-      ]);
 
-      const importedAgain = await request(app)
-        .post("/api/integrations/compras-gov/atas/import")
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .send({
-          uasg: "120624",
-          numeroPregao: "90001",
-          anoPregao: "2026",
-          numeroAta: "0001",
-          ataType: "CFTV",
-          coverageGroupCode: "MAO",
-          coverageGroupName: "Manaus",
-          coverageGroupLocalities: [
-            { cityName: "Manaus", stateUf: "AM" },
-            { cityName: "Iranduba", stateUf: "AM" },
-          ],
-        })
-        .expect(201);
-
-      expect(importedAgain.body.imported.createdItems).toBe(0);
-      expect(importedAgain.body.imported.updatedItems).toBe(1);
-      expect(importedAgain.body.itemsCreated).toBe(0);
-      expect(importedAgain.body.itemsUpdated).toBe(1);
-      expect(importedAgain.body.coverageGroup.localities).toEqual([
-        { cityName: "Iranduba", stateUf: "AM" },
-        { cityName: "Manaus", stateUf: "AM" },
-      ]);
-
-      const atas = await prisma.ata.findMany({
+      const ata = await prisma.ata.findFirstOrThrow({
         where: { externalSource: "COMPRAS_GOV", externalUasg: "120624" },
-        include: {
-          items: true,
-          coverageGroups: {
-            include: {
-              localities: {
-                orderBy: [{ stateUf: "asc" }, { cityName: "asc" }],
-              },
-            },
-          },
-        },
+        include: { items: true },
       });
+      expect(ata.externalPregaoNumber).toBe("90001");
+      expect(ata.items).toHaveLength(1);
+      expect(ata.items[0].externalItemNumber).toBe("1");
+      expect(ata.items[0].initialQuantity.toString()).toBe("50");
 
-      expect(atas).toHaveLength(1);
-      expect(atas[0].externalPregaoNumber).toBe("90001");
-      expect(atas[0].items).toHaveLength(1);
-      expect(atas[0].items[0].externalItemNumber).toBe("1");
-      expect(atas[0].coverageGroups).toHaveLength(1);
-      expect(atas[0].coverageGroups[0].code).toBe("MAO");
-      expect(atas[0].items[0].coverageGroupId).toBe(atas[0].coverageGroups[0].id);
-      expect(atas[0].coverageGroups[0].localities).toHaveLength(2);
-
-      const secondExternalItem = await prisma.ataItem.create({
-        data: {
-          ataId: atas[0].id,
-          coverageGroupId: atas[0].coverageGroups[0].id,
-          referenceCode: "2",
-          description: "Item externo indisponivel",
-          unit: "UN",
-          unitPrice: "10",
-          initialQuantity: "10",
-          externalSource: "COMPRAS_GOV",
-          externalItemId: "ATA-PNCP-1:2",
-          externalItemNumber: "2",
-        },
-      });
-
-      const externalBalance = await request(app)
-        .get(`/api/atas/${atas[0].id}/external-balance`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      const balanceUrls = fetchMock.mock.calls
-        .map(([input]) => new URL(String(input)))
-        .filter((url) => url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"));
-      expect(balanceUrls).toHaveLength(0);
-
-      expect(externalBalance.body.summary.naoSincronizado).toBe(2);
-      expect(externalBalance.body.items[0].localBalance.availableQuantity).toBe("50");
-      expect(externalBalance.body.items[0].externalBalance).toBeNull();
-      expect(externalBalance.body.items[0].difference).toBeNull();
-      expect(externalBalance.body.items[0].status).toBe("NAO_SINCRONIZADO");
-      expect(externalBalance.body.summary.externalQueryErrors).toBe(0);
-      expect(externalBalance.body.items[1].item.id).toBe(secondExternalItem.id);
-      expect(externalBalance.body.items[1].externalBalance).toBeNull();
-      expect(externalBalance.body.items[1].status).toBe("NAO_SINCRONIZADO");
-
-      const itemComparison = await request(app)
-        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(itemComparison.body.item.id).toBe(atas[0].items[0].id);
-      expect(itemComparison.body.status).toBe("NAO_SINCRONIZADO");
-
-      const movementsBeforeItemSync = await prisma.ataItemBalanceMovement.count({
-        where: { ataItemId: atas[0].items[0].id },
-      });
-
-      fetchMock.mockClear();
-      const itemSynced = await request(app)
-        .post(`/api/ata-items/${atas[0].items[0].id}/sync-external-balance`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      const itemSyncBalanceUrls = fetchMock.mock.calls
-        .map(([input]) => new URL(String(input)))
-        .filter((url) => url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"));
-      expect(itemSyncBalanceUrls.length).toBeGreaterThan(0);
-      expect(itemSyncBalanceUrls.every((url) => url.searchParams.get("numeroItem") === "1")).toBe(
-        true,
-      );
-      expect(itemSynced.body.item.id).toBe(atas[0].items[0].id);
-      expect(itemSynced.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
-      expect(itemSynced.body.localBalance.availableQuantity).toBe("50");
-      expect(itemSynced.body.externalBalance.availableQuantity).toBe("45");
-      expect(itemSynced.body.lastSyncAt).not.toBeNull();
-
-      const savedSnapshot = await prisma.ataItemExternalBalanceSnapshot.findUniqueOrThrow({
-        where: { ataItemId: atas[0].items[0].id },
-      });
-      expect(savedSnapshot.status).toBe("CONSUMO_OFICIAL_DETECTADO");
-      expect(savedSnapshot.externalBalance).not.toBeNull();
-      expect(savedSnapshot.difference).toBe("5");
-      expect(savedSnapshot.source).toBe("COMPRAS_GOV");
-      expect((savedSnapshot.externalBalance as Record<string, any>).rawRecords).toBeGreaterThanOrEqual(1);
-
-      fetchMock.mockClear();
-      const syncedItemComparison = await request(app)
-        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-      expect(fetchMock).not.toHaveBeenCalled();
-      expect(syncedItemComparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
-      expect(syncedItemComparison.body.externalBalance.source).toBe("COMPRAS_GOV");
-      expect(syncedItemComparison.body.externalBalance.commitments).toHaveLength(1);
-      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("adhesionBalance");
-      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("externalUsageStatus");
-      expect(syncedItemComparison.body.externalBalance).not.toHaveProperty("nonParticipantCommitments");
-      expect(syncedItemComparison.body.externalBalance.rawRecords).toBeGreaterThanOrEqual(1);
-      expect(syncedItemComparison.body.externalBalance.lastUpdatedAt).not.toBeNull();
-      expect(syncedItemComparison.body.externalBalance.availableQuantity).toBe("45");
-
-      const itemsAfterSync = await request(app)
-        .get("/api/ata-items")
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-      const syncedItemEntry = itemsAfterSync.body.items.find(
-        (entry: { id: string }) => entry.id === atas[0].items[0].id,
-      );
-      expect(syncedItemEntry.latestExternalBalanceSnapshot).not.toBeNull();
-      expect(syncedItemEntry.latestExternalBalanceSnapshot.status).toBe(
-        "CONSUMO_OFICIAL_DETECTADO",
-      );
-      expect(syncedItemEntry.latestExternalBalanceSnapshot.externalBalance.availableQuantity).toBe(
-        "45",
-      );
-
-      const firstItemAfterItemSync = await prisma.ataItem.findUniqueOrThrow({
-        where: { id: atas[0].items[0].id },
-        select: { initialQuantity: true, externalLastSyncAt: true },
-      });
-      const secondItemAfterItemSync = await prisma.ataItem.findUniqueOrThrow({
-        where: { id: secondExternalItem.id },
-        select: { initialQuantity: true, externalLastSyncAt: true },
-      });
-      expect(firstItemAfterItemSync.initialQuantity.toString()).toBe("50");
-      expect(firstItemAfterItemSync.externalLastSyncAt).not.toBeNull();
-      expect(secondItemAfterItemSync.initialQuantity.toString()).toBe("10");
-      expect(secondItemAfterItemSync.externalLastSyncAt).toBeNull();
-      await expect(
-        prisma.ataItemBalanceMovement.count({ where: { ataItemId: atas[0].items[0].id } }),
-      ).resolves.toBe(movementsBeforeItemSync);
-
-      const synced = await request(app)
-        .post(`/api/atas/${atas[0].id}/sync-external-balance`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(synced.body.updatedItems).toBe(2);
-      expect(synced.body.warnings).toContain(
-        "Saldo local nao foi alterado automaticamente; apenas snapshot/timestamp externo foi atualizado.",
-      );
-
-      const itemAfterSync = await prisma.ataItem.findUniqueOrThrow({
-        where: { id: atas[0].items[0].id },
-        select: { initialQuantity: true, externalLastSyncAt: true },
-      });
-      expect(itemAfterSync.initialQuantity.toString()).toBe("50");
-      expect(itemAfterSync.externalLastSyncAt).not.toBeNull();
-
-      const secondItemAfterSync = await prisma.ataItem.findUniqueOrThrow({
-        where: { id: secondExternalItem.id },
-        select: { initialQuantity: true, externalLastSyncAt: true },
-      });
-      expect(secondItemAfterSync.initialQuantity.toString()).toBe("10");
-      expect(secondItemAfterSync.externalLastSyncAt).not.toBeNull();
-
-      fetchMock.mockClear();
-      const syncedBalance = await request(app)
-        .get(`/api/atas/${atas[0].id}/external-balance`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-      expect(fetchMock).not.toHaveBeenCalled();
-      expect(syncedBalance.body.summary.naoSincronizado).toBe(0);
-      expect(syncedBalance.body.items[0].status).toBe("CONSUMO_OFICIAL_DETECTADO");
-      expect(syncedBalance.body.items[1].status).toBe("OK");
-
-      await prisma.ata.update({
-        where: { id: atas[0].id },
-        data: { externalAtaNumber: "EMPTY" },
-      });
-
-      const fallbackBalance = await request(app)
-        .get(`/api/atas/${atas[0].id}/external-balance`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(fallbackBalance.body.summary.notFound).toBe(0);
-      expect(fallbackBalance.body.items[0].status).toBe("CONSUMO_OFICIAL_DETECTADO");
-      expect(fallbackBalance.body.warnings).toHaveLength(0);
-
-      const fallbackItemComparison = await request(app)
-        .get(`/api/ata-items/${atas[0].items[0].id}/balance-comparison`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(fallbackItemComparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
-
-      const fallbackSync = await request(app)
-        .post(`/api/atas/${atas[0].id}/sync-external-balance`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(fallbackSync.body.updatedItems).toBe(2);
-      expect(fallbackSync.body.items[0].status).toBe("OK");
+      const requestedPaths = fetchMock.mock.calls.map(([input]) => new URL(String(input)).pathname);
+      expect(
+        requestedPaths.every(
+          (path) =>
+            path.endsWith("/modulo-arp/1_consultarARP") ||
+            path.endsWith("/modulo-arp/2_consultarARPItem"),
+        ),
+      ).toBe(true);
     } finally {
       fetchMock.mockRestore();
     }
@@ -3375,334 +2937,6 @@ describe("critical flows", () => {
           (url) => url.searchParams.has("numeroAtaRegistroPreco") && url.searchParams.get("numeroAtaRegistroPreco"),
         ),
       ).toBe(false);
-    } finally {
-      fetchMock.mockRestore();
-    }
-  });
-
-  it.skip("legacy: resolves external balance from ARP item details", async () => {
-    const requestedUrls: URL[] = [];
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
-      const url = new URL(String(input));
-      requestedUrls.push(url);
-
-      if (url.pathname.endsWith("/modulo-arp/1_consultarARP")) {
-        return new Response(
-          JSON.stringify({
-            resultado: [
-              {
-                numeroAtaRegistroPreco: "00001/2026",
-                codigoUnidadeGerenciadora: "160016",
-                nomeUnidadeGerenciadora: "COMANDO DO COMANDO MILITAR DA AMAZONIA",
-                numeroCompra: "90012",
-                anoCompra: "2025",
-                dataVigenciaInicial: "2026-02-16",
-                dataVigenciaFinal: "2027-02-15",
-                numeroControlePncpAta: "00394452000103-1-022869/2025-000001",
-              },
-            ],
-            totalPaginas: 1,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      if (url.pathname.endsWith("/modulo-arp/2_consultarARPItem")) {
-        return new Response(
-          JSON.stringify({
-            resultado: [
-              {
-                numeroAtaRegistroPreco: "00001/2026",
-                codigoUnidadeGerenciadora: "160016",
-                numeroCompra: "90012",
-                anoCompra: "2025",
-                numeroItem: "00013",
-                codigoItem: 13684,
-                descricaoItem: "ElaboraÃ§Ã£o de As-Built de projetos de CFTV.",
-                tipoItem: "ServiÃ§o",
-                quantidadeHomologadaVencedor: 120,
-                valorUnitario: 2375,
-                nomeRazaoSocialFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
-                numeroControlePncpAta: "00394452000103-1-022869/2025-000001",
-              },
-            ],
-            totalPaginas: 1,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      if (url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem")) {
-        return new Response(JSON.stringify({ resultado: [], totalPaginas: 0 }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        });
-      }
-
-      if (url.pathname.endsWith("/modulo-arp/2.1_consultarARPItem_Id")) {
-        expect(url.searchParams.get("numeroControlePncpAta")).toBe(
-          "00394452000103-1-022869/2025-000001",
-        );
-        return new Response(
-          JSON.stringify({
-            resultado: [
-              {
-                numeroAtaRegistroPreco: "00001/2026",
-                codigoUnidadeGerenciadora: "160016",
-                numeroCompra: "90012",
-                anoCompra: "2025",
-                numeroItem: "00013",
-                codigoItem: 13684,
-                descricaoItem: "ElaboraÃ§Ã£o de As-Built de projetos de CFTV.",
-                quantidadeHomologadaVencedor: 120,
-                valorUnitario: 2375,
-                nomeRazaoSocialFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
-                numeroControlePncpAta: "00394452000103-1-022869/2025-000001",
-                dataHoraAtualizacao: "2026-05-06T12:00:00.000Z",
-              },
-            ],
-            totalPaginas: 1,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      if (url.pathname.endsWith("/modulo-arp/3_consultarUnidadesItem")) {
-        expect(url.searchParams.get("numeroAta")).toBe("00001/2026");
-        expect(url.searchParams.get("unidadeGerenciadora")).toBe("160016");
-        expect(url.searchParams.get("numeroItem")).toBe("00013");
-        return new Response(
-          JSON.stringify({
-            resultado: [
-              {
-                numeroAta: "00001/2026",
-                unidadeGerenciadora: "160016",
-                numeroItem: "00013",
-                nomeFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
-                quantidadeRegistrada: 120,
-                quantidadeSaldo: 119,
-                numeroNotaEmpenho: "2026NE000567",
-                codigoUnidade: "160016",
-                nomeUnidade: "COMANDO DO COMANDO MILITAR DA AMAZONIA",
-                tipoUnidade: "GERENCIADORA",
-                valorDocumento: 2375,
-                dataDocumento: "2026-05-06T12:00:00.000Z",
-                dataHoraAtualizacao: "2026-05-06T12:00:00.000Z",
-              },
-              {
-                numeroAta: "00001/2026",
-                unidadeGerenciadora: "160016",
-                numeroItem: "00013",
-                fornecedorNome: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
-                quantidadeRegistrada: 1,
-                quantidade: 1,
-                saldoParaEmpenho: 0,
-                documento: "2026NE000139",
-                codigoUnidade: "160120",
-                nomeUnidade: "4. DEPOSITO DE SUPRIMENTO",
-                tipoUnidade: "NAO_PARTICIPANTE",
-                valorTotal: 2375,
-                dataInclusao: "2026-05-06T14:48:33.000Z",
-                dataHoraAtualizacao: "2026-05-06T14:48:33.000Z",
-              },
-            ],
-            totalPaginas: 1,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      if (url.pathname.endsWith("/modulo-arp/5_consultarAdesoesItem")) {
-        expect(url.searchParams.get("numeroItem")).toBe("00013");
-        return new Response(
-          JSON.stringify({
-            resultado: [
-              {
-                numeroAta: "00001/2026",
-                unidadeGerenciadora: "160016",
-                unidadeNaoParticipante: "160121 - 12 BATALHAO LOGISTICO",
-                quantidadeAprovadaAdesao: 2,
-                valor: 4750,
-                dataAprovacaoAnalise: "2026-05-07T10:00:00.000Z",
-                razaoSocialFornecedor: "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
-              },
-            ],
-            totalPaginas: 1,
-          }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        );
-      }
-
-      return new Response(JSON.stringify({ resultado: [], totalPaginas: 0 }), {
-        status: 404,
-        headers: { "content-type": "application/json" },
-      });
-    });
-
-    try {
-      const imported = await request(app)
-        .post("/api/integrations/compras-gov/atas/import")
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .send({
-          uasg: "160016",
-          numeroPregao: "90012",
-          anoPregao: "2025",
-          numeroAta: "00001/2026",
-          ataType: "CFTV",
-          coverageGroupCode: "CFTV",
-          coverageGroupName: "Manaus",
-          coverageGroupStateUf: "AM",
-          coverageGroupCityName: "Manaus",
-        })
-        .expect(201);
-
-      const item = await prisma.ataItem.findFirstOrThrow({
-        where: { ataId: imported.body.ata.id, referenceCode: "00013" },
-      });
-      expect(item.description).toContain("Elaboração");
-      expect(item.unit).toBe("SERVIÇO");
-      const movementsBefore = await prisma.ataItemBalanceMovement.count({
-        where: { ataItemId: item.id },
-      });
-
-      const comparisonBeforeSync = await request(app)
-        .get(`/api/ata-items/${item.id}/balance-comparison`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(comparisonBeforeSync.body.status).toBe("NAO_SINCRONIZADO");
-
-      const comparison = await request(app)
-        .post(`/api/ata-items/${item.id}/sync-external-balance`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(comparison.body.status).toBe("CONSUMO_OFICIAL_DETECTADO");
-      expect(comparison.body.externalBalance.source).toBe("COMPRAS_GOV");
-      expect(comparison.body.difference).toBe("1");
-      expect(comparison.body.externalBalance.registeredQuantity).toBe("120");
-      expect(comparison.body.externalBalance.committedQuantity).toBe("1");
-      expect(comparison.body.externalBalance.availableQuantity).toBe("119");
-      expect(comparison.body.externalBalance.commitments).toHaveLength(1);
-      expect(comparison.body.externalBalance.commitments[0].numeroEmpenho).toBe(
-        "2026NE000567",
-      );
-      expect(comparison.body.externalBalance.commitments[0].fornecedor).toBe(
-        "METROPOLE SECURITY COMERCIO ELETRO ELETRONICO LTDA",
-      );
-      expect(comparison.body.externalBalance.commitments[0].quantidadeEmpenhada).toBe(
-        "1",
-      );
-      expect(comparison.body.externalBalance.commitments[0].estimatedAmount).toBe(
-        "2375",
-      );
-      expect(comparison.body.externalBalance.commitments[0].dataEmpenho).toBe(
-        "2026-05-06T12:00:00.000Z",
-      );
-      expect(comparison.body.externalBalance.commitments[0].affectsManagedBalance).toBe(true);
-      expect(comparison.body.externalBalance).not.toHaveProperty("nonParticipantCommitments");
-      expect(comparison.body.externalBalance).not.toHaveProperty("adhesionBalance");
-      expect(comparison.body.externalBalance).not.toHaveProperty("externalUsageStatus");
-
-      const balanceUrls = requestedUrls.filter((url) =>
-        url.pathname.endsWith("/modulo-arp/4_consultarEmpenhosSaldoItem"),
-      );
-      expect(balanceUrls.length).toBeGreaterThan(0);
-      expect(
-        requestedUrls.some((url) => url.pathname.endsWith("/modulo-arp/2.1_consultarARPItem_Id")),
-      ).toBe(true);
-      expect(
-        requestedUrls.some((url) => url.pathname.endsWith("/modulo-arp/3_consultarUnidadesItem")),
-      ).toBe(true);
-      expect(
-        requestedUrls.some((url) => url.pathname.endsWith("/modulo-arp/5_consultarAdesoesItem")),
-      ).toBe(false);
-
-      const after = await prisma.ataItem.findUniqueOrThrow({
-        where: { id: item.id },
-        select: { initialQuantity: true },
-      });
-      expect(after.initialQuantity.toString()).toBe("120");
-      await expect(
-        prisma.ataItemBalanceMovement.count({ where: { ataItemId: item.id } }),
-      ).resolves.toBe(movementsBefore);
-    } finally {
-      fetchMock.mockRestore();
-    }
-  });
-
-  it.skip("legacy: handles rate limits during external balance synchronization", async () => {
-    const catalog = await createCatalog("50.00");
-    const previousSyncAt = new Date("2026-03-01T10:00:00.000Z");
-
-    await prisma.ata.update({
-      where: { id: catalog.ata.id },
-      data: {
-        externalSource: "COMPRAS_GOV",
-        externalUasg: "160016",
-        externalPregaoNumber: "90012",
-        externalPregaoYear: "2025",
-        externalAtaNumber: "00001/2026",
-        externalLastSyncAt: previousSyncAt,
-      },
-    });
-    await prisma.ataItem.update({
-      where: { id: catalog.ataItem.id },
-      data: {
-        referenceCode: "00014",
-        externalSource: "COMPRAS_GOV",
-        externalItemId: "00394452000103-1-022869/2025-000001:00014",
-        externalItemNumber: "00014",
-        externalLastSyncAt: previousSyncAt,
-      },
-    });
-
-    const movementsBefore = await prisma.ataItemBalanceMovement.count({
-      where: { ataItemId: catalog.ataItem.id },
-    });
-    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(
-      new Response(
-        JSON.stringify({ message: "Rate limit is exceeded. Try again in 7 seconds." }),
-        {
-          status: 429,
-          headers: { "content-type": "application/json" },
-        },
-      ),
-    );
-
-    try {
-      const response = await request(app)
-        .post(`/api/atas/${catalog.ata.id}/sync-external-balance`)
-        .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-        .expect(200);
-
-      expect(response.body.summary.rateLimitErrors).toBe(1);
-      expect(response.body.items[0].status).toBe("RATE_LIMIT_COMPRAS_GOV");
-      expect(response.body.items[0].externalBalance).toBeNull();
-      expect(response.body.items[0].externalError.retryAfterSeconds).toBe(7);
-      expect(response.body.retryAfterSeconds).toBe(7);
-      expect(response.body.updatedItems).toBe(0);
-      expect(response.body.syncedAt).toBeNull();
-      expect(
-        response.body.warnings.some((warning: string) =>
-          warning.includes("Limite de requisi") && warning.includes("Compras.gov.br"),
-        ),
-      ).toBe(true);
-
-      const ataAfter = await prisma.ata.findUniqueOrThrow({
-        where: { id: catalog.ata.id },
-        select: { externalLastSyncAt: true },
-      });
-      const itemAfter = await prisma.ataItem.findUniqueOrThrow({
-        where: { id: catalog.ataItem.id },
-        select: { externalLastSyncAt: true },
-      });
-      expect(ataAfter.externalLastSyncAt?.toISOString()).toBe(previousSyncAt.toISOString());
-      expect(itemAfter.externalLastSyncAt?.toISOString()).toBe(previousSyncAt.toISOString());
-      await expect(
-        prisma.ataItemBalanceMovement.count({ where: { ataItemId: catalog.ataItem.id } }),
-      ).resolves.toBe(movementsBefore);
-      expect(fetchMock).toHaveBeenCalledTimes(1);
     } finally {
       fetchMock.mockRestore();
     }

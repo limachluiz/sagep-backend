@@ -48,7 +48,6 @@ type BalanceMovementContext = {
     | "RESERVE"
     | "RELEASE"
     | "CONSUME"
-    | "EXTERNAL_CONSUMPTION"
     | "REVERSE_CONSUME"
     | "ADJUSTMENT";
   summary: string;
@@ -93,10 +92,6 @@ export class AtaItemBalanceService {
 
       if (movement.movementType === "CONSUME") {
         reservedQuantity = reservedQuantity.sub(movement.quantity);
-        consumedQuantity = consumedQuantity.add(movement.quantity);
-      }
-
-      if (movement.movementType === "EXTERNAL_CONSUMPTION") {
         consumedQuantity = consumedQuantity.add(movement.quantity);
       }
 

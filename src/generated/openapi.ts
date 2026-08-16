@@ -1973,6 +1973,23 @@ export interface paths {
         patch: operations["atas_patch_byId"];
         trace?: never;
     };
+    "/atas/{id}/sync-pncp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Atualizar metadados da ATA no PNCP */
+        post: operations["atas_post_byId_syncPncp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/atas/{id}/coverage-groups": {
         parameters: {
             query?: never;
@@ -2092,26 +2109,6 @@ export interface paths {
         get: operations["ataItems_get_byId_movements"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/ata-items/{id}/register-external-consumption": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Registrar consumo externo de saldo
-         * @description Registra consumo confirmado fora do fluxo local, preservando justificativa, origem, referência externa e trilha de auditoria.
-         */
-        post: operations["ataItems_post_byId_registerExternalConsumption"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3330,7 +3327,7 @@ export interface components {
          * @example {
          *       "name": "1 Ten Maria Souza",
          *       "warName": "Souza",
-         *       "email": "maria.souza@sagep.mil.br",
+         *       "email": "usuario.exemplo@example.invalid",
          *       "password": "<senha-forte-do-usuario>",
          *       "role": "GESTOR",
          *       "rank": "1º Ten",
@@ -3689,17 +3686,6 @@ export interface components {
                 /** Format: date-time */
                 lastMovementAt?: string | null;
             };
-            latestExternalBalanceSnapshot?: {
-                source?: string;
-                status?: string;
-                externalBalance?: {
-                    [key: string]: unknown;
-                } | null;
-                difference?: string | null;
-                /** Format: date-time */
-                lastSyncAt?: string;
-                warnings?: string[] | null;
-            } | null;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -3759,29 +3745,6 @@ export interface components {
             notes?: string | null;
             isActive?: boolean | null;
         };
-        /**
-         * @example {
-         *       "quantity": 2,
-         *       "reason": "Consumo externo confirmado manualmente apos conferencia do snapshot",
-         *       "source": "COMPRAS_GOV",
-         *       "externalStatus": "CONSUMO_OFICIAL_DETECTADO",
-         *       "externalReference": "SNAPSHOT-2026-05-15T10:30:00.000Z",
-         *       "commitmentNumber": "2026NE000567",
-         *       "unit": "160016",
-         *       "notes": "Conferencia manual aprovada pelo gestor"
-         *     }
-         */
-        AtaItemRegisterExternalConsumptionRequest: {
-            quantity: number;
-            reason: string;
-            source: string;
-            /** @description Status oficial da UASG principal; origens de adesao/carona nao sao aceitas. */
-            externalStatus: string;
-            externalReference: string;
-            commitmentNumber?: string | null;
-            unit?: string | null;
-            notes?: string | null;
-        };
         AtaItemsEnvelope: {
             items?: components["schemas"]["AtaItem"][];
             meta?: components["schemas"]["PaginationMeta"];
@@ -3814,7 +3777,7 @@ export interface components {
         AtaItemBalanceMovement: {
             id?: string;
             /** @enum {string} */
-            movementType?: "RESERVE" | "RELEASE" | "CONSUME" | "EXTERNAL_CONSUMPTION" | "REVERSE_CONSUME" | "ADJUSTMENT";
+            movementType?: "RESERVE" | "RELEASE" | "CONSUME" | "REVERSE_CONSUME" | "ADJUSTMENT";
             /** @description Decimal serializado pelo Prisma. */
             quantity?: string;
             /** @description Decimal serializado pelo Prisma. */
@@ -3835,107 +3798,6 @@ export interface components {
             createdAt?: string;
         };
         AtaItemBalanceMovementsResponse: components["schemas"]["AtaItemBalanceMovement"][];
-        AtaItemRegisterExternalConsumptionResponse: {
-            item?: components["schemas"]["AtaItem"];
-            movement?: components["schemas"]["AtaItemBalanceMovement"];
-            localBalance?: {
-                [key: string]: unknown;
-            };
-            message?: string;
-        };
-        ComprasGovExternalBalanceComparisonItem: {
-            item?: {
-                id?: string;
-                ataItemCode?: number;
-                referenceCode?: string;
-                description?: string;
-                externalItemId?: string | null;
-                externalItemNumber?: string | null;
-            };
-            localBalance?: {
-                [key: string]: unknown;
-            };
-            externalBalance?: {
-                externalItemNumber?: string;
-                /** @enum {string} */
-                source?: "COMPRAS_GOV" | "COMPRAS_GOV_IMPORT_FALLBACK";
-                registeredQuantity?: string;
-                committedQuantity?: string;
-                availableQuantity?: string;
-                commitments?: {
-                    numeroEmpenho?: string | null;
-                    unidade?: string | null;
-                    tipoUnidade?: string | null;
-                    fornecedor?: string | null;
-                    /** Format: date-time */
-                    dataEmpenho?: string | null;
-                    quantidadeIncluida?: string | null;
-                    quantidadeEmpenhada?: string | null;
-                    estimatedAmount?: string | null;
-                    affectsManagedBalance?: boolean;
-                    rawKeyDebug?: {
-                        availableKeys?: string[];
-                        sourceEndpoint?: string;
-                        item?: string | null;
-                        unidade?: string | null;
-                    } | null;
-                }[];
-                /** Format: date-time */
-                lastUpdatedAt?: string | null;
-                rawRecords?: number;
-            } | null;
-            difference?: string | null;
-            /** Format: date-time */
-            lastSyncAt?: string | null;
-            /** @enum {string} */
-            status?: "OK" | "DIVERGENTE" | "CONSUMO_OFICIAL_DETECTADO" | "NAO_SINCRONIZADO" | "NAO_ENCONTRADO" | "ERRO_CONSULTA_EXTERNA" | "RATE_LIMIT_COMPRAS_GOV";
-            externalError?: {
-                status?: number | null;
-                url?: string | null;
-                body?: string | null;
-                retryAfterSeconds?: number | null;
-            } | null;
-        };
-        ComprasGovExternalBalanceComparison: {
-            /** @enum {string} */
-            source?: "COMPRAS_GOV";
-            ata?: {
-                id?: string;
-                ataCode?: number;
-                number?: string;
-                externalUasg?: string | null;
-                externalPregaoNumber?: string | null;
-                externalPregaoYear?: string | null;
-                externalAtaNumber?: string | null;
-                /** Format: date-time */
-                externalLastSyncAt?: string | null;
-            };
-            /** Format: date-time */
-            comparedAt?: string;
-            summary?: {
-                totalItems?: number;
-                ok?: number;
-                divergent?: number;
-                externalConsumptionDetected?: number;
-                naoSincronizado?: number;
-                notFound?: number;
-                externalQueryErrors?: number;
-                rateLimitErrors?: number;
-                semEmpenhoRegistrado?: number;
-            };
-            items?: components["schemas"]["ComprasGovExternalBalanceComparisonItem"][];
-            warnings?: string[];
-            retryAfterSeconds?: number | null;
-            debug?: {
-                [key: string]: unknown;
-            }[] | null;
-        };
-        ComprasGovExternalBalanceSyncResponse: components["schemas"]["ComprasGovExternalBalanceComparison"] & {
-            /** Format: date-time */
-            syncedAt?: string | null;
-            updatedItems?: number;
-            warnings?: string[];
-        };
         /** @description Catalogo de OMs usadas como destino operacional em estimativas. A localidade da OM e usada para validar compatibilidade com o grupo de cobertura da ATA. */
         MilitaryOrganization: {
             id?: string;
@@ -4008,6 +3870,8 @@ export interface components {
             portalSyncOnStartup: boolean;
             /** Format: uri */
             comprasGovBaseUrl: string;
+            /** Format: uri */
+            pncpBaseUrl: string;
             defaultBiddingNumber?: string | null;
             defaultBiddingYear?: number | null;
             defaultImmediateCommitment?: boolean;
@@ -4021,7 +3885,7 @@ export interface components {
         };
         IntegrationConnectionCheck: {
             /** @enum {string} */
-            provider?: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV";
+            provider?: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV" | "PNCP";
             /** @enum {string} */
             status?: "OPERATIONAL" | "DEGRADED" | "UNAVAILABLE" | "NOT_CONFIGURED";
             latencyMs?: number | null;
@@ -4029,6 +3893,10 @@ export interface components {
             message?: string;
             /** Format: date-time */
             checkedAt?: string;
+        };
+        /** @description Metadados da ATA atualizados no PNCP, sem interferência no saldo operacional do SAGEP. */
+        PncpAtaSyncResponse: {
+            [key: string]: unknown;
         };
         HealthComponent: {
             /** @enum {string} */
@@ -8566,6 +8434,35 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    atas_post_byId_syncPncp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da ata. */
+                id: components["parameters"]["AtaId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PncpAtaSyncResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     atas_post_byId_coverageGroups: {
         parameters: {
             query?: never;
@@ -8841,39 +8738,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AtaItemBalanceMovementsResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
-    ataItems_post_byId_registerExternalConsumption: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Identificador UUID do item da ata. */
-                id: components["parameters"]["AtaItemId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AtaItemRegisterExternalConsumptionRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AtaItemRegisterExternalConsumptionResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

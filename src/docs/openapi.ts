@@ -2556,26 +2556,6 @@ export const openApiDocument: OpenApiDocument = {
               lastMovementAt: { type: "string", format: "date-time", nullable: true },
             },
           },
-          latestExternalBalanceSnapshot: {
-            type: "object",
-            nullable: true,
-            properties: {
-              source: { type: "string" },
-              status: { type: "string" },
-              externalBalance: {
-                type: "object",
-                nullable: true,
-                additionalProperties: true,
-              },
-              difference: { type: "string", nullable: true },
-              lastSyncAt: { type: "string", format: "date-time" },
-              warnings: {
-                type: "array",
-                nullable: true,
-                items: { type: "string" },
-              },
-            },
-          },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
           ata: {
@@ -2696,33 +2676,6 @@ export const openApiDocument: OpenApiDocument = {
           isActive: false,
         },
       },
-      AtaItemRegisterExternalConsumptionRequest: {
-        type: "object",
-        required: ["quantity", "reason", "source", "externalStatus", "externalReference"],
-        properties: {
-          quantity: { type: "number", exclusiveMinimum: 0 },
-          reason: { type: "string" },
-          source: { type: "string" },
-          externalStatus: {
-            type: "string",
-            description: "Status oficial da UASG principal; origens de adesao/carona nao sao aceitas.",
-          },
-          externalReference: { type: "string" },
-          commitmentNumber: { type: "string", nullable: true },
-          unit: { type: "string", nullable: true },
-          notes: { type: "string", nullable: true },
-        },
-        example: {
-          quantity: 2,
-          reason: "Consumo externo confirmado manualmente apos conferencia do snapshot",
-          source: "COMPRAS_GOV",
-          externalStatus: "CONSUMO_OFICIAL_DETECTADO",
-          externalReference: "SNAPSHOT-2026-05-15T10:30:00.000Z",
-          commitmentNumber: "2026NE000567",
-          unit: "160016",
-          notes: "Conferencia manual aprovada pelo gestor",
-        },
-      },
       AtaItemsEnvelope: {
         type: "object",
         properties: {
@@ -2750,7 +2703,6 @@ export const openApiDocument: OpenApiDocument = {
               "RESERVE",
               "RELEASE",
               "CONSUME",
-              "EXTERNAL_CONSUMPTION",
               "REVERSE_CONSUME",
               "ADJUSTMENT",
             ],
@@ -2792,172 +2744,6 @@ export const openApiDocument: OpenApiDocument = {
       AtaItemBalanceMovementsResponse: {
         type: "array",
         items: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
-      },
-      AtaItemRegisterExternalConsumptionResponse: {
-        type: "object",
-        properties: {
-          item: { $ref: "#/components/schemas/AtaItem" },
-          movement: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
-          localBalance: {
-            type: "object",
-            additionalProperties: true,
-          },
-          message: { type: "string" },
-        },
-      },
-      ComprasGovExternalBalanceComparisonItem: {
-        type: "object",
-        properties: {
-          item: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              ataItemCode: { type: "integer" },
-              referenceCode: { type: "string" },
-              description: { type: "string" },
-              externalItemId: { type: "string", nullable: true },
-              externalItemNumber: { type: "string", nullable: true },
-            },
-          },
-          localBalance: {
-            type: "object",
-            additionalProperties: true,
-          },
-          externalBalance: {
-            nullable: true,
-            type: "object",
-            properties: {
-              externalItemNumber: { type: "string" },
-              source: { type: "string", enum: ["COMPRAS_GOV", "COMPRAS_GOV_IMPORT_FALLBACK"] },
-              registeredQuantity: { type: "string" },
-              committedQuantity: { type: "string" },
-              availableQuantity: { type: "string" },
-              commitments: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    numeroEmpenho: { type: "string", nullable: true },
-                    unidade: { type: "string", nullable: true },
-                    tipoUnidade: { type: "string", nullable: true },
-                    fornecedor: { type: "string", nullable: true },
-                    dataEmpenho: { type: "string", format: "date-time", nullable: true },
-                    quantidadeIncluida: { type: "string", nullable: true },
-                    quantidadeEmpenhada: { type: "string", nullable: true },
-                    estimatedAmount: { type: "string", nullable: true },
-                    affectsManagedBalance: { type: "boolean" },
-                    rawKeyDebug: {
-                      type: "object",
-                      nullable: true,
-                      properties: {
-                        availableKeys: {
-                          type: "array",
-                          items: { type: "string" },
-                        },
-                        sourceEndpoint: { type: "string" },
-                        item: { type: "string", nullable: true },
-                        unidade: { type: "string", nullable: true },
-                      },
-                    },
-                  },
-                },
-              },
-              lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
-              rawRecords: { type: "integer" },
-            },
-          },
-          difference: { type: "string", nullable: true },
-          lastSyncAt: { type: "string", format: "date-time", nullable: true },
-          status: {
-            type: "string",
-            enum: [
-              "OK",
-              "DIVERGENTE",
-              "CONSUMO_OFICIAL_DETECTADO",
-              "NAO_SINCRONIZADO",
-              "NAO_ENCONTRADO",
-              "ERRO_CONSULTA_EXTERNA",
-              "RATE_LIMIT_COMPRAS_GOV",
-            ],
-          },
-          externalError: {
-            type: "object",
-            nullable: true,
-            properties: {
-              status: { type: "integer", nullable: true },
-              url: { type: "string", nullable: true },
-              body: { type: "string", nullable: true },
-              retryAfterSeconds: { type: "integer", nullable: true },
-            },
-          },
-        },
-      },
-      ComprasGovExternalBalanceComparison: {
-        type: "object",
-        properties: {
-          source: { type: "string", enum: ["COMPRAS_GOV"] },
-          ata: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              ataCode: { type: "integer" },
-              number: { type: "string" },
-              externalUasg: { type: "string", nullable: true },
-              externalPregaoNumber: { type: "string", nullable: true },
-              externalPregaoYear: { type: "string", nullable: true },
-              externalAtaNumber: { type: "string", nullable: true },
-              externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
-            },
-          },
-          comparedAt: { type: "string", format: "date-time" },
-          summary: {
-            type: "object",
-            properties: {
-              totalItems: { type: "integer" },
-              ok: { type: "integer" },
-              divergent: { type: "integer" },
-              externalConsumptionDetected: { type: "integer" },
-              naoSincronizado: { type: "integer" },
-              notFound: { type: "integer" },
-              externalQueryErrors: { type: "integer" },
-              rateLimitErrors: { type: "integer" },
-              semEmpenhoRegistrado: { type: "integer" },
-            },
-          },
-          items: {
-            type: "array",
-            items: { $ref: "#/components/schemas/ComprasGovExternalBalanceComparisonItem" },
-          },
-          warnings: {
-            type: "array",
-            items: { type: "string" },
-          },
-          retryAfterSeconds: { type: "integer", nullable: true },
-          debug: {
-            type: "array",
-            nullable: true,
-            items: {
-              type: "object",
-              additionalProperties: true,
-            },
-          },
-        },
-      },
-      ComprasGovExternalBalanceSyncResponse: {
-        allOf: [
-          { $ref: "#/components/schemas/ComprasGovExternalBalanceComparison" },
-          {
-            type: "object",
-            properties: {
-              syncedAt: { type: "string", format: "date-time", nullable: true },
-              updatedItems: { type: "integer" },
-              warnings: {
-                type: "array",
-                items: { type: "string" },
-              },
-            },
-          },
-        ],
       },
       MilitaryOrganization: {
         type: "object",
@@ -3046,9 +2832,9 @@ export const openApiDocument: OpenApiDocument = {
         type: "object",
         properties: { provider: { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV", "PNCP"] }, status: { type: "string", enum: ["OPERATIONAL", "DEGRADED", "UNAVAILABLE", "NOT_CONFIGURED"] }, latencyMs: { type: ["integer", "null"] }, httpStatus: { type: ["integer", "null"] }, message: { type: "string" }, checkedAt: { type: "string", format: "date-time" } },
       },
-      AtaExternalBalanceComparison: {
+      PncpAtaSyncResponse: {
         type: "object",
-        description: "Comparação entre o saldo operacional do SAGEP, o saldo oficial do Compras.gov.br e os metadados complementares do PNCP.",
+        description: "Metadados da ATA atualizados no PNCP, sem interferência no saldo operacional do SAGEP.",
         additionalProperties: true,
       },
       HealthComponent: {
@@ -5382,22 +5168,13 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["atas.manage"],
       },
     },
-    "/atas/{id}/external-balance": {
-      get: {
-        tags: ["atas"],
-        summary: "Consultar último saldo oficial armazenado da ATA",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaId" }],
-        responses: { "200": okJson("#/components/schemas/AtaExternalBalanceComparison"), ...defaultErrorResponses },
-      },
-    },
-    "/atas/{id}/sync-external-balance": {
+    "/atas/{id}/sync-pncp": {
       post: {
         tags: ["atas"],
-        summary: "Sincronizar saldos no Compras.gov.br e validar a ATA no PNCP",
+        summary: "Atualizar metadados da ATA no PNCP",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
-        responses: { "200": okJson("#/components/schemas/AtaExternalBalanceComparison"), ...defaultErrorResponses },
+        responses: { "200": okJson("#/components/schemas/PncpAtaSyncResponse"), ...defaultErrorResponses },
         "x-permissions": ["atas.manage"],
       },
     },
@@ -5567,44 +5344,6 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/AtaItemBalanceMovementsResponse"),
           ...defaultErrorResponses,
         },
-      },
-    },
-    "/ata-items/{id}/balance-comparison": {
-      get: {
-        tags: ["ata-items"],
-        summary: "Consultar último saldo oficial armazenado do item",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        responses: { "200": okJson("#/components/schemas/AtaExternalBalanceComparison"), ...defaultErrorResponses },
-      },
-    },
-    "/ata-items/{id}/sync-external-balance": {
-      post: {
-        tags: ["ata-items"],
-        summary: "Sincronizar saldo oficial de um item",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        responses: { "200": okJson("#/components/schemas/AtaExternalBalanceComparison"), ...defaultErrorResponses },
-        "x-permissions": ["atas.manage"],
-      },
-    },
-    "/ata-items/{id}/register-external-consumption": {
-      post: {
-        tags: ["ata-items"],
-        summary: "Registrar consumo externo de saldo",
-        description:
-          "Registra consumo confirmado fora do fluxo local, preservando justificativa, origem, referência externa e trilha de auditoria.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        requestBody: {
-          required: true,
-          content: jsonContent("#/components/schemas/AtaItemRegisterExternalConsumptionRequest"),
-        },
-        responses: {
-          "200": okJson("#/components/schemas/AtaItemRegisterExternalConsumptionResponse"),
-          ...defaultErrorResponses,
-        },
-        "x-permissions": ["atas.manage"],
       },
     },
     "/ata-items/{id}": {

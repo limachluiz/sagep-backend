@@ -1,10 +1,8 @@
 import { Prisma } from "../../generated/prisma/client.js";
-import * as $Enums from "../../generated/prisma/enums.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { ataItemBalanceService } from "./ata-item-balance.service.js";
-import { auditService } from "../audit/audit.service.js";
 
 type UfValue = "AM" | "RO" | "RR" | "AC";
 
@@ -27,25 +25,6 @@ type UpdateAtaItemInput = {
   initialQuantity?: number;
   notes?: string;
   isActive?: boolean;
-};
-
-type RegisterExternalConsumptionInput = {
-  quantity: number;
-  reason: string;
-  source: string;
-  externalStatus: string;
-  externalReference: string;
-  commitmentNumber?: string;
-  unit?: string;
-  notes?: string;
-};
-
-type ExternalConsumptionActor = {
-  id: string;
-  name?: string | null;
-  email?: string | null;
-  role: string;
-  permissions?: string[];
 };
 
 type ListAtaItemsFilters = {
@@ -120,61 +99,6 @@ export class AtaItemsService {
     }
 
     return normalized;
-  }
-
-  private serializeLatestExternalBalanceSnapshot(snapshot: {
-    source: string;
-    status: string;
-    externalBalance: Prisma.JsonValue | null;
-    difference: string | null;
-    lastSyncAt: Date;
-    warnings: Prisma.JsonValue | null;
-  } | null) {
-    if (!snapshot) return null;
-
-    return {
-      source: snapshot.source,
-      status: snapshot.status,
-      externalBalance: snapshot.externalBalance,
-      difference: snapshot.difference,
-      lastSyncAt: snapshot.lastSyncAt,
-      warnings: snapshot.warnings,
-    };
-  }
-
-  private async attachLatestExternalBalanceSnapshot<T extends { id: string }>(items: T[]) {
-    if (items.length === 0) return items;
-
-    const snapshots = await prisma.ataItemExternalBalanceSnapshot.findMany({
-      where: {
-        ataItemId: {
-          in: items.map((item) => item.id),
-        },
-      },
-      select: {
-        ataItemId: true,
-        source: true,
-        status: true,
-        externalBalance: true,
-        difference: true,
-        lastSyncAt: true,
-        warnings: true,
-      },
-    });
-
-    const snapshotByItemId = new Map(
-      snapshots.map((snapshot) => [snapshot.ataItemId, snapshot]),
-    );
-
-    return items.map((item) => {
-      const normalizedItem = this.normalizeReturnedAtaItemText(item);
-      return {
-        ...normalizedItem,
-        latestExternalBalanceSnapshot: this.serializeLatestExternalBalanceSnapshot(
-          snapshotByItemId.get(item.id) ?? null,
-        ),
-      };
-    });
   }
 
   private serializeMovement(movement: {
@@ -263,11 +187,6 @@ export class AtaItemsService {
     return value.toFixed(2);
   }
 
-  private normalizeOptionalText(value?: string | null) {
-    const normalized = value?.trim();
-    return normalized ? normalized : null;
-  }
-
   async create(ataId: string, data: CreateAtaItemInput) {
     await this.ensureAtaExists(ataId);
     const coverageGroup = await this.resolveCoverageGroup(ataId, data.coverageGroupCode);
@@ -286,9 +205,9 @@ export class AtaItemsService {
       include: ataItemInclude,
     });
 
-    return (await this.attachLatestExternalBalanceSnapshot(
-      await ataItemBalanceService.enrichAtaItemsWithBalance([item]),
-    ))[0];
+    return this.normalizeReturnedAtaItemText(
+      (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0],
+    );
   }
 
   async listByAta(ataId: string, filters: ListAtaItemsFilters) {
@@ -381,8 +300,8 @@ export class AtaItemsService {
       ],
     });
 
-    return this.attachLatestExternalBalanceSnapshot(
-      await ataItemBalanceService.enrichAtaItemsWithBalance(items),
+    return (await ataItemBalanceService.enrichAtaItemsWithBalance(items)).map((item) =>
+      this.normalizeReturnedAtaItemText(item),
     );
   }
 
@@ -484,8 +403,8 @@ export class AtaItemsService {
       ],
     });
 
-    return this.attachLatestExternalBalanceSnapshot(
-      await ataItemBalanceService.enrichAtaItemsWithBalance(items),
+    return (await ataItemBalanceService.enrichAtaItemsWithBalance(items)).map((item) =>
+      this.normalizeReturnedAtaItemText(item),
     );
   }
 
@@ -499,9 +418,9 @@ export class AtaItemsService {
       throw new AppError("Item da ata não encontrado", 404);
     }
 
-    return (await this.attachLatestExternalBalanceSnapshot(
-      await ataItemBalanceService.enrichAtaItemsWithBalance([item]),
-    ))[0];
+    return this.normalizeReturnedAtaItemText(
+      (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0],
+    );
   }
 
   async findByCode(itemCode: number) {
@@ -514,9 +433,9 @@ export class AtaItemsService {
       throw new AppError("Item da ata não encontrado", 404);
     }
 
-    return (await this.attachLatestExternalBalanceSnapshot(
-      await ataItemBalanceService.enrichAtaItemsWithBalance([item]),
-    ))[0];
+    return this.normalizeReturnedAtaItemText(
+      (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0],
+    );
   }
 
   async listMovements(itemId: string) {
@@ -617,9 +536,9 @@ export class AtaItemsService {
       include: ataItemInclude,
     });
 
-    return (await this.attachLatestExternalBalanceSnapshot(
-      await ataItemBalanceService.enrichAtaItemsWithBalance([item]),
-    ))[0];
+    return this.normalizeReturnedAtaItemText(
+      (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0],
+    );
   }
 
   async remove(itemId: string) {
@@ -645,164 +564,4 @@ export class AtaItemsService {
     };
   }
 
-  async registerExternalConsumption(
-    itemId: string,
-    data: RegisterExternalConsumptionInput,
-    actor: ExternalConsumptionActor,
-  ) {
-    const normalizedReason = data.reason.trim();
-    const normalizedSource = data.source.trim();
-    const normalizedExternalStatus = data.externalStatus.trim();
-    const normalizedExternalReference = data.externalReference.trim();
-    const normalizedCommitmentNumber = this.normalizeOptionalText(data.commitmentNumber);
-    const normalizedUnit = this.normalizeOptionalText(data.unit);
-    const normalizedNotes = this.normalizeOptionalText(data.notes);
-    const normalizedQuantity = new Prisma.Decimal(this.normalizeQuantity(data.quantity));
-    const externalOriginText = [
-      normalizedSource,
-      normalizedExternalStatus,
-      normalizedExternalReference,
-      normalizedUnit ?? "",
-    ].join(" ").toUpperCase();
-
-    return prisma.$transaction(async (tx) => {
-      const item = await tx.ataItem.findUnique({
-        where: { id: itemId },
-        include: ataItemInclude,
-      });
-
-      if (!item || item.deletedAt) {
-        throw new AppError("Item da ata não encontrado", 404);
-      }
-
-      if (
-        externalOriginText.includes("ADESAO") ||
-        externalOriginText.includes("ADESÃO") ||
-        externalOriginText.includes("CARONA") ||
-        externalOriginText.includes("NAO_PARTICIPANTE") ||
-        externalOriginText.includes("NÃO_PARTICIPANTE")
-      ) {
-        throw new AppError("Consumo de adesao/carona ou orgao nao participante deve ser ignorado", 400);
-      }
-
-      if (normalizedUnit && item.ata.externalUasg && normalizedUnit !== item.ata.externalUasg) {
-        throw new AppError("Consumo externo so pode ser registrado para a UASG principal da ATA", 400);
-      }
-
-      const localBalance = await ataItemBalanceService.getBalanceForAtaItem(itemId, tx);
-      const availableQuantity = new Prisma.Decimal(localBalance.availableQuantity);
-
-      if (normalizedQuantity.greaterThan(availableQuantity)) {
-        throw new AppError(
-          `Saldo insuficiente para registrar consumo externo. Disponivel: ${availableQuantity.toString()}, solicitado: ${normalizedQuantity.toString()}`,
-          409,
-        );
-      }
-
-      const createdMovement = await tx.ataItemBalanceMovement.create({
-        data: {
-          ataItemId: item.id,
-          actorUserId: actor.id,
-          actorName: actor.name ?? actor.email ?? null,
-          movementType: $Enums.AtaItemBalanceMovementType.EXTERNAL_CONSUMPTION,
-          quantity: normalizedQuantity,
-          unitPrice: item.unitPrice,
-          totalAmount: item.unitPrice.mul(normalizedQuantity).toDecimalPlaces(2),
-          summary: `Consumo externo manual registrado: ${normalizedReason}`,
-          metadata: {
-            source: "COMPRAS_GOV",
-            externalSource: normalizedSource,
-            externalStatus: normalizedExternalStatus,
-            externalReference: normalizedExternalReference,
-            commitmentNumber: normalizedCommitmentNumber,
-            unit: normalizedUnit ?? item.ata.externalUasg ?? null,
-            reason: normalizedReason,
-            notes: normalizedNotes,
-          },
-        },
-        select: {
-          id: true,
-        },
-      });
-
-      const movement = await tx.ataItemBalanceMovement.findUniqueOrThrow({
-        where: { id: createdMovement.id },
-        select: {
-          id: true,
-          movementType: true,
-          quantity: true,
-          unitPrice: true,
-          totalAmount: true,
-          summary: true,
-          actorName: true,
-          projectId: true,
-          estimateId: true,
-          diexRequestId: true,
-          serviceOrderId: true,
-          createdAt: true,
-          project: {
-            select: {
-              projectCode: true,
-            },
-          },
-          estimate: {
-            select: {
-              estimateCode: true,
-            },
-          },
-          diexRequest: {
-            select: {
-              diexCode: true,
-            },
-          },
-          serviceOrder: {
-            select: {
-              serviceOrderCode: true,
-            },
-          },
-        },
-      });
-
-      const updatedLocalBalance = await ataItemBalanceService.getBalanceForAtaItem(itemId, tx);
-
-      await auditService.log({
-        entityType: "ATA_ITEM",
-        entityId: item.id,
-        action: "REGISTER_EXTERNAL_CONSUMPTION",
-        actor: {
-          id: actor.id,
-          name: actor.name ?? actor.email ?? null,
-        },
-        summary: `Consumo externo manual registrado para o item ${item.referenceCode}`,
-        metadata: {
-          item: {
-            id: item.id,
-            ataItemCode: item.ataItemCode,
-            referenceCode: item.referenceCode,
-            description: item.description,
-          },
-          ata: {
-            id: item.ata.id,
-            ataCode: item.ata.ataCode,
-            number: item.ata.number,
-          },
-          quantity: normalizedQuantity.toString(),
-          reason: normalizedReason,
-          source: normalizedSource,
-          externalStatus: normalizedExternalStatus,
-          externalReference: normalizedExternalReference,
-          commitmentNumber: normalizedCommitmentNumber,
-          unit: normalizedUnit ?? item.ata.externalUasg ?? null,
-          notes: normalizedNotes,
-        },
-      });
-
-      return {
-        item: (await ataItemBalanceService.enrichAtaItemsWithBalance([item], tx))[0],
-        movement: this.serializeMovement(movement),
-        localBalance: updatedLocalBalance,
-        message: "Consumo externo registrado manualmente com sucesso",
-      };
-    });
-  }
 }

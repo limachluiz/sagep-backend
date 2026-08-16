@@ -1,27 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { ComprasGovBalanceService } from "../src/modules/compras-gov/compras-gov-balance.service.js";
 import { systemSettingsService } from "../src/modules/system-settings/system-settings.service.js";
 
-describe("semântica das integrações de ARP", () => {
+describe("testes de conexão das integrações", () => {
   afterEach(() => vi.restoreAllMocks());
-
-  it("não trata saldo de remanejamento como saldo disponível para empenho", () => {
-    const service = new ComprasGovBalanceService() as unknown as {
-      getAvailableQuantityFromUnitEntry(record: Record<string, unknown>):
-        | { key: string; value: { toString(): string } }
-        | null;
-    };
-
-    expect(service.getAvailableQuantityFromUnitEntry({
-      quantidadeRegistrada: 5_000,
-      saldoRemanejamentoEmpenho: 5_000,
-    })).toBeNull();
-
-    const officialBalance = service.getAvailableQuantityFromUnitEntry({ saldoEmpenho: 4_500 });
-    expect(officialBalance?.key).toBe("saldoEmpenho");
-    expect(officialBalance?.value.toString()).toBe("4500");
-  });
 
   it("testa o catálogo do serviço PNCP configurado", async () => {
     vi.spyOn(systemSettingsService, "getEffective").mockResolvedValue({
@@ -31,7 +13,11 @@ describe("semântica das integrações de ARP", () => {
       new Response("{}", { status: 200, headers: { "content-type": "application/json" } }),
     );
     const service = systemSettingsService as unknown as {
-      probePncp(): Promise<{ status: string; httpStatus: number | null; details: Record<string, unknown> }>;
+      probePncp(): Promise<{
+        status: string;
+        httpStatus: number | null;
+        details: Record<string, unknown>;
+      }>;
     };
 
     const result = await service.probePncp();

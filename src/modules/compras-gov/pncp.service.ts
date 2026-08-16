@@ -1,5 +1,8 @@
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { env } from "../../config/env.js";
+import { prisma } from "../../config/prisma.js";
+import { Prisma } from "../../generated/prisma/client.js";
+import { AppError } from "../../shared/app-error.js";
 
 type PncpAtaResponse = Record<string, unknown> & {
   numeroControlePNCP?: string;
@@ -137,6 +140,49 @@ export class PncpService {
       },
       sourceUpdatedAt: ata.dataAtualizacaoGlobal ?? ata.dataAtualizacao ?? null,
       checkedAt: new Date().toISOString(),
+    };
+  }
+
+  async syncAta(ataId: string) {
+    const ata = await prisma.ata.findUnique({
+      where: { id: ataId },
+      select: {
+        id: true,
+        ataCode: true,
+        number: true,
+        externalPncpControlNumber: true,
+      },
+    });
+
+    if (!ata) {
+      throw new AppError("Ata não encontrada", 404);
+    }
+
+    if (!ata.externalPncpControlNumber) {
+      throw new AppError("ATA sem número de controle do PNCP", 400);
+    }
+
+    const snapshot = await this.fetchAtaSnapshot(ata.externalPncpControlNumber);
+    const lastSyncAt = new Date();
+
+    await prisma.ata.update({
+      where: { id: ata.id },
+      data: {
+        externalPncpControlNumber: snapshot.controlNumber,
+        pncpSnapshot: snapshot as unknown as Prisma.InputJsonValue,
+        pncpLastSyncAt: lastSyncAt,
+      },
+    });
+
+    return {
+      ata: {
+        id: ata.id,
+        ataCode: ata.ataCode,
+        number: ata.number,
+      },
+      controlNumber: snapshot.controlNumber,
+      lastSyncAt,
+      snapshot,
     };
   }
 }

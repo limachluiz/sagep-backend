@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PncpService } from "../src/modules/compras-gov/pncp.service.js";
 import { systemSettingsService } from "../src/modules/system-settings/system-settings.service.js";
+import { prisma } from "../src/config/prisma.js";
 
 describe("PncpService", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -50,5 +51,44 @@ describe("PncpService", () => {
       "Número de controle PNCP inválido",
     );
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("atualiza somente os metadados PNCP da ATA", async () => {
+    const service = new PncpService();
+    const snapshot = {
+      source: "PNCP" as const,
+      controlNumber: "00394452000103-1-022869/2025-000001",
+      ataNumber: "00001",
+      ataYear: 2026,
+      validFrom: "2026-02-16",
+      validUntil: "2027-02-15",
+      cancelled: false,
+      allowsAdhesion: true,
+      organization: { cnpj: "00394452000103", name: "COMANDO DO EXERCITO" },
+      managingUnit: { code: "160016", name: "CMA", city: "Manaus", state: "AM" },
+      linkedContracts: { total: 1, records: [] },
+      sourceUpdatedAt: "2026-07-01T13:59:21",
+      checkedAt: "2026-08-16T12:00:00.000Z",
+    };
+    vi.spyOn(prisma.ata, "findUnique").mockResolvedValue({
+      id: "ata-1",
+      ataCode: 1,
+      number: "ARP 00001/2026",
+      externalPncpControlNumber: snapshot.controlNumber,
+    } as never);
+    const update = vi.spyOn(prisma.ata, "update").mockResolvedValue({} as never);
+    vi.spyOn(service, "fetchAtaSnapshot").mockResolvedValue(snapshot);
+
+    const result = await service.syncAta("ata-1");
+
+    expect(result.snapshot).toEqual(snapshot);
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: "ata-1" },
+      data: expect.objectContaining({
+        externalPncpControlNumber: snapshot.controlNumber,
+        pncpSnapshot: snapshot,
+      }),
+    }));
+    expect(update.mock.calls[0][0].data).not.toHaveProperty("externalLastSyncAt");
   });
 });

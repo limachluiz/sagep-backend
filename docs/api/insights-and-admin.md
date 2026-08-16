@@ -635,33 +635,13 @@ Observacoes:
 - itens sao criados/atualizados por `ataId`, grupo e `referenceCode`.
 - a integracao grava os campos externos em `Ata` e `AtaItem`, mas nao altera movimentos de saldo local.
 
-### Funcionalidades externas descontinuadas
+### Saldo operacional e metadados oficiais
 
-As rotas de comparação, sincronização de saldo por ATA/item e registro de
-consumo externo foram removidas. A lista abaixo fica apenas como referência
-histórica e não representa endpoints disponíveis:
-
-- `GET /api/atas/{id}/external-balance` le apenas snapshots externos persistidos localmente para os itens da ATA; nao consulta Compras.gov.br.
-- `POST /api/atas/{id}/sync-external-balance` consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
-- `GET /api/ata-items/{id}/balance-comparison` le apenas o ultimo snapshot persistido do item; se nao existir, retorna `NAO_SINCRONIZADO`.
-- `POST /api/ata-items/{id}/sync-external-balance` consulta Compras.gov.br apenas para esse item e atualiza o snapshot persistido correspondente.
-- `GET /api/ata-items` pode retornar `latestExternalBalanceSnapshot` resumido por item para a tela reaproveitar o ultimo snapshot salvo sem nova consulta externa.
-- Quando houver snapshot salvo, os GET locais devolvem `externalBalance` completo com `source`, `externalItemNumber`, `registeredQuantity`, `committedQuantity`, `availableQuantity`, `commitments`, `lastUpdatedAt` e `rawRecords`.
-- `POST /api/ata-items/{id}/register-external-consumption` registra manualmente um consumo externo no saldo interno com justificativa obrigatoria, sem consultar Compras.gov.br nem alterar `initialQuantity`.
-- Status possiveis: `OK`, `DIVERGENTE`, `CONSUMO_OFICIAL_DETECTADO`, `NAO_SINCRONIZADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`.
-- HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
-- O backend consulta `4_consultarEmpenhosSaldoItem` por ATA (`numeroAta` e `unidadeGerenciadora`). Se esse endpoint retornar vazio, usa o `externalItemId` salvo no item para consultar `2.1_consultarARPItem_Id` e cruza os dados oficiais de `3_consultarUnidadesItem` por `numeroItem`, `externalItemNumber` e `referenceCode`, normalizando zeros a esquerda.
-- `Ata.externalUasg` e a UASG principal. O backend so considera a linha dessa UASG para quantidade registrada, empenhada, saldo disponivel e empenhos.
-- A sincronização da ATA também consulta o PNCP pelo `numeroControlePncpAta`, valida vigência/cancelamento e armazena um snapshot dos contratos ou empenhos vinculados. O PNCP complementa a conciliação, mas não substitui o saldo quantitativo do Compras.gov.br.
-- Resposta vazia nas fontes oficiais não é convertida em saldo zero nem em saldo integral: o item permanece `NAO_ENCONTRADO`, evitando falsa confirmação de disponibilidade.
-- Linhas de outras UASGs, adesoes, caronas e orgaos nao participantes sao ignoradas integralmente.
-- Snapshot persistido por item: tabela/model `AtaItemExternalBalanceSnapshot`, contendo `source`, `status`, `externalBalance`, `difference`, `warnings` e `lastSyncAt`.
-- O lançamento manual cria movimentação `EXTERNAL_CONSUMPTION`, reduz apenas o saldo disponível/eleva o consumido no cálculo local e gera audit log `REGISTER_EXTERNAL_CONSUMPTION`.
-- Valores estimados aparecem somente em `estimatedAmount`; `numeroEmpenho` permanece `null` quando a API externa nao informar.
-- A normalizacao revisada considera aliases de NE, fornecedor, data, quantidade e valor nos endpoints `3_consultarUnidadesItem`, `4_consultarEmpenhosSaldoItem` e `2.1_consultarARPItem_Id`.
-- Em `development`, cada item normalizado pode trazer `rawKeyDebug` com as chaves cruas disponiveis, endpoint de origem, item e unidade.
-- Se a API retornar `200` sem registros, itens importados do Compras.gov.br usam fallback com `externalBalance.source = COMPRAS_GOV_IMPORT_FALLBACK`, quantidade registrada importada e empenhado zero.
-- Em `development`, o retorno inclui `debug` com URLs chamadas, status HTTP, quantidade de registros, sample dos primeiros registros e itens locais sem match.
+- O saldo dos itens e calculado exclusivamente pelas movimentacoes internas do SAGEP.
+- Nao existem rotas de consulta, comparacao ou sincronizacao de saldo externo.
+- A importacao do Compras.gov.br continua responsavel pelos dados cadastrais da ATA, itens, valores e fornecedores.
+- `POST /api/atas/{id}/sync-pncp` atualiza somente vigencia, cancelamento e contratos vinculados no PNCP.
+- A sincronizacao do PNCP nao cria movimentos, nao bloqueia estimativas e nao altera o saldo disponivel.
 
 Exemplo de update com substituicao de grupos:
 
