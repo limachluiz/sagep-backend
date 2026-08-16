@@ -11,10 +11,21 @@ import {
 } from "./atas.schemas.js";
 import { AtasService } from "./atas.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import { comprasGovBalanceService } from "../compras-gov/compras-gov-balance.service.js";
 
 const atasService = new AtasService();
 
 export class AtasController {
+  async externalBalance(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    return res.status(200).json(await comprasGovBalanceService.compareAta(id));
+  }
+
+  async syncExternalBalance(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    return res.status(200).json(await comprasGovBalanceService.syncAta(id));
+  }
+
   async create(req: Request, res: Response) {
     const data = createAtaSchema.parse(req.body);
     const ata = await atasService.create(data);

@@ -1,6 +1,8 @@
 import { Request, Response } from "express";
 import {
   archivedTaskQuerySchema,
+  completeTaskSchema,
+  createTaskActivitySchema,
   createTaskSchema,
   listTasksQuerySchema,
   taskCodeParamSchema,
@@ -15,6 +17,16 @@ import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
 const tasksService = new TasksService();
 
 export class TasksController {
+  async addActivity(req: Request, res: Response) {
+    const { id } = taskIdParamSchema.parse(req.params);
+    return res.status(201).json(await tasksService.addActivity(id, createTaskActivitySchema.parse(req.body), req.user!));
+  }
+
+  async complete(req: Request, res: Response) {
+    const { id } = taskIdParamSchema.parse(req.params);
+    return res.status(200).json(await tasksService.complete(id, completeTaskSchema.parse(req.body ?? {}), req.user!));
+  }
+
   async create(req: Request, res: Response) {
     const data = createTaskSchema.parse(req.body);
     const task = await tasksService.create(data, req.user!);

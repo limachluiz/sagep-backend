@@ -16,6 +16,12 @@ atasRoutes.post("/", requirePermission("atas.manage"), (req, res) =>
 );
 atasRoutes.get("/", (req, res) => controller.list(req, res));
 atasRoutes.get("/code/:code", (req, res) => controller.findByCode(req, res));
+atasRoutes.get("/:id/external-balance", (req, res) => controller.externalBalance(req, res));
+atasRoutes.post(
+  "/:id/sync-external-balance",
+  requirePermission("atas.manage"),
+  (req, res) => controller.syncExternalBalance(req, res)
+);
 
 atasRoutes.post(
   "/:id/coverage-groups",

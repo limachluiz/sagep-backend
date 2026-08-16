@@ -44,6 +44,10 @@ async function resetDatabase() {
   await prisma.auditLog.deleteMany();
   await prisma.refreshToken.deleteMany();
   await prisma.userPermissionOverride.deleteMany();
+  await prisma.notificationDismissal.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.financialDocument.deleteMany();
+  await prisma.commitmentNote.deleteMany();
   await prisma.ataItemExternalBalanceSnapshot.deleteMany();
   await prisma.ataItemBalanceMovement.deleteMany();
   await prisma.serviceOrderDeliveredDocument.deleteMany();
@@ -54,6 +58,7 @@ async function resetDatabase() {
   await prisma.diexRequest.deleteMany();
   await prisma.estimateItem.deleteMany();
   await prisma.estimate.deleteMany();
+  await prisma.taskActivity.deleteMany();
   await prisma.task.deleteMany();
   await prisma.projectMember.deleteMany();
   await prisma.project.deleteMany();
@@ -63,6 +68,8 @@ async function resetDatabase() {
   await prisma.ataCoverageGroup.deleteMany();
   await prisma.ata.deleteMany();
   await prisma.militaryOrganization.deleteMany();
+  await prisma.integrationConnectionCheck.deleteMany();
+  await prisma.systemConfiguration.deleteMany();
   await prisma.user.deleteMany();
   await prisma.permission.deleteMany();
 }
@@ -3941,11 +3948,38 @@ describe("critical flows", () => {
       .send({ assigneeId: projetista.id })
       .expect(200);
 
-    await request(app)
-      .patch(`/api/tasks/${task.body.id}/status`)
+    const progress = await request(app)
+      .post(`/api/tasks/${task.body.id}/activities`)
       .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .send({ status: "CONCLUIDA" })
+      .send({ content: "Documentação conferida e encaminhada para revisão." })
+      .expect(201);
+
+    expect(progress.body.status).toBe("EM_ANDAMENTO");
+    expect(progress.body.activities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "NOTE", author: expect.objectContaining({ id: projetista.id }) }),
+        expect.objectContaining({
+          type: "STATUS_CHANGE",
+          fromStatus: "PENDENTE",
+          toStatus: "EM_ANDAMENTO",
+        }),
+      ]),
+    );
+
+    const completed = await request(app)
+      .post(`/api/tasks/${task.body.id}/complete`)
+      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+      .send({ content: "Entrega final validada." })
       .expect(200);
+
+    expect(completed.body.status).toBe("CONCLUIDA");
+    expect(completed.body.completedAt).toBeTruthy();
+    expect(completed.body.completedBy.id).toBe(projetista.id);
+    expect(completed.body.activities).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "COMPLETION", content: "Entrega final validada." }),
+      ]),
+    );
 
     await request(app)
       .delete(`/api/tasks/${task.body.id}`)

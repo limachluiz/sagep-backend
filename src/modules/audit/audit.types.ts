@@ -6,7 +6,11 @@ export type AuditEntityType =
   | "TASK"
   | "ATA_ITEM"
   | "USER"
-  | "AUTH";
+  | "AUTH"
+  | "COMMITMENT_NOTE"
+  | "INVOICE"
+  | "NOTIFICATION"
+  | "SYSTEM_SETTINGS";
 
 export type AuditActionType =
   | "CREATE"
@@ -27,7 +31,10 @@ export type AuditActionType =
   | "SESSION_REVOKE"
   | "SESSION_REVOKE_ALL"
   | "SESSION_EXPIRE"
-  | "SESSION_CLEANUP";
+  | "SESSION_CLEANUP"
+  | "SYNC"
+  | "DISMISS"
+  | "CONNECTION_TEST";
 
 export type AuditPrimitive = string | number | boolean | null;
 export type AuditValue =

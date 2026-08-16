@@ -678,6 +678,46 @@ export interface paths {
         patch: operations["tasks_patch_byId_status"];
         trace?: never;
     };
+    "/tasks/{id}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar andamento da tarefa
+         * @description Registra autor, data e hora. Se a tarefa estiver pendente, inicia automaticamente.
+         */
+        post: operations["tasks_post_byId_activities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Concluir tarefa
+         * @description Encerra a tarefa e registra o responsável, a data, a hora e a observação final.
+         */
+        post: operations["tasks_post_byId_complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tasks/{id}/restore": {
         parameters: {
             query?: never;
@@ -1234,6 +1274,216 @@ export interface paths {
         get: operations["operationalAlerts_get_collection"];
         put?: never;
         post?: never;
+        /** Limpar todas as notificações visíveis do usuário */
+        delete: operations["operationalAlerts_delete_collection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operational-alerts/{notificationKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Limpar uma notificação do usuário */
+        delete: operations["operationalAlerts_delete_byNotificationKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar integrações e parâmetros institucionais */
+        get: operations["settings_get_systemSettings"];
+        /** Atualizar integrações e parâmetros institucionais */
+        put: operations["settings_put_systemSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings/connections/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Testar todas as conexões configuradas */
+        post: operations["settings_post_systemSettings_connections_test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings/connections/{provider}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Testar uma conexão configurada */
+        post: operations["settings_post_systemSettings_connections_byProvider_test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Notas de Empenho rastreadas */
+        get: operations["financialExecution_get_commitmentNotes"];
+        put?: never;
+        /** Validar, vincular e registrar uma Nota de Empenho */
+        post: operations["financialExecution_post_commitmentNotes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Consultar e comparar uma NE no Portal da Transparência */
+        post: operations["financialExecution_post_commitmentNotes_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consultar uma NE avulsa sem vinculá-la a projeto
+         * @description Consulta a fonte oficial e informa quando o documento já está cadastrado no SAGEP. Não persiste nem altera o workflow.
+         */
+        post: operations["financialExecution_post_commitmentNotes_lookup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalhar NE, documentos relacionados e NFe */
+        get: operations["financialExecution_get_commitmentNotes_byId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sincronizar uma NE com o Portal da Transparência */
+        post: operations["financialExecution_post_commitmentNotes_byId_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sincronizar todas as NEs ativas */
+        post: operations["financialExecution_post_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resumo da execução financeira */
+        get: operations["financialExecution_get_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Registrar e conferir NFe do projeto */
+        post: operations["financialExecution_post_invoices"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2554,8 +2804,13 @@ export interface components {
             priority?: number | null;
             assigneeId?: string | null;
             assigneeName?: string | null;
+            completedById?: string | null;
             /** Format: date-time */
             dueDate?: string | null;
+            /** Format: date-time */
+            completedAt?: string | null;
+            completedBy?: components["schemas"]["UserSummary"] | null;
+            activities?: components["schemas"]["TaskActivity"][];
             /** Format: date-time */
             archivedAt?: string | null;
             /** Format: date-time */
@@ -2591,6 +2846,25 @@ export interface components {
         TaskStatusUpdateRequest: {
             /** @enum {string} */
             status: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA";
+        };
+        TaskActivity: {
+            id: string;
+            /** @enum {string} */
+            type: "NOTE" | "STATUS_CHANGE" | "COMPLETION" | "REOPENED";
+            content: string;
+            /** @enum {string|null} */
+            fromStatus?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA" | null;
+            /** @enum {string|null} */
+            toStatus?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA" | null;
+            author?: components["schemas"]["UserSummary"] | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TaskActivityCreateRequest: {
+            content: string;
+        };
+        TaskCompleteRequest: {
+            content?: string;
         };
         TaskListEnvelope: {
             items?: components["schemas"]["Task"][];
@@ -2985,6 +3259,64 @@ export interface components {
                     [key: string]: unknown;
                 }[];
             };
+        };
+        CommitmentNoteLookupRequest: {
+            projectId: string;
+            /** @example 2026NE000534 */
+            number: string;
+            /** @default 160016 */
+            managementUnit: string;
+            /** @default 00001 */
+            management: string;
+        };
+        CommitmentNoteStandaloneLookupRequest: {
+            /** @example 2026NE000534 */
+            number: string;
+            /** @default 160016 */
+            managementUnit: string;
+            /** @default 00001 */
+            management: string;
+        };
+        CommitmentNoteStandaloneLookupResponse: {
+            snapshot: components["schemas"]["CommitmentNoteResponse"];
+            registered?: components["schemas"]["CommitmentNoteResponse"] | null;
+        };
+        CommitmentNoteRegisterRequest: components["schemas"]["CommitmentNoteLookupRequest"] & {
+            /** Format: date-time */
+            receivedAt: string;
+            /** @default false */
+            acceptDivergence: boolean;
+        };
+        CommitmentNoteResponse: {
+            [key: string]: unknown;
+        };
+        CommitmentNoteListResponse: {
+            items?: components["schemas"]["CommitmentNoteResponse"][];
+            summary?: {
+                [key: string]: unknown;
+            };
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
+        InvoiceCreateRequest: {
+            projectId: string;
+            commitmentNoteId?: string;
+            number: string;
+            series?: string;
+            accessKey?: string;
+            supplierCnpj: string;
+            /** Format: date-time */
+            issuedAt: string;
+            /** Format: double */
+            grossAmount: number;
+            /** Format: double */
+            attestedAmount?: number;
+            /** Format: date-time */
+            attestedAt?: string;
+            /** Format: uri */
+            documentLink?: string;
+            notes?: string;
         };
         PublicRegisterRequest: {
             name: string;
@@ -3662,6 +3994,41 @@ export interface components {
             status: "ok";
             /** Format: date-time */
             timestamp: string;
+        };
+        SystemSettings: {
+            organizationName: string;
+            organizationAcronym: string;
+            uasg: string;
+            management: string;
+            commandName: string;
+            timeZone: string;
+            /** Format: uri */
+            portalTransparenciaBaseUrl: string;
+            portalSyncIntervalMinutes: number;
+            portalSyncOnStartup: boolean;
+            /** Format: uri */
+            comprasGovBaseUrl: string;
+            defaultBiddingNumber?: string | null;
+            defaultBiddingYear?: number | null;
+            defaultImmediateCommitment?: boolean;
+            defaultEstimateGroup?: string;
+            portalApiToken?: {
+                [key: string]: unknown;
+            };
+            connections?: {
+                [key: string]: unknown;
+            };
+        };
+        IntegrationConnectionCheck: {
+            /** @enum {string} */
+            provider?: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV";
+            /** @enum {string} */
+            status?: "OPERATIONAL" | "DEGRADED" | "UNAVAILABLE" | "NOT_CONFIGURED";
+            latencyMs?: number | null;
+            httpStatus?: number | null;
+            message?: string;
+            /** Format: date-time */
+            checkedAt?: string;
         };
         HealthComponent: {
             /** @enum {string} */
@@ -5348,6 +5715,72 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    tasks_post_byId_activities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da tarefa. */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskActivityCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Andamento registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    tasks_post_byId_complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da tarefa. */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Tarefa concluída */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     tasks_post_byId_restore: {
         parameters: {
             query?: never;
@@ -6706,6 +7139,439 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["OperationalAlertsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    operationalAlerts_delete_collection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    operationalAlerts_delete_byNotificationKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Chave estável da notificação */
+                notificationKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_get_systemSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_put_systemSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemSettings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_post_systemSettings_connections_test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationConnectionCheck"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_post_systemSettings_connections_byProvider_test: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Integração */
+                provider: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationConnectionCheck"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_get_commitmentNotes: {
+        parameters: {
+            query?: {
+                /** @description Pagina atual. */
+                page?: components["parameters"]["Page"];
+                /** @description Quantidade por pagina. */
+                pageSize?: components["parameters"]["PageSize"];
+                /** @description NE, fornecedor, CNPJ ou projeto */
+                search?: string;
+                /** @description Situação financeira */
+                financialStatus?: "NAO_LIQUIDADA" | "PARCIALMENTE_LIQUIDADA" | "LIQUIDADA" | "PARCIALMENTE_PAGA" | "PAGA" | "PARCIALMENTE_ANULADA" | "ANULADA";
+                /** @description Situação da validação externa */
+                syncStatus?: "VALIDADO" | "DIVERGENTE" | "ERRO";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitmentNoteRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitmentNoteLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes_lookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitmentNoteStandaloneLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteStandaloneLookupResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_get_commitmentNotes_byId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador da Nota de Empenho */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes_byId_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador da Nota de Empenho */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_get_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_invoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

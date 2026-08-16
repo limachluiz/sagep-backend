@@ -202,7 +202,7 @@ Resposta com envelope:
       "id": "cmabc123",
       "userCode": 7,
       "name": "Cap Joao Silva",
-      "email": "joao.silva@sagep.mil.br",
+      "email": "usuario.exemplo@example.invalid",
       "role": "PROJETISTA",
       "active": true,
       "createdAt": "2026-04-29T00:00:00.000Z",
@@ -239,11 +239,11 @@ Payload:
 ```json
 {
   "name": "1 Ten Maria Souza",
-  "email": "maria.souza@sagep.mil.br",
+  "email": "usuario.exemplo@example.invalid",
   "password": "<senha-forte-do-usuario>",
   "role": "GESTOR",
   "rank": "1 Ten",
-  "cpf": "12345678900"
+  "cpf": "<cpf-do-usuario>"
 }
 ```
 
@@ -260,7 +260,7 @@ Resposta tipica:
   "id": "cmuser123",
   "userCode": 8,
   "name": "1 Ten Maria Souza",
-  "email": "maria.souza@sagep.mil.br",
+  "email": "usuario.exemplo@example.invalid",
   "role": "GESTOR",
   "active": true,
   "createdAt": "2026-04-29T00:00:00.000Z"
@@ -279,7 +279,7 @@ Payload aceito pelo schema:
 {
   "role": "CONSULTA",
   "rank": "1 Ten",
-  "cpf": "12345678900"
+  "cpf": "<cpf-do-usuario>"
 }
 ```
 
@@ -296,7 +296,7 @@ Resposta tipica:
   "id": "cmuser123",
   "userCode": 8,
   "name": "1 Ten Maria Souza",
-  "email": "maria.souza@sagep.mil.br",
+  "email": "usuario.exemplo@example.invalid",
   "role": "CONSULTA",
   "active": true,
   "createdAt": "2026-04-29T00:00:00.000Z",
@@ -514,9 +514,9 @@ Payload:
 ```json
 {
   "name": "1 Ten Maria Souza",
-  "email": "maria.souza.atualizada@sagep.mil.br",
+  "email": "usuario.atualizado@example.invalid",
   "rank": "1 Ten",
-  "cpf": "12345678900"
+  "cpf": "<cpf-do-usuario>"
 }
 ```
 
@@ -652,6 +652,8 @@ histórica e não representa endpoints disponíveis:
 - HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
 - O backend consulta `4_consultarEmpenhosSaldoItem` por ATA (`numeroAta` e `unidadeGerenciadora`). Se esse endpoint retornar vazio, usa o `externalItemId` salvo no item para consultar `2.1_consultarARPItem_Id` e cruza os dados oficiais de `3_consultarUnidadesItem` por `numeroItem`, `externalItemNumber` e `referenceCode`, normalizando zeros a esquerda.
 - `Ata.externalUasg` e a UASG principal. O backend so considera a linha dessa UASG para quantidade registrada, empenhada, saldo disponivel e empenhos.
+- A sincronização da ATA também consulta o PNCP pelo `numeroControlePncpAta`, valida vigência/cancelamento e armazena um snapshot dos contratos ou empenhos vinculados. O PNCP complementa a conciliação, mas não substitui o saldo quantitativo do Compras.gov.br.
+- Resposta vazia nas fontes oficiais não é convertida em saldo zero nem em saldo integral: o item permanece `NAO_ENCONTRADO`, evitando falsa confirmação de disponibilidade.
 - Linhas de outras UASGs, adesoes, caronas e orgaos nao participantes sao ignoradas integralmente.
 - Snapshot persistido por item: tabela/model `AtaItemExternalBalanceSnapshot`, contendo `source`, `status`, `externalBalance`, `difference`, `warnings` e `lastSyncAt`.
 - O lançamento manual cria movimentação `EXTERNAL_CONSUMPTION`, reduz apenas o saldo disponível/eleva o consumido no cálculo local e gera audit log `REGISTER_EXTERNAL_CONSUMPTION`.

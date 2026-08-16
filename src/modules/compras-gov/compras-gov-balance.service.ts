@@ -4,7 +4,8 @@ import { AppError } from "../../shared/app-error.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 
-const COMPRAS_GOV_BASE_URL = "https://dadosabertos.compras.gov.br";
+import { systemSettingsService } from "../system-settings/system-settings.service.js";
+import { pncpService, type PncpAtaSnapshot } from "./pncp.service.js";
 const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
 const REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_PAGE_SIZE = 100;
@@ -568,7 +569,8 @@ export class ComprasGovBalanceService {
       ataNumberTried: context?.ataNumberTried ?? null,
       matchKey: context?.matchKey ?? null,
     });
-    const url = new URL(path, COMPRAS_GOV_BASE_URL);
+    const settings = await systemSettingsService.getEffective();
+    const url = new URL(path, settings.comprasGovBaseUrl);
     for (const [key, value] of Object.entries(params)) {
       if (value === "") continue;
       url.searchParams.set(key, String(value));
@@ -670,7 +672,10 @@ export class ComprasGovBalanceService {
         externalPregaoNumber: true,
         externalPregaoYear: true,
         externalAtaNumber: true,
+        externalPncpControlNumber: true,
         externalLastSyncAt: true,
+        pncpLastSyncAt: true,
+        pncpSnapshot: true,
         items: {
           where: { deletedAt: null },
           select: {
@@ -726,7 +731,10 @@ export class ComprasGovBalanceService {
             externalPregaoNumber: true,
             externalPregaoYear: true,
             externalAtaNumber: true,
+            externalPncpControlNumber: true,
             externalLastSyncAt: true,
+            pncpLastSyncAt: true,
+            pncpSnapshot: true,
           },
         },
       },
@@ -1348,6 +1356,25 @@ export class ComprasGovBalanceService {
     };
   }
 
+  private buildStoredPncp(ata: {
+    externalPncpControlNumber: string | null;
+    pncpLastSyncAt: Date | null;
+    pncpSnapshot: Prisma.JsonValue | null;
+    items?: Array<{ externalItemId: string | null }>;
+  }) {
+    const derivedControl = ata.items
+      ?.map((item) => this.parseExternalItemId(item.externalItemId).numeroControlePncpAta)
+      .find(Boolean) ?? null;
+    const controlNumber = ata.externalPncpControlNumber ?? derivedControl;
+
+    return {
+      status: !controlNumber ? "NAO_VINCULADO" : ata.pncpSnapshot ? "SINCRONIZADO" : "NAO_SINCRONIZADO",
+      controlNumber,
+      lastSyncAt: ata.pncpLastSyncAt,
+      snapshot: ata.pncpSnapshot as PncpAtaSnapshot | null,
+    };
+  }
+
   private async fetchExternalComparisonForAta(ataId: string) {
     this.resetDebug();
     const ata = await this.getAtaWithItems(ataId);
@@ -1387,17 +1414,11 @@ export class ComprasGovBalanceService {
     }
 
     const localBalanceMap = await ataItemBalanceService.getBalanceMapForAtaItems(ata.items);
-    const useImportFallback =
-      externalResult.records.length === 0 &&
-      detailFallbackRecords.length === 0 &&
-      !detailFallbackError &&
-      externalResult.error === null;
     const items = ata.items.map((item) =>
     {
       const externalBalance =
         this.findExternalBalance(item, externalResult.balances) ??
-        detailFallbackBalances.get(item.id) ??
-        (useImportFallback ? this.buildImportFallbackBalance(item) : undefined);
+        detailFallbackBalances.get(item.id);
 
       return this.buildComparison(
         item,
@@ -1426,6 +1447,7 @@ export class ComprasGovBalanceService {
       externalConsumptionDetected: items.filter(
         (item) => item.status === "CONSUMO_OFICIAL_DETECTADO"
       ).length,
+      naoSincronizado: 0,
       notFound: items.filter((item) => item.status === "NAO_ENCONTRADO").length,
       externalQueryErrors: items.filter((item) => item.status === "ERRO_CONSULTA_EXTERNA").length,
       rateLimitErrors: items.filter((item) => item.status === "RATE_LIMIT_COMPRAS_GOV").length,
@@ -1441,6 +1463,7 @@ export class ComprasGovBalanceService {
         externalPregaoNumber: ata.externalPregaoNumber,
         externalPregaoYear: ata.externalPregaoYear,
         externalAtaNumber: ata.externalAtaNumber,
+        externalPncpControlNumber: ata.externalPncpControlNumber,
         externalLastSyncAt: ata.externalLastSyncAt,
       },
       comparedAt: new Date(),
@@ -1454,15 +1477,14 @@ export class ComprasGovBalanceService {
               "Saldo externo consultado nos detalhes oficiais da ARP quando o endpoint de empenhos/saldo retornou vazio.",
             ]
           : []),
-        ...(useImportFallback
-          ? [
-              "Compras.gov.br não retornou empenhos para esta ATA. Saldo externo exibido com base na quantidade registrada importada.",
-            ]
+        ...(externalResult.records.length === 0 && detailFallbackRecords.length === 0
+          ? ["As fontes oficiais não informaram saldo para os itens desta ATA; nenhum valor foi presumido como zero ou disponível."]
           : []),
       ],
       retryAfterSeconds:
         externalResult.error?.retryAfterSeconds ?? detailFallbackError?.retryAfterSeconds ?? null,
       debug: this.getDebug(),
+      pncp: this.buildStoredPncp(ata),
     };
   }
 
@@ -1486,6 +1508,7 @@ export class ComprasGovBalanceService {
         externalPregaoNumber: ata.externalPregaoNumber,
         externalPregaoYear: ata.externalPregaoYear,
         externalAtaNumber: ata.externalAtaNumber,
+        externalPncpControlNumber: ata.externalPncpControlNumber,
         externalLastSyncAt: ata.externalLastSyncAt,
       },
       comparedAt: new Date(),
@@ -1494,6 +1517,7 @@ export class ComprasGovBalanceService {
       warnings: [],
       retryAfterSeconds: null,
       debug: this.getDebug(),
+      pncp: this.buildStoredPncp(ata),
     };
   }
 
@@ -1517,10 +1541,12 @@ export class ComprasGovBalanceService {
         externalPregaoNumber: ata.externalPregaoNumber,
         externalPregaoYear: ata.externalPregaoYear,
         externalAtaNumber: ata.externalAtaNumber,
+        externalPncpControlNumber: ata.externalPncpControlNumber,
         externalLastSyncAt: ata.externalLastSyncAt,
       },
       comparedAt: new Date(),
       ...this.buildStoredComparison(localItem, localBalance, snapshot),
+      pncp: this.buildStoredPncp(ata),
     };
   }
 
@@ -1545,15 +1571,9 @@ export class ComprasGovBalanceService {
       }
     }
     const localBalance = await ataItemBalanceService.getBalanceForAtaItem(localItem.id);
-    const useImportFallback =
-      externalResult.records.length === 0 &&
-      !detailFallback &&
-      !detailFallbackError &&
-      externalResult.error === null;
     const externalBalance =
       this.findExternalBalance(localItem, externalResult.balances) ??
-      detailFallback?.balance ??
-      (useImportFallback ? this.buildImportFallbackBalance(localItem) : undefined);
+      detailFallback?.balance;
     const hasExternalError = Boolean(externalResult.error || detailFallbackError);
 
     const comparison = this.buildComparison(
@@ -1577,6 +1597,7 @@ export class ComprasGovBalanceService {
           externalPregaoNumber: ata.externalPregaoNumber,
           externalPregaoYear: ata.externalPregaoYear,
           externalAtaNumber: ata.externalAtaNumber,
+          externalPncpControlNumber: ata.externalPncpControlNumber,
           externalLastSyncAt: ata.externalLastSyncAt,
         },
         comparedAt: new Date(),
@@ -1587,6 +1608,7 @@ export class ComprasGovBalanceService {
         retryAfterSeconds:
           externalResult.error?.retryAfterSeconds ?? detailFallbackError?.retryAfterSeconds ?? null,
         ...(stored ? this.buildStoredComparison(localItem, localBalance, stored) : comparison),
+        pncp: this.buildStoredPncp(ata),
       };
     }
 
@@ -1614,10 +1636,12 @@ export class ComprasGovBalanceService {
         externalPregaoNumber: ata.externalPregaoNumber,
         externalPregaoYear: ata.externalPregaoYear,
         externalAtaNumber: ata.externalAtaNumber,
+        externalPncpControlNumber: ata.externalPncpControlNumber,
         externalLastSyncAt: ata.externalLastSyncAt,
       },
       comparedAt: new Date(),
       ...syncedComparison,
+      pncp: this.buildStoredPncp(ata),
     };
   }
 
@@ -1625,6 +1649,35 @@ export class ComprasGovBalanceService {
     console.info("external sync requested", { scope: "ata", ataId });
     const comparison = await this.fetchExternalComparisonForAta(ataId);
     const now = new Date();
+    const pncpControlNumber = comparison.pncp.controlNumber;
+    let pncpSnapshot: PncpAtaSnapshot | null = null;
+    let pncpWarning: string | null = null;
+
+    if (pncpControlNumber) {
+      try {
+        pncpSnapshot = await pncpService.fetchAtaSnapshot(pncpControlNumber);
+      } catch (error) {
+        pncpWarning = `PNCP não pôde ser atualizado: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+    if (pncpSnapshot) {
+      await prisma.ata.update({
+        where: { id: ataId },
+        data: {
+          externalPncpControlNumber: pncpControlNumber,
+          pncpSnapshot: this.normalizeJsonValue(pncpSnapshot),
+          pncpLastSyncAt: now,
+        },
+      });
+    }
+    const pncpResult = pncpSnapshot
+      ? {
+          status: "SINCRONIZADO",
+          controlNumber: pncpSnapshot.controlNumber,
+          lastSyncAt: now,
+          snapshot: pncpSnapshot,
+        }
+      : comparison.pncp;
     const hasExternalError = comparison.items.some((item) =>
       ["ERRO_CONSULTA_EXTERNA", "RATE_LIMIT_COMPRAS_GOV"].includes(item.status)
     );
@@ -1642,7 +1695,10 @@ export class ComprasGovBalanceService {
 
       await prisma.ata.update({
         where: { id: ataId },
-        data: { externalLastSyncAt: now },
+        data: {
+          externalLastSyncAt: now,
+          ...(pncpControlNumber && { externalPncpControlNumber: pncpControlNumber }),
+        },
       });
 
       await prisma.ataItem.updateMany({
@@ -1663,10 +1719,12 @@ export class ComprasGovBalanceService {
         updatedItems,
         warnings: [
           ...comparison.warnings,
+          ...(pncpWarning ? [pncpWarning] : []),
           "Sincronizacao nao concluida; snapshot externo valido foi preservado.",
         ],
         retryAfterSeconds: comparison.retryAfterSeconds,
         debug: comparison.debug,
+        pncp: pncpResult,
       };
     }
 
@@ -1678,6 +1736,7 @@ export class ComprasGovBalanceService {
       warnings: [
         "Saldo local nao foi alterado automaticamente; apenas snapshot/timestamp externo foi atualizado.",
         ...comparison.warnings,
+        ...(pncpWarning ? [pncpWarning] : []),
       ],
       retryAfterSeconds: comparison.retryAfterSeconds,
       debug: comparison.debug,

@@ -15,6 +15,7 @@ const tagExternalDocs = {
   dashboard: "./insights-and-admin.md",
   search: "./insights-and-admin.md",
   "operational-alerts": "./insights-and-admin.md",
+  "financial-execution": "./financial-execution.md",
   exports: "./insights-and-admin.md",
   reports: "./insights-and-admin.md",
   users: "./insights-and-admin.md",
@@ -23,6 +24,7 @@ const tagExternalDocs = {
   "ata-items": "./insights-and-admin.md",
   integrations: "./insights-and-admin.md",
   "military-organizations": "./insights-and-admin.md",
+  settings: "./insights-and-admin.md",
   health: "./README.md",
 };
 
@@ -181,6 +183,7 @@ export const openApiDocument: OpenApiDocument = {
     "dashboard",
     "search",
     "operational-alerts",
+    "financial-execution",
     "exports",
     "reports",
     "users",
@@ -189,6 +192,7 @@ export const openApiDocument: OpenApiDocument = {
     "ata-items",
     "integrations",
     "military-organizations",
+    "settings",
   ].map((name) => ({
     name,
     description: `Modulo ${name} do backend SAGEP`,
@@ -1361,7 +1365,17 @@ export const openApiDocument: OpenApiDocument = {
           priority: { type: "integer", minimum: 1, maximum: 5, nullable: true },
           assigneeId: { type: "string", nullable: true },
           assigneeName: { type: "string", nullable: true },
+          completedById: { type: "string", nullable: true },
           dueDate: { type: "string", format: "date-time", nullable: true },
+          completedAt: { type: "string", format: "date-time", nullable: true },
+          completedBy: {
+            allOf: [{ $ref: "#/components/schemas/UserSummary" }],
+            nullable: true,
+          },
+          activities: {
+            type: "array",
+            items: { $ref: "#/components/schemas/TaskActivity" },
+          },
           archivedAt: { type: "string", format: "date-time", nullable: true },
           deletedAt: { type: "string", format: "date-time", nullable: true },
           archiveContext: { $ref: "#/components/schemas/ArchiveContext" },
@@ -1410,6 +1424,46 @@ export const openApiDocument: OpenApiDocument = {
             type: "string",
             enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
           },
+        },
+      },
+      TaskActivity: {
+        type: "object",
+        required: ["id", "type", "content", "createdAt"],
+        properties: {
+          id: { type: "string" },
+          type: {
+            type: "string",
+            enum: ["NOTE", "STATUS_CHANGE", "COMPLETION", "REOPENED"],
+          },
+          content: { type: "string" },
+          fromStatus: {
+            type: "string",
+            enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
+            nullable: true,
+          },
+          toStatus: {
+            type: "string",
+            enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
+            nullable: true,
+          },
+          author: {
+            allOf: [{ $ref: "#/components/schemas/UserSummary" }],
+            nullable: true,
+          },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      TaskActivityCreateRequest: {
+        type: "object",
+        required: ["content"],
+        properties: {
+          content: { type: "string", minLength: 2, maxLength: 4000 },
+        },
+      },
+      TaskCompleteRequest: {
+        type: "object",
+        properties: {
+          content: { type: "string", maxLength: 4000 },
         },
       },
       TaskListEnvelope: {
@@ -2014,6 +2068,79 @@ export const openApiDocument: OpenApiDocument = {
           },
         },
       },
+      CommitmentNoteLookupRequest: {
+        type: "object",
+        required: ["projectId", "number"],
+        properties: {
+          projectId: { type: "string" },
+          number: { type: "string", pattern: "^\\d{4}NE\\d{6}$", example: "2026NE000534" },
+          managementUnit: { type: "string", default: "160016" },
+          management: { type: "string", default: "00001" },
+        },
+      },
+      CommitmentNoteStandaloneLookupRequest: {
+        type: "object",
+        required: ["number"],
+        properties: {
+          number: { type: "string", pattern: "^\\d{4}NE\\d{6}$", example: "2026NE000534" },
+          managementUnit: { type: "string", pattern: "^\\d{6}$", default: "160016" },
+          management: { type: "string", pattern: "^\\d{5}$", default: "00001" },
+        },
+      },
+      CommitmentNoteStandaloneLookupResponse: {
+        type: "object",
+        required: ["snapshot"],
+        properties: {
+          snapshot: { $ref: "#/components/schemas/CommitmentNoteResponse" },
+          registered: {
+            allOf: [{ $ref: "#/components/schemas/CommitmentNoteResponse" }],
+            nullable: true,
+          },
+        },
+      },
+      CommitmentNoteRegisterRequest: {
+        allOf: [
+          { $ref: "#/components/schemas/CommitmentNoteLookupRequest" },
+          {
+            type: "object",
+            required: ["receivedAt"],
+            properties: {
+              receivedAt: { type: "string", format: "date-time" },
+              acceptDivergence: { type: "boolean", default: false },
+            },
+          },
+        ],
+      },
+      CommitmentNoteResponse: {
+        type: "object",
+        additionalProperties: true,
+      },
+      CommitmentNoteListResponse: {
+        type: "object",
+        properties: {
+          items: { type: "array", items: { $ref: "#/components/schemas/CommitmentNoteResponse" } },
+          summary: { type: "object", additionalProperties: true },
+          meta: { type: "object", additionalProperties: true },
+        },
+      },
+      InvoiceCreateRequest: {
+        type: "object",
+        required: ["projectId", "number", "supplierCnpj", "issuedAt", "grossAmount"],
+        properties: {
+          projectId: { type: "string" },
+          commitmentNoteId: { type: "string" },
+          number: { type: "string" },
+          series: { type: "string" },
+          accessKey: { type: "string", minLength: 44, maxLength: 44 },
+          supplierCnpj: { type: "string" },
+          issuedAt: { type: "string", format: "date-time" },
+          grossAmount: { type: "number", format: "double" },
+          attestedAmount: { type: "number", format: "double" },
+          attestedAt: { type: "string", format: "date-time" },
+          documentLink: { type: "string", format: "uri" },
+          notes: { type: "string" },
+        },
+      },
       PublicRegisterRequest: {
         type: "object",
         required: ["name", "email", "password"],
@@ -2043,7 +2170,7 @@ export const openApiDocument: OpenApiDocument = {
         example: {
           name: "1 Ten Maria Souza",
           warName: "Souza",
-          email: "maria.souza@sagep.mil.br",
+          email: "usuario.exemplo@example.invalid",
           password: "<senha-forte-do-usuario>",
           role: "GESTOR",
           rank: "1º Ten",
@@ -2902,6 +3029,28 @@ export const openApiDocument: OpenApiDocument = {
           timestamp: { type: "string", format: "date-time" },
         },
       },
+      SystemSettings: {
+        type: "object",
+        required: ["organizationName", "organizationAcronym", "uasg", "management", "commandName", "timeZone", "portalTransparenciaBaseUrl", "portalSyncIntervalMinutes", "portalSyncOnStartup", "comprasGovBaseUrl", "pncpBaseUrl"],
+        properties: {
+          organizationName: { type: "string" }, organizationAcronym: { type: "string" },
+          uasg: { type: "string", pattern: "^\\d{6}$" }, management: { type: "string", pattern: "^\\d{5}$" },
+          commandName: { type: "string" }, timeZone: { type: "string" },
+          portalTransparenciaBaseUrl: { type: "string", format: "uri" }, portalSyncIntervalMinutes: { type: "integer", minimum: 15 }, portalSyncOnStartup: { type: "boolean" },
+          comprasGovBaseUrl: { type: "string", format: "uri" }, pncpBaseUrl: { type: "string", format: "uri" }, defaultBiddingNumber: { type: ["string", "null"] }, defaultBiddingYear: { type: ["integer", "null"] },
+          defaultImmediateCommitment: { type: "boolean" }, defaultEstimateGroup: { type: "string" },
+          portalApiToken: { type: "object", additionalProperties: true }, connections: { type: "object", additionalProperties: true },
+        },
+      },
+      IntegrationConnectionCheck: {
+        type: "object",
+        properties: { provider: { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV", "PNCP"] }, status: { type: "string", enum: ["OPERATIONAL", "DEGRADED", "UNAVAILABLE", "NOT_CONFIGURED"] }, latencyMs: { type: ["integer", "null"] }, httpStatus: { type: ["integer", "null"] }, message: { type: "string" }, checkedAt: { type: "string", format: "date-time" } },
+      },
+      AtaExternalBalanceComparison: {
+        type: "object",
+        description: "Comparação entre o saldo operacional do SAGEP, o saldo oficial do Compras.gov.br e os metadados complementares do PNCP.",
+        additionalProperties: true,
+      },
       HealthComponent: {
         type: "object",
         required: ["id", "name", "description", "status", "latencyMs", "critical", "message"],
@@ -3734,6 +3883,42 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["tasks.edit_all", "tasks.edit_own", "tasks.complete"],
       },
     },
+    "/tasks/{id}/activities": {
+      post: {
+        tags: ["tasks"],
+        summary: "Registrar andamento da tarefa",
+        description: "Registra autor, data e hora. Se a tarefa estiver pendente, inicia automaticamente.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/TaskActivityCreateRequest"),
+        },
+        responses: {
+          "201": createdJson("#/components/schemas/Task", "Andamento registrado"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["tasks.edit_all", "tasks.edit_own", "tasks.complete"],
+      },
+    },
+    "/tasks/{id}/complete": {
+      post: {
+        tags: ["tasks"],
+        summary: "Concluir tarefa",
+        description: "Encerra a tarefa e registra o responsável, a data, a hora e a observação final.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/TaskCompleteRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/Task", "Tarefa concluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["tasks.complete", "tasks.edit_all", "tasks.edit_own"],
+      },
+    },
     "/tasks/{id}/restore": {
       post: {
         tags: ["tasks"],
@@ -4431,6 +4616,127 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
       },
+      delete: {
+        tags: ["operational-alerts"],
+        summary: "Limpar todas as notificações visíveis do usuário",
+        security: bearerSecurity,
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/operational-alerts/{notificationKey}": {
+      delete: {
+        tags: ["operational-alerts"],
+        summary: "Limpar uma notificação do usuário",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("notificationKey", "Chave estável da notificação")],
+        responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses },
+      },
+    },
+    "/system-settings": {
+      get: { tags: ["settings"], summary: "Consultar integrações e parâmetros institucionais", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
+      put: { tags: ["settings"], summary: "Atualizar integrações e parâmetros institucionais", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SystemSettings") }, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+    },
+    "/system-settings/connections/test": {
+      post: { tags: ["settings"], summary: "Testar todas as conexões configuradas", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+    },
+    "/system-settings/connections/{provider}/test": {
+      post: { tags: ["settings"], summary: "Testar uma conexão configurada", security: bearerSecurity, parameters: [pathIdParameter("provider", "Integração", { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] })], responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+    },
+    "/financial-execution/commitment-notes": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Listar Notas de Empenho rastreadas",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/Page" },
+          { $ref: "#/components/parameters/PageSize" },
+          queryParameter("search", "NE, fornecedor, CNPJ ou projeto", { type: "string" }),
+          queryParameter("financialStatus", "Situação financeira", { type: "string", enum: ["NAO_LIQUIDADA", "PARCIALMENTE_LIQUIDADA", "LIQUIDADA", "PARCIALMENTE_PAGA", "PAGA", "PARCIALMENTE_ANULADA", "ANULADA"] }),
+          queryParameter("syncStatus", "Situação da validação externa", { type: "string", enum: ["VALIDADO", "DIVERGENTE", "ERRO"] }),
+        ],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteListResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+      post: {
+        tags: ["financial-execution"],
+        summary: "Validar, vincular e registrar uma Nota de Empenho",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteRegisterRequest") },
+        responses: { "201": createdJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
+      },
+    },
+    "/financial-execution/commitment-notes/preview": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Consultar e comparar uma NE no Portal da Transparência",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteLookupRequest") },
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
+      },
+    },
+    "/financial-execution/commitment-notes/lookup": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Consultar uma NE avulsa sem vinculá-la a projeto",
+        description: "Consulta a fonte oficial e informa quando o documento já está cadastrado no SAGEP. Não persiste nem altera o workflow.",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteStandaloneLookupRequest") },
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteStandaloneLookupResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+    },
+    "/financial-execution/commitment-notes/{id}": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Detalhar NE, documentos relacionados e NFe",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("id", "Identificador da Nota de Empenho")],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+    },
+    "/financial-execution/commitment-notes/{id}/sync": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Sincronizar uma NE com o Portal da Transparência",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("id", "Identificador da Nota de Empenho")],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.sync"],
+      },
+    },
+    "/financial-execution/sync": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Sincronizar todas as NEs ativas",
+        security: bearerSecurity,
+        responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.sync"],
+      },
+    },
+    "/financial-execution/summary": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Resumo da execução financeira",
+        security: bearerSecurity,
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+    },
+    "/financial-execution/invoices": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Registrar e conferir NFe do projeto",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/InvoiceCreateRequest") },
+        responses: { "201": createdJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
+      },
     },
     "/exports/projects.xlsx": {
       get: {
@@ -5076,6 +5382,25 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["atas.manage"],
       },
     },
+    "/atas/{id}/external-balance": {
+      get: {
+        tags: ["atas"],
+        summary: "Consultar último saldo oficial armazenado da ATA",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: { "200": okJson("#/components/schemas/AtaExternalBalanceComparison"), ...defaultErrorResponses },
+      },
+    },
+    "/atas/{id}/sync-external-balance": {
+      post: {
+        tags: ["atas"],
+        summary: "Sincronizar saldos no Compras.gov.br e validar a ATA no PNCP",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: { "200": okJson("#/components/schemas/AtaExternalBalanceComparison"), ...defaultErrorResponses },
+        "x-permissions": ["atas.manage"],
+      },
+    },
     "/atas/{id}/coverage-groups": {
       post: {
         tags: ["atas"],
@@ -5242,6 +5567,25 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/AtaItemBalanceMovementsResponse"),
           ...defaultErrorResponses,
         },
+      },
+    },
+    "/ata-items/{id}/balance-comparison": {
+      get: {
+        tags: ["ata-items"],
+        summary: "Consultar último saldo oficial armazenado do item",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: { "200": okJson("#/components/schemas/AtaExternalBalanceComparison"), ...defaultErrorResponses },
+      },
+    },
+    "/ata-items/{id}/sync-external-balance": {
+      post: {
+        tags: ["ata-items"],
+        summary: "Sincronizar saldo oficial de um item",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: { "200": okJson("#/components/schemas/AtaExternalBalanceComparison"), ...defaultErrorResponses },
+        "x-permissions": ["atas.manage"],
       },
     },
     "/ata-items/{id}/register-external-consumption": {

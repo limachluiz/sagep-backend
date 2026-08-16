@@ -7,6 +7,7 @@ import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
+import { systemSettingsService } from "../system-settings/system-settings.service.js";
 
 type CurrentUser = {
   id: string;
@@ -668,7 +669,10 @@ export class DiexService {
       throw new AppError("Você não tem permissão para emitir DIEx", 403);
     }
 
-    const project = await this.resolveProject(data.projectId, data.projectCode);
+    const [project, settings] = await Promise.all([
+      this.resolveProject(data.projectId, data.projectCode),
+      systemSettingsService.getEffective(),
+    ]);
 
     workflowService.assertCanCreateDiex(this.buildWorkflowSnapshot(project));
 
@@ -718,10 +722,10 @@ export class DiexService {
           estimateId: estimate.id,
           diexNumber: data.diexNumber?.trim(),
           issuedAt: data.issuedAt,
-          issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
-          commandName: data.commandName?.trim() || "COMANDO MILITAR DA AMAZÔNIA",
-          pregaoNumber: data.pregaoNumber?.trim() || "04/2025",
-          uasg: data.uasg?.trim() || "160016",
+          issuingOrganization: data.issuingOrganization?.trim() || settings.organizationAcronym,
+          commandName: data.commandName?.trim() || settings.commandName,
+          pregaoNumber: data.pregaoNumber?.trim() || (settings.defaultBiddingNumber && settings.defaultBiddingYear ? `${settings.defaultBiddingNumber}/${settings.defaultBiddingYear}` : "Não configurado"),
+          uasg: data.uasg?.trim() || settings.uasg,
           supplierName: estimate.ata.vendorName,
           supplierCnpj: data.supplierCnpj.trim(),
           requesterName: requester.requesterName,
