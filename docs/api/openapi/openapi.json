@@ -5414,6 +5414,78 @@
           "isActive": false
         }
       },
+      "MilitaryOrganizationsCsvRequest": {
+        "type": "object",
+        "required": [
+          "content",
+          "mode"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "CSV UTF-8 com cabeçalhos sigla, nome, cidade, uf e ativo opcional."
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "CREATE_ONLY",
+              "UPSERT"
+            ]
+          }
+        }
+      },
+      "MilitaryOrganizationsCsvPreview": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "CREATE_ONLY",
+              "UPSERT"
+            ]
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "MilitaryOrganizationsCsvImportResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "imported": {
+            "type": "integer"
+          },
+          "total": {
+            "type": "integer"
+          },
+          "create": {
+            "type": "integer"
+          },
+          "update": {
+            "type": "integer"
+          },
+          "unchanged": {
+            "type": "integer"
+          },
+          "skipped": {
+            "type": "integer"
+          },
+          "invalid": {
+            "type": "integer"
+          }
+        }
+      },
       "MilitaryOrganizationListEnvelope": {
         "type": "object",
         "properties": {
@@ -15931,6 +16003,168 @@
           "military_organizations.manage"
         ],
         "operationId": "militaryOrganizations_delete_code_byCode"
+      }
+    },
+    "/military-organizations/import/template": {
+      "get": {
+        "tags": [
+          "military-organizations"
+        ],
+        "summary": "Baixar modelo CSV para importação de OMs",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Modelo CSV UTF-8",
+            "content": {
+              "text/csv": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "military_organizations.manage"
+        ],
+        "operationId": "militaryOrganizations_get_import_template"
+      }
+    },
+    "/military-organizations/import/preview": {
+      "post": {
+        "tags": [
+          "military-organizations"
+        ],
+        "summary": "Validar CSV e prever criação, atualização ou descarte",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MilitaryOrganizationsCsvRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilitaryOrganizationsCsvPreview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "military_organizations.manage"
+        ],
+        "operationId": "militaryOrganizations_post_import_preview"
+      }
+    },
+    "/military-organizations/import": {
+      "post": {
+        "tags": [
+          "military-organizations"
+        ],
+        "summary": "Importar OMs válidas após nova validação do CSV",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MilitaryOrganizationsCsvRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MilitaryOrganizationsCsvImportResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "military_organizations.manage"
+        ],
+        "operationId": "militaryOrganizations_post_import"
       }
     },
     "/military-organizations/{id}": {

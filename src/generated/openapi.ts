@@ -2267,6 +2267,57 @@ export interface paths {
         patch: operations["militaryOrganizations_patch_code_byCode"];
         trace?: never;
     };
+    "/military-organizations/import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Baixar modelo CSV para importação de OMs */
+        get: operations["militaryOrganizations_get_import_template"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/military-organizations/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validar CSV e prever criação, atualização ou descarte */
+        post: operations["militaryOrganizations_post_import_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/military-organizations/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Importar OMs válidas após nova validação do CSV */
+        post: operations["militaryOrganizations_post_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/military-organizations/{id}": {
         parameters: {
             query?: never;
@@ -3928,6 +3979,32 @@ export interface components {
             /** @enum {string} */
             stateUf?: "AM" | "RO" | "RR" | "AC";
             isActive?: boolean | null;
+        };
+        MilitaryOrganizationsCsvRequest: {
+            /** @description CSV UTF-8 com cabeçalhos sigla, nome, cidade, uf e ativo opcional. */
+            content: string;
+            /** @enum {string} */
+            mode: "CREATE_ONLY" | "UPSERT";
+        };
+        MilitaryOrganizationsCsvPreview: {
+            /** @enum {string} */
+            mode?: "CREATE_ONLY" | "UPSERT";
+            rows?: {
+                [key: string]: unknown;
+            }[];
+            summary?: {
+                [key: string]: unknown;
+            };
+        };
+        MilitaryOrganizationsCsvImportResponse: {
+            message?: string;
+            imported?: number;
+            total?: number;
+            create?: number;
+            update?: number;
+            unchanged?: number;
+            skipped?: number;
+            invalid?: number;
         };
         MilitaryOrganizationListEnvelope: {
             items?: components["schemas"]["MilitaryOrganization"][];
@@ -9326,6 +9403,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MilitaryOrganization"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    militaryOrganizations_get_import_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Modelo CSV UTF-8 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    militaryOrganizations_post_import_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MilitaryOrganizationsCsvRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MilitaryOrganizationsCsvPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    militaryOrganizations_post_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MilitaryOrganizationsCsvRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MilitaryOrganizationsCsvImportResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

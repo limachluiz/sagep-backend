@@ -2793,6 +2793,29 @@ export const openApiDocument: OpenApiDocument = {
           isActive: false,
         },
       },
+      MilitaryOrganizationsCsvRequest: {
+        type: "object",
+        required: ["content", "mode"],
+        properties: {
+          content: { type: "string", description: "CSV UTF-8 com cabeçalhos sigla, nome, cidade, uf e ativo opcional." },
+          mode: { type: "string", enum: ["CREATE_ONLY", "UPSERT"] },
+        },
+      },
+      MilitaryOrganizationsCsvPreview: {
+        type: "object",
+        properties: {
+          mode: { type: "string", enum: ["CREATE_ONLY", "UPSERT"] },
+          rows: { type: "array", items: { type: "object", additionalProperties: true } },
+          summary: { type: "object", additionalProperties: true },
+        },
+      },
+      MilitaryOrganizationsCsvImportResponse: {
+        type: "object",
+        properties: {
+          message: { type: "string" }, imported: { type: "integer" }, total: { type: "integer" },
+          create: { type: "integer" }, update: { type: "integer" }, unchanged: { type: "integer" }, skipped: { type: "integer" }, invalid: { type: "integer" },
+        },
+      },
       MilitaryOrganizationListEnvelope: {
         type: "object",
         properties: {
@@ -5538,6 +5561,15 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-permissions": ["military_organizations.manage"],
       },
+    },
+    "/military-organizations/import/template": {
+      get: { tags: ["military-organizations"], summary: "Baixar modelo CSV para importação de OMs", security: bearerSecurity, responses: { "200": { description: "Modelo CSV UTF-8", content: binaryContent("text/csv") }, ...defaultErrorResponses }, "x-permissions": ["military_organizations.manage"] },
+    },
+    "/military-organizations/import/preview": {
+      post: { tags: ["military-organizations"], summary: "Validar CSV e prever criação, atualização ou descarte", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/MilitaryOrganizationsCsvRequest") }, responses: { "200": okJson("#/components/schemas/MilitaryOrganizationsCsvPreview"), ...defaultErrorResponses }, "x-permissions": ["military_organizations.manage"] },
+    },
+    "/military-organizations/import": {
+      post: { tags: ["military-organizations"], summary: "Importar OMs válidas após nova validação do CSV", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/MilitaryOrganizationsCsvRequest") }, responses: { "200": okJson("#/components/schemas/MilitaryOrganizationsCsvImportResponse"), ...defaultErrorResponses }, "x-permissions": ["military_organizations.manage"] },
     },
     "/military-organizations/{id}": {
       get: {

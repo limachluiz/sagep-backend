@@ -10,6 +10,24 @@ militaryOrganizationsRoutes.use(authMiddleware);
 
 militaryOrganizationsRoutes.get("/", (req, res) => controller.list(req, res));
 
+militaryOrganizationsRoutes.get(
+  "/import/template",
+  requirePermission("military_organizations.manage"),
+  (req, res) => controller.template(req, res),
+);
+
+militaryOrganizationsRoutes.post(
+  "/import/preview",
+  requirePermission("military_organizations.manage"),
+  (req, res) => controller.previewImport(req, res),
+);
+
+militaryOrganizationsRoutes.post(
+  "/import",
+  requirePermission("military_organizations.manage"),
+  (req, res) => controller.importCsv(req, res),
+);
+
 militaryOrganizationsRoutes.get("/code/:code", (req, res) =>
   controller.findByCode(req, res)
 );

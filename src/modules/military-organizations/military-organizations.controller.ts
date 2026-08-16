@@ -5,6 +5,7 @@ import {
   militaryOrganizationCodeParamSchema,
   militaryOrganizationIdParamSchema,
   updateMilitaryOrganizationSchema,
+  militaryOrganizationsCsvRequestSchema,
 } from "./military-organizations.schemas.js";
 import { MilitaryOrganizationsService } from "./military-organizations.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
@@ -12,6 +13,22 @@ import { buildListResponse } from "../../shared/pagination.js";
 const service = new MilitaryOrganizationsService();
 
 export class MilitaryOrganizationsController {
+  template(_req: Request, res: Response) {
+    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    res.setHeader("Content-Disposition", 'attachment; filename="modelo-importacao-oms.csv"');
+    return res.status(200).send(service.csvTemplate());
+  }
+
+  async previewImport(req: Request, res: Response) {
+    const { content, mode } = militaryOrganizationsCsvRequestSchema.parse(req.body);
+    return res.status(200).json(await service.previewCsv(content, mode));
+  }
+
+  async importCsv(req: Request, res: Response) {
+    const { content, mode } = militaryOrganizationsCsvRequestSchema.parse(req.body);
+    return res.status(200).json(await service.importCsv(content, mode, req.user!));
+  }
+
   async create(req: Request, res: Response) {
     const data = createMilitaryOrganizationSchema.parse(req.body);
     const om = await service.create(data);

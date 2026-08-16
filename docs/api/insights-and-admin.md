@@ -166,6 +166,23 @@ Permissoes: `reports.export` e `dashboard.view_executive`.
 
 Uso: gerar dossie consolidado do projeto em JSON ou PDF.
 
+## Importacao Em Lote De Organizacoes Militares
+
+A tela de Organizacoes Militares oferece um modelo CSV UTF-8 separado por
+ponto e virgula, compativel com Excel. Tambem sao aceitos CSVs separados por
+virgula. Os cabecalhos obrigatorios sao `sigla`, `nome`, `cidade` e `uf`; a
+coluna `ativo` e opcional e aceita `SIM/NAO`, `true/false` ou `1/0`.
+
+| Metodo | Rota | Uso |
+|---|---|---|
+| `GET` | `/military-organizations/import/template` | Baixa o modelo oficial. |
+| `POST` | `/military-organizations/import/preview` | Valida ate 1.000 linhas sem gravar. |
+| `POST` | `/military-organizations/import` | Revalida e grava somente linhas validas. |
+
+O modo `CREATE_ONLY` ignora siglas existentes. O modo `UPSERT` atualiza nome,
+cidade, UF e status das OMs encontradas pela sigla. Siglas repetidas no mesmo
+arquivo e linhas invalidas sao identificadas individualmente na previa.
+
 ## Users
 
 Base:
