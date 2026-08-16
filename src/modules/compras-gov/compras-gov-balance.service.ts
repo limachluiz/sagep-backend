@@ -31,9 +31,6 @@ const AVAILABLE_QUANTITY_KEYS = [
   "qtdDisponivel",
   "qtdSaldoEmpenho",
   "quantidadeSaldoEmpenho",
-  "saldoRemanejamentoEmpenho",
-  "quantidadeDisponivelRemanejamentoEmpenho",
-  "quantidadeSaldoRemanejamentoEmpenho",
 ];
 const RATE_LIMIT_WARNING =
   "Limite de requisições do Compras.gov.br atingido. Tente novamente em alguns segundos.";
@@ -1049,6 +1046,12 @@ export class ComprasGovBalanceService {
     const unitRegistered = unitRegisteredEntry?.value ?? decimal(0);
     const registeredQuantity = unitRegistered.greaterThan(0) ? unitRegistered : itemRegistered;
     const availableQuantityEntry = this.getAvailableQuantityFromUnitEntry(managedUnit);
+    // Saldo de remanejamento/adesão não é saldo disponível para novos empenhos.
+    // Sem um campo explícito de saldo de empenho, a fonte oficial deve ser tratada
+    // como não informada, em vez de apresentar a quantidade registrada como saldo.
+    if (!availableQuantityEntry) {
+      return undefined;
+    }
     const availableQuantity = availableQuantityEntry?.value ?? decimal(0);
     const explicitCommittedQuantityEntry = this.getExplicitCommittedQuantityFromUnitEntry(managedUnit);
     const explicitCommittedQuantity = explicitCommittedQuantityEntry?.value ?? null;
@@ -1264,23 +1267,25 @@ export class ComprasGovBalanceService {
     comparison: ReturnType<ComprasGovBalanceService["buildComparison"]>,
     warnings: string[] = comparison.warnings ?? []
   ) {
-    if (!comparison.externalBalance) return null;
-
     return prisma.ataItemExternalBalanceSnapshot.upsert({
       where: { ataItemId },
       update: {
-        source: comparison.externalBalance.source,
+        source: comparison.externalBalance?.source ?? COMPRAS_GOV_SOURCE,
         status: comparison.status,
-        externalBalance: this.normalizeJsonValue(comparison.externalBalance),
+        externalBalance: comparison.externalBalance
+          ? this.normalizeJsonValue(comparison.externalBalance)
+          : Prisma.JsonNull,
         difference: comparison.difference,
         lastSyncAt: comparison.lastSyncAt ?? new Date(),
         warnings: this.normalizeJsonValue(warnings),
       },
       create: {
         ataItemId,
-        source: comparison.externalBalance.source,
+        source: comparison.externalBalance?.source ?? COMPRAS_GOV_SOURCE,
         status: comparison.status,
-        externalBalance: this.normalizeJsonValue(comparison.externalBalance),
+        externalBalance: comparison.externalBalance
+          ? this.normalizeJsonValue(comparison.externalBalance)
+          : Prisma.JsonNull,
         difference: comparison.difference,
         lastSyncAt: comparison.lastSyncAt ?? new Date(),
         warnings: this.normalizeJsonValue(warnings),
@@ -1636,7 +1641,13 @@ export class ComprasGovBalanceService {
       localBalance,
       externalBalance
     );
-    await this.upsertSnapshot(localItem.id, syncedComparison);
+    await this.upsertSnapshot(localItem.id, syncedComparison, [
+      ...externalResult.warnings,
+      ...(externalBalance
+        ? []
+        : ["O Compras.gov.br não publicou saldo de empenho para este item."]
+      ),
+    ]);
 
     return {
       source: COMPRAS_GOV_SOURCE,
@@ -1697,11 +1708,15 @@ export class ComprasGovBalanceService {
     let updatedItems = 0;
     if (!hasExternalError) {
       for (const item of comparison.items) {
-        if (!item.externalBalance) continue;
         await this.upsertSnapshot(item.item.id, {
           ...item,
           lastSyncAt: now,
-        });
+        }, item.externalBalance
+          ? item.warnings
+          : [
+              ...(item.warnings ?? []),
+              "O Compras.gov.br não publicou saldo de empenho para este item.",
+            ]);
         updatedItems += 1;
       }
 
@@ -1716,9 +1731,7 @@ export class ComprasGovBalanceService {
       await prisma.ataItem.updateMany({
         where: {
           ataId,
-          id: {
-            in: comparison.items.filter((item) => item.externalBalance).map((item) => item.item.id),
-          },
+          id: { in: comparison.items.map((item) => item.item.id) },
         },
         data: { externalLastSyncAt: now },
       });

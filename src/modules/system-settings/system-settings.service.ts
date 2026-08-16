@@ -161,24 +161,47 @@ export class SystemSettingsService {
 
   private async probePncp() {
     const settings = await this.getEffective();
-    // O catálogo OpenAPI valida a API pública sem depender de uma consulta volumosa de atas.
-    const url = new URL("/api/consulta/v3/api-docs", new URL(settings.pncpBaseUrl).origin);
-    const result = await this.probeHttp(url, { Accept: "application/json" }, "PNCP");
+    // Valida exatamente o serviço configurado para consultar atas. O PNCP costuma
+    // responder em mais de 15 segundos, por isso usa o timeout próprio da integração.
+    const baseUrl = settings.pncpBaseUrl.replace(/\/$/, "");
+    const url = new URL(`${baseUrl}/v3/api-docs`);
+    const result = await this.probeHttp(
+      url,
+      { Accept: "application/json" },
+      "PNCP",
+      env.PNCP_REQUEST_TIMEOUT_MS,
+    );
     return {
       ...result,
       details: { ...result.details, configuredBaseUrl: settings.pncpBaseUrl },
     };
   }
 
-  private async probeHttp(url: URL, headers: Record<string, string>, label: string) {
+  private async probeHttp(
+    url: URL,
+    headers: Record<string, string>,
+    label: string,
+    timeoutMs = env.INTEGRATION_PROBE_TIMEOUT_MS,
+  ) {
     const started = performance.now();
     try {
-      const response = await fetch(url, { headers, signal: AbortSignal.timeout(env.INTEGRATION_PROBE_TIMEOUT_MS) });
+      const response = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
       const status: ConnectionStatus = response.ok ? "OPERATIONAL" : response.status === 429 ? "DEGRADED" : "UNAVAILABLE";
       const message = response.ok ? `${label} respondeu com sucesso` : response.status === 429 ? `${label} acessível, mas com limite de requisições` : `${label} respondeu com HTTP ${response.status}`;
       return this.result(status, started, response.status, message, { endpoint: `${url.origin}${url.pathname}` });
     } catch (error) {
-      return this.result("UNAVAILABLE", started, null, `${label} não respondeu`, { endpoint: `${url.origin}${url.pathname}`, error: error instanceof Error ? error.message : String(error) });
+      const timeout = error instanceof Error && error.name === "TimeoutError";
+      return this.result(
+        "UNAVAILABLE",
+        started,
+        null,
+        timeout ? `${label} excedeu ${Math.round(timeoutMs / 1000)} segundos` : `${label} não respondeu`,
+        {
+          endpoint: `${url.origin}${url.pathname}`,
+          timeoutMs,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      );
     }
   }
 
