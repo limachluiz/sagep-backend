@@ -1,11 +1,11 @@
 import { Prisma } from "../../generated/prisma/client.js";
+import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
-const REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 
@@ -368,7 +368,7 @@ export class ComprasGovService {
     try {
       response = await fetch(url, {
         headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(env.COMPRAS_GOV_REQUEST_TIMEOUT_MS),
       });
     } catch {
       debugEntry.errorBody = "Falha de rede ou timeout ao consultar API do Compras.gov.br";

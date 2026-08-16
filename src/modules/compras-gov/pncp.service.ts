@@ -1,6 +1,5 @@
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
-
-const REQUEST_TIMEOUT_MS = 10_000;
+import { env } from "../../config/env.js";
 
 type PncpAtaResponse = Record<string, unknown> & {
   numeroControlePNCP?: string;
@@ -72,7 +71,7 @@ export class PncpService {
     try {
       response = await fetch(url, {
         headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(env.PNCP_REQUEST_TIMEOUT_MS),
       });
     } catch {
       throw new PncpRequestError("PNCP não respondeu à consulta", null, url.toString());

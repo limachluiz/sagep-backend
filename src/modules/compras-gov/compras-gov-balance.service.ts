@@ -1,4 +1,5 @@
 import { Prisma } from "../../generated/prisma/client.js";
+import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
@@ -7,7 +8,6 @@ import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js"
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { pncpService, type PncpAtaSnapshot } from "./pncp.service.js";
 const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
-const REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 const REGISTERED_QUANTITY_KEYS = [
@@ -165,6 +165,7 @@ type ExternalRequestError = Error & {
   url?: string;
   body?: string;
   network?: boolean;
+  timeout?: boolean;
   retryAfterSeconds?: number | null;
 };
 
@@ -587,12 +588,18 @@ export class ComprasGovBalanceService {
     try {
       response = await fetch(url, {
         headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(env.COMPRAS_GOV_REQUEST_TIMEOUT_MS),
       });
-    } catch {
-      const error = new Error("Falha ao consultar saldo externo do Compras.gov.br") as ExternalRequestError;
+    } catch (cause) {
+      const timedOut = cause instanceof Error && cause.name === "TimeoutError";
+      const error = new Error(
+        timedOut
+          ? `Compras.gov.br excedeu o tempo limite de ${Math.round(env.COMPRAS_GOV_REQUEST_TIMEOUT_MS / 1000)} segundos`
+          : "Falha ao consultar saldo externo do Compras.gov.br"
+      ) as ExternalRequestError;
       error.url = url.toString();
       error.network = true;
+      error.timeout = timedOut;
       debugEntry.body = error.message;
       throw error;
     }
@@ -1381,7 +1388,12 @@ export class ComprasGovBalanceService {
     const externalResult = await this.fetchExternalBalancesForAta(ata);
 
     if (externalResult.error?.network) {
-      throw new AppError("API do Compras.gov.br indisponivel para consulta de saldo externo", 502);
+      throw new AppError(
+        externalResult.error.timeout
+          ? `O Compras.gov.br demorou mais de ${Math.round(env.COMPRAS_GOV_REQUEST_TIMEOUT_MS / 1000)} segundos para consultar o saldo. Tente novamente.`
+          : "API do Compras.gov.br indisponivel para consulta de saldo externo",
+        502
+      );
     }
 
     const detailFallbackBalances = new Map<string, ExternalBalance>();

@@ -28,6 +28,9 @@ const envSchema = z
     .transform((value) => value === "true"),
   HEALTH_PGADMIN_URL: z.string().url().optional(),
   HEALTH_PROBE_TIMEOUT_MS: z.coerce.number().int().min(250).max(10000).default(2000),
+  INTEGRATION_PROBE_TIMEOUT_MS: z.coerce.number().int().min(2000).max(60000).default(15000),
+  COMPRAS_GOV_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
+  PNCP_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
 })
   .transform((env) => ({
     ...env,

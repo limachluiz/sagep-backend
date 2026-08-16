@@ -161,13 +161,8 @@ export class SystemSettingsService {
 
   private async probePncp() {
     const settings = await this.getEffective();
-    const url = new URL("/api/consulta/v1/atas", new URL(settings.pncpBaseUrl).origin);
-    const endDate = new Date();
-    const startDate = new Date(endDate);
-    startDate.setUTCDate(startDate.getUTCDate() - 30);
-    url.searchParams.set("dataInicial", startDate.toISOString().slice(0, 10).replaceAll("-", ""));
-    url.searchParams.set("dataFinal", endDate.toISOString().slice(0, 10).replaceAll("-", ""));
-    url.searchParams.set("pagina", "1");
+    // O catálogo OpenAPI valida a API pública sem depender de uma consulta volumosa de atas.
+    const url = new URL("/api/consulta/v3/api-docs", new URL(settings.pncpBaseUrl).origin);
     const result = await this.probeHttp(url, { Accept: "application/json" }, "PNCP");
     return {
       ...result,
@@ -178,9 +173,9 @@ export class SystemSettingsService {
   private async probeHttp(url: URL, headers: Record<string, string>, label: string) {
     const started = performance.now();
     try {
-      const response = await fetch(url, { headers, signal: AbortSignal.timeout(env.HEALTH_PROBE_TIMEOUT_MS) });
+      const response = await fetch(url, { headers, signal: AbortSignal.timeout(env.INTEGRATION_PROBE_TIMEOUT_MS) });
       const status: ConnectionStatus = response.ok ? "OPERATIONAL" : response.status === 429 ? "DEGRADED" : "UNAVAILABLE";
-      const message = response.ok ? `${label} conectado e autenticado` : response.status === 429 ? `${label} acessível, mas com limite de requisições` : `${label} respondeu com HTTP ${response.status}`;
+      const message = response.ok ? `${label} respondeu com sucesso` : response.status === 429 ? `${label} acessível, mas com limite de requisições` : `${label} respondeu com HTTP ${response.status}`;
       return this.result(status, started, response.status, message, { endpoint: `${url.origin}${url.pathname}` });
     } catch (error) {
       return this.result("UNAVAILABLE", started, null, `${label} não respondeu`, { endpoint: `${url.origin}${url.pathname}`, error: error instanceof Error ? error.message : String(error) });
