@@ -22,8 +22,10 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - governança de acesso via RBAC persistido no banco;
 - auditoria de ações críticas;
 - dashboards operacionais, executivos e financeiros com filtros temporais e organizacionais;
-- gestão de saldo dos itens da ATA com reserva, consumo, estorno e rollback de NE.
+- gestão de saldo interno dos itens da ATA com reserva, consumo, estorno e rollback de NE;
 - importação completa de ATAs e itens pelo Compras.gov.br;
+- backup automático e manual, exportação seletiva e restauração segura do PostgreSQL;
+- importação em escala de Organizações Militares por CSV, com prévia e validação;
 - Kanban interno derivado do workflow dos projetos, filtrável por etapa, UF, OM, tipo e responsável;
 - Gantt consolidado a partir das Ordens de Serviço, com recortes por UF, tipo e responsável.
 
@@ -56,13 +58,17 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - aprovação do As-Built condicionada a link de arquivo ou pasta em nuvem;
 - importação única de ATA completa pelo Compras.gov.br;
 - saldo dos itens da ATA por movimentação;
+- importação CSV de OMs em modo de criação ou atualização, com análise prévia por linha;
+- backup completo manual e agendado, importação e download de arquivos `.dump`;
+- restauração integral com verificação SHA-256 e backup de segurança automático;
+- exportação seletiva de projetos, ATAs e outros módulos em SQL;
 - dashboards operacional, executivo e visão geral;
 - alertas operacionais;
 - relatórios e exportações;
-- auditoria e timeline.
+- auditoria e timeline;
 - contrato OpenAPI com cliente TypeScript gerado;
-- códigos de erro estáveis e `requestId` para suporte.
-- centro de saúde com sondas da API, PostgreSQL e pgAdmin, histórico de latência e diagnóstico administrativo.
+- códigos de erro estáveis e `requestId` para suporte;
+- centro de saúde com sondas da API, PostgreSQL e pgAdmin, histórico de latência e diagnóstico administrativo;
 - execução financeira com validação de NE no Portal da Transparência, rastreio de liquidação/pagamento, NFe e alertas dispensáveis por usuário.
 
 ## Fluxo documental resumido
@@ -136,6 +142,12 @@ Variáveis usadas atualmente:
 | `ALLOW_PUBLIC_REGISTRATION` | nao | Habilita `POST /auth/register`. Padrao seguro: `false` |
 | `HEALTH_PGADMIN_URL` | nao | Endpoint interno de ping do pgAdmin. No Compose: `http://pgadmin/misc/ping` |
 | `HEALTH_PROBE_TIMEOUT_MS` | nao | Timeout das sondas internas. Padrao `2000` ms |
+| `BACKUP_DIRECTORY` | nao | Diretório dos backups e manifestos. Padrão `./backups`; no Docker usa volume persistente |
+| `BACKUP_RETENTION_DAYS` | nao | Retenção dos backups automáticos em dias. Padrão `30` |
+| `BACKUP_MAX_FILES` | nao | Quantidade máxima de backups automáticos mantidos. Padrão `30` |
+| `BACKUP_SCHEDULE_HOURS` | nao | Intervalo entre backups automáticos. `0` desativa; padrão `24` |
+| `BACKUP_RUN_ON_STARTUP` | nao | Cria backup ao iniciar a API. Padrão `false` |
+| `BACKUP_MAX_UPLOAD_MB` | nao | Limite para importação de arquivo `.dump`. Padrão `512` MB |
 
 Exemplo:
 
@@ -159,6 +171,12 @@ CORS_ALLOW_CREDENTIALS=false
 ALLOW_PUBLIC_REGISTRATION=false
 HEALTH_PGADMIN_URL="http://pgadmin/misc/ping"
 HEALTH_PROBE_TIMEOUT_MS=2000
+BACKUP_DIRECTORY=./backups
+BACKUP_RETENTION_DAYS=30
+BACKUP_MAX_FILES=30
+BACKUP_SCHEDULE_HOURS=24
+BACKUP_RUN_ON_STARTUP=false
+BACKUP_MAX_UPLOAD_MB=512
 ```
 
 Requisicoes sem header `Origin`, como scripts, health checks e comunicacao
@@ -252,13 +270,29 @@ Dentro do `psql`:
 SELECT COUNT(*) FROM "Ata";
 ```
 
-### Backup do banco
+### Backup e restauração administrados
+
+O módulo protegido por `backups.manage` e pela role `ADMIN` oferece:
+
+- criação imediata e rotina automática configurável;
+- armazenamento no volume Docker `sagep_backups`;
+- manifesto com metadados e checksum SHA-256;
+- download, importação e validação de backups PostgreSQL no formato custom;
+- exportação seletiva de módulos em SQL;
+- restauração integral mediante confirmação explícita;
+- backup de segurança automático imediatamente antes de cada restauração;
+- bloqueio de operações simultâneas e modo de manutenção durante o restore.
+
+As rotas estão documentadas no OpenAPI em `/api/docs` e os arquivos físicos não
+são expostos diretamente pelo servidor web.
+
+### Backup manual via terminal
 
 ```bash
 docker exec -t sagep_postgres pg_dump -U sagep -d sagep > backup_sagep.sql
 ```
 
-### Restore do banco
+### Restore manual via terminal
 
 Com os containers de pe:
 
