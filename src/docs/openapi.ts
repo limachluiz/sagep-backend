@@ -25,6 +25,7 @@ const tagExternalDocs = {
   integrations: "./insights-and-admin.md",
   "military-organizations": "./insights-and-admin.md",
   settings: "./insights-and-admin.md",
+  backups: "./insights-and-admin.md",
   health: "./README.md",
 };
 
@@ -193,6 +194,7 @@ export const openApiDocument: OpenApiDocument = {
     "integrations",
     "military-organizations",
     "settings",
+    "backups",
   ].map((name) => ({
     name,
     description: `Modulo ${name} do backend SAGEP`,
@@ -2828,6 +2830,59 @@ export const openApiDocument: OpenApiDocument = {
           portalApiToken: { type: "object", additionalProperties: true }, connections: { type: "object", additionalProperties: true },
         },
       },
+      DatabaseBackup: {
+        type: "object",
+        required: ["id", "kind", "filename", "createdAt", "sizeBytes", "checksumSha256", "format", "verified"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          kind: { type: "string", enum: ["MANUAL", "AUTOMATIC", "IMPORTED", "SAFETY"] },
+          filename: { type: "string" },
+          originalFilename: { type: ["string", "null"] },
+          createdAt: { type: "string", format: "date-time" },
+          createdBy: { type: ["string", "null"] },
+          sizeBytes: { type: "integer", minimum: 1 },
+          checksumSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          databaseName: { type: "string" },
+          format: { type: "string", enum: ["POSTGRES_CUSTOM"] },
+          verified: { type: "boolean" },
+        },
+      },
+      BackupsOverview: {
+        type: "object",
+        properties: {
+          items: { type: "array", items: { $ref: "#/components/schemas/DatabaseBackup" } },
+          summary: { type: "object", additionalProperties: true },
+          policy: { type: "object", additionalProperties: true },
+          operationRunning: { type: "boolean" },
+        },
+      },
+      RestoreDatabaseRequest: {
+        type: "object",
+        required: ["confirmation"],
+        properties: { confirmation: { type: "string", enum: ["RESTAURAR BANCO"] } },
+      },
+      RestoreDatabaseResponse: {
+        type: "object",
+        required: ["message", "restoredAt", "restoredBackup", "safetyBackup"],
+        properties: {
+          message: { type: "string" },
+          restoredAt: { type: "string", format: "date-time" },
+          restoredBackup: { $ref: "#/components/schemas/DatabaseBackup" },
+          safetyBackup: { $ref: "#/components/schemas/DatabaseBackup" },
+        },
+      },
+      SelectiveDatabaseExportRequest: {
+        type: "object",
+        required: ["modules"],
+        properties: {
+          modules: {
+            type: "array",
+            minItems: 1,
+            uniqueItems: true,
+            items: { type: "string", enum: ["PROJECTS", "ATAS", "USERS", "SETTINGS", "AUDIT"] },
+          },
+        },
+      },
       IntegrationConnectionCheck: {
         type: "object",
         properties: { provider: { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV", "PNCP"] }, status: { type: "string", enum: ["OPERATIONAL", "DEGRADED", "UNAVAILABLE", "NOT_CONFIGURED"] }, latencyMs: { type: ["integer", "null"] }, httpStatus: { type: ["integer", "null"] }, message: { type: "string" }, checkedAt: { type: "string", format: "date-time" } },
@@ -4430,6 +4485,23 @@ export const openApiDocument: OpenApiDocument = {
     },
     "/system-settings/connections/{provider}/test": {
       post: { tags: ["settings"], summary: "Testar uma conexão configurada", security: bearerSecurity, parameters: [pathIdParameter("provider", "Integração", { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] })], responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+    },
+    "/backups": {
+      get: { tags: ["backups"], summary: "Listar backups e política de retenção", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/BackupsOverview"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+      post: { tags: ["backups"], summary: "Criar e verificar backup completo do PostgreSQL", security: bearerSecurity, responses: { "201": createdJson("#/components/schemas/DatabaseBackup"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+    },
+    "/backups/import": {
+      post: { tags: ["backups"], summary: "Importar e validar arquivo .dump do SAGEP", security: bearerSecurity, requestBody: { required: true, content: binaryContent("application/octet-stream") }, responses: { "201": createdJson("#/components/schemas/DatabaseBackup"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+    },
+    "/backups/export": {
+      post: { tags: ["backups"], summary: "Exportar dados selecionados em SQL", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SelectiveDatabaseExportRequest") }, responses: { "200": { description: "Arquivo SQL", content: binaryContent("application/sql") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+    },
+    "/backups/{id}/download": {
+      get: { tags: ["backups"], summary: "Baixar backup", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": { description: "Arquivo PostgreSQL custom", content: binaryContent("application/octet-stream") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+    },
+    "/backups/{id}/restore": {
+      post: { tags: ["backups"], summary: "Restaurar integralmente o banco com backup de segurança prévio", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], requestBody: { required: true, content: jsonContent("#/components/schemas/RestoreDatabaseRequest") }, responses: { "200": okJson("#/components/schemas/RestoreDatabaseResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+      delete: { tags: ["backups"], summary: "Excluir backup armazenado", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
     },
     "/financial-execution/commitment-notes": {
       get: {

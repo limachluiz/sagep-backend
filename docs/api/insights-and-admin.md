@@ -1,5 +1,28 @@
 # Dashboards, Busca, Alertas, Relatorios E Administracao
 
+## Backup E Restauracao
+
+Base: `/api/backups`. Todas as rotas exigem role `ADMIN` e a permissao critica
+`backups.manage`.
+
+| Metodo | Rota | Uso |
+|---|---|---|
+| `GET` | `/backups` | Lista arquivos, espaco usado e politica de retencao. |
+| `POST` | `/backups` | Cria backup PostgreSQL completo, valida e calcula SHA-256. |
+| `POST` | `/backups/import` | Recebe um `.dump` como `application/octet-stream` e valida sua origem. |
+| `POST` | `/backups/export` | Exporta modulos selecionados em SQL. |
+| `GET` | `/backups/:id/download` | Baixa a copia integral. |
+| `POST` | `/backups/:id/restore` | Restaura o banco apos confirmacao literal `RESTAURAR BANCO`. |
+| `DELETE` | `/backups/:id` | Exclui arquivo e manifesto. |
+
+O formato integral e o `custom archive` nativo do PostgreSQL. Antes da
+restauracao, o SAGEP confere o checksum e o catalogo do arquivo e cria um backup
+de seguranca do estado corrente. Ao final, as migracoes pendentes da versao atual
+do SAGEP sao reaplicadas automaticamente. A rotina automatica e controlada pelas
+variaveis `BACKUP_SCHEDULE_HOURS`, `BACKUP_RUN_ON_STARTUP`,
+`BACKUP_RETENTION_DAYS` e `BACKUP_MAX_FILES`. Os arquivos ficam no volume Docker
+persistente `sagep_backups`.
+
 ## Auditoria
 
 Base:

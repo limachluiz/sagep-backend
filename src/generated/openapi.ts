@@ -1350,6 +1350,93 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar backups e política de retenção */
+        get: operations["backups_get_collection"];
+        put?: never;
+        /** Criar e verificar backup completo do PostgreSQL */
+        post: operations["backups_post_collection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Importar e validar arquivo .dump do SAGEP */
+        post: operations["backups_post_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exportar dados selecionados em SQL */
+        post: operations["backups_post_export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Baixar backup */
+        get: operations["backups_get_byId_download"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restaurar integralmente o banco com backup de segurança prévio */
+        post: operations["backups_post_byId_restore"];
+        /** Excluir backup armazenado */
+        delete: operations["backups_delete_byId_restore"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/financial-execution/commitment-notes": {
         parameters: {
             query?: never;
@@ -3882,6 +3969,47 @@ export interface components {
             connections?: {
                 [key: string]: unknown;
             };
+        };
+        DatabaseBackup: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "MANUAL" | "AUTOMATIC" | "IMPORTED" | "SAFETY";
+            filename: string;
+            originalFilename?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            createdBy?: string | null;
+            sizeBytes: number;
+            checksumSha256: string;
+            databaseName?: string;
+            /** @enum {string} */
+            format: "POSTGRES_CUSTOM";
+            verified: boolean;
+        };
+        BackupsOverview: {
+            items?: components["schemas"]["DatabaseBackup"][];
+            summary?: {
+                [key: string]: unknown;
+            };
+            policy?: {
+                [key: string]: unknown;
+            };
+            operationRunning?: boolean;
+        };
+        RestoreDatabaseRequest: {
+            /** @enum {string} */
+            confirmation: "RESTAURAR BANCO";
+        };
+        RestoreDatabaseResponse: {
+            message: string;
+            /** Format: date-time */
+            restoredAt: string;
+            restoredBackup: components["schemas"]["DatabaseBackup"];
+            safetyBackup: components["schemas"]["DatabaseBackup"];
+        };
+        SelectiveDatabaseExportRequest: {
+            modules: ("PROJECTS" | "ATAS" | "USERS" | "SETTINGS" | "AUDIT")[];
         };
         IntegrationConnectionCheck: {
             /** @enum {string} */
@@ -7173,6 +7301,209 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationConnectionCheck"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_get_collection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupsOverview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_collection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackup"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackup"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_export: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectiveDatabaseExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Arquivo SQL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/sql": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_get_byId_download: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID do backup */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Arquivo PostgreSQL custom */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_byId_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID do backup */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreDatabaseRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreDatabaseResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_delete_byId_restore: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description UUID do backup */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

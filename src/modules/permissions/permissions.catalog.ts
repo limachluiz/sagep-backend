@@ -49,7 +49,8 @@ export type Permission =
   | "system_health.view"
   | "system_health.view_details"
   | "settings.view"
-  | "settings.manage";
+  | "settings.manage"
+  | "backups.manage";
 
 export const roleValues = ["ADMIN", "GESTOR", "PROJETISTA", "CONSULTA"] as const;
 
@@ -122,6 +123,7 @@ export const rolePermissions: Record<UserRole, Permission[]> = {
     "system_health.view_details",
     "settings.view",
     "settings.manage",
+    "backups.manage",
   ],
   GESTOR: [
     "audit.view",
@@ -234,6 +236,7 @@ export const permissionDescriptions: Record<Permission, string> = {
   "system_health.view_details": "Permite consultar diagnosticos tecnicos do ambiente",
   "settings.view": "Permite consultar parametros institucionais e integracoes",
   "settings.manage": "Permite alterar parametros e testar integracoes externas",
+  "backups.manage": "Permite criar, baixar, importar, excluir e restaurar backups do banco",
 };
 
 export const allPermissions = Object.keys(permissionDescriptions) as Permission[];
@@ -255,6 +258,7 @@ const permissionGroupLabels: Record<string, string> = {
   users: "Usuarios",
   system_health: "Saude do sistema",
   settings: "Configuracoes do sistema",
+  backups: "Backup e restauracao",
 };
 
 export type PermissionCatalogItem = {
@@ -277,6 +281,7 @@ export const criticalPermissions: Permission[] = [
   "military_organizations.manage",
   "system_health.view_details",
   "settings.manage",
+  "backups.manage",
 ];
 
 export const allRoles = [...roleValues];

@@ -21,6 +21,7 @@ import { militaryOrganizationsRoutes } from "./modules/military-organizations/mi
 import { serviceOrdersRoutes } from "./modules/service-orders/service-orders.routes.js";
 import { financialExecutionRoutes } from "./modules/financial-execution/financial-execution.routes.js";
 import { systemSettingsRoutes } from "./modules/system-settings/system-settings.routes.js";
+import { backupsRoutes } from "./modules/backups/backups.routes.js";
 
 export const routes = Router();
 
@@ -46,3 +47,4 @@ routes.use("/military-organizations", militaryOrganizationsRoutes);
 routes.use("/service-orders", serviceOrdersRoutes);
 routes.use("/financial-execution", financialExecutionRoutes);
 routes.use("/system-settings", systemSettingsRoutes);
+routes.use("/backups", backupsRoutes);

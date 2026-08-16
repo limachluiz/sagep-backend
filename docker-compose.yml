@@ -44,8 +44,16 @@ services:
       CORS_ALLOW_CREDENTIALS: ${CORS_ALLOW_CREDENTIALS:-false}
       HEALTH_PGADMIN_URL: ${HEALTH_PGADMIN_URL:-http://pgadmin/misc/ping}
       HEALTH_PROBE_TIMEOUT_MS: ${HEALTH_PROBE_TIMEOUT_MS:-2000}
+      BACKUP_DIRECTORY: ${BACKUP_DIRECTORY:-/app/backups}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
+      BACKUP_MAX_FILES: ${BACKUP_MAX_FILES:-30}
+      BACKUP_SCHEDULE_HOURS: ${BACKUP_SCHEDULE_HOURS:-24}
+      BACKUP_RUN_ON_STARTUP: ${BACKUP_RUN_ON_STARTUP:-true}
+      BACKUP_MAX_UPLOAD_MB: ${BACKUP_MAX_UPLOAD_MB:-512}
     ports:
       - "${API_PORT:-3000}:${PORT:-3000}"
+    volumes:
+      - sagep_backups:/app/backups
 
   pgadmin:
     image: dpage/pgadmin4:8
@@ -63,3 +71,5 @@ services:
 volumes:
   sagep_postgres_data:
     name: sagep_postgres_data
+  sagep_backups:
+    name: sagep_backups

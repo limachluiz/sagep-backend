@@ -31,6 +31,15 @@ const envSchema = z
   INTEGRATION_PROBE_TIMEOUT_MS: z.coerce.number().int().min(2000).max(60000).default(15000),
   COMPRAS_GOV_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
   PNCP_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
+  BACKUP_DIRECTORY: z.string().min(1).default("./backups"),
+  BACKUP_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),
+  BACKUP_MAX_FILES: z.coerce.number().int().min(1).max(1000).default(30),
+  BACKUP_SCHEDULE_HOURS: z.coerce.number().min(0).max(8760).default(24),
+  BACKUP_RUN_ON_STARTUP: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  BACKUP_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(4096).default(512),
 })
   .transform((env) => ({
     ...env,

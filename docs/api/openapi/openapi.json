@@ -179,6 +179,14 @@
         "description": "Documentacao Markdown complementar",
         "url": "./insights-and-admin.md"
       }
+    },
+    {
+      "name": "backups",
+      "description": "Modulo backups do backend SAGEP",
+      "externalDocs": {
+        "description": "Documentacao Markdown complementar",
+        "url": "./insights-and-admin.md"
+      }
     }
   ],
   "components": {
@@ -5530,6 +5538,156 @@
           "connections": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "DatabaseBackup": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "filename",
+          "createdAt",
+          "sizeBytes",
+          "checksumSha256",
+          "format",
+          "verified"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "MANUAL",
+              "AUTOMATIC",
+              "IMPORTED",
+              "SAFETY"
+            ]
+          },
+          "filename": {
+            "type": "string"
+          },
+          "originalFilename": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdBy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sizeBytes": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "checksumSha256": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$"
+          },
+          "databaseName": {
+            "type": "string"
+          },
+          "format": {
+            "type": "string",
+            "enum": [
+              "POSTGRES_CUSTOM"
+            ]
+          },
+          "verified": {
+            "type": "boolean"
+          }
+        }
+      },
+      "BackupsOverview": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatabaseBackup"
+            }
+          },
+          "summary": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "policy": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "operationRunning": {
+            "type": "boolean"
+          }
+        }
+      },
+      "RestoreDatabaseRequest": {
+        "type": "object",
+        "required": [
+          "confirmation"
+        ],
+        "properties": {
+          "confirmation": {
+            "type": "string",
+            "enum": [
+              "RESTAURAR BANCO"
+            ]
+          }
+        }
+      },
+      "RestoreDatabaseResponse": {
+        "type": "object",
+        "required": [
+          "message",
+          "restoredAt",
+          "restoredBackup",
+          "safetyBackup"
+        ],
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "restoredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "restoredBackup": {
+            "$ref": "#/components/schemas/DatabaseBackup"
+          },
+          "safetyBackup": {
+            "$ref": "#/components/schemas/DatabaseBackup"
+          }
+        }
+      },
+      "SelectiveDatabaseExportRequest": {
+        "type": "object",
+        "required": [
+          "modules"
+        ],
+        "properties": {
+          "modules": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "enum": [
+                "PROJECTS",
+                "ATAS",
+                "USERS",
+                "SETTINGS",
+                "AUDIT"
+              ]
+            }
           }
         }
       },
@@ -11570,6 +11728,421 @@
           "settings.manage"
         ],
         "operationId": "settings_post_systemSettings_connections_byProvider_test"
+      }
+    },
+    "/backups": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Listar backups e política de retenção",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BackupsOverview"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "backups.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "operationId": "backups_get_collection"
+      },
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Criar e verificar backup completo do PostgreSQL",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseBackup"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "backups.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "operationId": "backups_post_collection"
+      }
+    },
+    "/backups/import": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Importar e validar arquivo .dump do SAGEP",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DatabaseBackup"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "backups.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "operationId": "backups_post_import"
+      }
+    },
+    "/backups/export": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Exportar dados selecionados em SQL",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SelectiveDatabaseExportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Arquivo SQL",
+            "content": {
+              "application/sql": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "backups.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "operationId": "backups_post_export"
+      }
+    },
+    "/backups/{id}/download": {
+      "get": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Baixar backup",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "UUID do backup",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo PostgreSQL custom",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "backups.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "operationId": "backups_get_byId_download"
+      }
+    },
+    "/backups/{id}/restore": {
+      "post": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Restaurar integralmente o banco com backup de segurança prévio",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "UUID do backup",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreDatabaseRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreDatabaseResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "backups.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "operationId": "backups_post_byId_restore"
+      },
+      "delete": {
+        "tags": [
+          "backups"
+        ],
+        "summary": "Excluir backup armazenado",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "UUID do backup",
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArchiveResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "backups.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "operationId": "backups_delete_byId_restore"
       }
     },
     "/financial-execution/commitment-notes": {
