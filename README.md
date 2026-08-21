@@ -213,6 +213,8 @@ URLs oficiais do frontend.
 - O escopo de projetos, tarefas, estimativas, documentos, execução financeira, busca, dashboards e alertas usa as permissões efetivas do usuário; um override `DENY` prevalece sobre a permissão herdada da role e bloqueia também consultas por ID ou código.
 - Respostas `5xx` não devolvem causas, endereços internos ou mensagens de ferramentas; o `requestId` permanece disponível para correlação com o log do servidor.
 - Backups e exportações SQL são gravados com permissão `0600`. O download integral exige reautenticação recente, verifica novamente o SHA-256 e gera registro de auditoria.
+- Na inicialização do container, o entrypoint corrige o proprietário do volume de backups e então executa migrations e API como usuário `sagep`, sem manter o processo da aplicação como `root`.
+- No Compose, `BACKUP_DIRECTORY` permanece fixo em `/app/backups`, o ponto do volume nomeado. O valor `./backups` continua válido apenas na execução local via npm.
 - Login, renovação e logout validam `Origin`/`Sec-Fetch-Site` contra `CORS_ALLOWED_ORIGINS`, reduzindo o risco de CSRF sobre o cookie de renovação.
 - Operações administrativas críticas exigem confirmação recente da senha. O token temporário é vinculado ao usuário, permanece somente em memória no frontend e expira em até 15 minutos (padrão: 5 minutos).
 - URLs configuráveis das integrações aceitam apenas HTTPS e os hosts oficiais do Portal da Transparência, Compras.gov.br e PNCP; redirecionamentos externos não são seguidos.
