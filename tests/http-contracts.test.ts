@@ -158,6 +158,74 @@ describe("contratos HTTP transversais", () => {
     });
   });
 
+  it("não expõe mensagem nem detalhes internos de AppError 5xx", () => {
+    const requestId = "2c4a3610-9e9f-40d7-97d0-886bf983302e";
+    const json = vi.fn();
+    const status = vi.fn(() => ({ json }));
+    const response = { locals: { requestId }, status } as unknown as Response;
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new AppError(
+      "Falha interna em postgresql://usuario:senha@database/sagep",
+      502,
+      "PORTAL_TRANSPARENCIA_UNAVAILABLE",
+      { cause: "ECONNREFUSED 10.0.0.5:5432" },
+    );
+
+    errorMiddleware(error, {} as Request, response, vi.fn() as NextFunction);
+
+    expect(status).toHaveBeenCalledWith(502);
+    expect(json).toHaveBeenCalledWith({
+      code: "PORTAL_TRANSPARENCIA_UNAVAILABLE",
+      message: "Portal da Transparência indisponível",
+      requestId,
+    });
+    expect(JSON.stringify(json.mock.calls)).not.toContain("postgresql://");
+    expect(JSON.stringify(json.mock.calls)).not.toContain("ECONNREFUSED");
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("usuario:senha");
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("ECONNREFUSED");
+    consoleError.mockRestore();
+  });
+
+  it("não grava o conteúdo bruto de erro inesperado no log HTTP", () => {
+    const json = vi.fn();
+    const status = vi.fn(() => ({ json }));
+    const response = {
+      locals: { requestId: "request-secret-test" },
+      status,
+    } as unknown as Response;
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    errorMiddleware(
+      new Error("Bearer token-super-secreto"),
+      {} as Request,
+      response,
+      vi.fn() as NextFunction,
+    );
+
+    expect(status).toHaveBeenCalledWith(500);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("token-super-secreto");
+    expect(json).toHaveBeenCalledWith({
+      code: "INTERNAL_ERROR",
+      message: "Erro interno do servidor",
+      requestId: "request-secret-test",
+    });
+    consoleError.mockRestore();
+  });
+
+  it("exige reautenticação também para baixar o backup completo", () => {
+    const operation = (openApiDocument.paths as Record<string, any>)[
+      "/backups/{id}/download"
+    ].get;
+
+    expect(operation.parameters).toContainEqual({
+      $ref: "#/components/parameters/StepUpToken",
+    });
+    expect(operation.responses["428"]).toEqual({
+      $ref: "#/components/responses/StepUpRequired",
+    });
+  });
+
   it("atribui codigos de dominio estaveis sem alterar mensagens existentes", () => {
     expect(new AppError("Projeto não encontrado", 404).code).toBe(
       ERROR_CODES.PROJECT_NOT_FOUND,

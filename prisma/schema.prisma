@@ -120,6 +120,7 @@ enum AuditActionType {
   SYNC
   DISMISS
   CONNECTION_TEST
+  EXPORT
 }
 
 enum IntegrationProvider {

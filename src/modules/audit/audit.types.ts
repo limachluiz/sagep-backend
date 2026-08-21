@@ -35,7 +35,8 @@ export type AuditActionType =
   | "SESSION_CLEANUP"
   | "SYNC"
   | "DISMISS"
-  | "CONNECTION_TEST";
+  | "CONNECTION_TEST"
+  | "EXPORT";
 
 export type AuditPrimitive = string | number | boolean | null;
 export type AuditValue =

@@ -22,13 +22,14 @@ app.use(
   }),
 );
 app.use((req, res, next) => {
-  if (!req.path.startsWith("/api/docs")) {
+  const isApiDocs = req.path.startsWith("/api/docs");
+  if (!isApiDocs) {
     res.setHeader(
       "Content-Security-Policy",
       "default-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
     );
   }
-  if (req.path.startsWith("/api/auth")) {
+  if (req.path.startsWith("/api") && !isApiDocs) {
     res.setHeader("Cache-Control", "no-store");
     res.setHeader("Pragma", "no-cache");
   }

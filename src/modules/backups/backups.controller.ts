@@ -21,7 +21,8 @@ export class BackupsController {
 
   async download(req: Request, res: Response) {
     const { id } = backupIdParamSchema.parse(req.params);
-    const { manifest, filePath } = await backupsService.download(id);
+    const { manifest, filePath } = await backupsService.download(id, req.user!);
+    res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Content-Type", "application/octet-stream");
     return res.download(filePath, manifest.filename);
   }
@@ -39,7 +40,8 @@ export class BackupsController {
 
   async selectiveExport(req: Request, res: Response) {
     const { modules } = selectiveExportSchema.parse(req.body);
-    const exported = await backupsService.createSelectiveExport(modules);
+    const exported = await backupsService.createSelectiveExport(modules, req.user!);
+    res.setHeader("Cache-Control", "private, no-store");
     res.setHeader("Content-Type", "application/sql");
     res.on("finish", () => void exported.cleanup());
     res.on("close", () => void exported.cleanup());

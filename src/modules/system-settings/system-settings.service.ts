@@ -139,8 +139,14 @@ export class SystemSettingsService {
     try {
       await prisma.$queryRaw`SELECT 1`;
       return this.result("OPERATIONAL", started, null, "PostgreSQL conectado e respondendo", { target: "DATABASE_URL" });
-    } catch (error) {
-      return this.result("UNAVAILABLE", started, null, "Não foi possível consultar o PostgreSQL", { error: error instanceof Error ? error.message : String(error) });
+    } catch {
+      return this.result(
+        "UNAVAILABLE",
+        started,
+        null,
+        "Não foi possível consultar o PostgreSQL",
+        { target: "DATABASE_URL" },
+      );
     }
   }
 
@@ -211,7 +217,6 @@ export class SystemSettingsService {
         {
           endpoint: `${url.origin}${url.pathname}`,
           timeoutMs,
-          error: error instanceof Error ? error.message : String(error),
         },
       );
     }

@@ -30,4 +30,22 @@ describe("testes de conexão das integrações", () => {
     );
     expect(result.details.configuredBaseUrl).toBe("https://pncp.gov.br/api/pncp");
   });
+
+  it("não devolve a mensagem técnica da falha de rede", async () => {
+    vi.spyOn(systemSettingsService, "getEffective").mockResolvedValue({
+      pncpBaseUrl: "https://pncp.gov.br/api/pncp",
+    } as unknown as Awaited<ReturnType<typeof systemSettingsService.getEffective>>);
+    vi.spyOn(globalThis, "fetch").mockRejectedValue(
+      new Error("ECONNREFUSED 10.0.0.5:8443 internal-host"),
+    );
+    const service = systemSettingsService as unknown as {
+      probePncp(): Promise<{ details: Record<string, unknown> }>;
+    };
+
+    const result = await service.probePncp();
+
+    expect(result.details).not.toHaveProperty("error");
+    expect(JSON.stringify(result)).not.toContain("internal-host");
+    expect(JSON.stringify(result)).not.toContain("ECONNREFUSED");
+  });
 });

@@ -1438,7 +1438,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Baixar backup */
+        /** Baixar backup com verificação de integridade */
         get: operations["backups_get_byId_download"];
         put?: never;
         post?: never;
@@ -7630,7 +7630,10 @@ export interface operations {
     backups_get_byId_download: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description UUID do backup */
                 id: string;
@@ -7653,6 +7656,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };

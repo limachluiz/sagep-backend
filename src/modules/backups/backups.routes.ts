@@ -21,6 +21,12 @@ backupsRoutes.post(
   (req, res) => controller.importArchive(req, res),
 );
 backupsRoutes.post("/export", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.selectiveExport(req, res));
-backupsRoutes.get("/:id/download", ...adminOnly, (req, res) => controller.download(req, res));
+backupsRoutes.get(
+  "/:id/download",
+  sensitiveRateLimiter,
+  ...adminOnly,
+  requireStepUp,
+  (req, res) => controller.download(req, res),
+);
 backupsRoutes.post("/:id/restore", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.restore(req, res));
 backupsRoutes.delete("/:id", ...adminOnly, requireStepUp, (req, res) => controller.remove(req, res));

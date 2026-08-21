@@ -1,0 +1,1 @@
+ALTER TYPE "AuditActionType" ADD VALUE 'EXPORT';

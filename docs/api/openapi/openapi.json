@@ -12199,7 +12199,7 @@
         "tags": [
           "backups"
         ],
-        "summary": "Baixar backup",
+        "summary": "Baixar backup com verificação de integridade",
         "security": [
           {
             "bearerAuth": []
@@ -12215,6 +12215,9 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "responses": {
@@ -12244,6 +12247,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -12254,6 +12260,7 @@
         "x-roles": [
           "ADMIN"
         ],
+        "x-step-up": true,
         "operationId": "backups_get_byId_download"
       }
     },

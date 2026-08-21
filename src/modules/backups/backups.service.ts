@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
+import { chmod, mkdir, open, readFile, readdir, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
@@ -215,6 +215,7 @@ export class BackupsService {
         "--file",
         partialPath,
       ], this.commandEnv());
+      await chmod(partialPath, 0o600);
       await this.validateArchive(partialPath);
       await rename(partialPath, finalPath);
     } catch (error) {
@@ -348,8 +349,29 @@ export class BackupsService {
     };
   }
 
-  async download(id: string) {
-    return this.resolveBackup(id);
+  async download(id: string, actor: BackupActor) {
+    const resolved = await this.resolveBackup(id);
+    const currentChecksum = await this.checksum(resolved.filePath);
+    if (currentChecksum !== resolved.manifest.checksumSha256) {
+      throw new AppError(
+        "A integridade do arquivo de backup não pôde ser confirmada",
+        409,
+        "BACKUP_CHECKSUM_MISMATCH",
+      );
+    }
+    await auditService.log({
+      entityType: "SYSTEM_SETTINGS",
+      entityId: id,
+      action: "EXPORT",
+      actor: { id: actor.id, name: actor.name ?? actor.email },
+      summary: "Backup completo do banco de dados baixado",
+      metadata: {
+        filename: resolved.manifest.filename,
+        sizeBytes: resolved.manifest.sizeBytes,
+        checksumSha256: resolved.manifest.checksumSha256,
+      },
+    });
+    return resolved;
   }
 
   async remove(id: string, actor: BackupActor) {
@@ -434,12 +456,13 @@ export class BackupsService {
     });
   }
 
-  async createSelectiveExport(modules: SelectiveExportModule[]) {
+  async createSelectiveExport(modules: SelectiveExportModule[], actor: BackupActor) {
     return this.withOperationLock(async () => {
       await this.ensureDirectory();
       const uniqueTables = Array.from(new Set(modules.flatMap((module) => exportTables[module])));
       const id = randomUUID();
       const filePath = path.join(env.BACKUP_DIRECTORY, `${id}.sql`);
+      const partialPath = `${filePath}.partial`;
       const args = [
         ...this.connectionArgs(),
         "--format=plain",
@@ -448,10 +471,26 @@ export class BackupsService {
         "--no-owner",
         "--no-privileges",
         "--file",
-        filePath,
+        partialPath,
         ...uniqueTables.flatMap((table) => ["--table", `public.\"${table}\"`]),
       ];
-      await runCommand("pg_dump", args, this.commandEnv());
+      try {
+        await runCommand("pg_dump", args, this.commandEnv());
+        await chmod(partialPath, 0o600);
+        await rename(partialPath, filePath);
+        await auditService.log({
+          entityType: "SYSTEM_SETTINGS",
+          entityId: id,
+          action: "EXPORT",
+          actor: { id: actor.id, name: actor.name ?? actor.email },
+          summary: "Exportação seletiva do banco de dados gerada",
+          metadata: { modules, tables: uniqueTables },
+        });
+      } catch (error) {
+        await rm(partialPath, { force: true });
+        await rm(filePath, { force: true });
+        throw error;
+      }
       return {
         filePath,
         filename: `sagep-export-${modules.map((module) => module.toLowerCase()).join("-")}-${new Date().toISOString().slice(0, 10)}.sql`,

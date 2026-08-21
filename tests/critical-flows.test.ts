@@ -570,6 +570,12 @@ describe("critical flows", () => {
 
     expect(blocked.body.code).toBe("AUTH_STEP_UP_REQUIRED");
 
+    const backupId = "f47ac10b-58cc-4372-a567-0e02b2c3d479";
+    await request(app)
+      .get(`/api/backups/${backupId}/download`)
+      .set("Authorization", `Bearer ${refreshed.body.accessToken}`)
+      .expect(428);
+
     const reauthenticated = await request(app)
       .post("/api/auth/reauthenticate")
       .set("Authorization", `Bearer ${refreshed.body.accessToken}`)
@@ -587,6 +593,12 @@ describe("critical flows", () => {
       .expect(400);
 
     expect(passedBarrier.body.code).not.toMatch(/^AUTH_STEP_UP/);
+
+    await request(app)
+      .get(`/api/backups/${backupId}/download`)
+      .set("Authorization", `Bearer ${refreshed.body.accessToken}`)
+      .set("X-SAGEP-Reauth", reauthenticated.body.stepUpToken)
+      .expect(404);
 
     const successAudit = await prisma.auditLog.findFirst({
       where: { action: "REAUTHENTICATION_SUCCESS", actorUserId: admin.id },

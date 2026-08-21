@@ -36,6 +36,15 @@ const prismaHttpErrors: Record<string, { status: number; code: string; message: 
   },
 };
 
+const safeServerErrorMessages: Record<string, string> = {
+  BACKUP_COMMAND_FAILED: "Falha ao processar a operação de backup",
+  BACKUP_RESTORE_FAILED:
+    "A restauração falhou. O backup de segurança foi preservado",
+  BACKUP_TOOL_UNAVAILABLE: "Ferramenta de backup indisponível no servidor",
+  PORTAL_TRANSPARENCIA_ERROR: "Falha ao consultar o Portal da Transparência",
+  PORTAL_TRANSPARENCIA_UNAVAILABLE: "Portal da Transparência indisponível",
+};
+
 export function errorMiddleware(
   error: unknown,
   _req: Request,
@@ -45,18 +54,30 @@ export function errorMiddleware(
   const requestId = String(res.locals.requestId ?? "unavailable");
 
   if (error instanceof AppError) {
+    const isServerError = error.statusCode >= 500;
     const structuredDetails =
-      error.details && typeof error.details === "object"
+      !isServerError && error.details && typeof error.details === "object"
         ? (error.details as Record<string, unknown>)
         : null;
     const requiredPermissions = Array.isArray(structuredDetails?.requiredPermissions)
       ? structuredDetails.requiredPermissions
       : undefined;
 
+    if (isServerError) {
+      console.error("Falha HTTP controlada", {
+        requestId,
+        statusCode: error.statusCode,
+        code: error.code,
+        errorName: error.name,
+      });
+    }
+
     return res.status(error.statusCode).json({
       code: error.code,
-      message: error.message,
-      ...(error.details !== undefined ? { details: error.details } : {}),
+      message: isServerError
+        ? (safeServerErrorMessages[error.code] ?? "Erro interno do servidor")
+        : error.message,
+      ...(!isServerError && error.details !== undefined ? { details: error.details } : {}),
       // Compatibilidade temporaria com consumidores anteriores ao contrato estruturado.
       ...(requiredPermissions ? { requiredPermissions } : {}),
       requestId,
@@ -92,7 +113,10 @@ export function errorMiddleware(
     }
   }
 
-  console.error("Erro HTTP não tratado", { requestId, error });
+  console.error("Erro HTTP não tratado", {
+    requestId,
+    errorName: error instanceof Error ? error.name : typeof error,
+  });
 
   return res.status(500).json({
     code: "INTERNAL_ERROR",
