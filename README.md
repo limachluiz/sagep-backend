@@ -439,8 +439,10 @@ Material complementar já existente no repositório:
 - [OpenAPI exportado](docs/api/openapi/openapi.json)
 - [Cliente TypeScript gerado](src/generated/openapi.ts)
 
-O CI valida migrations, build, OpenAPI versionado, cliente TypeScript gerado e
-a suíte completa. O contrato atual possui 89 paths e 120 operações.
+O CI valida auditoria de dependências e segredos, migrations, build, OpenAPI
+versionado, cliente TypeScript gerado, suíte completa e a imagem Docker de produção.
+O CodeQL executa análise estática adicional e o Dependabot acompanha atualizações
+de npm, Docker e GitHub Actions. O contrato atual possui 128 paths e 164 operações.
 
 ## Estrutura resumida
 

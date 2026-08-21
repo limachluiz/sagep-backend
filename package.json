@@ -22,6 +22,8 @@
     "prisma:seed:dev": "cross-env SEED_MODE=dev tsx prisma/seed.ts",
     "prisma:seed:demo": "cross-env SEED_MODE=demo tsx prisma/seed.ts",
     "repair:mojibake": "tsx src/scripts/repair-mojibake.ts",
+    "security:audit": "node scripts/check-dependency-audit.mjs",
+    "security:secrets": "node scripts/check-secrets.mjs",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f api"

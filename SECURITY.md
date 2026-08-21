@@ -24,6 +24,21 @@ Essas exceções devem ser reavaliadas sempre que Prisma ou `tsx` publicarem nov
 devem ser silenciadas com `--force` nem corrigidas por override de versão principal sem que
 `prisma generate`, validação das migrations, testes e build Docker sejam executados.
 
+O comando `npm run security:audit` é a barreira usada pelo CI. Ele reconhece somente os
+identificadores e encadeamentos acima; qualquer alerta novo, mudança de severidade ou alteração
+da cadeia transitiva reprova a execução. `npm run security:secrets` procura padrões de chaves
+privadas e tokens nos arquivos versionados.
+
+## Automação no GitHub
+
+- O workflow `Backend CI` valida dependências, segredos, migrations, contratos, testes e a
+  imagem Docker, inclusive o entrypoint usado para preparar o volume de backups.
+- O workflow `Análise de segurança CodeQL` executa consultas estendidas em JavaScript e
+  TypeScript a cada push, pull request e semanalmente.
+- O Dependabot abre atualizações semanais de npm, Docker e GitHub Actions contra a `main`.
+- Os workflows usam permissões mínimas; somente o job do CodeQL recebe
+  `security-events: write` para publicar os resultados.
+
 ## Tratamento de incidentes
 
 Ao investigar falhas, use o `requestId` devolvido pela API para localizar o evento no log do

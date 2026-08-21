@@ -4,10 +4,11 @@ on:
   push:
     branches:
       - main
-      - feat/backend-melhorias
+      - upgrade-security
   pull_request:
     branches:
       - main
+      - upgrade-security
 
 permissions:
   contents: read
@@ -54,13 +55,19 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Configurar Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
-          node-version: 24
+          node-version: 22
           cache: npm
 
       - name: Instalar dependências
         run: npm ci
+
+      - name: Auditar dependências
+        run: npm run security:audit
+
+      - name: Procurar segredos versionados
+        run: npm run security:secrets
 
       - name: Gerar Prisma Client
         run: npm run prisma:generate
@@ -84,3 +91,27 @@ jobs:
 
       - name: Executar testes
         run: npm test
+
+  docker:
+    name: Imagem Docker segura
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Baixar o código
+        uses: actions/checkout@v7
+
+      - name: Construir imagem de produção
+        run: docker build --tag sagep-backend:ci .
+
+      - name: Validar entrypoint e usuário da aplicação
+        run: |
+          docker run --rm --entrypoint sh sagep-backend:ci -c '
+            set -eu
+            test -x /usr/local/bin/docker-entrypoint.sh
+            sh -n /usr/local/bin/docker-entrypoint.sh
+            ! grep -q "$(printf "\r")" /usr/local/bin/docker-entrypoint.sh
+            test "$(gosu sagep id -u)" -ne 0
+            pg_dump --version
+            pg_restore --version
+          '
