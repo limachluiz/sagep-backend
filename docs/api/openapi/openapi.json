@@ -438,6 +438,15 @@
           "type": "string"
         }
       },
+      "StepUpToken": {
+        "name": "X-SAGEP-Reauth",
+        "in": "header",
+        "required": false,
+        "description": "Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente.",
+        "schema": {
+          "type": "string"
+        }
+      },
       "AtaId": {
         "name": "id",
         "in": "path",
@@ -563,6 +572,21 @@
               "requiredPermissions": [
                 "projects.edit_all"
               ],
+              "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+            }
+          }
+        }
+      },
+      "StepUpRequired": {
+        "description": "A operação crítica exige confirmação recente da senha.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "AUTH_STEP_UP_REQUIRED",
+              "message": "Confirme sua senha para realizar esta operação",
               "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
             }
           }
@@ -1194,6 +1218,36 @@
             "enum": [
               true
             ]
+          }
+        }
+      },
+      "ReauthenticateRequest": {
+        "type": "object",
+        "required": [
+          "password"
+        ],
+        "properties": {
+          "password": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          }
+        }
+      },
+      "StepUpResponse": {
+        "type": "object",
+        "required": [
+          "stepUpToken",
+          "expiresInSeconds"
+        ],
+        "properties": {
+          "stepUpToken": {
+            "type": "string"
+          },
+          "expiresInSeconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 900
           }
         }
       },
@@ -6193,6 +6247,49 @@
         "operationId": "auth_get_me"
       }
     },
+    "/auth/reauthenticate": {
+      "post": {
+        "tags": [
+          "auth"
+        ],
+        "summary": "Confirmar senha para operação crítica",
+        "description": "Emite autorização reforçada curta, vinculada ao usuário autenticado. Sucessos e falhas são auditados.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReauthenticateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StepUpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        },
+        "operationId": "auth_post_reauthenticate"
+      }
+    },
     "/auth/profile": {
       "patch": {
         "tags": [
@@ -6493,6 +6590,11 @@
             "bearerAuth": []
           }
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Sessoes revogadas",
@@ -6518,6 +6620,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -6635,6 +6740,9 @@
           },
           {
             "$ref": "#/components/parameters/SessionId"
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "responses": {
@@ -6662,6 +6770,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -6693,6 +6804,9 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "responses": {
@@ -6721,6 +6835,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -6740,6 +6857,11 @@
         "security": [
           {
             "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "requestBody": {
@@ -6777,6 +6899,9 @@
           },
           "409": {
             "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
           },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
@@ -11655,6 +11780,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -11662,6 +11790,12 @@
         "x-permissions": [
           "settings.manage"
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
         "operationId": "settings_put_systemSettings"
       }
     },
@@ -11702,6 +11836,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -11709,6 +11846,12 @@
         "x-permissions": [
           "settings.manage"
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
         "operationId": "settings_post_systemSettings_connections_test"
       }
     },
@@ -11737,6 +11880,9 @@
                 "COMPRAS_GOV"
               ]
             }
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "responses": {
@@ -11765,6 +11911,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -11772,6 +11921,7 @@
         "x-permissions": [
           "settings.manage"
         ],
+        "x-step-up": true,
         "operationId": "settings_post_systemSettings_connections_byProvider_test"
       }
     },
@@ -11860,6 +12010,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -11870,6 +12023,12 @@
         "x-roles": [
           "ADMIN"
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
         "operationId": "backups_post_collection"
       }
     },
@@ -11921,6 +12080,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -11931,6 +12093,12 @@
         "x-roles": [
           "ADMIN"
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
         "operationId": "backups_post_import"
       }
     },
@@ -11982,6 +12150,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -11992,6 +12163,12 @@
         "x-roles": [
           "ADMIN"
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
         "operationId": "backups_post_export"
       }
     },
@@ -12079,6 +12256,9 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "requestBody": {
@@ -12117,6 +12297,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -12127,6 +12310,7 @@
         "x-roles": [
           "ADMIN"
         ],
+        "x-step-up": true,
         "operationId": "backups_post_byId_restore"
       },
       "delete": {
@@ -12149,6 +12333,9 @@
               "type": "string",
               "format": "uuid"
             }
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "responses": {
@@ -12177,6 +12364,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -12187,6 +12377,7 @@
         "x-roles": [
           "ADMIN"
         ],
+        "x-step-up": true,
         "operationId": "backups_delete_byId_restore"
       }
     },
@@ -13446,6 +13637,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -13456,6 +13650,12 @@
         "x-permissions": [
           "users.manage"
         ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
         "operationId": "users_post_collection"
       }
     },
@@ -13599,6 +13799,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "requestBody": {
@@ -13637,6 +13840,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -13647,6 +13853,7 @@
         "x-permissions": [
           "users.manage"
         ],
+        "x-step-up": true,
         "operationId": "users_patch_byId"
       }
     },
@@ -13665,6 +13872,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "requestBody": {
@@ -13703,6 +13913,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -13713,6 +13926,7 @@
         "x-permissions": [
           "users.manage"
         ],
+        "x-step-up": true,
         "operationId": "users_patch_byId_status"
       }
     },
@@ -13731,6 +13945,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "requestBody": {
@@ -13769,6 +13986,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -13779,6 +13999,7 @@
         "x-permissions": [
           "users.manage"
         ],
+        "x-step-up": true,
         "operationId": "users_patch_byId_role"
       }
     },
@@ -13896,6 +14117,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/RoleName"
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "requestBody": {
@@ -13934,6 +14158,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -13941,6 +14168,7 @@
         "x-permissions": [
           "permissions.manage_role_permissions"
         ],
+        "x-step-up": true,
         "operationId": "permissions_put_roles_byRole"
       }
     },
@@ -14112,6 +14340,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "requestBody": {
@@ -14150,6 +14381,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -14157,6 +14391,7 @@
         "x-permissions": [
           "permissions.manage_user_overrides"
         ],
+        "x-step-up": true,
         "operationId": "permissions_post_users_byId_overrides_allow"
       }
     },
@@ -14175,6 +14410,9 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/UserId"
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "requestBody": {
@@ -14213,6 +14451,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -14220,6 +14461,7 @@
         "x-permissions": [
           "permissions.manage_user_overrides"
         ],
+        "x-step-up": true,
         "operationId": "permissions_post_users_byId_overrides_deny"
       }
     },
@@ -14241,6 +14483,9 @@
           },
           {
             "$ref": "#/components/parameters/PermissionCode"
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
           }
         ],
         "responses": {
@@ -14269,6 +14514,9 @@
           "409": {
             "$ref": "#/components/responses/Conflict"
           },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
           "500": {
             "$ref": "#/components/responses/InternalServerError"
           }
@@ -14276,6 +14524,7 @@
         "x-permissions": [
           "permissions.manage_user_overrides"
         ],
+        "x-step-up": true,
         "operationId": "permissions_delete_users_byId_overrides_byPermissionCode"
       }
     },

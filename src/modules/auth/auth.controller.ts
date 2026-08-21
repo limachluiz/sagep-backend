@@ -6,6 +6,7 @@ import {
   cleanupSessionsSchema,
   listSessionsQuerySchema,
   loginSchema,
+  reauthenticateSchema,
   registerSchema,
   sessionIdParamSchema,
   updateOwnProfileSchema,
@@ -48,6 +49,12 @@ export class AuthController {
     const user = await authService.me(userId);
 
     return res.status(200).json(user);
+  }
+
+  async reauthenticate(req: Request, res: Response) {
+    const data = reauthenticateSchema.parse(req.body);
+    const result = await authService.reauthenticate(data, req.user!, getRequestContext(req));
+    return res.status(200).json(result);
   }
 
   async updateOwnProfile(req: Request, res: Response) {

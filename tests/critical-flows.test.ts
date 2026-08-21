@@ -518,6 +518,55 @@ describe("critical flows", () => {
     expect(malformedRefresh.body.code).toBe("AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED");
   });
 
+  it("auth: exige senha recente para operação crítica após renovação silenciosa", async () => {
+    const refreshed = await request(app)
+      .post("/api/auth/refresh")
+      .set("Cookie", adminAuth.refreshCookie)
+      .expect(200);
+
+    const blocked = await request(app)
+      .post("/api/users")
+      .set("Authorization", `Bearer ${refreshed.body.accessToken}`)
+      .send({})
+      .expect(428);
+
+    expect(blocked.body.code).toBe("AUTH_STEP_UP_REQUIRED");
+
+    const reauthenticated = await request(app)
+      .post("/api/auth/reauthenticate")
+      .set("Authorization", `Bearer ${refreshed.body.accessToken}`)
+      .send({ password })
+      .expect(200);
+
+    expect(reauthenticated.body.stepUpToken).toBeTruthy();
+    expect(reauthenticated.body.expiresInSeconds).toBe(300);
+
+    const passedBarrier = await request(app)
+      .post("/api/users")
+      .set("Authorization", `Bearer ${refreshed.body.accessToken}`)
+      .set("X-SAGEP-Reauth", reauthenticated.body.stepUpToken)
+      .send({})
+      .expect(400);
+
+    expect(passedBarrier.body.code).not.toMatch(/^AUTH_STEP_UP/);
+
+    const successAudit = await prisma.auditLog.findFirst({
+      where: { action: "REAUTHENTICATION_SUCCESS", actorUserId: admin.id },
+    });
+    expect(successAudit).toBeTruthy();
+  });
+
+  it("auth: bloqueia origem cruzada nos endpoints ligados ao cookie", async () => {
+    const response = await request(app)
+      .post("/api/auth/login")
+      .set("Origin", "https://origem-nao-autorizada.example")
+      .set("Sec-Fetch-Site", "cross-site")
+      .send({ email: admin.email, password })
+      .expect(403);
+
+    expect(response.body.code).toBe("CSRF_ORIGIN_DENIED");
+  });
+
   it("permissions persistence: role base is governed by persisted role permissions", async () => {
     const operationalPermission = await prisma.permission.findUniqueOrThrow({
       where: { code: "dashboard.view_operational" },

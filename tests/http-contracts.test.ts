@@ -50,9 +50,29 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(163);
+    expect(operationIds).toHaveLength(164);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
+  });
+
+  it("documenta reautenticacao e a barreira das operacoes criticas", () => {
+    const paths = openApiDocument.paths as Record<string, any>;
+    const components = openApiDocument.components as Record<string, any>;
+
+    expect(paths["/auth/reauthenticate"].post.requestBody.content["application/json"])
+      .toEqual(expect.objectContaining({
+        schema: { $ref: "#/components/schemas/ReauthenticateRequest" },
+      }));
+    expect(paths["/auth/sessions/revoke-all"].post.parameters).toContainEqual({
+      $ref: "#/components/parameters/StepUpToken",
+    });
+    expect(paths["/auth/sessions/revoke-all"].post.responses["428"]).toEqual({
+      $ref: "#/components/responses/StepUpRequired",
+    });
+    expect(components.schemas.StepUpResponse.required).toEqual([
+      "stepUpToken",
+      "expiresInSeconds",
+    ]);
   });
 
   it("separa a saude publica sanitizada do diagnostico tecnico administrativo", () => {

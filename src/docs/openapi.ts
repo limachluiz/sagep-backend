@@ -121,6 +121,25 @@ const defaultErrorResponses = {
   "500": { $ref: "#/components/responses/InternalServerError" },
 };
 
+const stepUpErrorResponse = {
+  "428": { $ref: "#/components/responses/StepUpRequired" },
+};
+
+function withStepUp(operation: Record<string, any>) {
+  return {
+    ...operation,
+    parameters: [
+      ...(Array.isArray(operation.parameters) ? operation.parameters : []),
+      { $ref: "#/components/parameters/StepUpToken" },
+    ],
+    responses: {
+      ...(operation.responses ?? {}),
+      ...stepUpErrorResponse,
+    },
+    "x-step-up": true,
+  };
+}
+
 const archiveResponseExample = {
   message: "Tarefa arquivada com sucesso",
   permissionUsed: "tasks.archive",
@@ -303,6 +322,14 @@ export const openApiDocument: OpenApiDocument = {
         "Codigo da permissao no catalogo RBAC persistido.",
       ),
       SessionId: pathIdParameter("sessionId", "Identificador da sessao."),
+      StepUpToken: {
+        name: "X-SAGEP-Reauth",
+        in: "header",
+        required: false,
+        description:
+          "Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente.",
+        schema: { type: "string" },
+      },
       AtaId: pathIdParameter("id", "Identificador UUID da ata."),
       AtaCoverageGroupId: pathIdParameter(
         "groupId",
@@ -350,6 +377,14 @@ export const openApiDocument: OpenApiDocument = {
             requiredPermissions: ["projects.edit_all"],
           },
           requiredPermissions: ["projects.edit_all"],
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
+        }),
+      },
+      StepUpRequired: {
+        description: "A operação crítica exige confirmação recente da senha.",
+        content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "AUTH_STEP_UP_REQUIRED",
+          message: "Confirme sua senha para realizar esta operação",
           requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
@@ -673,6 +708,21 @@ export const openApiDocument: OpenApiDocument = {
           message: { type: "string" },
           revokedSessions: { type: "integer" },
           logoutRequired: { type: "boolean", enum: [true] },
+        },
+      },
+      ReauthenticateRequest: {
+        type: "object",
+        required: ["password"],
+        properties: {
+          password: { type: "string", minLength: 1, maxLength: 128 },
+        },
+      },
+      StepUpResponse: {
+        type: "object",
+        required: ["stepUpToken", "expiresInSeconds"],
+        properties: {
+          stepUpToken: { type: "string" },
+          expiresInSeconds: { type: "integer", minimum: 60, maximum: 900 },
         },
       },
       UserOptionsResponse: {
@@ -3065,6 +3115,24 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
+    "/auth/reauthenticate": {
+      post: {
+        tags: ["auth"],
+        summary: "Confirmar senha para operação crítica",
+        description:
+          "Emite autorização reforçada curta, vinculada ao usuário autenticado. Sucessos e falhas são auditados.",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ReauthenticateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/StepUpResponse"),
+          "400": { $ref: "#/components/responses/BadRequest" },
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
     "/auth/profile": {
       patch: {
         tags: ["auth"],
@@ -3160,8 +3228,10 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["auth"],
         summary: "Revogar todas as sessoes proprias",
         security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/StepUpToken" }],
         responses: {
           "200": okJson("#/components/schemas/MessageResponse", "Sessoes revogadas"),
+          ...stepUpErrorResponse,
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_own"],
@@ -3196,9 +3266,11 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [
           pathIdParameter("userId", "Identificador do usuario."),
           { $ref: "#/components/parameters/SessionId" },
+          { $ref: "#/components/parameters/StepUpToken" },
         ],
         responses: {
           "200": okJson("#/components/schemas/MessageResponse", "Sessao revogada"),
+          ...stepUpErrorResponse,
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -3209,9 +3281,13 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["auth"],
         summary: "Revogar todas as sessoes de outro usuario",
         security: bearerSecurity,
-        parameters: [pathIdParameter("userId", "Identificador do usuario.")],
+        parameters: [
+          pathIdParameter("userId", "Identificador do usuario."),
+          { $ref: "#/components/parameters/StepUpToken" },
+        ],
         responses: {
           "200": okJson("#/components/schemas/MessageResponse", "Sessoes revogadas"),
+          ...stepUpErrorResponse,
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -3222,12 +3298,14 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["auth"],
         summary: "Executar limpeza administrativa de sessoes e auditoria",
         security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/StepUpToken" }],
         requestBody: {
           required: true,
           content: jsonContent("#/components/schemas/CleanupSessionsRequest"),
         },
         responses: {
           "200": okJson("#/components/schemas/CleanupSessionsResponse"),
+          ...stepUpErrorResponse,
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -4481,30 +4559,30 @@ export const openApiDocument: OpenApiDocument = {
     },
     "/system-settings": {
       get: { tags: ["settings"], summary: "Consultar integrações e parâmetros institucionais", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
-      put: { tags: ["settings"], summary: "Atualizar integrações e parâmetros institucionais", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SystemSettings") }, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+      put: withStepUp({ tags: ["settings"], summary: "Atualizar integrações e parâmetros institucionais", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SystemSettings") }, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
     },
     "/system-settings/connections/test": {
-      post: { tags: ["settings"], summary: "Testar todas as conexões configuradas", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+      post: withStepUp({ tags: ["settings"], summary: "Testar todas as conexões configuradas", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
     },
     "/system-settings/connections/{provider}/test": {
-      post: { tags: ["settings"], summary: "Testar uma conexão configurada", security: bearerSecurity, parameters: [pathIdParameter("provider", "Integração", { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] })], responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] },
+      post: withStepUp({ tags: ["settings"], summary: "Testar uma conexão configurada", security: bearerSecurity, parameters: [pathIdParameter("provider", "Integração", { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] })], responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
     },
     "/backups": {
       get: { tags: ["backups"], summary: "Listar backups e política de retenção", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/BackupsOverview"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
-      post: { tags: ["backups"], summary: "Criar e verificar backup completo do PostgreSQL", security: bearerSecurity, responses: { "201": createdJson("#/components/schemas/DatabaseBackup"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+      post: withStepUp({ tags: ["backups"], summary: "Criar e verificar backup completo do PostgreSQL", security: bearerSecurity, responses: { "201": createdJson("#/components/schemas/DatabaseBackup"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
     },
     "/backups/import": {
-      post: { tags: ["backups"], summary: "Importar e validar arquivo .dump do SAGEP", security: bearerSecurity, requestBody: { required: true, content: binaryContent("application/octet-stream") }, responses: { "201": createdJson("#/components/schemas/DatabaseBackup"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+      post: withStepUp({ tags: ["backups"], summary: "Importar e validar arquivo .dump do SAGEP", security: bearerSecurity, requestBody: { required: true, content: binaryContent("application/octet-stream") }, responses: { "201": createdJson("#/components/schemas/DatabaseBackup"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
     },
     "/backups/export": {
-      post: { tags: ["backups"], summary: "Exportar dados selecionados em SQL", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SelectiveDatabaseExportRequest") }, responses: { "200": { description: "Arquivo SQL", content: binaryContent("application/sql") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+      post: withStepUp({ tags: ["backups"], summary: "Exportar dados selecionados em SQL", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SelectiveDatabaseExportRequest") }, responses: { "200": { description: "Arquivo SQL", content: binaryContent("application/sql") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
     },
     "/backups/{id}/download": {
       get: { tags: ["backups"], summary: "Baixar backup", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": { description: "Arquivo PostgreSQL custom", content: binaryContent("application/octet-stream") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
     },
     "/backups/{id}/restore": {
-      post: { tags: ["backups"], summary: "Restaurar integralmente o banco com backup de segurança prévio", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], requestBody: { required: true, content: jsonContent("#/components/schemas/RestoreDatabaseRequest") }, responses: { "200": okJson("#/components/schemas/RestoreDatabaseResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
-      delete: { tags: ["backups"], summary: "Excluir backup armazenado", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+      post: withStepUp({ tags: ["backups"], summary: "Restaurar integralmente o banco com backup de segurança prévio", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], requestBody: { required: true, content: jsonContent("#/components/schemas/RestoreDatabaseRequest") }, responses: { "200": okJson("#/components/schemas/RestoreDatabaseResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+      delete: withStepUp({ tags: ["backups"], summary: "Excluir backup armazenado", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
     },
     "/financial-execution/commitment-notes": {
       get: {
@@ -4837,7 +4915,7 @@ export const openApiDocument: OpenApiDocument = {
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
-      post: {
+      post: withStepUp({
         tags: ["users"],
         summary: "Criar usuario administrativo",
         description:
@@ -4853,7 +4931,7 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
-      },
+      }),
     },
     "/users/options": {
       get: {
@@ -4892,7 +4970,7 @@ export const openApiDocument: OpenApiDocument = {
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
-      patch: {
+      patch: withStepUp({
         tags: ["users"],
         summary: "Atualizar dados cadastrais de usuario",
         description: "Atualiza name, warName, email, rank e cpf. Somente ADMIN.",
@@ -4908,10 +4986,10 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
-      },
+      }),
     },
     "/users/{id}/status": {
-      patch: {
+      patch: withStepUp({
         tags: ["users"],
         summary: "Atualizar status de usuario",
         description:
@@ -4928,10 +5006,10 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
-      },
+      }),
     },
     "/users/{id}/role": {
-      patch: {
+      patch: withStepUp({
         tags: ["users"],
         summary: "Atualizar role de usuario",
         description:
@@ -4948,7 +5026,7 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
-      },
+      }),
     },
     "/permissions/catalog": {
       get: {
@@ -4978,7 +5056,7 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-permissions": ["permissions.view"],
       },
-      put: {
+      put: withStepUp({
         tags: ["permissions"],
         summary: "Atualizar permissões base de uma role",
         description:
@@ -4994,7 +5072,7 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_role_permissions"],
-      },
+      }),
     },
     "/permissions/users": {
       get: {
@@ -5039,7 +5117,7 @@ export const openApiDocument: OpenApiDocument = {
       },
     },
     "/permissions/users/{id}/overrides/allow": {
-      post: {
+      post: withStepUp({
         tags: ["permissions"],
         summary: "Aplicar override ALLOW para um usuário",
         description:
@@ -5055,10 +5133,10 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_user_overrides"],
-      },
+      }),
     },
     "/permissions/users/{id}/overrides/deny": {
-      post: {
+      post: withStepUp({
         tags: ["permissions"],
         summary: "Aplicar override DENY para um usuário",
         description:
@@ -5074,10 +5152,10 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_user_overrides"],
-      },
+      }),
     },
     "/permissions/users/{id}/overrides/{permissionCode}": {
-      delete: {
+      delete: withStepUp({
         tags: ["permissions"],
         summary: "Remover override de permissão de um usuário",
         description:
@@ -5092,7 +5170,7 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_user_overrides"],
-      },
+      }),
     },
     "/atas": {
       get: {

@@ -3,9 +3,11 @@ import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
+import { env } from "../../config/env.js";
 import {
   generateAccessToken,
   generateRefreshToken,
+  generateStepUpToken,
   getRefreshTokenExpirationDate,
   hashToken,
   verifyRefreshToken,
@@ -19,6 +21,10 @@ type RegisterInput = {
 
 type LoginInput = {
   email: string;
+  password: string;
+};
+
+type ReauthenticateInput = {
   password: string;
 };
 
@@ -497,6 +503,7 @@ export class AuthService {
       {
         email: user.email,
         role: user.role,
+        authenticationMethod: "PASSWORD",
       },
       user.id,
     );
@@ -580,6 +587,54 @@ export class AuthService {
     };
   }
 
+  async reauthenticate(
+    data: ReauthenticateInput,
+    currentUser: CurrentUser,
+    context?: AuthRequestContext,
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id },
+      select: { id: true, name: true, email: true, active: true, passwordHash: true },
+    });
+    const passwordMatches = user
+      ? await bcrypt.compare(data.password, user.passwordHash)
+      : false;
+
+    if (!user?.active || !passwordMatches) {
+      await auditService.log({
+        entityType: "AUTH",
+        entityId: currentUser.id,
+        action: "REAUTHENTICATION_FAILED",
+        actor: { id: currentUser.id, name: currentUser.name ?? currentUser.email },
+        summary: `Falha na confirmação de senha para ${currentUser.email}`,
+        metadata: {
+          ipAddress: context?.ipAddress ?? null,
+          userAgent: context?.userAgent ?? null,
+        },
+      });
+      throw new AppError("Senha inválida", 401, "AUTH_REAUTHENTICATION_FAILED");
+    }
+
+    const token = generateStepUpToken(user.id);
+    await auditService.log({
+      entityType: "AUTH",
+      entityId: user.id,
+      action: "REAUTHENTICATION_SUCCESS",
+      actor: { id: user.id, name: user.name ?? user.email },
+      summary: `Autorização reforçada concedida para ${user.email}`,
+      metadata: {
+        expiresInSeconds: env.STEP_UP_EXPIRES_IN_SECONDS,
+        ipAddress: context?.ipAddress ?? null,
+        userAgent: context?.userAgent ?? null,
+      },
+    });
+
+    return {
+      stepUpToken: token,
+      expiresInSeconds: env.STEP_UP_EXPIRES_IN_SECONDS,
+    };
+  }
+
   async refresh(refreshToken: string, context?: AuthRequestContext) {
     try {
       verifyRefreshToken(refreshToken);
@@ -621,6 +676,7 @@ export class AuthService {
       {
         email: storedToken.user.email,
         role: storedToken.user.role,
+        authenticationMethod: "REFRESH",
       },
       storedToken.user.id,
     );

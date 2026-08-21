@@ -21,6 +21,7 @@ const envSchema = z
   RATE_LIMIT_MAX: z.coerce.number().int().min(10).default(600),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
   SENSITIVE_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
+  STEP_UP_EXPIRES_IN_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
   PDF_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
   PDF_RENDER_MODE: z.enum(["mock", "real"]).optional(),
   COMPRAS_GOV_DEBUG: z.coerce.boolean().optional(),

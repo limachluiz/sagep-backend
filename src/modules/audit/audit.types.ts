@@ -25,6 +25,8 @@ export type AuditActionType =
   | "CANCEL"
   | "LOGIN"
   | "LOGIN_FAILED"
+  | "REAUTHENTICATION_SUCCESS"
+  | "REAUTHENTICATION_FAILED"
   | "LOGOUT"
   | "TOKEN_REFRESH"
   | "SESSION_REVOKE"

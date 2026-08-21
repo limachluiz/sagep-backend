@@ -112,6 +112,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/auth/reauthenticate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmar senha para operação crítica
+         * @description Emite autorização reforçada curta, vinculada ao usuário autenticado. Sucessos e falhas são auditados.
+         */
+        post: operations["auth_post_reauthenticate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/profile": {
         parameters: {
             query?: never;
@@ -2533,6 +2553,13 @@ export interface components {
             /** @enum {boolean} */
             logoutRequired: true;
         };
+        ReauthenticateRequest: {
+            password: string;
+        };
+        StepUpResponse: {
+            stepUpToken: string;
+            expiresInSeconds: number;
+        };
         UserOptionsResponse: {
             items: components["schemas"]["UserOption"][];
         };
@@ -4210,6 +4237,22 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description A operação crítica exige confirmação recente da senha. */
+        StepUpRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "AUTH_STEP_UP_REQUIRED",
+                 *       "message": "Confirme sua senha para realizar esta operação",
+                 *       "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Recurso nao encontrado. */
         NotFound: {
             headers: {
@@ -4308,6 +4351,8 @@ export interface components {
         PermissionCode: string;
         /** @description Identificador da sessao. */
         SessionId: string;
+        /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+        StepUpToken: string;
         /** @description Identificador UUID da ata. */
         AtaId: string;
         /** @description Identificador UUID do grupo de cobertura da ata. */
@@ -4473,6 +4518,32 @@ export interface operations {
                     "application/json": components["schemas"]["UserSummary"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    auth_post_reauthenticate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReauthenticateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepUpResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -4646,7 +4717,10 @@ export interface operations {
     auth_post_sessions_revokeAll: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4666,6 +4740,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -4710,7 +4785,10 @@ export interface operations {
     auth_post_users_byUserId_sessions_bySessionId_revoke: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador do usuario. */
                 userId: string;
@@ -4735,13 +4813,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     auth_post_users_byUserId_sessions_revokeAll: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador do usuario. */
                 userId: string;
@@ -4764,13 +4846,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     auth_post_sessions_cleanup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4794,6 +4880,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -7302,7 +7389,10 @@ export interface operations {
     settings_put_systemSettings: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7326,13 +7416,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     settings_post_systemSettings_connections_test: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7352,13 +7446,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     settings_post_systemSettings_connections_byProvider_test: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Integração */
                 provider: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV";
@@ -7381,6 +7479,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -7413,7 +7512,10 @@ export interface operations {
     backups_post_collection: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7433,13 +7535,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     backups_post_import: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7463,13 +7569,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     backups_post_export: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7493,6 +7603,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -7528,7 +7639,10 @@ export interface operations {
     backups_post_byId_restore: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description UUID do backup */
                 id: string;
@@ -7555,13 +7669,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     backups_delete_byId_restore: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description UUID do backup */
                 id: string;
@@ -7584,6 +7702,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -8112,7 +8231,10 @@ export interface operations {
     users_post_collection: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -8136,6 +8258,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -8202,7 +8325,10 @@ export interface operations {
     users_patch_byId: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -8229,13 +8355,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     users_patch_byId_status: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -8262,13 +8392,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     users_patch_byId_role: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -8295,6 +8429,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -8356,7 +8491,10 @@ export interface operations {
     permissions_put_roles_byRole: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Role do RBAC persistido. */
                 role: components["parameters"]["RoleName"];
@@ -8383,6 +8521,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -8473,7 +8612,10 @@ export interface operations {
     permissions_post_users_byId_overrides_allow: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -8500,13 +8642,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     permissions_post_users_byId_overrides_deny: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -8533,13 +8679,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     permissions_delete_users_byId_overrides_byPermissionCode: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -8564,6 +8714,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };

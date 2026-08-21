@@ -5,10 +5,15 @@ import { env } from "../config/env.js";
 type JwtBasePayload = {
   email: string;
   role: string;
+  authenticationMethod?: "PASSWORD" | "REFRESH";
 };
 
 const accessSecret: Secret = env.JWT_ACCESS_SECRET;
 const refreshSecret: Secret = env.JWT_REFRESH_SECRET;
+const stepUpSecret: Secret = crypto
+  .createHmac("sha256", String(accessSecret))
+  .update("sagep-step-up-v1")
+  .digest();
 
 const accessExpiresIn = env.JWT_ACCESS_EXPIRES_IN as SignOptions["expiresIn"];
 const refreshExpiresIn = env.JWT_REFRESH_EXPIRES_IN as SignOptions["expiresIn"];
@@ -17,6 +22,7 @@ export function generateAccessToken(payload: JwtBasePayload, userId: string) {
   const options: SignOptions = {
     subject: userId,
     expiresIn: accessExpiresIn,
+    algorithm: "HS256",
   };
 
   return jwt.sign(payload, accessSecret, options);
@@ -27,17 +33,41 @@ export function generateRefreshToken(payload: JwtBasePayload, userId: string) {
     subject: userId,
     expiresIn: refreshExpiresIn,
     jwtid: crypto.randomUUID(),
+    algorithm: "HS256",
   };
 
   return jwt.sign(payload, refreshSecret, options);
 }
 
 export function verifyAccessToken(token: string) {
-  return jwt.verify(token, accessSecret) as JwtPayload & JwtBasePayload;
+  return jwt.verify(token, accessSecret, { algorithms: ["HS256"] }) as JwtPayload & JwtBasePayload;
 }
 
 export function verifyRefreshToken(token: string) {
-  return jwt.verify(token, refreshSecret) as JwtPayload & JwtBasePayload;
+  return jwt.verify(token, refreshSecret, { algorithms: ["HS256"] }) as JwtPayload & JwtBasePayload;
+}
+
+export function generateStepUpToken(userId: string) {
+  return jwt.sign(
+    { purpose: "STEP_UP" },
+    stepUpSecret,
+    {
+      subject: userId,
+      expiresIn: env.STEP_UP_EXPIRES_IN_SECONDS,
+      algorithm: "HS256",
+      audience: "sagep-sensitive-actions",
+      issuer: "sagep-api",
+      jwtid: crypto.randomUUID(),
+    },
+  );
+}
+
+export function verifyStepUpToken(token: string) {
+  return jwt.verify(token, stepUpSecret, {
+    algorithms: ["HS256"],
+    audience: "sagep-sensitive-actions",
+    issuer: "sagep-api",
+  }) as JwtPayload & { purpose: "STEP_UP" };
 }
 
 export function hashToken(token: string) {
