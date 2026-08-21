@@ -84,9 +84,10 @@ RUN mkdir -p /app/backups \
   && chown -R sagep:sagep /app /home/sagep
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+  && chmod 0755 /usr/local/bin/docker-entrypoint.sh
 
 EXPOSE 3000
 
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+ENTRYPOINT ["sh", "/usr/local/bin/docker-entrypoint.sh"]
 CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]
