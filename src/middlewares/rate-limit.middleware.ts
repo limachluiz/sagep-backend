@@ -26,9 +26,15 @@ export const apiRateLimiter = rateLimit({
 export const loginRateLimiter = rateLimit({
   ...sharedOptions,
   limit: env.AUTH_RATE_LIMIT_MAX,
+  keyGenerator: (req) => ipKeyGenerator(req.ip ?? "unknown"),
+});
+
+export const loginAccountRateLimiter = rateLimit({
+  ...sharedOptions,
+  limit: env.AUTH_RATE_LIMIT_MAX,
   keyGenerator: (req) => {
     const email = typeof req.body?.email === "string" ? req.body.email.trim().toLowerCase() : "";
-    return `${ipKeyGenerator(req.ip ?? "unknown")}:${email}`;
+    return email || `invalid:${ipKeyGenerator(req.ip ?? "unknown")}`;
   },
 });
 

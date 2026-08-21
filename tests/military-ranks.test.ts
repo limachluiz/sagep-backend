@@ -26,7 +26,7 @@ describe("postos e graduações militares", () => {
     const baseUser = {
       name: "Luiz Lima",
       email: "luiz@sagep.mil.br",
-      password: "123456",
+      password: "12345678",
       role: "PROJETISTA" as const,
     };
 

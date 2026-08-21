@@ -142,8 +142,8 @@ export class TasksService {
     return role === "ADMIN";
   }
 
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "tasks.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "tasks.view_all");
   }
 
   private resolveArchivedAccess(
@@ -508,7 +508,7 @@ export class TasksService {
       throw new AppError("Tarefa não encontrada", 404);
     }
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return task;
     }
 
@@ -530,7 +530,7 @@ export class TasksService {
       throw new AppError("Tarefa não encontrada", 404);
     }
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return task;
     }
 
@@ -660,7 +660,7 @@ export class TasksService {
       });
     }
 
-    if (!this.isPrivileged(user.role)) {
+    if (!this.isPrivileged(user)) {
       andConditions.push({
         OR: [
           { assigneeId: user.id },

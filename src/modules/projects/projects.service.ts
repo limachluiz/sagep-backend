@@ -226,7 +226,7 @@ export class ProjectsService {
           { description: { contains: filters.search, mode: "insensitive" } },
         ],
       }),
-      ...(!this.isPrivileged(user.role) && {
+      ...(!this.isPrivileged(user) && {
         OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }],
       }),
     };
@@ -347,8 +347,8 @@ export class ProjectsService {
     };
   }
 
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "projects.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private async getProjectAccessData(projectId: string, includeArchived = false) {
@@ -426,7 +426,7 @@ export class ProjectsService {
   private async ensureCanView(projectId: string, user: CurrentUser, includeArchived = false) {
     const project = await this.getProjectAccessData(projectId, includeArchived);
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return project;
     }
 
@@ -443,7 +443,7 @@ export class ProjectsService {
   private async ensureCanViewByCode(projectCode: number, user: CurrentUser, includeArchived = false) {
     const project = await this.getProjectAccessDataByCode(projectCode, includeArchived);
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return project;
     }
 
@@ -1129,7 +1129,7 @@ export class ProjectsService {
         : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     );
 
-    if (!this.isPrivileged(user.role)) {
+    if (!this.isPrivileged(user)) {
       andConditions.push({
         OR: [
           { ownerId: user.id },

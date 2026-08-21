@@ -388,6 +388,14 @@ export const openApiDocument: OpenApiDocument = {
           requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
+      TooManyRequests: {
+        description: "Limite de tentativas por IP ou conta excedido.",
+        content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "TOO_MANY_REQUESTS",
+          message: "Muitas tentativas. Aguarde antes de tentar novamente.",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
+        }),
+      },
       NotFound: {
         description: "Recurso nao encontrado.",
         content: jsonContent("#/components/schemas/ErrorResponse", {
@@ -2206,7 +2214,7 @@ export const openApiDocument: OpenApiDocument = {
           name: { type: "string", minLength: 3 },
           warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
-          password: { type: "string", minLength: 6 },
+          password: { type: "string", minLength: 8, maxLength: 128 },
         },
       },
       UserCreateRequest: {
@@ -2217,7 +2225,7 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           name: { type: "string", minLength: 3 },
           email: { type: "string", format: "email" },
-          password: { type: "string", minLength: 6 },
+          password: { type: "string", minLength: 8, maxLength: 128 },
           role: {
             type: "string",
             enum: ["PROJETISTA", "GESTOR", "CONSULTA"],
@@ -3082,6 +3090,8 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["auth"],
         summary: "Autenticar usuario",
+        description:
+          "Normaliza o e-mail, aplica limites por IP e conta e bloqueia temporariamente a conta após falhas consecutivas.",
         requestBody: {
           required: true,
           content: {
@@ -3091,7 +3101,7 @@ export const openApiDocument: OpenApiDocument = {
                 required: ["email", "password"],
                 properties: {
                   email: { type: "string", format: "email" },
-                  password: { type: "string", minLength: 1 },
+                  password: { type: "string", minLength: 1, maxLength: 128 },
                 },
               },
             },
@@ -3101,6 +3111,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/AuthTokensResponse"),
           "400": { $ref: "#/components/responses/BadRequest" },
           "401": { $ref: "#/components/responses/Unauthorized" },
+          "429": { $ref: "#/components/responses/TooManyRequests" },
         },
       },
     },

@@ -2,6 +2,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { ProjectsService } from "../projects/projects.service.js";
 import type {
@@ -56,7 +57,7 @@ export class FinancialExecutionService {
   }
 
   private projectAccessWhere(user: CurrentUser): Prisma.ProjectWhereInput {
-    if (user.role === "ADMIN" || user.role === "GESTOR") return {};
+    if (permissionsService.hasPermission(user, "projects.view_all")) return {};
     return {
       OR: [
         { ownerId: user.id },

@@ -204,6 +204,8 @@ model User {
   notifyDeadlines               Boolean                      @default(true)
   notifyWorkflowUpdates         Boolean                      @default(true)
   active                        Boolean                      @default(true)
+  failedLoginAttempts           Int                          @default(0)
+  lockedUntil                   DateTime?
   ownedProjects                 Project[]                    @relation("ProjectOwner")
   signedServiceOrdersRegistered Project[]                    @relation("SignedServiceOrderRegistrar")
   memberships                   ProjectMember[]

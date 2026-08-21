@@ -4,13 +4,13 @@ import { MILITARY_RANKS } from "../../shared/military-ranks.js";
 
 export const registerSchema = z.object({
   name: z.string().trim().min(3, "Nome inválido"),
-  email: z.string().trim().email("Email inválido"),
-  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+  email: z.string().trim().toLowerCase().email("Email inválido"),
+  password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres").max(128),
 });
 
 export const loginSchema = z.object({
-  email: z.string().trim().email("Email inválido"),
-  password: z.string().min(1, "Senha é obrigatória"),
+  email: z.string().trim().toLowerCase().email("Email inválido"),
+  password: z.string().min(1, "Senha é obrigatória").max(128),
 });
 
 export const reauthenticateSchema = z.object({

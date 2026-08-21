@@ -20,6 +20,8 @@ const envSchema = z
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900000),
   RATE_LIMIT_MAX: z.coerce.number().int().min(10).default(600),
   AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
+  LOGIN_MAX_FAILED_ATTEMPTS: z.coerce.number().int().min(3).max(20).default(5),
+  LOGIN_LOCKOUT_MINUTES: z.coerce.number().int().min(1).max(1440).default(15),
   SENSITIVE_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
   STEP_UP_EXPIRES_IN_SECONDS: z.coerce.number().int().min(60).max(900).default(300),
   PDF_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),

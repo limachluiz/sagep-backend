@@ -592,6 +592,21 @@
           }
         }
       },
+      "TooManyRequests": {
+        "description": "Limite de tentativas por IP ou conta excedido.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            },
+            "example": {
+              "code": "TOO_MANY_REQUESTS",
+              "message": "Muitas tentativas. Aguarde antes de tentar novamente.",
+              "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+            }
+          }
+        }
+      },
       "NotFound": {
         "description": "Recurso nao encontrado.",
         "content": {
@@ -4161,7 +4176,8 @@
           },
           "password": {
             "type": "string",
-            "minLength": 6
+            "minLength": 8,
+            "maxLength": 128
           }
         }
       },
@@ -4185,7 +4201,8 @@
           },
           "password": {
             "type": "string",
-            "minLength": 6
+            "minLength": 8,
+            "maxLength": 128
           },
           "role": {
             "type": "string",
@@ -6173,6 +6190,7 @@
           "auth"
         ],
         "summary": "Autenticar usuario",
+        "description": "Normaliza o e-mail, aplica limites por IP e conta e bloqueia temporariamente a conta após falhas consecutivas.",
         "requestBody": {
           "required": true,
           "content": {
@@ -6190,7 +6208,8 @@
                   },
                   "password": {
                     "type": "string",
-                    "minLength": 1
+                    "minLength": 1,
+                    "maxLength": 128
                   }
                 }
               }
@@ -6213,6 +6232,9 @@
           },
           "401": {
             "$ref": "#/components/responses/Unauthorized"
+          },
+          "429": {
+            "$ref": "#/components/responses/TooManyRequests"
           }
         },
         "operationId": "auth_post_login"

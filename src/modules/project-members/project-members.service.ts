@@ -6,6 +6,7 @@ type CurrentUser = {
   id: string;
   email: string;
   role: string;
+  permissions?: string[];
 };
 
 type AddProjectMemberInput = {
@@ -15,8 +16,8 @@ type AddProjectMemberInput = {
 };
 
 export class ProjectMembersService {
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "projects.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private async getProjectAccessData(projectId: string) {
@@ -46,7 +47,7 @@ export class ProjectMembersService {
   private async ensureCanView(projectId: string, user: CurrentUser) {
     const project = await this.getProjectAccessData(projectId);
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return project;
     }
 

@@ -87,7 +87,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Autenticar usuario */
+        /**
+         * Autenticar usuario
+         * @description Normaliza o e-mail, aplica limites por IP e conta e bloqueia temporariamente a conta após falhas consecutivas.
+         */
         post: operations["auth_post_login"];
         delete?: never;
         options?: never;
@@ -4253,6 +4256,22 @@ export interface components {
                 "application/json": components["schemas"]["ErrorResponse"];
             };
         };
+        /** @description Limite de tentativas por IP ou conta excedido. */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "TOO_MANY_REQUESTS",
+                 *       "message": "Muitas tentativas. Aguarde antes de tentar novamente.",
+                 *       "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
         /** @description Recurso nao encontrado. */
         NotFound: {
             headers: {
@@ -4498,6 +4517,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     auth_get_me: {

@@ -131,6 +131,44 @@ async function createUser(
   });
 }
 
+async function denyPermissionsForUser(userId: string, permissionCodes: string[]) {
+  const permissions = await prisma.permission.findMany({
+    where: {
+      code: {
+        in: permissionCodes,
+      },
+    },
+    select: {
+      id: true,
+      code: true,
+    },
+  });
+
+  expect(permissions).toHaveLength(permissionCodes.length);
+
+  await Promise.all(
+    permissions.map((permission) =>
+      prisma.userPermissionOverride.upsert({
+        where: {
+          userId_permissionId: {
+            userId,
+            permissionId: permission.id,
+          },
+        },
+        update: {
+          effect: "DENY",
+        },
+        create: {
+          id: `override:${userId}:${permission.id}`,
+          userId,
+          permissionId: permission.id,
+          effect: "DENY",
+        },
+      }),
+    ),
+  );
+}
+
 async function login(email: string, userAgent?: string) {
   const requestBuilder = request(app).post("/api/auth/login");
 
@@ -705,6 +743,110 @@ describe("critical flows", () => {
       .expect(403);
   });
 
+  it("RBAC/IDOR: DENY individual restringe recursos diretos e visoes agregadas", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto Sigiloso IDOR");
+    const { estimate } = await seedFinalizedEstimate(project.id);
+    const task = await prisma.task.create({
+      data: {
+        title: "Tarefa Sigilosa IDOR",
+        projectId: project.id,
+        assigneeId: admin.id,
+      },
+    });
+    const commitmentNote = await prisma.commitmentNote.create({
+      data: {
+        projectId: project.id,
+        number: "2026NE999999",
+        externalCode: `idor:${project.id}`,
+        supplierName: "Fornecedor Sigiloso",
+        currentAmount: "200.00",
+        lastSyncAt: new Date(),
+      },
+    });
+
+    await denyPermissionsForUser(gestor.id, [
+      "projects.view_all",
+      "tasks.view_all",
+      "estimates.view_all",
+    ]);
+
+    const restrictedGestor = await login(gestor.email);
+
+    expect(restrictedGestor.user.permissions).not.toContain("projects.view_all");
+    expect(restrictedGestor.user.permissions).not.toContain("tasks.view_all");
+    expect(restrictedGestor.user.permissions).not.toContain("estimates.view_all");
+
+    const authorization = { Authorization: `Bearer ${restrictedGestor.accessToken}` };
+
+    await request(app).get(`/api/projects/${project.id}`).set(authorization).expect(403);
+    await request(app)
+      .get(`/api/projects/code/${project.projectCode}`)
+      .set(authorization)
+      .expect(403);
+    await request(app).get(`/api/projects/${project.id}/members`).set(authorization).expect(403);
+
+    await request(app).get(`/api/tasks/${task.id}`).set(authorization).expect(403);
+    await request(app).get(`/api/tasks/code/${task.taskCode}`).set(authorization).expect(403);
+
+    await request(app).get(`/api/estimates/${estimate.id}`).set(authorization).expect(403);
+    await request(app)
+      .get(`/api/estimates/code/${estimate.estimateCode}`)
+      .set(authorization)
+      .expect(403);
+    await request(app)
+      .get(`/api/estimates/${estimate.id}/document/html`)
+      .set(authorization)
+      .expect(403);
+
+    const searchResponse = await request(app)
+      .get("/api/search")
+      .query({ q: "Projeto Sigiloso IDOR" })
+      .set(authorization)
+      .expect(200);
+
+    expect(searchResponse.body.groups.projects).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: project.id })]),
+    );
+
+    const financialResponse = await request(app)
+      .get("/api/financial-execution/commitment-notes")
+      .set(authorization)
+      .expect(200);
+
+    expect(financialResponse.body.items).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: commitmentNote.id })]),
+    );
+    await request(app)
+      .get(`/api/financial-execution/commitment-notes/${commitmentNote.id}`)
+      .set(authorization)
+      .expect(404);
+
+    const dashboardResponse = await request(app)
+      .get("/api/dashboard/operational")
+      .set(authorization)
+      .expect(200);
+
+    expect(dashboardResponse.body.operationalQueue).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: project.id })]),
+    );
+    expect(dashboardResponse.body.alerts.items).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ project: expect.objectContaining({ id: project.id }) }),
+      ]),
+    );
+
+    const alertsResponse = await request(app)
+      .get("/api/operational-alerts")
+      .set(authorization)
+      .expect(200);
+
+    expect(alertsResponse.body.alerts).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ project: expect.objectContaining({ id: project.id }) }),
+      ]),
+    );
+  });
+
   it("permissions admin: permissions.view allows read access, but write remains restricted", async () => {
     await request(app)
       .get("/api/permissions/catalog")
@@ -990,6 +1132,39 @@ describe("critical flows", () => {
     expect(metadata.password).toBeUndefined();
     expect(metadata.token).toBeUndefined();
     expect(metadata.tokenHash).toBeUndefined();
+  });
+
+  it("auth: bloqueia temporariamente a conta e limpa o bloqueio após expirar", async () => {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await request(app)
+        .post("/api/auth/login")
+        .send({ email: admin.email, password: "senha-errada" })
+        .expect(401);
+    }
+
+    const lockedUser = await prisma.user.findUniqueOrThrow({ where: { id: admin.id } });
+    expect(lockedUser.failedLoginAttempts).toBe(5);
+    expect(lockedUser.lockedUntil).toBeInstanceOf(Date);
+
+    const blocked = await request(app)
+      .post("/api/auth/login")
+      .send({ email: admin.email, password })
+      .expect(401);
+    expect(blocked.body.message).toBe("E-mail ou senha inválidos");
+
+    await prisma.user.update({
+      where: { id: admin.id },
+      data: { lockedUntil: new Date(Date.now() - 1_000) },
+    });
+
+    await request(app)
+      .post("/api/auth/login")
+      .send({ email: admin.email.toUpperCase(), password })
+      .expect(200);
+
+    const unlockedUser = await prisma.user.findUniqueOrThrow({ where: { id: admin.id } });
+    expect(unlockedUser.failedLoginAttempts).toBe(0);
+    expect(unlockedUser.lockedUntil).toBeNull();
   });
 
   it("auth profile: updates only personal fields and changes password with session revocation", async () => {

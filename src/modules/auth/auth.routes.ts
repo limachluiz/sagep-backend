@@ -5,6 +5,7 @@ import { env } from "../../config/env.js";
 import { AppError } from "../../shared/app-error.js";
 import {
   authSessionRateLimiter,
+  loginAccountRateLimiter,
   loginRateLimiter,
 } from "../../middlewares/rate-limit.middleware.js";
 import { requireTrustedBrowserOrigin } from "../../middlewares/csrf.middleware.js";
@@ -26,7 +27,13 @@ authRoutes.post("/register", requireTrustedBrowserOrigin, loginRateLimiter, (req
 
   return controller.register(req, res);
 });
-authRoutes.post("/login", requireTrustedBrowserOrigin, loginRateLimiter, (req, res) => controller.login(req, res));
+authRoutes.post(
+  "/login",
+  requireTrustedBrowserOrigin,
+  loginRateLimiter,
+  loginAccountRateLimiter,
+  (req, res) => controller.login(req, res),
+);
 authRoutes.get("/me", authMiddleware, (req, res) => controller.me(req, res));
 authRoutes.post("/reauthenticate", authMiddleware, authSessionRateLimiter, (req, res) =>
   controller.reauthenticate(req, res),

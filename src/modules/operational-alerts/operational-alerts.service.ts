@@ -97,12 +97,12 @@ const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
 };
 
 export class OperationalAlertsService {
-  private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private getProjectAccessWhere(user: CurrentUser): Prisma.ProjectWhereInput {
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return {};
     }
 

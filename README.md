@@ -145,6 +145,8 @@ Variáveis usadas atualmente:
 | `RATE_LIMIT_WINDOW_MS` | nao | Janela dos limites de requisição. Padrão `900000` ms |
 | `RATE_LIMIT_MAX` | nao | Limite geral por IP e janela. Padrão `600` |
 | `AUTH_RATE_LIMIT_MAX` | nao | Limite de tentativas de login por IP/usuário. Padrão `10` |
+| `LOGIN_MAX_FAILED_ATTEMPTS` | nao | Falhas consecutivas antes do bloqueio temporário da conta. Padrão `5` |
+| `LOGIN_LOCKOUT_MINUTES` | nao | Duração do bloqueio temporário após exceder as falhas. Padrão `15` minutos |
 | `SENSITIVE_RATE_LIMIT_MAX` | nao | Limite para backup, restauração e testes de conexão. Padrão `20` |
 | `STEP_UP_EXPIRES_IN_SECONDS` | nao | Validade da confirmação de senha exigida em operações críticas. Padrão `300`; intervalo permitido de 60 a 900 segundos |
 | `ALLOW_PUBLIC_REGISTRATION` | nao | Habilita `POST /auth/register`. Padrao seguro: `false` |
@@ -176,6 +178,8 @@ TRUST_PROXY_HOPS=0
 RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX=600
 AUTH_RATE_LIMIT_MAX=10
+LOGIN_MAX_FAILED_ATTEMPTS=5
+LOGIN_LOCKOUT_MINUTES=15
 SENSITIVE_RATE_LIMIT_MAX=20
 STEP_UP_EXPIRES_IN_SECONDS=300
 PDF_TIMEOUT_MS=60000
@@ -205,6 +209,8 @@ URLs oficiais do frontend.
 - Em produção, os dois segredos JWT precisam ser diferentes e possuir no mínimo 32 caracteres.
 - Helmet aplica cabeçalhos defensivos e a API possui CSP restritiva fora da documentação OpenAPI.
 - Login, renovação, backups, restaurações e testes de integração têm limites contra abuso. Em implantação com múltiplas réplicas, substitua o armazenamento local do limitador por Redis.
+- O login combina limites por IP e por conta, bloqueia temporariamente a conta após falhas consecutivas e usa uma comparação criptográfica de custo equivalente mesmo quando o e-mail não existe.
+- O escopo de projetos, tarefas, estimativas, documentos, execução financeira, busca, dashboards e alertas usa as permissões efetivas do usuário; um override `DENY` prevalece sobre a permissão herdada da role e bloqueia também consultas por ID ou código.
 - Login, renovação e logout validam `Origin`/`Sec-Fetch-Site` contra `CORS_ALLOWED_ORIGINS`, reduzindo o risco de CSRF sobre o cookie de renovação.
 - Operações administrativas críticas exigem confirmação recente da senha. O token temporário é vinculado ao usuário, permanece somente em memória no frontend e expira em até 15 minutos (padrão: 5 minutos).
 - URLs configuráveis das integrações aceitam apenas HTTPS e os hosts oficiais do Portal da Transparência, Compras.gov.br e PNCP; redirecionamentos externos não são seguidos.

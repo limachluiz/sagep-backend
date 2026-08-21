@@ -220,8 +220,8 @@ export class DiexService {
     };
   }
 
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "projects.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -406,7 +406,7 @@ export class DiexService {
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return true;
     }
 
@@ -887,7 +887,7 @@ export class DiexService {
       );
     }
 
-    if (!this.isPrivileged(user.role)) {
+    if (!this.isPrivileged(user)) {
       andConditions.push({
         OR: [
           { project: { ownerId: user.id } },
