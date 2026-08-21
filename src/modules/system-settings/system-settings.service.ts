@@ -4,6 +4,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { auditService } from "../audit/audit.service.js";
 import type { IntegrationProviderInput, UpdateSystemSettingsInput } from "./system-settings.schemas.js";
+import { assertAllowedIntegrationUrl } from "../../shared/integration-url.js";
 
 const DEFAULTS = {
   id: "default",
@@ -43,7 +44,11 @@ function publicConfiguration<T extends Record<string, unknown>>(settings: T) {
 export class SystemSettingsService {
   async getEffective() {
     const stored = await prisma.systemConfiguration.findUnique({ where: { id: "default" } });
-    return stored ? { ...DEFAULTS, ...stored } : { ...DEFAULTS, updatedById: null, createdAt: null, updatedAt: null };
+    const settings = stored ? { ...DEFAULTS, ...stored } : { ...DEFAULTS, updatedById: null, createdAt: null, updatedAt: null };
+    assertAllowedIntegrationUrl(settings.portalTransparenciaBaseUrl, "PORTAL_TRANSPARENCIA");
+    assertAllowedIntegrationUrl(settings.comprasGovBaseUrl, "COMPRAS_GOV");
+    assertAllowedIntegrationUrl(settings.pncpBaseUrl, "PNCP");
+    return settings;
   }
 
   async get() {
@@ -60,6 +65,9 @@ export class SystemSettingsService {
   }
 
   async update(input: UpdateSystemSettingsInput, user: CurrentUser) {
+    assertAllowedIntegrationUrl(input.portalTransparenciaBaseUrl, "PORTAL_TRANSPARENCIA");
+    assertAllowedIntegrationUrl(input.comprasGovBaseUrl, "COMPRAS_GOV");
+    if (input.pncpBaseUrl) assertAllowedIntegrationUrl(input.pncpBaseUrl, "PNCP");
     const before = await this.getEffective();
     const data = {
       ...input,
@@ -185,7 +193,11 @@ export class SystemSettingsService {
   ) {
     const started = performance.now();
     try {
-      const response = await fetch(url, { headers, signal: AbortSignal.timeout(timeoutMs) });
+      const response = await fetch(url, {
+        headers,
+        redirect: "manual",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
       const status: ConnectionStatus = response.ok ? "OPERATIONAL" : response.status === 429 ? "DEGRADED" : "UNAVAILABLE";
       const message = response.ok ? `${label} respondeu com sucesso` : response.status === 429 ? `${label} acessível, mas com limite de requisições` : `${label} respondeu com HTTP ${response.status}`;
       return this.result(status, started, response.status, message, { endpoint: `${url.origin}${url.pathname}` });

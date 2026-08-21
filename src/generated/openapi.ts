@@ -161,7 +161,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rotacionar refresh token */
+        /**
+         * Rotacionar refresh token
+         * @description Usa e rotaciona o refresh token mantido em cookie HttpOnly.
+         */
         post: operations["auth_post_refresh"];
         delete?: never;
         options?: never;
@@ -178,7 +181,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revogar refresh token atual */
+        /**
+         * Revogar refresh token atual
+         * @description Revoga a sessão identificada pelo cookie HttpOnly e remove o cookie.
+         */
         post: operations["auth_post_logout"];
         delete?: never;
         options?: never;
@@ -2639,8 +2645,10 @@ export interface components {
         };
         AuthTokensResponse: {
             accessToken: string;
-            refreshToken: string;
             user: components["schemas"]["UserSummary"];
+        };
+        RefreshResponse: {
+            accessToken: string;
         };
         SessionStatusDetail: {
             /** @enum {string} */
@@ -4535,13 +4543,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    refreshToken: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
@@ -4549,7 +4551,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthTokensResponse"];
+                    "application/json": components["schemas"]["RefreshResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -4563,13 +4565,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    refreshToken: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Logout realizado */
             200: {

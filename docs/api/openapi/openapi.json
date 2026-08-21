@@ -1658,18 +1658,25 @@
         "type": "object",
         "required": [
           "accessToken",
-          "refreshToken",
           "user"
         ],
         "properties": {
           "accessToken": {
             "type": "string"
           },
-          "refreshToken": {
-            "type": "string"
-          },
           "user": {
             "$ref": "#/components/schemas/UserSummary"
+          }
+        }
+      },
+      "RefreshResponse": {
+        "type": "object",
+        "required": [
+          "accessToken"
+        ],
+        "properties": {
+          "accessToken": {
+            "type": "string"
           }
         }
       },
@@ -6302,31 +6309,14 @@
           "auth"
         ],
         "summary": "Rotacionar refresh token",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "refreshToken"
-                ],
-                "properties": {
-                  "refreshToken": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
+        "description": "Usa e rotaciona o refresh token mantido em cookie HttpOnly.",
         "responses": {
           "200": {
             "description": "OK",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AuthTokensResponse"
+                  "$ref": "#/components/schemas/RefreshResponse"
                 }
               }
             }
@@ -6347,24 +6337,7 @@
           "auth"
         ],
         "summary": "Revogar refresh token atual",
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "refreshToken"
-                ],
-                "properties": {
-                  "refreshToken": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
+        "description": "Revoga a sessão identificada pelo cookie HttpOnly e remove o cookie.",
         "responses": {
           "200": {
             "description": "Logout realizado",

@@ -368,6 +368,7 @@ export class ComprasGovService {
     try {
       response = await fetch(url, {
         headers: { accept: "application/json" },
+        redirect: "manual",
         signal: AbortSignal.timeout(env.COMPRAS_GOV_REQUEST_TIMEOUT_MS),
       });
     } catch {

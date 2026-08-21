@@ -20,9 +20,11 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
-ENV PUPPETEER_CACHE_DIR=/root/.cache/puppeteer
+ENV PUPPETEER_CACHE_DIR=/home/sagep/.cache/puppeteer
 
 WORKDIR /app
+
+RUN groupadd --system sagep && useradd --system --gid sagep --create-home sagep
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
@@ -75,7 +77,12 @@ COPY prisma.config.ts ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/assets ./src/assets
 COPY --from=build /app/src/generated ./src/generated
-COPY --from=build /root/.cache/puppeteer /root/.cache/puppeteer
+COPY --from=build /root/.cache/puppeteer /home/sagep/.cache/puppeteer
+
+RUN mkdir -p /app/backups \
+  && chown -R sagep:sagep /app /home/sagep
+
+USER sagep
 
 EXPOSE 3000
 

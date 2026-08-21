@@ -37,13 +37,13 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - Prisma ORM
 - PostgreSQL
 - Zod
-- JWT + refresh token
+- JWT de acesso e refresh token em cookie HttpOnly
 - Vitest
 - Docker / Docker Compose
 
 ## Funcionalidades principais
 
-- autenticação com JWT e refresh token;
+- autenticação com JWT curto e refresh token rotativo em cookie HttpOnly;
 - sessões do usuário e revogação administrativa;
 - perfil pessoal com edição restrita de dados, avatar, preferências e alteração segura de senha;
 - RBAC governado pelo banco com permissões por role e overrides por usuário;
@@ -139,6 +139,13 @@ Variáveis usadas atualmente:
 | `JWT_REFRESH_SECRET` | sim | Segredo do refresh token |
 | `JWT_ACCESS_EXPIRES_IN` | sim | Expiração do access token |
 | `JWT_REFRESH_EXPIRES_IN` | sim | Expiração do refresh token |
+| `AUTH_REFRESH_COOKIE_NAME` | nao | Nome do cookie HttpOnly de renovação. Padrão `sagep_refresh` |
+| `AUTH_COOKIE_SECURE` | nao | Envia o cookie somente por HTTPS. Use `true` em produção com TLS |
+| `TRUST_PROXY_HOPS` | nao | Quantidade de proxies reversos confiáveis. Padrão `0` |
+| `RATE_LIMIT_WINDOW_MS` | nao | Janela dos limites de requisição. Padrão `900000` ms |
+| `RATE_LIMIT_MAX` | nao | Limite geral por IP e janela. Padrão `600` |
+| `AUTH_RATE_LIMIT_MAX` | nao | Limite de tentativas de login por IP/usuário. Padrão `10` |
+| `SENSITIVE_RATE_LIMIT_MAX` | nao | Limite para backup, restauração e testes de conexão. Padrão `20` |
 | `ALLOW_PUBLIC_REGISTRATION` | nao | Habilita `POST /auth/register`. Padrao seguro: `false` |
 | `HEALTH_PGADMIN_URL` | nao | Endpoint interno de ping do pgAdmin. No Compose: `http://pgadmin/misc/ping` |
 | `HEALTH_PROBE_TIMEOUT_MS` | nao | Timeout das sondas internas. Padrao `2000` ms |
@@ -162,12 +169,19 @@ JWT_SECRET="<gere-um-segredo-aleatorio-forte>"
 JWT_REFRESH_SECRET="<gere-outro-segredo-aleatorio-forte>"
 JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
+AUTH_REFRESH_COOKIE_NAME=sagep_refresh
+AUTH_COOKIE_SECURE=false
+TRUST_PROXY_HOPS=0
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX=600
+AUTH_RATE_LIMIT_MAX=10
+SENSITIVE_RATE_LIMIT_MAX=20
 PDF_TIMEOUT_MS=60000
 PDF_RENDER_MODE=real
 COMPRAS_GOV_DEBUG=false
 PORTAL_TRANSPARENCIA_API_TOKEN=
 CORS_ALLOWED_ORIGINS="http://localhost:4200"
-CORS_ALLOW_CREDENTIALS=false
+CORS_ALLOW_CREDENTIALS=true
 ALLOW_PUBLIC_REGISTRATION=false
 HEALTH_PGADMIN_URL="http://pgadmin/misc/ping"
 HEALTH_PROBE_TIMEOUT_MS=2000
@@ -182,6 +196,16 @@ BACKUP_MAX_UPLOAD_MB=512
 Requisicoes sem header `Origin`, como scripts, health checks e comunicacao
 entre servicos, nao sao bloqueadas pelo CORS. Em producao, informe apenas as
 URLs oficiais do frontend.
+
+## Segurança operacional
+
+- O refresh token nunca é entregue no JSON nem armazenado pelo frontend; ele usa cookie `HttpOnly`, `SameSite=Strict` e caminho restrito a `/api/auth`.
+- Em produção, os dois segredos JWT precisam ser diferentes e possuir no mínimo 32 caracteres.
+- Helmet aplica cabeçalhos defensivos e a API possui CSP restritiva fora da documentação OpenAPI.
+- Login, renovação, backups, restaurações e testes de integração têm limites contra abuso. Em implantação com múltiplas réplicas, substitua o armazenamento local do limitador por Redis.
+- URLs configuráveis das integrações aceitam apenas HTTPS e os hosts oficiais do Portal da Transparência, Compras.gov.br e PNCP; redirecionamentos externos não são seguidos.
+- PostgreSQL e pgAdmin são publicados somente em `127.0.0.1` no Compose. A API executa como usuário sem privilégios e com `no-new-privileges`.
+- Com proxy reverso, configure TLS, `AUTH_COOKIE_SECURE=true`, a origem exata em `CORS_ALLOWED_ORIGINS` e `TRUST_PROXY_HOPS` conforme a topologia real.
 
 ## Docker com banco persistente
 

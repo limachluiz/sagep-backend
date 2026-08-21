@@ -920,11 +920,17 @@ export const openApiDocument: OpenApiDocument = {
       },
       AuthTokensResponse: {
         type: "object",
-        required: ["accessToken", "refreshToken", "user"],
+        required: ["accessToken", "user"],
         properties: {
           accessToken: { type: "string" },
-          refreshToken: { type: "string" },
           user: { $ref: "#/components/schemas/UserSummary" },
+        },
+      },
+      RefreshResponse: {
+        type: "object",
+        required: ["accessToken"],
+        properties: {
+          accessToken: { type: "string" },
         },
       },
       SessionStatusDetail: {
@@ -3097,22 +3103,9 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["auth"],
         summary: "Rotacionar refresh token",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                required: ["refreshToken"],
-                properties: {
-                  refreshToken: { type: "string" },
-                },
-              },
-            },
-          },
-        },
+        description: "Usa e rotaciona o refresh token mantido em cookie HttpOnly.",
         responses: {
-          "200": okJson("#/components/schemas/AuthTokensResponse"),
+          "200": okJson("#/components/schemas/RefreshResponse"),
           "400": { $ref: "#/components/responses/BadRequest" },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
@@ -3122,20 +3115,7 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["auth"],
         summary: "Revogar refresh token atual",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                required: ["refreshToken"],
-                properties: {
-                  refreshToken: { type: "string" },
-                },
-              },
-            },
-          },
-        },
+        description: "Revoga a sessão identificada pelo cookie HttpOnly e remove o cookie.",
         responses: {
           "200": okJson("#/components/schemas/MessageResponse", "Logout realizado"),
           "400": { $ref: "#/components/responses/BadRequest" },

@@ -11,6 +11,16 @@ const envSchema = z
   JWT_REFRESH_SECRET: z.string().min(1),
   JWT_ACCESS_EXPIRES_IN: z.string().min(1),
   JWT_REFRESH_EXPIRES_IN: z.string().min(1),
+  AUTH_REFRESH_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default("sagep_refresh"),
+  AUTH_COOKIE_SECURE: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
+  TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
+  RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900000),
+  RATE_LIMIT_MAX: z.coerce.number().int().min(10).default(600),
+  AUTH_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(10),
+  SENSITIVE_RATE_LIMIT_MAX: z.coerce.number().int().min(1).default(20),
   PDF_TIMEOUT_MS: z.coerce.number().int().positive().default(60000),
   PDF_RENDER_MODE: z.enum(["mock", "real"]).optional(),
   COMPRAS_GOV_DEBUG: z.coerce.boolean().optional(),
@@ -51,6 +61,19 @@ const envSchema = z
   .refine((env) => Boolean(env.JWT_ACCESS_SECRET), {
     message: "JWT_SECRET ou JWT_ACCESS_SECRET precisa ser informado",
     path: ["JWT_ACCESS_SECRET"],
-  });
+  })
+  .refine((env) => env.JWT_ACCESS_SECRET !== env.JWT_REFRESH_SECRET, {
+    message: "Os segredos JWT de acesso e renovação devem ser diferentes",
+    path: ["JWT_REFRESH_SECRET"],
+  })
+  .refine(
+    (env) =>
+      env.NODE_ENV !== "production" ||
+      (env.JWT_ACCESS_SECRET.length >= 32 && env.JWT_REFRESH_SECRET.length >= 32),
+    {
+      message: "Em produção, os segredos JWT devem possuir pelo menos 32 caracteres",
+      path: ["JWT_ACCESS_SECRET"],
+    },
+  );
 
 export const env = envSchema.parse(process.env);

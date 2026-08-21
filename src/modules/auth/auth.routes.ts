@@ -3,11 +3,15 @@ import { AuthController } from "./auth.controller.js";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { env } from "../../config/env.js";
 import { AppError } from "../../shared/app-error.js";
+import {
+  authSessionRateLimiter,
+  loginRateLimiter,
+} from "../../middlewares/rate-limit.middleware.js";
 
 export const authRoutes = Router();
 const controller = new AuthController();
 
-authRoutes.post("/register", (req, res, next) => {
+authRoutes.post("/register", loginRateLimiter, (req, res, next) => {
   if (!env.ALLOW_PUBLIC_REGISTRATION) {
     return next(
       new AppError(
@@ -20,7 +24,7 @@ authRoutes.post("/register", (req, res, next) => {
 
   return controller.register(req, res);
 });
-authRoutes.post("/login", (req, res) => controller.login(req, res));
+authRoutes.post("/login", loginRateLimiter, (req, res) => controller.login(req, res));
 authRoutes.get("/me", authMiddleware, (req, res) => controller.me(req, res));
 authRoutes.patch("/profile", authMiddleware, (req, res) => controller.updateOwnProfile(req, res));
 authRoutes.post("/change-password", authMiddleware, (req, res) =>
@@ -45,5 +49,5 @@ authRoutes.post("/users/:userId/sessions/revoke-all", authMiddleware, (req, res)
 authRoutes.post("/users/:userId/sessions/:sessionId/revoke", authMiddleware, (req, res) =>
   controller.revokeUserSession(req, res),
 );
-authRoutes.post("/refresh", (req, res) => controller.refresh(req, res));
-authRoutes.post("/logout", (req, res) => controller.logout(req, res));
+authRoutes.post("/refresh", authSessionRateLimiter, (req, res) => controller.refresh(req, res));
+authRoutes.post("/logout", authSessionRateLimiter, (req, res) => controller.logout(req, res));

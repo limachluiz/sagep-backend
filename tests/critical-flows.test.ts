@@ -139,10 +139,22 @@ async function login(email: string, userAgent?: string) {
   }
 
   const response = await requestBuilder.send({ email, password }).expect(200);
+  expect(response.body.refreshToken).toBeUndefined();
+  expect(response.headers["set-cookie"]?.[0]).toContain("HttpOnly");
+  expect(response.headers["set-cookie"]?.[0]).toContain("SameSite=Strict");
+  expect(response.headers["set-cookie"]?.[0]).toContain("Path=/api/auth");
+  const refreshCookie = response.headers["set-cookie"]?.[0]?.split(";")[0];
+  if (!refreshCookie) throw new Error("Cookie de renovação não recebido no login");
+  const refreshToken = decodeURIComponent(refreshCookie.slice(refreshCookie.indexOf("=") + 1));
 
-  return response.body as {
+  return {
+    ...response.body,
+    refreshCookie,
+    refreshToken,
+  } as {
     accessToken: string;
     refreshToken: string;
+    refreshCookie: string;
     user: {
       id: string;
       role: string;
@@ -430,12 +442,16 @@ describe("critical flows", () => {
     const refreshed = await request(app)
       .post("/api/auth/refresh")
       .set("User-Agent", "sagep-test-agent")
-      .send({ refreshToken: adminAuth.refreshToken })
+      .set("Cookie", adminAuth.refreshCookie)
       .expect(200);
 
     expect(refreshed.body.accessToken).toBeTruthy();
-    expect(refreshed.body.refreshToken).toBeTruthy();
-    expect(refreshed.body.refreshToken).not.toBe(adminAuth.refreshToken);
+    expect(refreshed.body.refreshToken).toBeUndefined();
+    const rotatedCookie = refreshed.headers["set-cookie"]?.[0]?.split(";")[0];
+    expect(rotatedCookie).toBeTruthy();
+    if (!rotatedCookie) throw new Error("Cookie de renovação não foi rotacionado");
+    const rotatedRefreshToken = decodeURIComponent(rotatedCookie.slice(rotatedCookie.indexOf("=") + 1));
+    expect(rotatedRefreshToken).not.toBe(adminAuth.refreshToken);
 
     const rotatedToken = await prisma.refreshToken.findUnique({
       where: { tokenHash: hashToken(adminAuth.refreshToken) },
@@ -456,11 +472,11 @@ describe("critical flows", () => {
     await request(app)
       .post("/api/auth/logout")
       .set("User-Agent", "sagep-test-agent")
-      .send({ refreshToken: refreshed.body.refreshToken })
+      .set("Cookie", rotatedCookie)
       .expect(200);
 
     const loggedOutToken = await prisma.refreshToken.findUnique({
-      where: { tokenHash: hashToken(refreshed.body.refreshToken) },
+      where: { tokenHash: hashToken(rotatedRefreshToken) },
     });
     expect(loggedOutToken?.revokedReason).toBe("LOGOUT");
     expect(loggedOutToken?.revokedByUserId).toBe(admin.id);
@@ -476,7 +492,7 @@ describe("critical flows", () => {
 
     const revokedRefresh = await request(app)
       .post("/api/auth/refresh")
-      .send({ refreshToken: refreshed.body.refreshToken })
+      .set("Cookie", rotatedCookie)
       .expect(401);
 
     expect(revokedRefresh.body.code).toBe("AUTH_REFRESH_TOKEN_REVOKED");
@@ -496,7 +512,7 @@ describe("critical flows", () => {
 
     const malformedRefresh = await request(app)
       .post("/api/auth/refresh")
-      .send({ refreshToken: "nao-e-um-jwt" })
+      .set("Cookie", "sagep_refresh=nao-e-um-jwt")
       .expect(401);
 
     expect(malformedRefresh.body.code).toBe("AUTH_REFRESH_TOKEN_INVALID_OR_EXPIRED");

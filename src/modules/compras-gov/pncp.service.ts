@@ -74,6 +74,7 @@ export class PncpService {
     try {
       response = await fetch(url, {
         headers: { Accept: "application/json" },
+        redirect: "manual",
         signal: AbortSignal.timeout(env.PNCP_REQUEST_TIMEOUT_MS),
       });
     } catch {

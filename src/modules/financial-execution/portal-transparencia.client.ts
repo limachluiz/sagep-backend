@@ -138,6 +138,7 @@ function recordsFromPayload(payload: unknown) {
 async function fetchPortalJson(url: string, token: string, notFoundMessage: string) {
   const response = await fetch(url, {
     headers: { "chave-api-dados": token, Accept: "application/json" },
+    redirect: "manual",
     signal: AbortSignal.timeout(15_000),
   }).catch((error) => {
     throw new AppError("Portal da Transparência indisponível", 502, "PORTAL_TRANSPARENCIA_UNAVAILABLE", { cause: error instanceof Error ? error.message : String(error) });
