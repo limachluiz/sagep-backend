@@ -60,10 +60,14 @@ services:
       BACKUP_SCHEDULE_HOURS: ${BACKUP_SCHEDULE_HOURS:-24}
       BACKUP_RUN_ON_STARTUP: ${BACKUP_RUN_ON_STARTUP:-true}
       BACKUP_MAX_UPLOAD_MB: ${BACKUP_MAX_UPLOAD_MB:-512}
+      DEPLOYMENT_PKI_DIRECTORY: /app/pki
+      DEPLOYMENT_TLS_DIRECTORY: /app/tls
     ports:
-      - "${API_PORT:-3000}:${PORT:-3000}"
+      - "127.0.0.1:${API_PORT:-3000}:${PORT:-3000}"
     volumes:
       - sagep_backups:/app/backups
+      - sagep_pki:/app/pki
+      - sagep_tls:/app/tls
     security_opt:
       - no-new-privileges:true
 
@@ -80,8 +84,49 @@ services:
     ports:
       - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
 
+  frontend:
+    profiles: ["https"]
+    build:
+      context: ../sagep-web
+      dockerfile: Dockerfile
+    container_name: sagep_frontend
+    restart: unless-stopped
+    expose:
+      - "8080"
+    security_opt:
+      - no-new-privileges:true
+
+  caddy:
+    profiles: ["https"]
+    image: caddy:2.10-alpine
+    container_name: sagep_proxy
+    restart: unless-stopped
+    depends_on:
+      - api
+      - frontend
+    environment:
+      SAGEP_HOSTNAME: ${SAGEP_HOSTNAME:-localhost}
+    ports:
+      - "${SAGEP_BIND_IP:-127.0.0.1}:80:80"
+      - "${SAGEP_BIND_IP:-127.0.0.1}:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - sagep_tls:/etc/caddy/pki:ro
+      - sagep_caddy_data:/data
+      - sagep_caddy_config:/config
+    security_opt:
+      - no-new-privileges:true
+
 volumes:
   sagep_postgres_data:
     name: sagep_postgres_data
   sagep_backups:
     name: sagep_backups
+  sagep_pki:
+    name: sagep_pki
+  sagep_tls:
+    name: sagep_tls
+  sagep_caddy_data:
+    name: sagep_caddy_data
+  sagep_caddy_config:
+    name: sagep_caddy_config

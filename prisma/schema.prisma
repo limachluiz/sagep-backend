@@ -242,6 +242,14 @@ model SystemConfiguration {
   defaultBiddingYear         Int?
   defaultImmediateCommitment Boolean  @default(true)
   defaultEstimateGroup       String   @default("3")
+  deploymentHostName         String?
+  deploymentExpectedIp       String?
+  deploymentGateway          String?
+  deploymentDnsServers       String[] @default([])
+  deploymentNtpServers       String[] @default([])
+  deploymentAllowedNetworks  String[] @default([])
+  deploymentProxyUrl         String?
+  deploymentCertificateMode  String   @default("INTERNAL_CA")
   updatedById                String?
   updatedBy                  User?    @relation("SystemConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
   createdAt                  DateTime @default(now())

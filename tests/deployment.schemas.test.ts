@@ -1,0 +1,31 @@
+import { describe, expect, it } from "vitest";
+import { initializeInternalCertificateSchema, trustKitPlatformSchema, updateDeploymentSchema } from "../src/modules/deployment/deployment.schemas.js";
+
+describe("configuração de implantação", () => {
+  it("aceita o nome DNS interno completo da OM", () => {
+    expect(initializeInternalCertificateSchema.parse({ hostName: "SAGEP.4CTA.EB.MIL.BR" })).toEqual({
+      hostName: "sagep.4cta.eb.mil.br",
+      rotate: false,
+    });
+  });
+
+  it("rejeita hostname incompleto e plataforma desconhecida", () => {
+    expect(() => initializeInternalCertificateSchema.parse({ hostName: "sagep" })).toThrow();
+    expect(() => trustKitPlatformSchema.parse({ platform: "macos" })).toThrow();
+  });
+
+  it("limita listas administrativas e normaliza o modo de certificado", () => {
+    const parsed = updateDeploymentSchema.parse({
+      hostName: "sagep.4cta.eb.mil.br",
+      expectedIp: "10.78.10.20",
+      gateway: "10.78.10.1",
+      dnsServers: ["10.78.0.10"],
+      ntpServers: ["10.78.0.20"],
+      allowedNetworks: ["10.78.0.0/16"],
+      proxyUrl: "",
+      certificateMode: "INTERNAL_CA",
+    });
+    expect(parsed.certificateMode).toBe("INTERNAL_CA");
+    expect(parsed.allowedNetworks).toEqual(["10.78.0.0/16"]);
+  });
+});

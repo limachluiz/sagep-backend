@@ -181,6 +181,14 @@
       }
     },
     {
+      "name": "deployment",
+      "description": "Modulo deployment do backend SAGEP",
+      "externalDocs": {
+        "description": "Documentacao Markdown complementar",
+        "url": "./insights-and-admin.md"
+      }
+    },
+    {
       "name": "backups",
       "description": "Modulo backups do backend SAGEP",
       "externalDocs": {
@@ -5688,6 +5696,92 @@
           "connections": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "DeploymentSettings": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "hostName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "expectedIp": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "gateway": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "dnsServers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "ntpServers": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "allowedNetworks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "proxyUrl": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "certificateMode": {
+            "type": "string",
+            "enum": [
+              "INTERNAL_CA",
+              "IMPORTED",
+              "ACME_DNS"
+            ]
+          },
+          "certificate": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DeploymentDiagnostics": {
+        "type": "object",
+        "additionalProperties": true
+      },
+      "InitializeInternalCertificateRequest": {
+        "type": "object",
+        "required": [
+          "hostName"
+        ],
+        "properties": {
+          "hostName": {
+            "type": "string",
+            "example": "sagep.4cta.eb.mil.br"
+          },
+          "rotate": {
+            "type": "boolean",
+            "default": false
           }
         }
       },
@@ -11945,6 +12039,309 @@
         ],
         "x-step-up": true,
         "operationId": "settings_post_systemSettings_connections_byProvider_test"
+      }
+    },
+    "/deployment": {
+      "get": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Consultar parâmetros de rede e estado HTTPS",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.view"
+        ],
+        "operationId": "deployment_get_collection"
+      },
+      "put": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Atualizar parâmetros esperados da implantação",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeploymentSettings"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
+        "operationId": "deployment_put_collection"
+      }
+    },
+    "/deployment/diagnostics": {
+      "get": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Comparar rede observada com parâmetros esperados",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentDiagnostics"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "system_health.view_details"
+        ],
+        "operationId": "deployment_get_diagnostics"
+      }
+    },
+    "/deployment/certificate/internal": {
+      "post": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Inicializar ou rotacionar a autoridade interna da OM",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InitializeInternalCertificateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentSettings"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
+        "operationId": "deployment_post_certificate_internal"
+      }
+    },
+    "/deployment/trust-kit/{platform}": {
+      "get": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Baixar kit de confiança para uma plataforma cliente",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "platform",
+            "in": "path",
+            "required": true,
+            "description": "Plataforma cliente",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "windows",
+                "linux"
+              ]
+            }
+          },
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Arquivo ZIP com certificado, scripts e impressão digital",
+            "content": {
+              "application/zip": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "x-step-up": true,
+        "operationId": "deployment_get_trustKit_byPlatform"
       }
     },
     "/backups": {

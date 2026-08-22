@@ -41,6 +41,7 @@ const safeServerErrorMessages: Record<string, string> = {
   BACKUP_RESTORE_FAILED:
     "A restauração falhou. O backup de segurança foi preservado",
   BACKUP_TOOL_UNAVAILABLE: "Ferramenta de backup indisponível no servidor",
+  CERTIFICATE_TOOL_UNAVAILABLE: "Ferramenta de certificados indisponível no servidor",
   PORTAL_TRANSPARENCIA_ERROR: "Falha ao consultar o Portal da Transparência",
   PORTAL_TRANSPARENCIA_UNAVAILABLE: "Portal da Transparência indisponível",
 };

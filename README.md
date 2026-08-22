@@ -69,6 +69,7 @@ O SAGEP foi estruturado para apoiar a gestão de projetos técnicos com foco em:
 - contrato OpenAPI com cliente TypeScript gerado;
 - códigos de erro estáveis e `requestId` para suporte;
 - centro de saúde com sondas da API, PostgreSQL e pgAdmin, histórico de latência e diagnóstico administrativo;
+- administração de rede, DNS e HTTPS por OM, com diagnóstico não destrutivo e kits de confiança para Windows 11, Linux Mint e Ubuntu;
 - execução financeira com validação de NE no Portal da Transparência, rastreio de liquidação/pagamento, NFe e alertas dispensáveis por usuário.
 
 ## Fluxo documental resumido
@@ -158,6 +159,10 @@ Variáveis usadas atualmente:
 | `BACKUP_SCHEDULE_HOURS` | nao | Intervalo entre backups automáticos. `0` desativa; padrão `24` |
 | `BACKUP_RUN_ON_STARTUP` | nao | Cria backup ao iniciar a API. Padrão `false` |
 | `BACKUP_MAX_UPLOAD_MB` | nao | Limite para importação de arquivo `.dump`. Padrão `512` MB |
+| `DEPLOYMENT_PKI_DIRECTORY` | nao | Volume protegido da autoridade e do certificado HTTPS. No Docker use `/app/pki` |
+| `DEPLOYMENT_TLS_DIRECTORY` | nao | Volume que entrega somente certificado e chave do servidor ao proxy. No Docker use `/app/tls` |
+| `SAGEP_HOSTNAME` | no perfil HTTPS | Nome DNS interno completo, por exemplo `sagep.4cta.eb.mil.br` |
+| `SAGEP_BIND_IP` | no perfil HTTPS | IP privado do host no qual Caddy publicará 80/443. O padrão seguro é `127.0.0.1` |
 
 Exemplo:
 
@@ -197,6 +202,10 @@ BACKUP_MAX_FILES=30
 BACKUP_SCHEDULE_HOURS=24
 BACKUP_RUN_ON_STARTUP=false
 BACKUP_MAX_UPLOAD_MB=512
+DEPLOYMENT_PKI_DIRECTORY=./pki
+DEPLOYMENT_TLS_DIRECTORY=./tls
+SAGEP_HOSTNAME=sagep.4cta.eb.mil.br
+SAGEP_BIND_IP=10.78.xxx.xxx
 ```
 
 Requisicoes sem header `Origin`, como scripts, health checks e comunicacao
@@ -221,6 +230,9 @@ URLs oficiais do frontend.
 - URLs configuráveis das integrações aceitam apenas HTTPS e os hosts oficiais do Portal da Transparência, Compras.gov.br e PNCP; redirecionamentos externos não são seguidos.
 - PostgreSQL e pgAdmin são publicados somente em `127.0.0.1` no Compose. A API executa como usuário sem privilégios e com `no-new-privileges`.
 - Com proxy reverso, configure TLS, `AUTH_COOKIE_SECURE=true`, a origem exata em `CORS_ALLOWED_ORIGINS` e `TRUST_PROXY_HOPS` conforme a topologia real.
+- A autoridade interna é exclusiva de cada OM. A chave da autoridade permanece no volume `sagep_pki`, que não é montado no proxy; o Caddy recebe somente o certificado e a chave do servidor pelo volume `sagep_tls`. Somente o certificado raiz público e scripts com verificação SHA-256 compõem os kits dos clientes.
+- A impressão digital da raiz deve ser conferida por um canal administrativo confiável antes da instalação. Nunca distribua o kit como prova de sua própria autenticidade.
+- O painel registra IP, gateway, DNS, NTP, proxy e redes autorizadas, mas não altera a rede do sistema operacional nem acessa o socket do Docker.
 
 ## Docker com banco persistente
 
@@ -237,6 +249,35 @@ Subir tudo:
 ```bash
 docker compose up -d --build
 ```
+
+## HTTPS interno por OM
+
+O perfil HTTPS foi projetado para um servidor acessível somente na rede local da
+OM. O registro DNS interno deve apontar o nome escolhido para o IP privado
+reservado no DHCP. A publicação externa deve continuar bloqueada no UTM.
+
+1. Suba o ambiente padrão e acesse **Configurações → Rede, servidores e HTTPS**.
+2. Salve o nome DNS e os parâmetros esperados, execute o diagnóstico e inicialize
+   o certificado interno. A operação exige ADMIN e confirmação recente da senha.
+3. Defina no `.env` o mesmo `SAGEP_HOSTNAME`, o IP privado em `SAGEP_BIND_IP`,
+   `AUTH_COOKIE_SECURE=true`, `TRUST_PROXY_HOPS=1` e a origem HTTPS exata em
+   `CORS_ALLOWED_ORIGINS`.
+4. Ative o proxy e o frontend de produção:
+
+```bash
+docker compose --profile https up -d --build
+```
+
+O Caddy é o único serviço publicado em 80/443 nesse perfil. A API continua
+disponível apenas em `127.0.0.1:3000`, PostgreSQL em `127.0.0.1:5432` e pgAdmin
+em `127.0.0.1:5050`. Os kits baixados pelo painel possuem instalação,
+verificação e remoção para Windows 11 ou para Linux Mint/Ubuntu.
+
+Rotacionar a raiz invalida a confiança previamente instalada e exige redistribuir
+os kits. Faça essa operação apenas em resposta a comprometimento ou mudança
+planejada da autoridade da OM. Depois de emitir ou rotacionar um certificado,
+reinicie somente o proxy com `docker compose --profile https restart caddy` para
+que o novo material TLS seja carregado, sem reiniciar a API ou o banco.
 
 Ou via npm:
 

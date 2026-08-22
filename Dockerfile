@@ -58,6 +58,7 @@ RUN apt-get update \
     libxrender1 \
     libxss1 \
     libxtst6 \
+    openssl \
     gosu \
     gnupg \
     wget \

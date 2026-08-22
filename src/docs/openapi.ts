@@ -25,6 +25,7 @@ const tagExternalDocs = {
   integrations: "./insights-and-admin.md",
   "military-organizations": "./insights-and-admin.md",
   settings: "./insights-and-admin.md",
+  deployment: "./insights-and-admin.md",
   backups: "./insights-and-admin.md",
   health: "./README.md",
 };
@@ -213,6 +214,7 @@ export const openApiDocument: OpenApiDocument = {
     "integrations",
     "military-organizations",
     "settings",
+    "deployment",
     "backups",
   ].map((name) => ({
     name,
@@ -2917,6 +2919,25 @@ export const openApiDocument: OpenApiDocument = {
           portalApiToken: { type: "object", additionalProperties: true }, connections: { type: "object", additionalProperties: true },
         },
       },
+      DeploymentSettings: {
+        type: "object",
+        properties: {
+          id: { type: "string" }, hostName: { type: ["string", "null"] }, expectedIp: { type: ["string", "null"] },
+          gateway: { type: ["string", "null"] }, dnsServers: { type: "array", items: { type: "string" } },
+          ntpServers: { type: "array", items: { type: "string" } }, allowedNetworks: { type: "array", items: { type: "string" } },
+          proxyUrl: { type: ["string", "null"] }, certificateMode: { type: "string", enum: ["INTERNAL_CA", "IMPORTED", "ACME_DNS"] },
+          certificate: { type: "object", additionalProperties: true }, updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      DeploymentDiagnostics: {
+        type: "object",
+        additionalProperties: true,
+      },
+      InitializeInternalCertificateRequest: {
+        type: "object",
+        required: ["hostName"],
+        properties: { hostName: { type: "string", example: "sagep.4cta.eb.mil.br" }, rotate: { type: "boolean", default: false } },
+      },
       DatabaseBackup: {
         type: "object",
         required: ["id", "kind", "filename", "createdAt", "sizeBytes", "checksumSha256", "format", "verified"],
@@ -4577,6 +4598,19 @@ export const openApiDocument: OpenApiDocument = {
     },
     "/system-settings/connections/{provider}/test": {
       post: withStepUp({ tags: ["settings"], summary: "Testar uma conexão configurada", security: bearerSecurity, parameters: [pathIdParameter("provider", "Integração", { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] })], responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
+    },
+    "/deployment": {
+      get: { tags: ["deployment"], summary: "Consultar parâmetros de rede e estado HTTPS", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/DeploymentSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
+      put: withStepUp({ tags: ["deployment"], summary: "Atualizar parâmetros esperados da implantação", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/DeploymentSettings") }, responses: { "200": okJson("#/components/schemas/DeploymentSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/diagnostics": {
+      get: { tags: ["deployment"], summary: "Comparar rede observada com parâmetros esperados", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/DeploymentDiagnostics"), ...defaultErrorResponses }, "x-permissions": ["system_health.view_details"] },
+    },
+    "/deployment/certificate/internal": {
+      post: withStepUp({ tags: ["deployment"], summary: "Inicializar ou rotacionar a autoridade interna da OM", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/InitializeInternalCertificateRequest") }, responses: { "201": createdJson("#/components/schemas/DeploymentSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/trust-kit/{platform}": {
+      get: withStepUp({ tags: ["deployment"], summary: "Baixar kit de confiança para uma plataforma cliente", security: bearerSecurity, parameters: [pathIdParameter("platform", "Plataforma cliente", { type: "string", enum: ["windows", "linux"] })], responses: { "200": { description: "Arquivo ZIP com certificado, scripts e impressão digital", content: binaryContent("application/zip") }, ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
     },
     "/backups": {
       get: { tags: ["backups"], summary: "Listar backups e política de retenção", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/BackupsOverview"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
