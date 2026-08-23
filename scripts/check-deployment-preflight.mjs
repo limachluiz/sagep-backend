@@ -10,9 +10,29 @@ function item(id, status, message, remediation) {
 }
 
 export function isPrivateIpv4(value) {
-  const parts = value.split(".").map(Number);
-  if (parts.length !== 4 || parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
+  const rawParts = value.split(".");
+  if (rawParts.length !== 4 || rawParts.some((part) => !/^\d{1,3}$/.test(part) || String(Number(part)) !== part)) return false;
+  const parts = rawParts.map(Number);
+  if (parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)) return false;
   return parts[0] === 10 || (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) || (parts[0] === 192 && parts[1] === 168);
+}
+
+export function isCanonicalPrivateIpv4Cidr(value) {
+  const match = /^(\d{1,3}(?:\.\d{1,3}){3})\/(\d|[12]\d|3[0-2])$/.exec(value);
+  if (!match || !isPrivateIpv4(match[1])) return false;
+  const octets = match[1].split(".").map(Number);
+  const address = (((octets[0] << 24) >>> 0) + (octets[1] << 16) + (octets[2] << 8) + octets[3]) >>> 0;
+  const prefix = Number(match[2]);
+  const mask = prefix === 0 ? 0 : (0xffffffff << (32 - prefix)) >>> 0;
+  const network = (address & mask) >>> 0;
+  const broadcast = (network | (~mask >>> 0)) >>> 0;
+  if (network !== address) return false;
+  const privateRanges = [
+    [0x0a000000, 0x0affffff],
+    [0xac100000, 0xac1fffff],
+    [0xc0a80000, 0xc0a8ffff],
+  ];
+  return privateRanges.some(([start, end]) => network >= start && broadcast <= end);
 }
 
 function isPlaceholder(value) {
@@ -27,6 +47,7 @@ export function evaluateEnvironment(values) {
   const bindIp = values.SAGEP_BIND_IP || "";
   const origins = (values.CORS_ALLOWED_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean);
   const expectedOrigin = hostName ? `https://${hostName}` : "";
+  const allowedNetworks = (values.SAGEP_ALLOWED_NETWORKS || "").split(",").map((network) => network.trim()).filter(Boolean);
 
   checks.push(item("env.production", values.NODE_ENV === "production" ? "PASS" : "FAIL", values.NODE_ENV === "production" ? "NODE_ENV está em produção." : "NODE_ENV não está definido como production.", "Defina NODE_ENV=production."));
   checks.push(item("env.database", isPlaceholder(values.DATABASE_URL) ? "FAIL" : "PASS", isPlaceholder(values.DATABASE_URL) ? "DATABASE_URL está ausente ou usa valor de exemplo." : "DATABASE_URL foi informada sem exibir seu conteúdo.", "Defina a conexão PostgreSQL de produção."));
@@ -38,6 +59,8 @@ export function evaluateEnvironment(values) {
   const fqdnReady = /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(hostName);
   checks.push(item("env.hostname", fqdnReady ? "PASS" : "FAIL", fqdnReady ? "O nome DNS completo foi informado." : "SAGEP_HOSTNAME não contém um FQDN válido.", "Informe o nome interno, por exemplo sagep.4cta.eb.mil.br."));
   checks.push(item("env.bind-ip", isPrivateIpv4(bindIp) ? "PASS" : "FAIL", isPrivateIpv4(bindIp) ? "O proxy será vinculado a um IPv4 privado." : "SAGEP_BIND_IP não é um IPv4 privado válido.", "Use o endereço reservado da interface interna; não publique em 0.0.0.0."));
+  const networksReady = allowedNetworks.length > 0 && allowedNetworks.length <= 12 && allowedNetworks.every(isCanonicalPrivateIpv4Cidr);
+  checks.push(item("env.allowed-networks", networksReady ? "PASS" : "FAIL", networksReady ? `${new Set(allowedNetworks).size} rede(s) IPv4 privada(s) preparada(s) para o firewall.` : "SAGEP_ALLOWED_NETWORKS está vazia ou contém CIDR inválido, público ou não canônico.", "Informe CIDRs privados separados por vírgula, por exemplo 10.78.0.0/16."));
   checks.push(item("env.cors", expectedOrigin && origins.includes(expectedOrigin) && origins.every((origin) => origin.startsWith("https://")) ? "PASS" : "FAIL", expectedOrigin && origins.includes(expectedOrigin) ? "A origem HTTPS exata foi autorizada." : "O CORS não contém a origem HTTPS exata da instalação.", expectedOrigin ? `Defina CORS_ALLOWED_ORIGINS=${expectedOrigin}.` : "Configure primeiro SAGEP_HOSTNAME."));
   checks.push(item("env.registration", values.ALLOW_PUBLIC_REGISTRATION === "false" ? "PASS" : "FAIL", values.ALLOW_PUBLIC_REGISTRATION === "false" ? "Cadastro público bloqueado." : "O cadastro público não está explicitamente bloqueado.", "Defina ALLOW_PUBLIC_REGISTRATION=false."));
   return checks;

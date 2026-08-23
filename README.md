@@ -287,14 +287,54 @@ O perfil HTTPS foi projetado para um servidor acessível somente na rede local d
 OM. O registro DNS interno deve apontar o nome escolhido para o IP privado
 reservado no DHCP. A publicação externa deve continuar bloqueada no UTM.
 
+### Restrição de acesso por redes CIDR
+
+Defina no `.env` os CIDRs IPv4 privados autorizados, usando exatamente a mesma
+lista registrada no painel. Endereços públicos, `0.0.0.0/0` e valores que não
+representam o início da rede são rejeitados:
+
+```dotenv
+SAGEP_ALLOWED_NETWORKS=10.78.0.0/16,192.168.40.0/24
+```
+
+Confira a prévia sem alterar o host e, em seguida, aplique e valide como `root`:
+
+```bash
+npm run firewall:dry-run
+sudo /usr/bin/env node scripts/manage-firewall.mjs --apply
+sudo /usr/bin/env node scripts/manage-firewall.mjs --check
+```
+
+O utilitário cria cadeias exclusivas na `DOCKER-USER` e protege somente as
+conexões destinadas ao `SAGEP_BIND_IP` nas portas 80/443. Ele não redefine a
+política global, não altera SSH e não toca em PostgreSQL ou pgAdmin. A troca de
+regras usa duas cadeias alternadas para que uma atualização não abra uma janela
+temporária de acesso. A execução falha de forma segura se Docker, `iptables`, o
+IP privado ou a lista de redes não estiverem prontos.
+
+Para reaplicar a política em cada inicialização do Docker, instale a unidade
+versionada depois de posicionar o projeto em `/opt/sagep/sagep-backend`:
+
+```bash
+sudo install -m 0644 deploy/systemd/sagep-firewall.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now sagep-firewall.service
+sudo systemctl status sagep-firewall.service --no-pager
+```
+
+Depois de mudar `SAGEP_ALLOWED_NETWORKS`, atualize também o painel e execute
+`sudo systemctl reload sagep-firewall.service`. A remoção deliberada exige
+`sudo /usr/bin/env node scripts/manage-firewall.mjs --remove --confirm`; ela não altera
+nenhuma regra que não seja gerenciada pelo SAGEP.
+
 1. Suba o ambiente padrão e acesse **Configurações → Rede, servidores e HTTPS**.
 2. Salve o nome DNS e os parâmetros esperados, execute o diagnóstico e inicialize
    o certificado interno. A operação exige ADMIN e confirmação recente da senha.
    O quadro **Prontidão para produção** consolida bloqueios e alertas de runtime,
    segurança, DNS, armazenamento e certificado sem alterar o host.
 3. Defina no `.env` o mesmo `SAGEP_HOSTNAME`, o IP privado em `SAGEP_BIND_IP`,
-   `AUTH_COOKIE_SECURE=true`, `TRUST_PROXY_HOPS=1` e a origem HTTPS exata em
-   `CORS_ALLOWED_ORIGINS`.
+   os CIDRs privados em `SAGEP_ALLOWED_NETWORKS`, `AUTH_COOKIE_SECURE=true`,
+   `TRUST_PROXY_HOPS=1` e a origem HTTPS exata em `CORS_ALLOWED_ORIGINS`.
 4. Ative o proxy e o frontend de produção:
 
 ```bash

@@ -351,6 +351,7 @@ export class DeploymentService {
       dnsMatchesExpectedIp: diagnostics.dnsMatchesExpectedIp,
       dnsError: diagnostics.dnsError,
       allowedNetworks: configuration.deploymentAllowedNetworks,
+      hostAllowedNetworks: env.SAGEP_ALLOWED_NETWORKS,
       opensslAvailable: certificate.toolAvailable,
       certificateStatus: certificate.status,
       directories,

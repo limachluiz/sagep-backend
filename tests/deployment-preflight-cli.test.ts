@@ -21,6 +21,7 @@ describe("pré-validação local da implantação", () => {
       TRUST_PROXY_HOPS: "1",
       SAGEP_HOSTNAME: "sagep.4cta.eb.mil.br",
       SAGEP_BIND_IP: "10.78.10.20",
+      SAGEP_ALLOWED_NETWORKS: "10.78.0.0/16",
       CORS_ALLOWED_ORIGINS: "https://sagep.4cta.eb.mil.br",
       ALLOW_PUBLIC_REGISTRATION: "false",
     });
@@ -39,6 +40,7 @@ describe("pré-validação local da implantação", () => {
       TRUST_PROXY_HOPS: "0",
       SAGEP_HOSTNAME: "sagep",
       SAGEP_BIND_IP: "0.0.0.0",
+      SAGEP_ALLOWED_NETWORKS: "0.0.0.0/0",
       CORS_ALLOWED_ORIGINS: "*",
       ALLOW_PUBLIC_REGISTRATION: "true",
     });

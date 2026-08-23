@@ -19,6 +19,7 @@ function readyInput(overrides: Partial<DeploymentPreflightInput> = {}): Deployme
     dnsMatchesExpectedIp: true,
     dnsError: null,
     allowedNetworks: ["10.78.0.0/16"],
+    hostAllowedNetworks: ["10.78.0.0/16"],
     opensslAvailable: true,
     certificateStatus: "VALID",
     directories: [
@@ -57,5 +58,11 @@ describe("pré-validação da implantação", () => {
     const result = evaluateDeploymentPreflight(readyInput({ setupTokenConfigured: true }));
     expect(result.status).toBe("ATTENTION");
     expect(result.checks).toContainEqual(expect.objectContaining({ id: "security.setup-token", status: "WARN" }));
+  });
+
+  it("bloqueia produção quando o firewall do host diverge do painel", () => {
+    const result = evaluateDeploymentPreflight(readyInput({ hostAllowedNetworks: ["192.168.0.0/16"] }));
+    expect(result.status).toBe("BLOCKED");
+    expect(result.checks).toContainEqual(expect.objectContaining({ id: "network.firewall", status: "FAIL" }));
   });
 });

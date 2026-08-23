@@ -27,6 +27,7 @@ export type DeploymentPreflightInput = {
   dnsMatchesExpectedIp: boolean;
   dnsError: string | null;
   allowedNetworks: string[];
+  hostAllowedNetworks: string[];
   opensslAvailable: boolean;
   certificateStatus: "NOT_CONFIGURED" | "VALID" | "EXPIRING" | "EXPIRED" | "INVALID";
   directories: Array<{ id: string; label: string; path: string; exists: boolean; writable: boolean }>;
@@ -155,6 +156,23 @@ export function evaluateDeploymentPreflight(input: DeploymentPreflightInput) {
     input.allowedNetworks.length > 0 ? "PASS" : "WARN",
     input.allowedNetworks.length > 0 ? `${input.allowedNetworks.length} faixa(s) de rede registrada(s).` : "Nenhuma faixa de rede autorizada foi registrada.",
     input.allowedNetworks.length > 0 ? undefined : "Registre as redes CIDR que poderão alcançar o proxy e aplique-as no firewall do host.",
+  ));
+  const registeredNetworks = [...new Set(input.allowedNetworks)].sort();
+  const hostNetworks = [...new Set(input.hostAllowedNetworks)].sort();
+  const firewallMatches = registeredNetworks.length > 0
+    && registeredNetworks.length === hostNetworks.length
+    && registeredNetworks.every((network, index) => network === hostNetworks[index]);
+  checks.push(check(
+    "network.firewall",
+    "NETWORK",
+    "Configuração do firewall",
+    firewallMatches ? "PASS" : production ? "FAIL" : "WARN",
+    firewallMatches
+      ? `${hostNetworks.length} faixa(s) coerente(s) entre o painel e o host; confirme a aplicação com o check administrativo.`
+      : hostNetworks.length === 0
+        ? "Nenhuma rede foi configurada em SAGEP_ALLOWED_NETWORKS."
+        : "As redes do painel e de SAGEP_ALLOWED_NETWORKS são diferentes.",
+    firewallMatches ? undefined : "Iguale os CIDRs no painel e no .env, aplique as regras e execute o check administrativo no host.",
   ));
 
   checks.push(check(

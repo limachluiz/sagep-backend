@@ -1,7 +1,12 @@
 import { z } from "zod";
+import { isCanonicalPrivateIpv4Cidr, normalizePrivateIpv4Cidrs } from "../../shared/network.js";
 
 const optionalText = z.string().trim().max(255).nullable().optional();
 const list = z.array(z.string().trim().min(1).max(255)).max(12).default([]);
+const allowedNetworks = z.array(z.string().trim().refine(
+  isCanonicalPrivateIpv4Cidr,
+  "Informe uma rede IPv4 privada em CIDR, usando o endereço da rede, por exemplo 10.78.0.0/16",
+)).max(12).default([]).transform(normalizePrivateIpv4Cidrs);
 
 export const initializeSetupSchema = z.object({
   setupToken: z.string().min(32).max(256),
@@ -35,7 +40,7 @@ export const initializeSetupSchema = z.object({
     gateway: optionalText,
     dnsServers: list,
     ntpServers: list,
-    allowedNetworks: list,
+    allowedNetworks,
     proxyUrl: z.union([z.string().trim().url(), z.literal(""), z.null()]).optional(),
   }),
 });

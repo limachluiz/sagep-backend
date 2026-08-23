@@ -28,6 +28,21 @@ describe("configuração de implantação", () => {
     expect(parsed.certificateMode).toBe("INTERNAL_CA");
     expect(parsed.allowedNetworks).toEqual(["10.78.0.0/16"]);
   });
+
+  it("rejeita CIDR público ou não canônico e normaliza duplicações", () => {
+    const base = {
+      hostName: "sagep.4cta.eb.mil.br",
+      expectedIp: "10.78.10.20",
+      gateway: "10.78.10.1",
+      dnsServers: ["10.78.0.10"],
+      ntpServers: ["10.78.0.20"],
+      proxyUrl: null,
+      certificateMode: "INTERNAL_CA" as const,
+    };
+    expect(updateDeploymentSchema.parse({ ...base, allowedNetworks: ["10.78.0.0/16", "10.78.0.0/16"] }).allowedNetworks).toEqual(["10.78.0.0/16"]);
+    expect(() => updateDeploymentSchema.parse({ ...base, allowedNetworks: ["0.0.0.0/0"] })).toThrow();
+    expect(() => updateDeploymentSchema.parse({ ...base, allowedNetworks: ["10.78.1.1/16"] })).toThrow();
+  });
 });
 
 describe("schemas de custódia da autoridade", () => {

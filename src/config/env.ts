@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { isCanonicalPrivateIpv4Cidr, normalizePrivateIpv4Cidrs } from "../shared/network.js";
 
 const envSchema = z
   .object({
@@ -67,6 +68,7 @@ const envSchema = z
     .transform((value) => value === "true"),
   SAGEP_HOSTNAME: z.string().trim().toLowerCase().optional(),
   SAGEP_BIND_IP: z.string().trim().optional(),
+  SAGEP_ALLOWED_NETWORKS: z.string().default(""),
   SAGEP_SETUP_TOKEN: z.preprocess(
     (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
     z.string().min(32).max(256).optional(),
@@ -78,6 +80,7 @@ const envSchema = z
     CORS_ALLOWED_ORIGINS: env.CORS_ALLOWED_ORIGINS.split(",")
       .map((origin) => origin.trim())
       .filter(Boolean),
+    SAGEP_ALLOWED_NETWORKS: normalizePrivateIpv4Cidrs(env.SAGEP_ALLOWED_NETWORKS.split(",")),
   }))
   .refine((env) => Boolean(env.JWT_ACCESS_SECRET), {
     message: "JWT_SECRET ou JWT_ACCESS_SECRET precisa ser informado",
@@ -86,6 +89,14 @@ const envSchema = z
   .refine((env) => env.JWT_ACCESS_SECRET !== env.JWT_REFRESH_SECRET, {
     message: "Os segredos JWT de acesso e renovação devem ser diferentes",
     path: ["JWT_REFRESH_SECRET"],
+  })
+  .refine((env) => env.SAGEP_ALLOWED_NETWORKS.every(isCanonicalPrivateIpv4Cidr), {
+    message: "SAGEP_ALLOWED_NETWORKS aceita somente redes IPv4 privadas em CIDR canônico",
+    path: ["SAGEP_ALLOWED_NETWORKS"],
+  })
+  .refine((env) => env.SAGEP_ALLOWED_NETWORKS.length <= 12, {
+    message: "SAGEP_ALLOWED_NETWORKS aceita no máximo 12 redes",
+    path: ["SAGEP_ALLOWED_NETWORKS"],
   })
   .refine(
     (env) =>
