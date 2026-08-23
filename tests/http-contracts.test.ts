@@ -50,7 +50,7 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(171);
+    expect(operationIds).toHaveLength(172);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
@@ -88,6 +88,15 @@ describe("contratos HTTP transversais", () => {
     expect(paths["/health/details"].get["x-permissions"]).toEqual([
       "system_health.view_details",
     ]);
+  });
+
+  it("protege a pré-validação detalhada da implantação", () => {
+    const paths = openApiDocument.paths as Record<string, any>;
+    expect(paths["/deployment/preflight"].get["x-permissions"]).toEqual([
+      "system_health.view_details",
+    ]);
+    expect(paths["/deployment/preflight"].get.responses["200"].content["application/json"].schema)
+      .toEqual({ $ref: "#/components/schemas/DeploymentPreflight" });
   });
 
   it("documenta tarefas no detalhe contextual do projeto", () => {

@@ -1448,6 +1448,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployment/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verificar prontidão segura da implantação */
+        get: operations["deployment_get_preflight"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/deployment/certificate/internal": {
         parameters: {
             query?: never;
@@ -4198,7 +4215,7 @@ export interface components {
             allowedNetworks?: string[];
             proxyUrl?: string | null;
             /** @enum {string} */
-            certificateMode?: "INTERNAL_CA" | "IMPORTED" | "ACME_DNS";
+            certificateMode?: "INTERNAL_CA";
             certificate?: {
                 [key: string]: unknown;
             };
@@ -4207,6 +4224,27 @@ export interface components {
         };
         DeploymentDiagnostics: {
             [key: string]: unknown;
+        };
+        DeploymentPreflight: {
+            /** Format: date-time */
+            checkedAt: string;
+            /** @enum {string} */
+            status: "READY" | "ATTENTION" | "BLOCKED";
+            counts: {
+                pass: number;
+                warn: number;
+                fail: number;
+            };
+            checks: {
+                id: string;
+                /** @enum {string} */
+                category: "RUNTIME" | "SECURITY" | "NETWORK" | "STORAGE" | "CERTIFICATE" | "DATABASE";
+                label: string;
+                /** @enum {string} */
+                status: "PASS" | "WARN" | "FAIL";
+                message: string;
+                remediation?: string;
+            }[];
         };
         SetupStatus: {
             requiresSetup: boolean;
@@ -7795,6 +7833,32 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DeploymentDiagnostics"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_get_preflight: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentPreflight"];
                 };
             };
             400: components["responses"]["BadRequest"];

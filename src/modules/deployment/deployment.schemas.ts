@@ -16,7 +16,7 @@ export const updateDeploymentSchema = z.object({
   ntpServers: list,
   allowedNetworks: list,
   proxyUrl: z.union([z.string().trim().url(), z.literal(""), z.null()]).optional(),
-  certificateMode: z.enum(["INTERNAL_CA", "IMPORTED", "ACME_DNS"]),
+  certificateMode: z.literal("INTERNAL_CA"),
 });
 
 export const initializeInternalCertificateSchema = z.object({

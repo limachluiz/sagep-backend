@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { createHash, X509Certificate } from "node:crypto";
 import dns from "node:dns";
 import { promises as fs } from "node:fs";
+import { constants as fsConstants } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -11,6 +12,7 @@ import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { AuditService } from "../audit/audit.service.js";
 import type { InitializeInternalCertificateInput, UpdateDeploymentInput } from "./deployment.schemas.js";
+import { evaluateDeploymentPreflight } from "./deployment-preflight.js";
 
 const runFile = promisify(execFile);
 const auditService = new AuditService();
@@ -56,6 +58,21 @@ async function fileExists(filePath: string) {
     return true;
   } catch {
     return false;
+  }
+}
+
+async function directoryStatus(id: string, label: string, directoryPath: string) {
+  try {
+    const stats = await fs.stat(directoryPath);
+    if (!stats.isDirectory()) return { id, label, path: directoryPath, exists: true, writable: false };
+    try {
+      await fs.access(directoryPath, fsConstants.W_OK);
+      return { id, label, path: directoryPath, exists: true, writable: true };
+    } catch {
+      return { id, label, path: directoryPath, exists: true, writable: false };
+    }
+  } catch {
+    return { id, label, path: directoryPath, exists: false, writable: false };
   }
 }
 
@@ -220,11 +237,48 @@ export class DeploymentService {
     }
     return {
       checkedAt: new Date().toISOString(), hostName: os.hostname(), interfaces: addresses,
+      environmentHostName: env.SAGEP_HOSTNAME ?? null, bindIp: env.SAGEP_BIND_IP ?? null,
       systemDnsServers: dns.getServers(), configuredHostName: configuration.deploymentHostName,
       resolvedAddresses, dnsError,
-      expectedIpMatches: !configuration.deploymentExpectedIp || addresses.some((item) => item.address === configuration.deploymentExpectedIp),
+      expectedIpMatches: !configuration.deploymentExpectedIp || env.SAGEP_BIND_IP === configuration.deploymentExpectedIp || addresses.some((item) => item.address === configuration.deploymentExpectedIp),
       dnsMatchesExpectedIp: !configuration.deploymentExpectedIp || resolvedAddresses.includes(configuration.deploymentExpectedIp),
     };
+  }
+
+  async preflight() {
+    const [configuration, userCount, certificate, directories] = await Promise.all([
+      getConfiguration(),
+      prisma.user.count(),
+      certificateStatus(),
+      Promise.all([
+        directoryStatus("backups", "Volume de backups", env.BACKUP_DIRECTORY),
+        directoryStatus("pki", "Volume protegido da autoridade", env.DEPLOYMENT_PKI_DIRECTORY),
+        directoryStatus("tls", "Volume TLS do proxy", env.DEPLOYMENT_TLS_DIRECTORY),
+      ]),
+    ]);
+    const diagnostics = await this.diagnostics();
+
+    return evaluateDeploymentPreflight({
+      nodeMajorVersion: Number.parseInt(process.versions.node.split(".")[0] ?? "0", 10),
+      nodeEnvironment: env.NODE_ENV,
+      cookieSecure: env.AUTH_COOKIE_SECURE,
+      trustProxyHops: env.TRUST_PROXY_HOPS,
+      corsOrigins: env.CORS_ALLOWED_ORIGINS,
+      publicRegistrationAllowed: env.ALLOW_PUBLIC_REGISTRATION,
+      setupTokenConfigured: Boolean(env.SAGEP_SETUP_TOKEN),
+      userCount,
+      hostName: configuration.deploymentHostName,
+      environmentHostName: env.SAGEP_HOSTNAME ?? null,
+      bindIp: env.SAGEP_BIND_IP ?? null,
+      expectedIp: configuration.deploymentExpectedIp,
+      expectedIpMatches: diagnostics.expectedIpMatches,
+      dnsMatchesExpectedIp: diagnostics.dnsMatchesExpectedIp,
+      dnsError: diagnostics.dnsError,
+      allowedNetworks: configuration.deploymentAllowedNetworks,
+      opensslAvailable: certificate.toolAvailable,
+      certificateStatus: certificate.status,
+      directories,
+    });
   }
 
   async initializeInternalCertificate(input: InitializeInternalCertificateInput, actor: Actor) {

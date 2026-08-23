@@ -2926,13 +2926,37 @@ export const openApiDocument: OpenApiDocument = {
           id: { type: "string" }, hostName: { type: ["string", "null"] }, expectedIp: { type: ["string", "null"] },
           gateway: { type: ["string", "null"] }, dnsServers: { type: "array", items: { type: "string" } },
           ntpServers: { type: "array", items: { type: "string" } }, allowedNetworks: { type: "array", items: { type: "string" } },
-          proxyUrl: { type: ["string", "null"] }, certificateMode: { type: "string", enum: ["INTERNAL_CA", "IMPORTED", "ACME_DNS"] },
+          proxyUrl: { type: ["string", "null"] }, certificateMode: { type: "string", enum: ["INTERNAL_CA"] },
           certificate: { type: "object", additionalProperties: true }, updatedAt: { type: "string", format: "date-time" },
         },
       },
       DeploymentDiagnostics: {
         type: "object",
         additionalProperties: true,
+      },
+      DeploymentPreflight: {
+        type: "object",
+        required: ["checkedAt", "status", "counts", "checks"],
+        properties: {
+          checkedAt: { type: "string", format: "date-time" },
+          status: { type: "string", enum: ["READY", "ATTENTION", "BLOCKED"] },
+          counts: {
+            type: "object", required: ["pass", "warn", "fail"],
+            properties: { pass: { type: "integer", minimum: 0 }, warn: { type: "integer", minimum: 0 }, fail: { type: "integer", minimum: 0 } },
+          },
+          checks: {
+            type: "array",
+            items: {
+              type: "object", required: ["id", "category", "label", "status", "message"],
+              properties: {
+                id: { type: "string" },
+                category: { type: "string", enum: ["RUNTIME", "SECURITY", "NETWORK", "STORAGE", "CERTIFICATE", "DATABASE"] },
+                label: { type: "string" }, status: { type: "string", enum: ["PASS", "WARN", "FAIL"] },
+                message: { type: "string" }, remediation: { type: "string" },
+              },
+            },
+          },
+        },
       },
       SetupStatus: {
         type: "object",
@@ -4653,6 +4677,9 @@ export const openApiDocument: OpenApiDocument = {
     },
     "/deployment/diagnostics": {
       get: { tags: ["deployment"], summary: "Comparar rede observada com parâmetros esperados", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/DeploymentDiagnostics"), ...defaultErrorResponses }, "x-permissions": ["system_health.view_details"] },
+    },
+    "/deployment/preflight": {
+      get: { tags: ["deployment"], summary: "Verificar prontidão segura da implantação", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/DeploymentPreflight"), ...defaultErrorResponses }, "x-permissions": ["system_health.view_details"] },
     },
     "/deployment/certificate/internal": {
       post: withStepUp({ tags: ["deployment"], summary: "Inicializar ou rotacionar a autoridade interna da OM", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/InitializeInternalCertificateRequest") }, responses: { "201": createdJson("#/components/schemas/DeploymentSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),

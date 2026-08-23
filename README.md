@@ -264,6 +264,16 @@ uma transação serializável com trava no PostgreSQL e é encerrada definitivam
 assim que o primeiro usuário é criado. Depois de concluir, remova
 `SAGEP_SETUP_TOKEN` do `.env` e recrie somente o container da API.
 
+Antes de subir os containers no servidor, execute a pré-validação local:
+
+```bash
+npm run deployment:preflight
+```
+
+O comando é somente leitura, não imprime segredos e encerra com código diferente
+de zero quando encontra bloqueios em `.env`, Docker Compose, OpenSSL, DNS, IP
+privado ou requisitos mínimos de armazenamento.
+
 O perfil HTTPS foi projetado para um servidor acessível somente na rede local da
 OM. O registro DNS interno deve apontar o nome escolhido para o IP privado
 reservado no DHCP. A publicação externa deve continuar bloqueada no UTM.
@@ -271,6 +281,8 @@ reservado no DHCP. A publicação externa deve continuar bloqueada no UTM.
 1. Suba o ambiente padrão e acesse **Configurações → Rede, servidores e HTTPS**.
 2. Salve o nome DNS e os parâmetros esperados, execute o diagnóstico e inicialize
    o certificado interno. A operação exige ADMIN e confirmação recente da senha.
+   O quadro **Prontidão para produção** consolida bloqueios e alertas de runtime,
+   segurança, DNS, armazenamento e certificado sem alterar o host.
 3. Defina no `.env` o mesmo `SAGEP_HOSTNAME`, o IP privado em `SAGEP_BIND_IP`,
    `AUTH_COOKIE_SECURE=true`, `TRUST_PROXY_HOPS=1` e a origem HTTPS exata em
    `CORS_ALLOWED_ORIGINS`.
@@ -290,6 +302,10 @@ os kits. Faça essa operação apenas em resposta a comprometimento ou mudança
 planejada da autoridade da OM. Depois de emitir ou rotacionar um certificado,
 reinicie somente o proxy com `docker compose --profile https restart caddy` para
 que o novo material TLS seja carregado, sem reiniciar a API ou o banco.
+
+Somente o modo **Autoridade interna por OM** está habilitado nesta versão. Modos
+de certificado importado ou ACME DNS-01 não são oferecidos até que possuam fluxo
+completo de validação, rotação e recuperação.
 
 Ou via npm:
 

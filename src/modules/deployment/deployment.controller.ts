@@ -15,6 +15,10 @@ export class DeploymentController {
     return res.status(200).json(await deploymentService.diagnostics());
   }
 
+  async preflight(_req: Request, res: Response) {
+    return res.status(200).json(await deploymentService.preflight());
+  }
+
   async initializeCertificate(req: Request, res: Response) {
     return res.status(201).json(await deploymentService.initializeInternalCertificate(initializeInternalCertificateSchema.parse(req.body), req.user!));
   }

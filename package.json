@@ -24,6 +24,7 @@
     "repair:mojibake": "tsx src/scripts/repair-mojibake.ts",
     "security:audit": "node scripts/check-dependency-audit.mjs",
     "security:secrets": "node scripts/check-secrets.mjs",
+    "deployment:preflight": "node scripts/check-deployment-preflight.mjs",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f api"

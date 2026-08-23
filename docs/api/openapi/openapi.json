@@ -5750,9 +5750,7 @@
           "certificateMode": {
             "type": "string",
             "enum": [
-              "INTERNAL_CA",
-              "IMPORTED",
-              "ACME_DNS"
+              "INTERNAL_CA"
             ]
           },
           "certificate": {
@@ -5768,6 +5766,97 @@
       "DeploymentDiagnostics": {
         "type": "object",
         "additionalProperties": true
+      },
+      "DeploymentPreflight": {
+        "type": "object",
+        "required": [
+          "checkedAt",
+          "status",
+          "counts",
+          "checks"
+        ],
+        "properties": {
+          "checkedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "READY",
+              "ATTENTION",
+              "BLOCKED"
+            ]
+          },
+          "counts": {
+            "type": "object",
+            "required": [
+              "pass",
+              "warn",
+              "fail"
+            ],
+            "properties": {
+              "pass": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "warn": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "fail": {
+                "type": "integer",
+                "minimum": 0
+              }
+            }
+          },
+          "checks": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "category",
+                "label",
+                "status",
+                "message"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "category": {
+                  "type": "string",
+                  "enum": [
+                    "RUNTIME",
+                    "SECURITY",
+                    "NETWORK",
+                    "STORAGE",
+                    "CERTIFICATE",
+                    "DATABASE"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string",
+                  "enum": [
+                    "PASS",
+                    "WARN",
+                    "FAIL"
+                  ]
+                },
+                "message": {
+                  "type": "string"
+                },
+                "remediation": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
       },
       "SetupStatus": {
         "type": "object",
@@ -12398,6 +12487,53 @@
           "system_health.view_details"
         ],
         "operationId": "deployment_get_diagnostics"
+      }
+    },
+    "/deployment/preflight": {
+      "get": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Verificar prontidão segura da implantação",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeploymentPreflight"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "system_health.view_details"
+        ],
+        "operationId": "deployment_get_preflight"
       }
     },
     "/deployment/certificate/internal": {
