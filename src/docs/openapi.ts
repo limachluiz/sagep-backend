@@ -2927,7 +2927,27 @@ export const openApiDocument: OpenApiDocument = {
           gateway: { type: ["string", "null"] }, dnsServers: { type: "array", items: { type: "string" } },
           ntpServers: { type: "array", items: { type: "string" } }, allowedNetworks: { type: "array", items: { type: "string" } },
           proxyUrl: { type: ["string", "null"] }, certificateMode: { type: "string", enum: ["INTERNAL_CA"] },
-          certificate: { type: "object", additionalProperties: true }, updatedAt: { type: "string", format: "date-time" },
+          certificate: { $ref: "#/components/schemas/CertificateStatus" }, updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      CertificateStatus: {
+        type: "object",
+        required: ["configured", "toolAvailable", "status"],
+        properties: {
+          configured: { type: "boolean" }, toolAvailable: { type: "boolean" },
+          status: { type: "string", enum: ["NOT_CONFIGURED", "VALID", "EXPIRING", "EXPIRED", "INVALID"] },
+          subject: { type: "string" }, issuer: { type: "string" }, validFrom: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time" }, daysRemaining: { type: "integer" },
+          fingerprintSha256: { type: "string" }, rootFingerprintSha256: { type: "string" },
+          proxyRestartRequired: { type: "boolean" },
+          renewalAlert: {
+            type: ["object", "null"],
+            properties: {
+              thresholdDays: { type: "integer", enum: [60, 30, 15, 7, 0] },
+              severity: { type: "string", enum: ["INFO", "WARNING", "CRITICAL"] },
+              label: { type: "string" },
+            },
+          },
         },
       },
       DeploymentDiagnostics: {
@@ -4682,7 +4702,10 @@ export const openApiDocument: OpenApiDocument = {
       get: { tags: ["deployment"], summary: "Verificar prontidão segura da implantação", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/DeploymentPreflight"), ...defaultErrorResponses }, "x-permissions": ["system_health.view_details"] },
     },
     "/deployment/certificate/internal": {
-      post: withStepUp({ tags: ["deployment"], summary: "Inicializar ou rotacionar a autoridade interna da OM", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/InitializeInternalCertificateRequest") }, responses: { "201": createdJson("#/components/schemas/DeploymentSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+      post: withStepUp({ tags: ["deployment"], summary: "Inicializar ou rotacionar a autoridade interna da OM", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/InitializeInternalCertificateRequest") }, responses: { "201": createdJson("#/components/schemas/CertificateStatus"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/certificate/renew": {
+      post: withStepUp({ tags: ["deployment"], summary: "Renovar o certificado do servidor preservando a autoridade da OM", security: bearerSecurity, responses: { "201": createdJson("#/components/schemas/CertificateStatus"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
     },
     "/deployment/trust-kit/{platform}": {
       get: withStepUp({ tags: ["deployment"], summary: "Baixar kit de confiança para uma plataforma cliente", security: bearerSecurity, parameters: [pathIdParameter("platform", "Plataforma cliente", { type: "string", enum: ["windows", "linux"] })], responses: { "200": { description: "Arquivo ZIP com certificado, scripts e impressão digital", content: binaryContent("application/zip") }, ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),

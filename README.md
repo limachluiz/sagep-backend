@@ -303,6 +303,12 @@ planejada da autoridade da OM. Depois de emitir ou rotacionar um certificado,
 reinicie somente o proxy com `docker compose --profile https restart caddy` para
 que o novo material TLS seja carregado, sem reiniciar a API ou o banco.
 
+A renovação normal cria uma nova chave e um novo certificado do servidor usando
+a autoridade existente. A impressão digital da raiz não muda e os kits instalados
+continuam válidos. O SAGEP gera alertas aos 60, 30, 15 e 7 dias e torna o aviso
+crítico quando faltam até 7 dias ou quando o certificado já venceu. Após renovar,
+reinicie somente o Caddy para carregar o novo par TLS.
+
 Somente o modo **Autoridade interna por OM** está habilitado nesta versão. Modos
 de certificado importado ou ACME DNS-01 não são oferecidos até que possuam fluxo
 completo de validação, rotação e recuperação.

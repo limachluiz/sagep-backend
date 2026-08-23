@@ -1482,6 +1482,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployment/certificate/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renovar o certificado do servidor preservando a autoridade da OM */
+        post: operations["deployment_post_certificate_renew"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/deployment/trust-kit/{platform}": {
         parameters: {
             query?: never;
@@ -4216,11 +4233,32 @@ export interface components {
             proxyUrl?: string | null;
             /** @enum {string} */
             certificateMode?: "INTERNAL_CA";
-            certificate?: {
-                [key: string]: unknown;
-            };
+            certificate?: components["schemas"]["CertificateStatus"];
             /** Format: date-time */
             updatedAt?: string;
+        };
+        CertificateStatus: {
+            configured: boolean;
+            toolAvailable: boolean;
+            /** @enum {string} */
+            status: "NOT_CONFIGURED" | "VALID" | "EXPIRING" | "EXPIRED" | "INVALID";
+            subject?: string;
+            issuer?: string;
+            /** Format: date-time */
+            validFrom?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            daysRemaining?: number;
+            fingerprintSha256?: string;
+            rootFingerprintSha256?: string;
+            proxyRestartRequired?: boolean;
+            renewalAlert?: {
+                /** @enum {integer} */
+                thresholdDays?: 60 | 30 | 15 | 7 | 0;
+                /** @enum {string} */
+                severity?: "INFO" | "WARNING" | "CRITICAL";
+                label?: string;
+            } | null;
         };
         DeploymentDiagnostics: {
             [key: string]: unknown;
@@ -7891,7 +7929,37 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DeploymentSettings"];
+                    "application/json": components["schemas"]["CertificateStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_post_certificate_renew: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CertificateStatus"];
                 };
             };
             400: components["responses"]["BadRequest"];

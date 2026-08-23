@@ -6,6 +6,7 @@ import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js"
 import { permissionsService } from "../permissions/permissions.service.js";
 import { auditService } from "../audit/audit.service.js";
 import { AppError } from "../../shared/app-error.js";
+import { getDeploymentCertificateStatus } from "../deployment/deployment.service.js";
 
 type CurrentUser = {
   id: string;
@@ -37,7 +38,9 @@ type AlertCategory =
   | "NE_AGUARDANDO_LIQUIDACAO"
   | "NE_AGUARDANDO_PAGAMENTO"
   | "PROJETO_CONCLUIDO_NAO_PAGO"
-  | "NE_PAGA_PROJETO_ABERTO";
+  | "NE_PAGA_PROJETO_ABERTO"
+  | "CERTIFICADO_HTTPS_VENCENDO"
+  | "CERTIFICADO_HTTPS_VENCIDO";
 
 type AlertItem = {
   id: string;
@@ -45,7 +48,7 @@ type AlertItem = {
   severity: AlertSeverity;
   title: string;
   description: string;
-  project: {
+  project?: {
     id: string;
     projectCode: number;
     title: string;
@@ -57,7 +60,7 @@ type AlertItem = {
       email: string;
     };
   };
-  nextAction: ReturnType<typeof workflowService.getNextAction>;
+  nextAction?: ReturnType<typeof workflowService.getNextAction>;
   detailsPath: string;
   daysSinceUpdate?: number;
   document?: {
@@ -94,6 +97,8 @@ const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
   NE_AGUARDANDO_PAGAMENTO: [],
   PROJETO_CONCLUIDO_NAO_PAGO: [],
   NE_PAGA_PROJETO_ABERTO: [],
+  CERTIFICADO_HTTPS_VENCENDO: [],
+  CERTIFICADO_HTTPS_VENCIDO: [],
 };
 
 export class OperationalAlertsService {
@@ -559,11 +564,35 @@ export class OperationalAlertsService {
       }
     }
 
+    if (permissionsService.hasPermission(user, "settings.view")) {
+      const certificate = await getDeploymentCertificateStatus();
+      if (certificate.configured && certificate.renewalAlert) {
+        const expired = certificate.status === "EXPIRED";
+        alerts.push({
+          id: `deployment:certificate:${certificate.renewalAlert.thresholdDays}`,
+          category: expired ? "CERTIFICADO_HTTPS_VENCIDO" : "CERTIFICADO_HTTPS_VENCENDO",
+          severity: certificate.renewalAlert.severity,
+          title: expired ? "Certificado HTTPS vencido" : `Certificado HTTPS vence em ${certificate.daysRemaining} dia(s)`,
+          description: expired
+            ? "O proxy HTTPS precisa receber um novo certificado assinado pela autoridade interna da OM."
+            : "Renove somente o certificado do servidor para preservar a confiança já instalada nas estações.",
+          detailsPath: "/settings/network",
+          sourceUpdatedAt: certificate.validFrom ? new Date(certificate.validFrom) : now,
+          metadata: {
+            daysRemaining: certificate.daysRemaining,
+            expiresAt: certificate.expiresAt,
+            renewalThresholdDays: certificate.renewalAlert.thresholdDays,
+            rootRotationRequired: false,
+          },
+        });
+      }
+    }
+
     const projectUpdatedAt = new Map(projects.map((project) => [project.id, project.updatedAt]));
     const dismissals = await prisma.notificationDismissal.findMany({ where: { userId: user.id } });
     const dismissalByKey = new Map(dismissals.map((item) => [item.notificationKey, item]));
     alerts = alerts.filter((alert) => {
-      const sourceUpdatedAt = alert.sourceUpdatedAt ?? projectUpdatedAt.get(alert.project.id) ?? now;
+      const sourceUpdatedAt = alert.sourceUpdatedAt ?? (alert.project ? projectUpdatedAt.get(alert.project.id) : undefined) ?? now;
       alert.sourceUpdatedAt = sourceUpdatedAt;
       const dismissal = dismissalByKey.get(alert.id);
       return !dismissal || dismissal.sourceUpdatedAt < sourceUpdatedAt;
@@ -590,6 +619,8 @@ export class OperationalAlertsService {
       NE_AGUARDANDO_PAGAMENTO: [...emptyCategoryGroups.NE_AGUARDANDO_PAGAMENTO],
       PROJETO_CONCLUIDO_NAO_PAGO: [...emptyCategoryGroups.PROJETO_CONCLUIDO_NAO_PAGO],
       NE_PAGA_PROJETO_ABERTO: [...emptyCategoryGroups.NE_PAGA_PROJETO_ABERTO],
+      CERTIFICADO_HTTPS_VENCENDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCENDO],
+      CERTIFICADO_HTTPS_VENCIDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCIDO],
     };
 
     for (const alert of alerts) {

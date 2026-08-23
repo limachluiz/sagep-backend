@@ -23,6 +23,10 @@ export class DeploymentController {
     return res.status(201).json(await deploymentService.initializeInternalCertificate(initializeInternalCertificateSchema.parse(req.body), req.user!));
   }
 
+  async renewCertificate(req: Request, res: Response) {
+    return res.status(201).json(await deploymentService.renewServerCertificate(req.user!));
+  }
+
   async trustKit(req: Request, res: Response) {
     const { platform } = trustKitPlatformSchema.parse(req.params);
     const kit = await deploymentService.trustKit(platform, req.user!);

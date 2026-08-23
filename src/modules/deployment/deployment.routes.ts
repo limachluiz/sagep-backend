@@ -16,4 +16,5 @@ deploymentRoutes.get("/diagnostics", requirePermission("system_health.view_detai
 deploymentRoutes.get("/preflight", requirePermission("system_health.view_details"), (req, res) => controller.preflight(req, res));
 deploymentRoutes.put("/", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.update(req, res));
 deploymentRoutes.post("/certificate/internal", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.initializeCertificate(req, res));
+deploymentRoutes.post("/certificate/renew", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.renewCertificate(req, res));
 deploymentRoutes.get("/trust-kit/:platform", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.trustKit(req, res));

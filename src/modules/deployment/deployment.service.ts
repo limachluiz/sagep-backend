@@ -13,6 +13,7 @@ import { AppError } from "../../shared/app-error.js";
 import { AuditService } from "../audit/audit.service.js";
 import type { InitializeInternalCertificateInput, UpdateDeploymentInput } from "./deployment.schemas.js";
 import { evaluateDeploymentPreflight } from "./deployment-preflight.js";
+import { getCertificateRenewalAlert } from "./certificate-lifecycle.js";
 
 const runFile = promisify(execFile);
 const auditService = new AuditService();
@@ -21,6 +22,8 @@ const ROOT_CERT = "sagep-om-root-ca.crt";
 const ROOT_KEY = "sagep-om-root-ca.key";
 const SERVER_CERT = "server.crt";
 const SERVER_KEY = "server.key";
+let certificateOperationInProgress = false;
+let opensslAvailabilityCache: { checkedAt: number; available: boolean } | null = null;
 
 type Actor = NonNullable<Express.Request["user"]>;
 
@@ -84,15 +87,36 @@ function formatFingerprint(fingerprint: string) {
   return fingerprint.match(/.{1,2}/g)?.join(":") ?? fingerprint;
 }
 
-async function certificateStatus() {
-  const certificatePath = path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_CERT);
-  const rootPath = path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_CERT);
-  let toolAvailable = true;
+async function opensslAvailable() {
+  if (opensslAvailabilityCache && Date.now() - opensslAvailabilityCache.checkedAt < 300_000) {
+    return opensslAvailabilityCache.available;
+  }
+  let available = true;
   try {
     await runFile("openssl", ["version"], { timeout: 5_000 });
   } catch {
-    toolAvailable = false;
+    available = false;
   }
+  opensslAvailabilityCache = { checkedAt: Date.now(), available };
+  return available;
+}
+
+async function withCertificateOperationLock<T>(operation: () => Promise<T>) {
+  if (certificateOperationInProgress) {
+    throw new AppError("Já existe uma operação de certificado em andamento", 409, "CERTIFICATE_OPERATION_IN_PROGRESS");
+  }
+  certificateOperationInProgress = true;
+  try {
+    return await operation();
+  } finally {
+    certificateOperationInProgress = false;
+  }
+}
+
+export async function getDeploymentCertificateStatus() {
+  const certificatePath = path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_CERT);
+  const rootPath = path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_CERT);
+  const toolAvailable = await opensslAvailable();
 
   if (!(await fileExists(certificatePath)) || !(await fileExists(rootPath))) {
     return { configured: false, toolAvailable, status: "NOT_CONFIGURED" as const };
@@ -107,10 +131,11 @@ async function certificateStatus() {
     const root = new X509Certificate(rootPem);
     const expiresAt = new Date(server.validTo);
     const daysRemaining = Math.floor((expiresAt.getTime() - Date.now()) / 86_400_000);
+    const status = daysRemaining < 0 ? "EXPIRED" as const : daysRemaining <= 30 ? "EXPIRING" as const : "VALID" as const;
     return {
       configured: true,
       toolAvailable,
-      status: daysRemaining < 0 ? "EXPIRED" as const : daysRemaining <= 30 ? "EXPIRING" as const : "VALID" as const,
+      status,
       subject: server.subject,
       issuer: server.issuer,
       validFrom: new Date(server.validFrom).toISOString(),
@@ -118,10 +143,46 @@ async function certificateStatus() {
       daysRemaining,
       fingerprintSha256: formatFingerprint(certificateFingerprint(server)),
       rootFingerprintSha256: formatFingerprint(certificateFingerprint(root)),
+      renewalAlert: getCertificateRenewalAlert(status, daysRemaining),
     };
   } catch {
     return { configured: false, toolAvailable, status: "INVALID" as const };
   }
+}
+
+async function installGeneratedFile(source: string, destination: string, mode: number) {
+  const pending = `${destination}.next-${process.pid}-${Date.now()}`;
+  try {
+    await fs.copyFile(source, pending);
+    await fs.chmod(pending, mode);
+    await fs.rename(pending, destination);
+  } finally {
+    await fs.rm(pending, { force: true });
+  }
+}
+
+async function issueServerCertificate(hostName: string, rootCert: string, rootKey: string, temporaryDirectory: string) {
+  const serverCert = path.join(temporaryDirectory, SERVER_CERT);
+  const serverKey = path.join(temporaryDirectory, SERVER_KEY);
+  const request = path.join(temporaryDirectory, "server.csr");
+  const extensions = path.join(temporaryDirectory, "server.ext");
+
+  await runFile("openssl", [
+    "req", "-new", "-newkey", "rsa:3072", "-sha256", "-nodes",
+    "-keyout", serverKey, "-out", request, "-subj", `/CN=${hostName}/O=SAGEP`,
+  ], { timeout: 120_000 });
+  await fs.writeFile(extensions, [
+    "basicConstraints=critical,CA:FALSE",
+    "keyUsage=critical,digitalSignature,keyEncipherment",
+    "extendedKeyUsage=serverAuth",
+    `subjectAltName=DNS:${hostName}`,
+  ].join("\n"), { mode: 0o600 });
+  await runFile("openssl", [
+    "x509", "-req", "-in", request, "-CA", rootCert, "-CAkey", rootKey,
+    "-CAcreateserial", "-out", serverCert, "-days", "397", "-sha256", "-extfile", extensions,
+  ], { timeout: 120_000 });
+
+  return { serverCert, serverKey };
 }
 
 async function generateInternalCertificate(hostName: string) {
@@ -130,10 +191,6 @@ async function generateInternalCertificate(hostName: string) {
   const temporaryDirectory = await fs.mkdtemp(path.join(env.DEPLOYMENT_PKI_DIRECTORY, ".generate-"));
   const rootCert = path.join(temporaryDirectory, ROOT_CERT);
   const rootKey = path.join(temporaryDirectory, ROOT_KEY);
-  const serverCert = path.join(temporaryDirectory, SERVER_CERT);
-  const serverKey = path.join(temporaryDirectory, SERVER_KEY);
-  const request = path.join(temporaryDirectory, "server.csr");
-  const extensions = path.join(temporaryDirectory, "server.ext");
 
   try {
     await runFile("openssl", [
@@ -143,27 +200,11 @@ async function generateInternalCertificate(hostName: string) {
       "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0",
       "-addext", "keyUsage=critical,keyCertSign,cRLSign",
     ], { timeout: 120_000 });
-    await runFile("openssl", [
-      "req", "-new", "-newkey", "rsa:3072", "-sha256", "-nodes",
-      "-keyout", serverKey, "-out", request, "-subj", `/CN=${hostName}/O=SAGEP`,
-    ], { timeout: 120_000 });
-    await fs.writeFile(extensions, [
-      "basicConstraints=critical,CA:FALSE",
-      "keyUsage=critical,digitalSignature,keyEncipherment",
-      "extendedKeyUsage=serverAuth",
-      `subjectAltName=DNS:${hostName}`,
-    ].join("\n"), { mode: 0o600 });
-    await runFile("openssl", [
-      "x509", "-req", "-in", request, "-CA", rootCert, "-CAkey", rootKey,
-      "-CAcreateserial", "-out", serverCert, "-days", "397", "-sha256", "-extfile", extensions,
-    ], { timeout: 120_000 });
-
-    for (const filename of [ROOT_CERT, ROOT_KEY, SERVER_CERT, SERVER_KEY]) {
-      const destinationDirectory = filename.startsWith("server.") ? env.DEPLOYMENT_TLS_DIRECTORY : env.DEPLOYMENT_PKI_DIRECTORY;
-      const destination = path.join(destinationDirectory, filename);
-      await fs.copyFile(path.join(temporaryDirectory, filename), destination);
-      await fs.chmod(destination, filename.endsWith(".key") ? 0o600 : 0o644);
-    }
+    const server = await issueServerCertificate(hostName, rootCert, rootKey, temporaryDirectory);
+    await installGeneratedFile(rootKey, path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_KEY), 0o600);
+    await installGeneratedFile(rootCert, path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_CERT), 0o644);
+    await installGeneratedFile(server.serverKey, path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_KEY), 0o600);
+    await installGeneratedFile(server.serverCert, path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_CERT), 0o644);
   } catch (error) {
     throw new AppError("Não foi possível emitir o certificado interno", 503, "CERTIFICATE_TOOL_UNAVAILABLE", {
       reason: error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT" ? "OPENSSL_NOT_FOUND" : "GENERATION_FAILED",
@@ -193,7 +234,7 @@ function linuxScripts(fingerprint: string) {
 export class DeploymentService {
   async get() {
     const configuration = await getConfiguration();
-    return { ...serializable(configuration), certificate: await certificateStatus() };
+    return { ...serializable(configuration), certificate: await getDeploymentCertificateStatus() };
   }
 
   async update(input: UpdateDeploymentInput, actor: Actor) {
@@ -216,7 +257,7 @@ export class DeploymentService {
       entityType: "SYSTEM_SETTINGS", entityId: CONFIGURATION_ID, action: "UPDATE", actor,
       summary: "Configuração de rede e HTTPS atualizada", before: serializable(before), after: serializable(updated),
     });
-    return { ...serializable(updated), certificate: await certificateStatus() };
+    return { ...serializable(updated), certificate: await getDeploymentCertificateStatus() };
   }
 
   async diagnostics() {
@@ -249,7 +290,7 @@ export class DeploymentService {
     const [configuration, userCount, certificate, directories] = await Promise.all([
       getConfiguration(),
       prisma.user.count(),
-      certificateStatus(),
+      getDeploymentCertificateStatus(),
       Promise.all([
         directoryStatus("backups", "Volume de backups", env.BACKUP_DIRECTORY),
         directoryStatus("pki", "Volume protegido da autoridade", env.DEPLOYMENT_PKI_DIRECTORY),
@@ -282,11 +323,11 @@ export class DeploymentService {
   }
 
   async initializeInternalCertificate(input: InitializeInternalCertificateInput, actor: Actor) {
-    const current = await certificateStatus();
+    const current = await getDeploymentCertificateStatus();
     if (current.configured && !input.rotate) {
       throw new AppError("Já existe um certificado interno. Confirme a rotação para substituí-lo", 409, "CERTIFICATE_ALREADY_CONFIGURED");
     }
-    await generateInternalCertificate(input.hostName);
+    await withCertificateOperationLock(() => generateInternalCertificate(input.hostName));
     await prisma.systemConfiguration.update({
       where: { id: CONFIGURATION_ID },
       data: { deploymentHostName: input.hostName, deploymentCertificateMode: "INTERNAL_CA", updatedById: actor.id },
@@ -296,7 +337,60 @@ export class DeploymentService {
       summary: current.configured ? "Certificado HTTPS interno rotacionado" : "Certificado HTTPS interno inicializado",
       metadata: { hostName: input.hostName, rootRotated: current.configured },
     });
-    return certificateStatus();
+    return getDeploymentCertificateStatus();
+  }
+
+  async renewServerCertificate(actor: Actor) {
+    const configuration = await getConfiguration();
+    if (!configuration.deploymentHostName) {
+      throw new AppError("Configure o nome DNS antes de renovar o certificado", 409, "DEPLOYMENT_HOSTNAME_NOT_CONFIGURED");
+    }
+
+    const rootCert = path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_CERT);
+    const rootKey = path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_KEY);
+    if (!(await fileExists(rootCert)) || !(await fileExists(rootKey))) {
+      throw new AppError("A autoridade interna da OM não está disponível", 409, "CERTIFICATE_AUTHORITY_NOT_CONFIGURED");
+    }
+
+    const before = await getDeploymentCertificateStatus();
+    try {
+      const root = new X509Certificate(await fs.readFile(rootCert, "utf8"));
+      const rootDaysRemaining = Math.floor((new Date(root.validTo).getTime() - Date.now()) / 86_400_000);
+      if (rootDaysRemaining <= 430) {
+        throw new AppError("A autoridade raiz está próxima do vencimento e precisa ser rotacionada", 409, "CERTIFICATE_AUTHORITY_EXPIRING", { rootDaysRemaining });
+      }
+
+      await withCertificateOperationLock(async () => {
+        await fs.mkdir(env.DEPLOYMENT_TLS_DIRECTORY, { recursive: true, mode: 0o700 });
+        const temporaryDirectory = await fs.mkdtemp(path.join(env.DEPLOYMENT_PKI_DIRECTORY, ".renew-"));
+        try {
+          const server = await issueServerCertificate(configuration.deploymentHostName!, rootCert, rootKey, temporaryDirectory);
+          await installGeneratedFile(server.serverKey, path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_KEY), 0o600);
+          await installGeneratedFile(server.serverCert, path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_CERT), 0o644);
+        } finally {
+          await fs.rm(temporaryDirectory, { recursive: true, force: true });
+        }
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("Não foi possível renovar o certificado do servidor", 503, "CERTIFICATE_RENEWAL_FAILED", {
+        reason: error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT" ? "OPENSSL_OR_AUTHORITY_NOT_FOUND" : "RENEWAL_FAILED",
+      });
+    }
+
+    const renewed = await getDeploymentCertificateStatus();
+    await auditService.log({
+      entityType: "SYSTEM_SETTINGS", entityId: CONFIGURATION_ID, action: "UPDATE", actor,
+      summary: "Certificado HTTPS do servidor renovado sem rotação da autoridade",
+      metadata: {
+        hostName: configuration.deploymentHostName,
+        rootRotated: false,
+        previousFingerprintSha256: before.fingerprintSha256 ?? null,
+        renewedFingerprintSha256: renewed.fingerprintSha256 ?? null,
+        rootFingerprintSha256: renewed.rootFingerprintSha256 ?? null,
+      },
+    });
+    return { ...renewed, proxyRestartRequired: true };
   }
 
   async trustKit(platform: "windows" | "linux", actor: Actor) {

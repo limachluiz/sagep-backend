@@ -68,4 +68,20 @@ describe("PKI interna da OM", () => {
       expect(Object.keys(zip.files).some((name) => name.endsWith(".key"))).toBe(false);
     }
   }, 30_000);
+
+  it("renova somente o certificado do servidor e preserva a autoridade da OM", async () => {
+    const service = new DeploymentService();
+    const before = await service.initializeInternalCertificate({ hostName: "sagep.4cta.eb.mil.br", rotate: true }, actor);
+    const renewed = await service.renewServerCertificate(actor);
+
+    expect(renewed).toMatchObject({ configured: true, status: "VALID", proxyRestartRequired: true });
+    expect(renewed.rootFingerprintSha256).toBe(before.rootFingerprintSha256);
+    expect(renewed.fingerprintSha256).not.toBe(before.fingerprintSha256);
+    expect(mocks.auditCreate).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        summary: "Certificado HTTPS do servidor renovado sem rotação da autoridade",
+        metadata: expect.objectContaining({ rootRotated: false }),
+      }),
+    }));
+  }, 30_000);
 });

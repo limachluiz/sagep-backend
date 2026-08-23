@@ -5754,12 +5754,92 @@
             ]
           },
           "certificate": {
-            "type": "object",
-            "additionalProperties": true
+            "$ref": "#/components/schemas/CertificateStatus"
           },
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "CertificateStatus": {
+        "type": "object",
+        "required": [
+          "configured",
+          "toolAvailable",
+          "status"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "toolAvailable": {
+            "type": "boolean"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "NOT_CONFIGURED",
+              "VALID",
+              "EXPIRING",
+              "EXPIRED",
+              "INVALID"
+            ]
+          },
+          "subject": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "validFrom": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "daysRemaining": {
+            "type": "integer"
+          },
+          "fingerprintSha256": {
+            "type": "string"
+          },
+          "rootFingerprintSha256": {
+            "type": "string"
+          },
+          "proxyRestartRequired": {
+            "type": "boolean"
+          },
+          "renewalAlert": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "properties": {
+              "thresholdDays": {
+                "type": "integer",
+                "enum": [
+                  60,
+                  30,
+                  15,
+                  7,
+                  0
+                ]
+              },
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "INFO",
+                  "WARNING",
+                  "CRITICAL"
+                ]
+              },
+              "label": {
+                "type": "string"
+              }
+            }
           }
         }
       },
@@ -12563,7 +12643,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DeploymentSettings"
+                  "$ref": "#/components/schemas/CertificateStatus"
                 }
               }
             }
@@ -12603,6 +12683,65 @@
         ],
         "x-step-up": true,
         "operationId": "deployment_post_certificate_internal"
+      }
+    },
+    "/deployment/certificate/renew": {
+      "post": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Renovar o certificado do servidor preservando a autoridade da OM",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Criado com sucesso",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CertificateStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
+        "operationId": "deployment_post_certificate_renew"
       }
     },
     "/deployment/trust-kit/{platform}": {
