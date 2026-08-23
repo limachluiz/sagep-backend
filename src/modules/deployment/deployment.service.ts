@@ -29,14 +29,19 @@ import {
   type AuthorityBackupPayload,
   validateAuthorityMaterial,
 } from "./pki-backup.js";
+import {
+  generateInternalCertificate,
+  installGeneratedFile,
+  issueServerCertificate,
+  ROOT_CERT,
+  ROOT_KEY,
+  SERVER_CERT,
+  SERVER_KEY,
+} from "./pki-provisioning.js";
 
 const runFile = promisify(execFile);
 const auditService = new AuditService();
 const CONFIGURATION_ID = "default";
-const ROOT_CERT = "sagep-om-root-ca.crt";
-const ROOT_KEY = "sagep-om-root-ca.key";
-const SERVER_CERT = "server.crt";
-const SERVER_KEY = "server.key";
 let certificateOperationInProgress = false;
 let opensslAvailabilityCache: { checkedAt: number; available: boolean } | null = null;
 
@@ -185,70 +190,6 @@ export async function getDeploymentCertificateStatus() {
   }
 }
 
-async function installGeneratedFile(source: string, destination: string, mode: number) {
-  const pending = `${destination}.next-${process.pid}-${Date.now()}`;
-  try {
-    await fs.copyFile(source, pending);
-    await fs.chmod(pending, mode);
-    await fs.rename(pending, destination);
-  } finally {
-    await fs.rm(pending, { force: true });
-  }
-}
-
-async function issueServerCertificate(hostName: string, rootCert: string, rootKey: string, temporaryDirectory: string) {
-  const serverCert = path.join(temporaryDirectory, SERVER_CERT);
-  const serverKey = path.join(temporaryDirectory, SERVER_KEY);
-  const request = path.join(temporaryDirectory, "server.csr");
-  const extensions = path.join(temporaryDirectory, "server.ext");
-
-  await runFile("openssl", [
-    "req", "-new", "-newkey", "rsa:3072", "-sha256", "-nodes",
-    "-keyout", serverKey, "-out", request, "-subj", `/CN=${hostName}/O=SAGEP`,
-  ], { timeout: 120_000 });
-  await fs.writeFile(extensions, [
-    "basicConstraints=critical,CA:FALSE",
-    "keyUsage=critical,digitalSignature,keyEncipherment",
-    "extendedKeyUsage=serverAuth",
-    `subjectAltName=DNS:${hostName}`,
-  ].join("\n"), { mode: 0o600 });
-  await runFile("openssl", [
-    "x509", "-req", "-in", request, "-CA", rootCert, "-CAkey", rootKey,
-    "-CAcreateserial", "-out", serverCert, "-days", "397", "-sha256", "-extfile", extensions,
-  ], { timeout: 120_000 });
-
-  return { serverCert, serverKey };
-}
-
-async function generateInternalCertificate(hostName: string) {
-  await fs.mkdir(env.DEPLOYMENT_PKI_DIRECTORY, { recursive: true, mode: 0o700 });
-  await fs.mkdir(env.DEPLOYMENT_TLS_DIRECTORY, { recursive: true, mode: 0o700 });
-  const temporaryDirectory = await fs.mkdtemp(path.join(env.DEPLOYMENT_PKI_DIRECTORY, ".generate-"));
-  const rootCert = path.join(temporaryDirectory, ROOT_CERT);
-  const rootKey = path.join(temporaryDirectory, ROOT_KEY);
-
-  try {
-    await runFile("openssl", [
-      "req", "-x509", "-newkey", "rsa:4096", "-sha256", "-days", "3650", "-nodes",
-      "-keyout", rootKey, "-out", rootCert,
-      "-subj", "/CN=SAGEP OM Internal Root CA/O=SAGEP",
-      "-addext", "basicConstraints=critical,CA:TRUE,pathlen:0",
-      "-addext", "keyUsage=critical,keyCertSign,cRLSign",
-    ], { timeout: 120_000 });
-    const server = await issueServerCertificate(hostName, rootCert, rootKey, temporaryDirectory);
-    await installGeneratedFile(rootKey, path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_KEY), 0o600);
-    await installGeneratedFile(rootCert, path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_CERT), 0o644);
-    await installGeneratedFile(server.serverKey, path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_KEY), 0o600);
-    await installGeneratedFile(server.serverCert, path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_CERT), 0o644);
-  } catch (error) {
-    throw new AppError("Não foi possível emitir o certificado interno", 503, "CERTIFICATE_TOOL_UNAVAILABLE", {
-      reason: error instanceof Error && (error as NodeJS.ErrnoException).code === "ENOENT" ? "OPENSSL_NOT_FOUND" : "GENERATION_FAILED",
-    });
-  } finally {
-    await fs.rm(temporaryDirectory, { recursive: true, force: true });
-  }
-}
-
 function windowsScripts(fingerprint: string) {
   return {
     install: `# Kit de confiança SAGEP - Windows 11\n$ErrorActionPreference = "Stop"\n$principal = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())\nif (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) { throw "Execute o PowerShell como Administrador." }\n$certPath = Join-Path $PSScriptRoot "${ROOT_CERT}"\n$cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2($certPath)\n$expected = "${fingerprint}"\n$actual = $cert.Thumbprint.ToUpperInvariant()\nif ($actual -ne $expected) { throw "Impressao digital divergente. Esperada: $expected; obtida: $actual" }\nImport-Certificate -FilePath $certPath -CertStoreLocation "Cert:\\LocalMachine\\Root" | Out-Null\nWrite-Host "Confianca SAGEP instalada. Thumbprint: $actual" -ForegroundColor Green\n`,
@@ -363,7 +304,7 @@ export class DeploymentService {
     if (current.configured && !input.rotate) {
       throw new AppError("Já existe um certificado interno. Confirme a rotação para substituí-lo", 409, "CERTIFICATE_ALREADY_CONFIGURED");
     }
-    await withCertificateOperationLock(() => generateInternalCertificate(input.hostName));
+    await withCertificateOperationLock(() => generateInternalCertificate(input.hostName, env.DEPLOYMENT_PKI_DIRECTORY, env.DEPLOYMENT_TLS_DIRECTORY));
     await prisma.systemConfiguration.update({
       where: { id: CONFIGURATION_ID },
       data: { deploymentHostName: input.hostName, deploymentCertificateMode: "INTERNAL_CA", updatedById: actor.id },

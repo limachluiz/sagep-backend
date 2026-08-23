@@ -3,7 +3,7 @@ import dns from "node:dns/promises";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { parse } from "dotenv";
+import { parseEnvironmentFile } from "./env-file.mjs";
 
 function item(id, status, message, remediation) {
   return { id, status, message, ...(remediation ? { remediation } : {}) };
@@ -78,8 +78,8 @@ async function main() {
     checks.push(item("file.env", "FAIL", `Arquivo não encontrado: ${envPath}.`, "Copie .env.example para .env e preencha os valores de produção."));
   } else {
     const stats = fs.statSync(envPath);
-    checks.push(item("file.env", (stats.mode & 0o077) === 0 ? "PASS" : "WARN", (stats.mode & 0o077) === 0 ? "O .env não permite leitura por grupo ou outros usuários." : "O .env possui permissões mais amplas que 0600.", "Execute chmod 600 .env no servidor Linux."));
-    const values = parse(fs.readFileSync(envPath));
+    checks.push(item("file.env", (stats.mode & 0o077) === 0 ? "PASS" : "FAIL", (stats.mode & 0o077) === 0 ? "O .env não permite leitura por grupo ou outros usuários." : "O .env possui permissões mais amplas que 0600.", "Execute chmod 600 .env no servidor Linux."));
+    const values = parseEnvironmentFile(fs.readFileSync(envPath, "utf8"));
     checks.push(...evaluateEnvironment(values));
 
     if (values.SAGEP_HOSTNAME) {

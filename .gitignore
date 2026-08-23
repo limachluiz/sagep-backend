@@ -7,7 +7,10 @@ src/generated/prisma/
 !src/generated/openapi.ts
 coverage
 .env
+.env.install-*
+.env.finalize-*
 .codex
 /backups/
 /pki/
 /tls/
+/deployment-output/

@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { parse } from "dotenv";
+import { parseEnvironmentFile } from "./env-file.mjs";
 
 const MANAGED_CHAINS = ["SAGEP-INGRESS-A", "SAGEP-INGRESS-B"];
 const HTTPS_PORTS = [80, 443];
@@ -178,7 +178,7 @@ async function main() {
   const options = argumentsFrom(process.argv.slice(2));
   if (options.mode === "remove") return removeFirewall(options.confirmed);
   if (!fs.existsSync(options.envPath)) throw new Error(`Arquivo não encontrado: ${options.envPath}`);
-  const values = parse(fs.readFileSync(options.envPath));
+  const values = parseEnvironmentFile(fs.readFileSync(options.envPath, "utf8"));
   const bindIp = (values.SAGEP_BIND_IP || "").trim();
   if (!isPrivateIpv4(bindIp)) throw new Error("SAGEP_BIND_IP deve ser um IPv4 privado e não pode ser 0.0.0.0");
   const networks = parseAllowedNetworks(values.SAGEP_ALLOWED_NETWORKS);

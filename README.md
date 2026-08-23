@@ -263,25 +263,39 @@ docker compose up -d --build
 
 ### Primeira inicialização segura
 
-Antes do primeiro acesso, gere uma chave de instalação com `openssl rand -hex 32`
-e grave o resultado em `SAGEP_SETUP_TOKEN` no `.env`. Quando o banco ainda não
-possuir usuários, o frontend direciona para `/setup`, onde o administrador informa
-os dados da OM, a primeira conta administrativa e os parâmetros básicos de rede.
-
-A chave nunca é armazenada no banco nem devolvida pela API. A inicialização usa
-uma transação serializável com trava no PostgreSQL e é encerrada definitivamente
-assim que o primeiro usuário é criado. Depois de concluir, remova
-`SAGEP_SETUP_TOKEN` do `.env` e recrie somente o container da API.
-
-Antes de subir os containers no servidor, execute a pré-validação local:
+Em uma instalação nova, use o fluxo assistido documentado em
+[`docs/INSTALLATION.md`](docs/INSTALLATION.md). O bootstrap do host instala apenas
+os pacotes necessários e não altera SSH ou firewall:
 
 ```bash
-npm run deployment:preflight
+sudo bash scripts/bootstrap-host.sh --install
+npm run deployment:install
 ```
 
-O comando é somente leitura, não imprime segredos e encerra com código diferente
-de zero quando encontra bloqueios em `.env`, Docker Compose, OpenSSL, DNS, IP
-privado ou requisitos mínimos de armazenamento.
+O instalador gera localmente as senhas, dois segredos JWT distintos e a chave
+temporária de primeira inicialização. O `.env` é criado de forma atômica com
+permissão `0600` e nunca é sobrescrito. Após configurar o DNS interno, a fase de
+implantação valida o ambiente, constrói as imagens, cria a autoridade exclusiva
+da OM dentro dos volumes protegidos, aplica o firewall antes de publicar 80/443
+e sobe o perfil HTTPS.
+
+Quando o banco ainda não possuir usuários, o frontend direciona para `/setup`,
+onde o administrador informa os dados da OM, a primeira conta administrativa e
+os parâmetros de rede. A chave nunca é armazenada no banco nem devolvida pela
+API. Depois de concluir, finalize a instalação para removê-la e recriar somente
+a API:
+
+```bash
+sudo /usr/bin/env node scripts/install-sagep.mjs \
+  --finalize --confirm-finalize REMOVER-CHAVE
+```
+
+Para instalações já configuradas, a pré-validação continua disponível sem
+dependências npm e sem imprimir segredos:
+
+```bash
+node scripts/check-deployment-preflight.mjs .env
+```
 
 O perfil HTTPS foi projetado para um servidor acessível somente na rede local da
 OM. O registro DNS interno deve apontar o nome escolhido para o IP privado

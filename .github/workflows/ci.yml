@@ -69,6 +69,13 @@ jobs:
       - name: Procurar segredos versionados
         run: npm run security:secrets
 
+      - name: Validar utilitários de instalação
+        run: |
+          bash -n scripts/bootstrap-host.sh
+          node --check scripts/env-file.mjs
+          node --check scripts/install-sagep.mjs
+          node --check scripts/manage-firewall.mjs
+
       - name: Gerar Prisma Client
         run: npm run prisma:generate
 
