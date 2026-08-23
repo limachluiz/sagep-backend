@@ -40,7 +40,8 @@ type AlertCategory =
   | "PROJETO_CONCLUIDO_NAO_PAGO"
   | "NE_PAGA_PROJETO_ABERTO"
   | "CERTIFICADO_HTTPS_VENCENDO"
-  | "CERTIFICADO_HTTPS_VENCIDO";
+  | "CERTIFICADO_HTTPS_VENCIDO"
+  | "CERTIFICADO_RENOVACAO_FALHOU";
 
 type AlertItem = {
   id: string;
@@ -99,6 +100,7 @@ const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
   NE_PAGA_PROJETO_ABERTO: [],
   CERTIFICADO_HTTPS_VENCENDO: [],
   CERTIFICADO_HTTPS_VENCIDO: [],
+  CERTIFICADO_RENOVACAO_FALHOU: [],
 };
 
 export class OperationalAlertsService {
@@ -586,6 +588,21 @@ export class OperationalAlertsService {
           },
         });
       }
+      if (certificate.renewalAutomation.lastResult === "FAILED") {
+        alerts.push({
+          id: "deployment:certificate:auto-renewal-failed",
+          category: "CERTIFICADO_RENOVACAO_FALHOU",
+          severity: "CRITICAL",
+          title: "Falha na renovação automática do HTTPS",
+          description: "A última tentativa automática não foi concluída. Verifique a autoridade da OM e execute a renovação manual.",
+          detailsPath: "/settings/network",
+          sourceUpdatedAt: certificate.renewalAutomation.lastAttemptAt ? new Date(certificate.renewalAutomation.lastAttemptAt) : now,
+          metadata: {
+            errorCode: certificate.renewalAutomation.lastErrorCode,
+            lastAttemptAt: certificate.renewalAutomation.lastAttemptAt,
+          },
+        });
+      }
     }
 
     const projectUpdatedAt = new Map(projects.map((project) => [project.id, project.updatedAt]));
@@ -621,6 +638,7 @@ export class OperationalAlertsService {
       NE_PAGA_PROJETO_ABERTO: [...emptyCategoryGroups.NE_PAGA_PROJETO_ABERTO],
       CERTIFICADO_HTTPS_VENCENDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCENDO],
       CERTIFICADO_HTTPS_VENCIDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCIDO],
+      CERTIFICADO_RENOVACAO_FALHOU: [...emptyCategoryGroups.CERTIFICADO_RENOVACAO_FALHOU],
     };
 
     for (const alert of alerts) {

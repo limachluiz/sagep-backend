@@ -2932,7 +2932,7 @@ export const openApiDocument: OpenApiDocument = {
       },
       CertificateStatus: {
         type: "object",
-        required: ["configured", "toolAvailable", "status"],
+        required: ["configured", "toolAvailable", "status", "renewalAutomation"],
         properties: {
           configured: { type: "boolean" }, toolAvailable: { type: "boolean" },
           status: { type: "string", enum: ["NOT_CONFIGURED", "VALID", "EXPIRING", "EXPIRED", "INVALID"] },
@@ -2940,6 +2940,21 @@ export const openApiDocument: OpenApiDocument = {
           expiresAt: { type: "string", format: "date-time" }, daysRemaining: { type: "integer" },
           fingerprintSha256: { type: "string" }, rootFingerprintSha256: { type: "string" },
           proxyRestartRequired: { type: "boolean" },
+          renewalAutomation: {
+            type: "object",
+            required: ["enabled", "renewBeforeDays", "checkIntervalHours", "proxyReloadMode", "lastCheckedAt", "lastAttemptAt", "lastRenewedAt", "lastResult", "lastErrorCode"],
+            properties: {
+              enabled: { type: "boolean" },
+              renewBeforeDays: { type: "integer", minimum: 15, maximum: 60 },
+              checkIntervalHours: { type: "integer", minimum: 1, maximum: 168 },
+              proxyReloadMode: { type: "string", enum: ["AUTOMATIC", "MANUAL"] },
+              lastCheckedAt: { type: ["string", "null"], format: "date-time" },
+              lastAttemptAt: { type: ["string", "null"], format: "date-time" },
+              lastRenewedAt: { type: ["string", "null"], format: "date-time" },
+              lastResult: { type: "string", enum: ["NEVER_RUN", "NOT_CONFIGURED", "NOT_DUE", "RENEWED", "FAILED"] },
+              lastErrorCode: { type: ["string", "null"] },
+            },
+          },
           renewalAlert: {
             type: ["object", "null"],
             properties: {
@@ -3039,7 +3054,7 @@ export const openApiDocument: OpenApiDocument = {
             type: "object",
             required: ["proxyRestartRequired", "trustRedistributionRequired", "recoveryFilename"],
             properties: {
-              proxyRestartRequired: { type: "boolean", enum: [true] },
+              proxyRestartRequired: { type: "boolean" },
               trustRedistributionRequired: { type: "boolean" },
               recoveryFilename: { type: ["string", "null"] },
             },

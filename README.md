@@ -161,6 +161,11 @@ Variáveis usadas atualmente:
 | `BACKUP_MAX_UPLOAD_MB` | nao | Limite para importação de arquivo `.dump`. Padrão `512` MB |
 | `DEPLOYMENT_PKI_DIRECTORY` | nao | Volume protegido da autoridade e do certificado HTTPS. No Docker use `/app/pki` |
 | `DEPLOYMENT_TLS_DIRECTORY` | nao | Volume que entrega somente certificado e chave do servidor ao proxy. No Docker use `/app/tls` |
+| `CERTIFICATE_AUTO_RENEW_ENABLED` | nao | Ativa a verificação e renovação automática. Padrão `true` |
+| `CERTIFICATE_AUTO_RENEW_DAYS` | nao | Renova quando a validade restante atingir este limite. Padrão `30` dias |
+| `CERTIFICATE_RENEWAL_CHECK_HOURS` | nao | Intervalo das verificações automáticas. Padrão `24` horas |
+| `CERTIFICATE_PROXY_AUTO_RELOAD` | nao | Informa se o ambiente recarrega o proxy automaticamente. O Compose define `true` |
+| `CERTIFICATE_RELOAD_CHECK_SECONDS` | nao | Intervalo do observador TLS do Caddy. Padrão `15` segundos |
 | `SAGEP_HOSTNAME` | no perfil HTTPS | Nome DNS interno completo, por exemplo `sagep.4cta.eb.mil.br` |
 | `SAGEP_BIND_IP` | no perfil HTTPS | IP privado do host no qual Caddy publicará 80/443. O padrão seguro é `127.0.0.1` |
 
@@ -204,6 +209,10 @@ BACKUP_RUN_ON_STARTUP=false
 BACKUP_MAX_UPLOAD_MB=512
 DEPLOYMENT_PKI_DIRECTORY=./pki
 DEPLOYMENT_TLS_DIRECTORY=./tls
+CERTIFICATE_AUTO_RENEW_ENABLED=true
+CERTIFICATE_AUTO_RENEW_DAYS=30
+CERTIFICATE_RENEWAL_CHECK_HOURS=24
+CERTIFICATE_PROXY_AUTO_RELOAD=false
 SAGEP_HOSTNAME=sagep.4cta.eb.mil.br
 SAGEP_BIND_IP=10.78.xxx.xxx
 ```
@@ -308,6 +317,13 @@ a autoridade existente. A impressão digital da raiz não muda e os kits instala
 continuam válidos. O SAGEP gera alertas aos 60, 30, 15 e 7 dias e torna o aviso
 crítico quando faltam até 7 dias ou quando o certificado já venceu. Após renovar,
 reinicie somente o Caddy para carregar o novo par TLS.
+
+Por padrão, a API verifica a validade na inicialização e a cada 24 horas. Quando
+restam 30 dias ou menos, renova automaticamente o certificado do servidor sem
+rotacionar a raiz. No perfil Docker HTTPS, um observador interno compara o
+checksum do par TLS e solicita a recarga ao Caddy pela interface administrativa
+restrita a `localhost:2019`; nenhuma porta administrativa é publicada. Falhas
+geram alerta crítico e permanecem visíveis no painel de implantação.
 
 Em **Configurações → Backup e restauração**, o administrador pode exportar a
 autoridade da OM em um arquivo `.sagep-pki` protegido por AES-256-GCM e senha de

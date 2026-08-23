@@ -105,6 +105,9 @@ describe("contratos HTTP transversais", () => {
     expect(operation["x-roles"]).toEqual(["ADMIN"]);
     expect(operation.parameters).toContainEqual({ $ref: "#/components/parameters/StepUpToken" });
     expect(operation.responses["201"].content["application/json"].schema).toEqual({ $ref: "#/components/schemas/CertificateStatus" });
+    const certificateSchema = (openApiDocument.components.schemas as Record<string, any>).CertificateStatus;
+    expect(certificateSchema.required).toContain("renewalAutomation");
+    expect(certificateSchema.properties.renewalAutomation.properties.proxyReloadMode.enum).toEqual(["AUTOMATIC", "MANUAL"]);
   });
 
   it("protege exportação e restauração da autoridade com reautenticação administrativa", () => {

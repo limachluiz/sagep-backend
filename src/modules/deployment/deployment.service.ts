@@ -19,6 +19,7 @@ import type {
 } from "./deployment.schemas.js";
 import { evaluateDeploymentPreflight } from "./deployment-preflight.js";
 import { getCertificateRenewalAlert } from "./certificate-lifecycle.js";
+import { getCertificateRenewalAutomationStatus } from "./certificate-renewal-state.js";
 import {
   authorityArchiveChecksum,
   authorityFingerprint,
@@ -152,7 +153,7 @@ export async function getDeploymentCertificateStatus() {
   const toolAvailable = await opensslAvailable();
 
   if (!(await fileExists(certificatePath)) || !(await fileExists(rootPath))) {
-    return { configured: false, toolAvailable, status: "NOT_CONFIGURED" as const };
+    return { configured: false, toolAvailable, status: "NOT_CONFIGURED" as const, renewalAutomation: getCertificateRenewalAutomationStatus() };
   }
 
   try {
@@ -177,9 +178,10 @@ export async function getDeploymentCertificateStatus() {
       fingerprintSha256: formatFingerprint(certificateFingerprint(server)),
       rootFingerprintSha256: formatFingerprint(certificateFingerprint(root)),
       renewalAlert: getCertificateRenewalAlert(status, daysRemaining),
+      renewalAutomation: getCertificateRenewalAutomationStatus(),
     };
   } catch {
-    return { configured: false, toolAvailable, status: "INVALID" as const };
+    return { configured: false, toolAvailable, status: "INVALID" as const, renewalAutomation: getCertificateRenewalAutomationStatus() };
   }
 }
 
@@ -373,7 +375,7 @@ export class DeploymentService {
     return getDeploymentCertificateStatus();
   }
 
-  async renewServerCertificate(actor: Actor) {
+  async renewServerCertificate(actor: Actor | null, trigger: "MANUAL" | "AUTOMATIC" = "MANUAL") {
     const configuration = await getConfiguration();
     if (!configuration.deploymentHostName) {
       throw new AppError("Configure o nome DNS antes de renovar o certificado", 409, "DEPLOYMENT_HOSTNAME_NOT_CONFIGURED");
@@ -413,9 +415,10 @@ export class DeploymentService {
 
     const renewed = await getDeploymentCertificateStatus();
     await auditService.log({
-      entityType: "SYSTEM_SETTINGS", entityId: CONFIGURATION_ID, action: "UPDATE", actor,
-      summary: "Certificado HTTPS do servidor renovado sem rotação da autoridade",
+      entityType: "SYSTEM_SETTINGS", entityId: CONFIGURATION_ID, action: "UPDATE", actor: actor ?? undefined,
+      summary: trigger === "AUTOMATIC" ? "Certificado HTTPS do servidor renovado automaticamente" : "Certificado HTTPS do servidor renovado sem rotação da autoridade",
       metadata: {
+        trigger,
         hostName: configuration.deploymentHostName,
         rootRotated: false,
         previousFingerprintSha256: before.fingerprintSha256 ?? null,
@@ -423,7 +426,7 @@ export class DeploymentService {
         rootFingerprintSha256: renewed.rootFingerprintSha256 ?? null,
       },
     });
-    return { ...renewed, proxyRestartRequired: true };
+    return { ...renewed, proxyRestartRequired: !env.CERTIFICATE_PROXY_AUTO_RELOAD };
   }
 
   async exportAuthorityBackup(input: ExportAuthorityBackupInput, actor: Actor) {
@@ -522,7 +525,7 @@ export class DeploymentService {
         trustRedistributionRequired,
       },
     });
-    return { ...restored, proxyRestartRequired: true, trustRedistributionRequired, recoveryFilename };
+    return { ...restored, proxyRestartRequired: !env.CERTIFICATE_PROXY_AUTO_RELOAD, trustRedistributionRequired, recoveryFilename };
   }
 
   async trustKit(platform: "windows" | "linux", actor: Actor) {

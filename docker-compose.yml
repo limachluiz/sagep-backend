@@ -62,6 +62,10 @@ services:
       BACKUP_MAX_UPLOAD_MB: ${BACKUP_MAX_UPLOAD_MB:-512}
       DEPLOYMENT_PKI_DIRECTORY: /app/pki
       DEPLOYMENT_TLS_DIRECTORY: /app/tls
+      CERTIFICATE_AUTO_RENEW_ENABLED: ${CERTIFICATE_AUTO_RENEW_ENABLED:-true}
+      CERTIFICATE_AUTO_RENEW_DAYS: ${CERTIFICATE_AUTO_RENEW_DAYS:-30}
+      CERTIFICATE_RENEWAL_CHECK_HOURS: ${CERTIFICATE_RENEWAL_CHECK_HOURS:-24}
+      CERTIFICATE_PROXY_AUTO_RELOAD: "true"
       SAGEP_HOSTNAME: ${SAGEP_HOSTNAME:-}
       SAGEP_BIND_IP: ${SAGEP_BIND_IP:-}
       SAGEP_SETUP_TOKEN: ${SAGEP_SETUP_TOKEN:-}
@@ -109,11 +113,14 @@ services:
       - frontend
     environment:
       SAGEP_HOSTNAME: ${SAGEP_HOSTNAME:-localhost}
+      CERTIFICATE_RELOAD_CHECK_SECONDS: ${CERTIFICATE_RELOAD_CHECK_SECONDS:-15}
+    command: ["/bin/sh", "/etc/caddy/watch-certificates.sh"]
     ports:
       - "${SAGEP_BIND_IP:-127.0.0.1}:80:80"
       - "${SAGEP_BIND_IP:-127.0.0.1}:443:443"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./caddy-watch-certificates.sh:/etc/caddy/watch-certificates.sh:ro
       - sagep_tls:/etc/caddy/pki:ro
       - sagep_caddy_data:/data
       - sagep_caddy_config:/config

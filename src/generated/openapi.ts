@@ -4286,6 +4286,22 @@ export interface components {
             fingerprintSha256?: string;
             rootFingerprintSha256?: string;
             proxyRestartRequired?: boolean;
+            renewalAutomation: {
+                enabled: boolean;
+                renewBeforeDays: number;
+                checkIntervalHours: number;
+                /** @enum {string} */
+                proxyReloadMode: "AUTOMATIC" | "MANUAL";
+                /** Format: date-time */
+                lastCheckedAt: string | null;
+                /** Format: date-time */
+                lastAttemptAt: string | null;
+                /** Format: date-time */
+                lastRenewedAt: string | null;
+                /** @enum {string} */
+                lastResult: "NEVER_RUN" | "NOT_CONFIGURED" | "NOT_DUE" | "RENEWED" | "FAILED";
+                lastErrorCode: string | null;
+            };
             renewalAlert?: {
                 /** @enum {integer} */
                 thresholdDays?: 60 | 30 | 15 | 7 | 0;
@@ -4373,8 +4389,7 @@ export interface components {
             confirmation: "RESTAURAR AUTORIDADE";
         };
         RestoreAuthorityBackupResponse: components["schemas"]["CertificateStatus"] & {
-            /** @enum {boolean} */
-            proxyRestartRequired: true;
+            proxyRestartRequired: boolean;
             trustRedistributionRequired: boolean;
             recoveryFilename: string | null;
         };

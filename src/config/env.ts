@@ -55,6 +55,16 @@ const envSchema = z
   BACKUP_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(4096).default(512),
   DEPLOYMENT_PKI_DIRECTORY: z.string().min(1).default("./pki"),
   DEPLOYMENT_TLS_DIRECTORY: z.string().min(1).default("./tls"),
+  CERTIFICATE_AUTO_RENEW_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((value) => value === "true"),
+  CERTIFICATE_AUTO_RENEW_DAYS: z.coerce.number().int().min(15).max(60).default(30),
+  CERTIFICATE_RENEWAL_CHECK_HOURS: z.coerce.number().int().min(1).max(168).default(24),
+  CERTIFICATE_PROXY_AUTO_RELOAD: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   SAGEP_HOSTNAME: z.string().trim().toLowerCase().optional(),
   SAGEP_BIND_IP: z.string().trim().optional(),
   SAGEP_SETUP_TOKEN: z.preprocess(
