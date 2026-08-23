@@ -28,5 +28,23 @@ export const trustKitPlatformSchema = z.object({
   platform: z.enum(["windows", "linux"]),
 });
 
+const authorityPassphrase = z.string().min(20, "A senha deve ter pelo menos 20 caracteres").max(256);
+
+export const exportAuthorityBackupSchema = z.object({
+  passphrase: authorityPassphrase,
+  passphraseConfirmation: authorityPassphrase,
+}).refine((input) => input.passphrase === input.passphraseConfirmation, {
+  message: "A confirmação da senha é diferente",
+  path: ["passphraseConfirmation"],
+});
+
+export const restoreAuthorityBackupSchema = z.object({
+  archiveBase64: z.string().min(1).max(1_500_000),
+  passphrase: authorityPassphrase,
+  confirmation: z.literal("RESTAURAR AUTORIDADE"),
+});
+
 export type UpdateDeploymentInput = z.infer<typeof updateDeploymentSchema>;
 export type InitializeInternalCertificateInput = z.infer<typeof initializeInternalCertificateSchema>;
+export type ExportAuthorityBackupInput = z.infer<typeof exportAuthorityBackupSchema>;
+export type RestoreAuthorityBackupInput = z.infer<typeof restoreAuthorityBackupSchema>;

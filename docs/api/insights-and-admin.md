@@ -23,6 +23,22 @@ variaveis `BACKUP_SCHEDULE_HOURS`, `BACKUP_RUN_ON_STARTUP`,
 `BACKUP_RETENTION_DAYS` e `BACKUP_MAX_FILES`. Os arquivos ficam no volume Docker
 persistente `sagep_backups`.
 
+## Custodia Da Autoridade Da OM
+
+Base: `/api/deployment/certificate/authority`. As duas operacoes exigem role
+`ADMIN`, permissao `settings.manage`, limite sensivel e reautenticacao recente.
+
+| Metodo | Rota | Uso |
+|---|---|---|
+| `POST` | `/deployment/certificate/authority/export` | Exporta a raiz e sua chave em arquivo `.sagep-pki` autenticado e criptografado. |
+| `POST` | `/deployment/certificate/authority/restore` | Valida a custodia, cria uma copia de recuperacao e reemite o certificado do servidor. |
+
+A senha de no minimo 20 caracteres existe apenas durante a operacao. O arquivo
+usa AES-256-GCM com chave derivada por scrypt e fica vinculado a sigla da OM. A
+restauracao rejeita adulteracao, senha incorreta, raiz nao autossinada, chave
+divergente ou fraca e validade insuficiente. Senhas e chaves nunca entram na
+auditoria; somente checksum, impressoes digitais e metadados operacionais.
+
 ## Auditoria
 
 Base:

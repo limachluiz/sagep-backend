@@ -17,4 +17,6 @@ deploymentRoutes.get("/preflight", requirePermission("system_health.view_details
 deploymentRoutes.put("/", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.update(req, res));
 deploymentRoutes.post("/certificate/internal", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.initializeCertificate(req, res));
 deploymentRoutes.post("/certificate/renew", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.renewCertificate(req, res));
+deploymentRoutes.post("/certificate/authority/export", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.exportAuthority(req, res));
+deploymentRoutes.post("/certificate/authority/restore", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.restoreAuthority(req, res));
 deploymentRoutes.get("/trust-kit/:platform", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.trustKit(req, res));

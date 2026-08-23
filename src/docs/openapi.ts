@@ -3015,6 +3015,37 @@ export const openApiDocument: OpenApiDocument = {
         required: ["hostName"],
         properties: { hostName: { type: "string", example: "sagep.4cta.eb.mil.br" }, rotate: { type: "boolean", default: false } },
       },
+      ExportAuthorityBackupRequest: {
+        type: "object",
+        required: ["passphrase", "passphraseConfirmation"],
+        properties: {
+          passphrase: { type: "string", minLength: 20, maxLength: 256, writeOnly: true },
+          passphraseConfirmation: { type: "string", minLength: 20, maxLength: 256, writeOnly: true },
+        },
+      },
+      RestoreAuthorityBackupRequest: {
+        type: "object",
+        required: ["archiveBase64", "passphrase", "confirmation"],
+        properties: {
+          archiveBase64: { type: "string", format: "byte", maxLength: 1500000, writeOnly: true },
+          passphrase: { type: "string", minLength: 20, maxLength: 256, writeOnly: true },
+          confirmation: { type: "string", enum: ["RESTAURAR AUTORIDADE"] },
+        },
+      },
+      RestoreAuthorityBackupResponse: {
+        allOf: [
+          { $ref: "#/components/schemas/CertificateStatus" },
+          {
+            type: "object",
+            required: ["proxyRestartRequired", "trustRedistributionRequired", "recoveryFilename"],
+            properties: {
+              proxyRestartRequired: { type: "boolean", enum: [true] },
+              trustRedistributionRequired: { type: "boolean" },
+              recoveryFilename: { type: ["string", "null"] },
+            },
+          },
+        ],
+      },
       DatabaseBackup: {
         type: "object",
         required: ["id", "kind", "filename", "createdAt", "sizeBytes", "checksumSha256", "format", "verified"],
@@ -4706,6 +4737,12 @@ export const openApiDocument: OpenApiDocument = {
     },
     "/deployment/certificate/renew": {
       post: withStepUp({ tags: ["deployment"], summary: "Renovar o certificado do servidor preservando a autoridade da OM", security: bearerSecurity, responses: { "201": createdJson("#/components/schemas/CertificateStatus"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/certificate/authority/export": {
+      post: withStepUp({ tags: ["deployment"], summary: "Exportar backup criptografado da autoridade interna", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/ExportAuthorityBackupRequest") }, responses: { "200": { description: "Arquivo criptografado da autoridade", content: binaryContent("application/octet-stream") }, ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/certificate/authority/restore": {
+      post: withStepUp({ tags: ["deployment"], summary: "Restaurar autoridade interna e reemitir o certificado do servidor", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/RestoreAuthorityBackupRequest") }, responses: { "200": okJson("#/components/schemas/RestoreAuthorityBackupResponse"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
     },
     "/deployment/trust-kit/{platform}": {
       get: withStepUp({ tags: ["deployment"], summary: "Baixar kit de confiança para uma plataforma cliente", security: bearerSecurity, parameters: [pathIdParameter("platform", "Plataforma cliente", { type: "string", enum: ["windows", "linux"] })], responses: { "200": { description: "Arquivo ZIP com certificado, scripts e impressão digital", content: binaryContent("application/zip") }, ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),

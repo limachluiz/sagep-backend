@@ -11,9 +11,23 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { AuditService } from "../audit/audit.service.js";
-import type { InitializeInternalCertificateInput, UpdateDeploymentInput } from "./deployment.schemas.js";
+import type {
+  ExportAuthorityBackupInput,
+  InitializeInternalCertificateInput,
+  RestoreAuthorityBackupInput,
+  UpdateDeploymentInput,
+} from "./deployment.schemas.js";
 import { evaluateDeploymentPreflight } from "./deployment-preflight.js";
 import { getCertificateRenewalAlert } from "./certificate-lifecycle.js";
+import {
+  authorityArchiveChecksum,
+  authorityFingerprint,
+  decryptAuthorityBackup,
+  encryptAuthorityBackup,
+  MAX_PKI_BACKUP_BYTES,
+  type AuthorityBackupPayload,
+  validateAuthorityMaterial,
+} from "./pki-backup.js";
 
 const runFile = promisify(execFile);
 const auditService = new AuditService();
@@ -85,6 +99,25 @@ function certificateFingerprint(certificate: X509Certificate) {
 
 function formatFingerprint(fingerprint: string) {
   return fingerprint.match(/.{1,2}/g)?.join(":") ?? fingerprint;
+}
+
+function archiveDate() {
+  return new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
+}
+
+function backupPayload(configuration: Awaited<ReturnType<typeof getConfiguration>>, rootCertificatePem: string, rootPrivateKeyPem: string): AuthorityBackupPayload {
+  const certificate = new X509Certificate(rootCertificatePem);
+  return {
+    format: "SAGEP_PKI_BACKUP",
+    version: 1,
+    createdAt: new Date().toISOString(),
+    organizationName: configuration.organizationName,
+    organizationAcronym: configuration.organizationAcronym,
+    hostName: configuration.deploymentHostName ?? "",
+    rootCertificatePem,
+    rootPrivateKeyPem,
+    rootFingerprintSha256: authorityFingerprint(certificate),
+  };
 }
 
 async function opensslAvailable() {
@@ -391,6 +424,105 @@ export class DeploymentService {
       },
     });
     return { ...renewed, proxyRestartRequired: true };
+  }
+
+  async exportAuthorityBackup(input: ExportAuthorityBackupInput, actor: Actor) {
+    const configuration = await getConfiguration();
+    const rootCertPath = path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_CERT);
+    const rootKeyPath = path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_KEY);
+    if (!(await fileExists(rootCertPath)) || !(await fileExists(rootKeyPath))) {
+      throw new AppError("A autoridade interna da OM não está disponível", 409, "CERTIFICATE_AUTHORITY_NOT_CONFIGURED");
+    }
+    const [rootCertificatePem, rootPrivateKeyPem] = await Promise.all([
+      fs.readFile(rootCertPath, "utf8"),
+      fs.readFile(rootKeyPath, "utf8"),
+    ]);
+    const payload = backupPayload(configuration, rootCertificatePem, rootPrivateKeyPem);
+    const validated = validateAuthorityMaterial(payload, configuration.organizationAcronym);
+    const buffer = await encryptAuthorityBackup(payload, input.passphrase);
+    const checksumSha256 = authorityArchiveChecksum(buffer);
+    const filename = `sagep-autoridade-${configuration.organizationAcronym.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "om"}-${archiveDate()}.sagep-pki`;
+    await auditService.log({
+      entityType: "SYSTEM_SETTINGS", entityId: CONFIGURATION_ID, action: "EXPORT", actor,
+      summary: "Backup criptografado da autoridade interna exportado",
+      metadata: { filename, sizeBytes: buffer.length, checksumSha256, rootFingerprintSha256: formatFingerprint(validated.fingerprint) },
+    });
+    return { buffer, filename };
+  }
+
+  async restoreAuthorityBackup(input: RestoreAuthorityBackupInput, actor: Actor) {
+    const configuration = await getConfiguration();
+    if (!configuration.deploymentHostName) {
+      throw new AppError("Configure o nome DNS antes de restaurar a autoridade", 409, "DEPLOYMENT_HOSTNAME_NOT_CONFIGURED");
+    }
+    if (!/^[A-Za-z0-9+/]+={0,2}$/.test(input.archiveBase64)) {
+      throw new AppError("Arquivo de autoridade inválido ou senha incorreta", 422, "INVALID_AUTHORITY_BACKUP");
+    }
+    const archive = Buffer.from(input.archiveBase64, "base64");
+    if (!archive.length || archive.length > MAX_PKI_BACKUP_BYTES) {
+      throw new AppError("Arquivo de autoridade inválido ou senha incorreta", 422, "INVALID_AUTHORITY_BACKUP");
+    }
+    const payload = await decryptAuthorityBackup(archive, input.passphrase);
+    const restoredAuthority = validateAuthorityMaterial(payload, configuration.organizationAcronym);
+    const currentStatus = await getDeploymentCertificateStatus();
+    let recoveryFilename: string | null = null;
+
+    try {
+      await withCertificateOperationLock(async () => {
+        await fs.mkdir(env.DEPLOYMENT_PKI_DIRECTORY, { recursive: true, mode: 0o700 });
+        await fs.mkdir(env.DEPLOYMENT_TLS_DIRECTORY, { recursive: true, mode: 0o700 });
+        const temporaryDirectory = await fs.mkdtemp(path.join(env.DEPLOYMENT_PKI_DIRECTORY, ".restore-"));
+        try {
+          const recoveredRootCert = path.join(temporaryDirectory, ROOT_CERT);
+          const recoveredRootKey = path.join(temporaryDirectory, ROOT_KEY);
+          await Promise.all([
+            fs.writeFile(recoveredRootCert, payload.rootCertificatePem, { mode: 0o644 }),
+            fs.writeFile(recoveredRootKey, payload.rootPrivateKeyPem, { mode: 0o600 }),
+          ]);
+          const server = await issueServerCertificate(configuration.deploymentHostName!, recoveredRootCert, recoveredRootKey, temporaryDirectory);
+
+          const currentRootCert = path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_CERT);
+          const currentRootKey = path.join(env.DEPLOYMENT_PKI_DIRECTORY, ROOT_KEY);
+          if (await fileExists(currentRootCert) && await fileExists(currentRootKey)) {
+            const [certificatePem, privateKeyPem] = await Promise.all([
+              fs.readFile(currentRootCert, "utf8"), fs.readFile(currentRootKey, "utf8"),
+            ]);
+            const recoveryPayload = backupPayload(configuration, certificatePem, privateKeyPem);
+            validateAuthorityMaterial(recoveryPayload, configuration.organizationAcronym);
+            const recoveryArchive = await encryptAuthorityBackup(recoveryPayload, input.passphrase);
+            recoveryFilename = `recovery-before-authority-restore-${archiveDate()}.sagep-pki`;
+            await fs.writeFile(path.join(env.DEPLOYMENT_PKI_DIRECTORY, recoveryFilename), recoveryArchive, { mode: 0o600, flag: "wx" });
+          }
+
+          await installGeneratedFile(recoveredRootKey, currentRootKey, 0o600);
+          await installGeneratedFile(recoveredRootCert, currentRootCert, 0o644);
+          await installGeneratedFile(server.serverKey, path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_KEY), 0o600);
+          await installGeneratedFile(server.serverCert, path.join(env.DEPLOYMENT_TLS_DIRECTORY, SERVER_CERT), 0o644);
+        } finally {
+          await fs.rm(temporaryDirectory, { recursive: true, force: true });
+        }
+      });
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("Não foi possível restaurar a autoridade interna", 503, "AUTHORITY_RESTORE_FAILED");
+    }
+
+    const restored = await getDeploymentCertificateStatus();
+    const trustRedistributionRequired = Boolean(currentStatus.rootFingerprintSha256 && currentStatus.rootFingerprintSha256 !== restored.rootFingerprintSha256);
+    await auditService.log({
+      entityType: "SYSTEM_SETTINGS", entityId: CONFIGURATION_ID, action: "RESTORE", actor,
+      summary: "Autoridade interna restaurada de backup criptografado",
+      metadata: {
+        hostName: configuration.deploymentHostName,
+        archiveCreatedAt: payload.createdAt,
+        archiveSha256: authorityArchiveChecksum(archive),
+        previousRootFingerprintSha256: currentStatus.rootFingerprintSha256 ?? null,
+        restoredRootFingerprintSha256: formatFingerprint(restoredAuthority.fingerprint),
+        recoveryFilename,
+        trustRedistributionRequired,
+      },
+    });
+    return { ...restored, proxyRestartRequired: true, trustRedistributionRequired, recoveryFilename };
   }
 
   async trustKit(platform: "windows" | "linux", actor: Actor) {

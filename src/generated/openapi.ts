@@ -1499,6 +1499,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/deployment/certificate/authority/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exportar backup criptografado da autoridade interna */
+        post: operations["deployment_post_certificate_authority_export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/certificate/authority/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restaurar autoridade interna e reemitir o certificado do servidor */
+        post: operations["deployment_post_certificate_authority_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/deployment/trust-kit/{platform}": {
         parameters: {
             query?: never;
@@ -4326,6 +4360,23 @@ export interface components {
             hostName: string;
             /** @default false */
             rotate: boolean;
+        };
+        ExportAuthorityBackupRequest: {
+            passphrase: string;
+            passphraseConfirmation: string;
+        };
+        RestoreAuthorityBackupRequest: {
+            /** Format: byte */
+            archiveBase64: string;
+            passphrase: string;
+            /** @enum {string} */
+            confirmation: "RESTAURAR AUTORIDADE";
+        };
+        RestoreAuthorityBackupResponse: components["schemas"]["CertificateStatus"] & {
+            /** @enum {boolean} */
+            proxyRestartRequired: true;
+            trustRedistributionRequired: boolean;
+            recoveryFilename: string | null;
         };
         DatabaseBackup: {
             /** Format: uuid */
@@ -7960,6 +8011,74 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CertificateStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_post_certificate_authority_export: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportAuthorityBackupRequest"];
+            };
+        };
+        responses: {
+            /** @description Arquivo criptografado da autoridade */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_post_certificate_authority_restore: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreAuthorityBackupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreAuthorityBackupResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

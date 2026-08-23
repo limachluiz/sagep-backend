@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import JSZip from "jszip";
@@ -15,6 +15,8 @@ const mocks = vi.hoisted(() => {
     deploymentAllowedNetworks: [] as string[],
     deploymentProxyUrl: null as string | null,
     deploymentCertificateMode: "INTERNAL_CA",
+    organizationName: "4º Centro de Telemática de Área",
+    organizationAcronym: "4º CTA",
     updatedAt: new Date(),
   };
   return {
@@ -84,4 +86,34 @@ describe("PKI interna da OM", () => {
       }),
     }));
   }, 30_000);
+
+  it("exporta, restaura e reemite o certificado usando a autoridade recuperada", async () => {
+    const service = new DeploymentService();
+    const original = await service.initializeInternalCertificate({ hostName: "sagep.4cta.eb.mil.br", rotate: true }, actor);
+    const backup = await service.exportAuthorityBackup({
+      passphrase: "senha de custodia exclusiva com vinte caracteres",
+      passphraseConfirmation: "senha de custodia exclusiva com vinte caracteres",
+    }, actor);
+
+    const rotated = await service.initializeInternalCertificate({ hostName: "sagep.4cta.eb.mil.br", rotate: true }, actor);
+    expect(rotated.rootFingerprintSha256).not.toBe(original.rootFingerprintSha256);
+
+    const restored = await service.restoreAuthorityBackup({
+      archiveBase64: backup.buffer.toString("base64"),
+      passphrase: "senha de custodia exclusiva com vinte caracteres",
+      confirmation: "RESTAURAR AUTORIDADE",
+    }, actor);
+
+    expect(restored).toMatchObject({
+      configured: true,
+      rootFingerprintSha256: original.rootFingerprintSha256,
+      proxyRestartRequired: true,
+      trustRedistributionRequired: true,
+    });
+    expect(restored.fingerprintSha256).not.toBe(original.fingerprintSha256);
+    expect(restored.recoveryFilename).toMatch(/^recovery-before-authority-restore-/);
+    const recoveryFiles = (await readdir(env.DEPLOYMENT_PKI_DIRECTORY)).filter((name) => name.endsWith(".sagep-pki"));
+    expect(recoveryFiles).toContain(restored.recoveryFilename);
+    expect((await readFile(path.join(env.DEPLOYMENT_PKI_DIRECTORY, restored.recoveryFilename!))).toString("utf8")).not.toContain("PRIVATE KEY");
+  }, 60_000);
 });

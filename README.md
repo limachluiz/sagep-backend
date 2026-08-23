@@ -309,6 +309,15 @@ continuam válidos. O SAGEP gera alertas aos 60, 30, 15 e 7 dias e torna o aviso
 crítico quando faltam até 7 dias ou quando o certificado já venceu. Após renovar,
 reinicie somente o Caddy para carregar o novo par TLS.
 
+Em **Configurações → Backup e restauração**, o administrador pode exportar a
+autoridade da OM em um arquivo `.sagep-pki` protegido por AES-256-GCM e senha de
+custódia. A senha nunca é armazenada. A restauração exige reautenticação,
+confirmação literal, correspondência com a sigla da OM, chave RSA de 4096 bits,
+certificado raiz autêntico e validade suficiente. Antes da troca, o SAGEP grava
+no volume `sagep_pki` uma cópia criptografada da autoridade corrente e reemite o
+certificado do servidor para o DNS configurado. Se a raiz mudar, redistribua os
+kits de confiança e reinicie o Caddy.
+
 Somente o modo **Autoridade interna por OM** está habilitado nesta versão. Modos
 de certificado importado ou ACME DNS-01 não são oferecidos até que possuam fluxo
 completo de validação, rotação e recuperação.
@@ -396,6 +405,7 @@ O módulo protegido por `backups.manage` e pela role `ADMIN` oferece:
 - restauração integral mediante confirmação explícita;
 - backup de segurança automático imediatamente antes de cada restauração;
 - bloqueio de operações simultâneas e modo de manutenção durante o restore.
+- exportação e recuperação criptografadas da autoridade certificadora da OM.
 
 As rotas estão documentadas no OpenAPI em `/api/docs` e os arquivos físicos não
 são expostos diretamente pelo servidor web.

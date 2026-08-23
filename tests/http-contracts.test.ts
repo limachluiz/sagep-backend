@@ -50,7 +50,7 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(173);
+    expect(operationIds).toHaveLength(175);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
@@ -105,6 +105,16 @@ describe("contratos HTTP transversais", () => {
     expect(operation["x-roles"]).toEqual(["ADMIN"]);
     expect(operation.parameters).toContainEqual({ $ref: "#/components/parameters/StepUpToken" });
     expect(operation.responses["201"].content["application/json"].schema).toEqual({ $ref: "#/components/schemas/CertificateStatus" });
+  });
+
+  it("protege exportação e restauração da autoridade com reautenticação administrativa", () => {
+    const paths = openApiDocument.paths as Record<string, any>;
+    for (const route of ["/deployment/certificate/authority/export", "/deployment/certificate/authority/restore"]) {
+      const operation = paths[route].post;
+      expect(operation["x-permissions"]).toEqual(["settings.manage"]);
+      expect(operation["x-roles"]).toEqual(["ADMIN"]);
+      expect(operation.parameters).toContainEqual({ $ref: "#/components/parameters/StepUpToken" });
+    }
   });
 
   it("documenta tarefas no detalhe contextual do projeto", () => {

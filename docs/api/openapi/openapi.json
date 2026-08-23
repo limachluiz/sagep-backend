@@ -6082,6 +6082,87 @@
           }
         }
       },
+      "ExportAuthorityBackupRequest": {
+        "type": "object",
+        "required": [
+          "passphrase",
+          "passphraseConfirmation"
+        ],
+        "properties": {
+          "passphrase": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 256,
+            "writeOnly": true
+          },
+          "passphraseConfirmation": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 256,
+            "writeOnly": true
+          }
+        }
+      },
+      "RestoreAuthorityBackupRequest": {
+        "type": "object",
+        "required": [
+          "archiveBase64",
+          "passphrase",
+          "confirmation"
+        ],
+        "properties": {
+          "archiveBase64": {
+            "type": "string",
+            "format": "byte",
+            "maxLength": 1500000,
+            "writeOnly": true
+          },
+          "passphrase": {
+            "type": "string",
+            "minLength": 20,
+            "maxLength": 256,
+            "writeOnly": true
+          },
+          "confirmation": {
+            "type": "string",
+            "enum": [
+              "RESTAURAR AUTORIDADE"
+            ]
+          }
+        }
+      },
+      "RestoreAuthorityBackupResponse": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CertificateStatus"
+          },
+          {
+            "type": "object",
+            "required": [
+              "proxyRestartRequired",
+              "trustRedistributionRequired",
+              "recoveryFilename"
+            ],
+            "properties": {
+              "proxyRestartRequired": {
+                "type": "boolean",
+                "enum": [
+                  true
+                ]
+              },
+              "trustRedistributionRequired": {
+                "type": "boolean"
+              },
+              "recoveryFilename": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "DatabaseBackup": {
         "type": "object",
         "required": [
@@ -12742,6 +12823,145 @@
         ],
         "x-step-up": true,
         "operationId": "deployment_post_certificate_renew"
+      }
+    },
+    "/deployment/certificate/authority/export": {
+      "post": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Exportar backup criptografado da autoridade interna",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExportAuthorityBackupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Arquivo criptografado da autoridade",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
+        "operationId": "deployment_post_certificate_authority_export"
+      }
+    },
+    "/deployment/certificate/authority/restore": {
+      "post": {
+        "tags": [
+          "deployment"
+        ],
+        "summary": "Restaurar autoridade interna e reemitir o certificado do servidor",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RestoreAuthorityBackupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RestoreAuthorityBackupResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "x-roles": [
+          "ADMIN"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
+        "operationId": "deployment_post_certificate_authority_restore"
       }
     },
     "/deployment/trust-kit/{platform}": {
