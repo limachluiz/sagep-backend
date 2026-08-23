@@ -55,6 +55,10 @@ const envSchema = z
   BACKUP_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(4096).default(512),
   DEPLOYMENT_PKI_DIRECTORY: z.string().min(1).default("./pki"),
   DEPLOYMENT_TLS_DIRECTORY: z.string().min(1).default("./tls"),
+  SAGEP_SETUP_TOKEN: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().min(32).max(256).optional(),
+  ),
 })
   .transform((env) => ({
     ...env,

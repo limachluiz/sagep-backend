@@ -21,6 +21,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/setup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verificar se a instalação inicial é necessária */
+        get: operations["setup_get_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/initialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inicializar a OM e o primeiro administrador uma única vez */
+        post: operations["setup_post_initialize"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/status": {
         parameters: {
             query?: never;
@@ -4174,6 +4208,43 @@ export interface components {
         DeploymentDiagnostics: {
             [key: string]: unknown;
         };
+        SetupStatus: {
+            requiresSetup: boolean;
+            setupTokenConfigured: boolean;
+        };
+        InitializeSetupRequest: {
+            setupToken: string;
+            administrator: {
+                name: string;
+                /** Format: email */
+                email: string;
+                password: string;
+            };
+            organization: {
+                name: string;
+                acronym: string;
+                cityName: string;
+                /** @enum {string} */
+                stateUf: "AM" | "RO" | "RR" | "AC";
+                uasg: string;
+                management: string;
+                timeZone: string;
+                commandName: string;
+            };
+            network: {
+                [key: string]: unknown;
+            };
+        };
+        InitializeSetupResponse: {
+            /** @enum {boolean} */
+            initialized: true;
+            administrator: {
+                [key: string]: unknown;
+            };
+            organization: {
+                [key: string]: unknown;
+            };
+        };
         InitializeInternalCertificateRequest: {
             /** @example sagep.4cta.eb.mil.br */
             hostName: string;
@@ -4508,6 +4579,56 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
+        };
+    };
+    setup_get_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatus"];
+                };
+            };
+        };
+    };
+    setup_post_initialize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializeSetupRequest"];
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializeSetupResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     health_get_status: {

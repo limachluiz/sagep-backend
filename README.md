@@ -252,6 +252,18 @@ docker compose up -d --build
 
 ## HTTPS interno por OM
 
+### Primeira inicialização segura
+
+Antes do primeiro acesso, gere uma chave de instalação com `openssl rand -hex 32`
+e grave o resultado em `SAGEP_SETUP_TOKEN` no `.env`. Quando o banco ainda não
+possuir usuários, o frontend direciona para `/setup`, onde o administrador informa
+os dados da OM, a primeira conta administrativa e os parâmetros básicos de rede.
+
+A chave nunca é armazenada no banco nem devolvida pela API. A inicialização usa
+uma transação serializável com trava no PostgreSQL e é encerrada definitivamente
+assim que o primeiro usuário é criado. Depois de concluir, remova
+`SAGEP_SETUP_TOKEN` do `.env` e recrie somente o container da API.
+
 O perfil HTTPS foi projetado para um servidor acessível somente na rede local da
 OM. O registro DNS interno deve apontar o nome escolhido para o IP privado
 reservado no DHCP. A publicação externa deve continuar bloqueada no UTM.

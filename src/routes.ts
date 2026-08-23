@@ -23,11 +23,13 @@ import { financialExecutionRoutes } from "./modules/financial-execution/financia
 import { systemSettingsRoutes } from "./modules/system-settings/system-settings.routes.js";
 import { backupsRoutes } from "./modules/backups/backups.routes.js";
 import { deploymentRoutes } from "./modules/deployment/deployment.routes.js";
+import { setupRoutes } from "./modules/setup/setup.routes.js";
 
 export const routes = Router();
 
 routes.use("/health", healthRoutes);
 routes.use("/docs", openApiRoutes);
+routes.use("/setup", setupRoutes);
 routes.use("/auth", authRoutes);
 routes.use("/audits", auditRoutes);
 routes.use("/users", usersRoutes);

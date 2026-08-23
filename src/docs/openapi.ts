@@ -28,6 +28,7 @@ const tagExternalDocs = {
   deployment: "./insights-and-admin.md",
   backups: "./insights-and-admin.md",
   health: "./README.md",
+  setup: "./insights-and-admin.md",
 };
 
 function jsonContent(schemaRef: string, example?: unknown) {
@@ -2933,6 +2934,38 @@ export const openApiDocument: OpenApiDocument = {
         type: "object",
         additionalProperties: true,
       },
+      SetupStatus: {
+        type: "object",
+        required: ["requiresSetup", "setupTokenConfigured"],
+        properties: {
+          requiresSetup: { type: "boolean" },
+          setupTokenConfigured: { type: "boolean" },
+        },
+      },
+      InitializeSetupRequest: {
+        type: "object",
+        required: ["setupToken", "administrator", "organization", "network"],
+        properties: {
+          setupToken: { type: "string", minLength: 32, writeOnly: true },
+          administrator: {
+            type: "object", required: ["name", "email", "password"],
+            properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 12, writeOnly: true } },
+          },
+          organization: {
+            type: "object", required: ["name", "acronym", "cityName", "stateUf", "uasg", "management", "timeZone", "commandName"],
+            properties: {
+              name: { type: "string" }, acronym: { type: "string" }, cityName: { type: "string" }, stateUf: { type: "string", enum: ["AM", "RO", "RR", "AC"] },
+              uasg: { type: "string", pattern: "^\\d{6}$" }, management: { type: "string", pattern: "^\\d{5}$" }, timeZone: { type: "string" }, commandName: { type: "string" },
+            },
+          },
+          network: { type: "object", additionalProperties: true },
+        },
+      },
+      InitializeSetupResponse: {
+        type: "object",
+        required: ["initialized", "administrator", "organization"],
+        properties: { initialized: { type: "boolean", enum: [true] }, administrator: { type: "object", additionalProperties: true }, organization: { type: "object", additionalProperties: true } },
+      },
       InitializeInternalCertificateRequest: {
         type: "object",
         required: ["hostName"],
@@ -3065,6 +3098,21 @@ export const openApiDocument: OpenApiDocument = {
         responses: {
           "200": okJson("#/components/schemas/HealthResponse"),
         },
+      },
+    },
+    "/setup/status": {
+      get: {
+        tags: ["setup"],
+        summary: "Verificar se a instalação inicial é necessária",
+        responses: { "200": okJson("#/components/schemas/SetupStatus") },
+      },
+    },
+    "/setup/initialize": {
+      post: {
+        tags: ["setup"],
+        summary: "Inicializar a OM e o primeiro administrador uma única vez",
+        requestBody: { required: true, content: jsonContent("#/components/schemas/InitializeSetupRequest") },
+        responses: { "201": createdJson("#/components/schemas/InitializeSetupResponse"), ...defaultErrorResponses },
       },
     },
     "/health/status": {
