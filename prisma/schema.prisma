@@ -220,6 +220,7 @@ model User {
   notificationDismissals        NotificationDismissal[]
   invoicesRegistered            Invoice[]                    @relation("InvoiceRegistrar")
   systemConfigurationsUpdated   SystemConfiguration[]        @relation("SystemConfigurationUpdater")
+  portalApiTokensUpdated        SystemConfiguration[]        @relation("PortalApiTokenUpdater")
   integrationChecksPerformed    IntegrationConnectionCheck[] @relation("IntegrationCheckActor")
   lastLoginAt                   DateTime?
   createdAt                     DateTime                     @default(now())
@@ -251,8 +252,12 @@ model SystemConfiguration {
   deploymentAllowedNetworks  String[] @default([])
   deploymentProxyUrl         String?
   deploymentCertificateMode  String   @default("INTERNAL_CA")
+  portalApiTokenEncrypted    String?
+  portalApiTokenUpdatedAt    DateTime?
+  portalApiTokenUpdatedById  String?
   updatedById                String?
   updatedBy                  User?    @relation("SystemConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  portalApiTokenUpdatedBy    User?    @relation("PortalApiTokenUpdater", fields: [portalApiTokenUpdatedById], references: [id], onDelete: SetNull)
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 }

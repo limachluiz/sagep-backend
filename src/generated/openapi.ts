@@ -1396,6 +1396,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system-settings/portal-api-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Cadastrar ou substituir o token protegido do Portal da Transparência */
+        put: operations["settings_put_systemSettings_portalApiToken"];
+        post?: never;
+        /**
+         * Remover o token protegido armazenado
+         * @description Se houver token no ambiente, ele volta a ser a fonte efetiva.
+         */
+        delete: operations["settings_delete_systemSettings_portalApiToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system-settings/connections/{provider}/test": {
         parameters: {
             query?: never;
@@ -4260,12 +4281,25 @@ export interface components {
             defaultBiddingYear?: number | null;
             defaultImmediateCommitment?: boolean;
             defaultEstimateGroup?: string;
-            portalApiToken?: {
-                [key: string]: unknown;
-            };
+            portalApiToken?: components["schemas"]["PortalApiTokenStatus"];
             connections?: {
                 [key: string]: unknown;
             };
+        };
+        PortalApiTokenStatus: {
+            configured: boolean;
+            /** @enum {string|null} */
+            source: "DATABASE" | "ENVIRONMENT" | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** @enum {string|null} */
+            encryption?: "DEDICATED" | "DERIVED" | null;
+        };
+        PortalApiTokenWriteRequest: {
+            token: string;
+        };
+        PortalApiTokenStatusResponse: {
+            portalApiToken: components["schemas"]["PortalApiTokenStatus"];
         };
         DeploymentSettings: {
             id?: string;
@@ -7828,6 +7862,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IntegrationConnectionCheck"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_put_systemSettings_portalApiToken: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalApiTokenWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalApiTokenStatusResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_delete_systemSettings_portalApiToken: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalApiTokenStatusResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

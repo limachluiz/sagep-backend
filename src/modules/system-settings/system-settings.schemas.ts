@@ -22,5 +22,10 @@ export const integrationProviderSchema = z.object({
   provider: z.enum(["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV", "PNCP"]),
 });
 
+export const portalApiTokenSchema = z.object({
+  token: z.string().trim().min(8, "Informe um token válido").max(512),
+});
+
 export type UpdateSystemSettingsInput = z.infer<typeof updateSystemSettingsSchema>;
 export type IntegrationProviderInput = z.infer<typeof integrationProviderSchema>["provider"];
+export type PortalApiTokenInput = z.infer<typeof portalApiTokenSchema>;

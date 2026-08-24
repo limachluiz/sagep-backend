@@ -3,8 +3,9 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { auditService } from "../audit/audit.service.js";
-import type { IntegrationProviderInput, UpdateSystemSettingsInput } from "./system-settings.schemas.js";
+import type { IntegrationProviderInput, PortalApiTokenInput, UpdateSystemSettingsInput } from "./system-settings.schemas.js";
 import { assertAllowedIntegrationUrl } from "../../shared/integration-url.js";
+import { decryptPortalApiToken, encryptPortalApiToken, secretEncryptionSource } from "../../shared/secret-envelope.js";
 
 const DEFAULTS = {
   id: "default",
@@ -23,22 +24,28 @@ const DEFAULTS = {
   defaultBiddingYear: null as number | null,
   defaultImmediateCommitment: true,
   defaultEstimateGroup: "3",
+  portalApiTokenEncrypted: null as string | null,
+  portalApiTokenUpdatedAt: null as Date | null,
+  portalApiTokenUpdatedById: null as string | null,
 };
 
 type CurrentUser = { id: string; name?: string; email: string };
 type ConnectionStatus = "OPERATIONAL" | "DEGRADED" | "UNAVAILABLE" | "NOT_CONFIGURED";
 
-function tokenSummary() {
-  const token = env.PORTAL_TRANSPARENCIA_API_TOKEN?.trim();
+function tokenSummary(settings: { portalApiTokenEncrypted?: string | null; portalApiTokenUpdatedAt?: Date | null }) {
+  const stored = Boolean(settings.portalApiTokenEncrypted);
+  const environment = Boolean(env.PORTAL_TRANSPARENCIA_API_TOKEN?.trim());
   return {
-    configured: Boolean(token),
-    masked: token ? `••••••••${token.slice(-4)}` : null,
-    source: "ENVIRONMENT" as const,
+    configured: stored || environment,
+    source: stored ? "DATABASE" as const : environment ? "ENVIRONMENT" as const : null,
+    updatedAt: stored ? settings.portalApiTokenUpdatedAt ?? null : null,
+    encryption: stored ? secretEncryptionSource() : null,
   };
 }
 
 function publicConfiguration<T extends Record<string, unknown>>(settings: T) {
-  return { ...settings, portalApiToken: tokenSummary() };
+  const { portalApiTokenEncrypted: _encrypted, portalApiTokenUpdatedById: _updatedBy, ...safe } = settings;
+  return { ...safe, portalApiToken: tokenSummary(settings) };
 }
 
 export class SystemSettingsService {
@@ -62,6 +69,69 @@ export class SystemSettingsService {
       ...settings,
       connections: Object.fromEntries(latestChecks.filter(Boolean).map((check) => [check!.provider, check])),
     });
+  }
+
+  async getPortalApiToken() {
+    const settings = await this.getEffective();
+    if (settings.portalApiTokenEncrypted) {
+      return decryptPortalApiToken(settings.portalApiTokenEncrypted);
+    }
+    return env.PORTAL_TRANSPARENCIA_API_TOKEN?.trim() || null;
+  }
+
+  async savePortalApiToken(input: PortalApiTokenInput, user: CurrentUser) {
+    const encrypted = encryptPortalApiToken(input.token);
+    const updatedAt = new Date();
+    const before = tokenSummary(await this.getEffective());
+    await prisma.systemConfiguration.upsert({
+      where: { id: "default" },
+      create: {
+        id: "default",
+        portalApiTokenEncrypted: encrypted,
+        portalApiTokenUpdatedAt: updatedAt,
+        portalApiTokenUpdatedById: user.id,
+      },
+      update: {
+        portalApiTokenEncrypted: encrypted,
+        portalApiTokenUpdatedAt: updatedAt,
+        portalApiTokenUpdatedById: user.id,
+      },
+    });
+    await auditService.log({
+      entityType: "SYSTEM_SETTINGS",
+      entityId: "PORTAL_TRANSPARENCIA_API_TOKEN",
+      action: "UPDATE",
+      actor: { id: user.id, name: user.name ?? user.email },
+      summary: before.configured ? "Token do Portal da Transparência substituído" : "Token do Portal da Transparência configurado",
+      before: { configured: before.configured, source: before.source },
+      after: { configured: true, source: "DATABASE" },
+      metadata: { secretValueLogged: false },
+    });
+    return { portalApiToken: tokenSummary(await this.getEffective()) };
+  }
+
+  async removePortalApiToken(user: CurrentUser) {
+    const before = tokenSummary(await this.getEffective());
+    await prisma.systemConfiguration.updateMany({
+      where: { id: "default" },
+      data: {
+        portalApiTokenEncrypted: null,
+        portalApiTokenUpdatedAt: null,
+        portalApiTokenUpdatedById: null,
+      },
+    });
+    const after = tokenSummary(await this.getEffective());
+    await auditService.log({
+      entityType: "SYSTEM_SETTINGS",
+      entityId: "PORTAL_TRANSPARENCIA_API_TOKEN",
+      action: "DELETE",
+      actor: { id: user.id, name: user.name ?? user.email },
+      summary: "Token armazenado do Portal da Transparência removido",
+      before: { configured: before.configured, source: before.source },
+      after: { configured: after.configured, source: after.source },
+      metadata: { environmentFallbackActive: after.source === "ENVIRONMENT", secretValueLogged: false },
+    });
+    return { portalApiToken: after };
   }
 
   async update(input: UpdateSystemSettingsInput, user: CurrentUser) {
@@ -131,7 +201,13 @@ export class SystemSettingsService {
   }
 
   private auditSnapshot(settings: Record<string, unknown>) {
-    return Object.fromEntries(Object.entries(settings).filter(([key]) => !["updatedById", "createdAt", "updatedAt"].includes(key))) as Record<string, string | number | boolean | null>;
+    return Object.fromEntries(Object.entries(settings).filter(([key]) => ![
+      "updatedById",
+      "createdAt",
+      "updatedAt",
+      "portalApiTokenEncrypted",
+      "portalApiTokenUpdatedById",
+    ].includes(key))) as Record<string, string | number | boolean | null>;
   }
 
   private async probeDatabase() {
@@ -152,7 +228,7 @@ export class SystemSettingsService {
 
   private async probePortal() {
     const settings = await this.getEffective();
-    const token = env.PORTAL_TRANSPARENCIA_API_TOKEN?.trim();
+    const token = await this.getPortalApiToken();
     if (!token) return this.result("NOT_CONFIGURED", performance.now(), null, "Token do Portal da Transparência não configurado", { tokenSource: "PORTAL_TRANSPARENCIA_API_TOKEN" });
     const url = new URL(`${settings.portalTransparenciaBaseUrl.replace(/\/$/, "")}/orgaos-siafi`);
     url.searchParams.set("pagina", "1");

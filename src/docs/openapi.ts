@@ -2920,8 +2920,28 @@ export const openApiDocument: OpenApiDocument = {
           portalTransparenciaBaseUrl: { type: "string", format: "uri" }, portalSyncIntervalMinutes: { type: "integer", minimum: 15 }, portalSyncOnStartup: { type: "boolean" },
           comprasGovBaseUrl: { type: "string", format: "uri" }, pncpBaseUrl: { type: "string", format: "uri" }, defaultBiddingNumber: { type: ["string", "null"] }, defaultBiddingYear: { type: ["integer", "null"] },
           defaultImmediateCommitment: { type: "boolean" }, defaultEstimateGroup: { type: "string" },
-          portalApiToken: { type: "object", additionalProperties: true }, connections: { type: "object", additionalProperties: true },
+          portalApiToken: { $ref: "#/components/schemas/PortalApiTokenStatus" }, connections: { type: "object", additionalProperties: true },
         },
+      },
+      PortalApiTokenStatus: {
+        type: "object",
+        required: ["configured", "source"],
+        properties: {
+          configured: { type: "boolean" },
+          source: { type: ["string", "null"], enum: ["DATABASE", "ENVIRONMENT", null] },
+          updatedAt: { type: ["string", "null"], format: "date-time" },
+          encryption: { type: ["string", "null"], enum: ["DEDICATED", "DERIVED", null] },
+        },
+      },
+      PortalApiTokenWriteRequest: {
+        type: "object",
+        required: ["token"],
+        properties: { token: { type: "string", minLength: 8, maxLength: 512, writeOnly: true } },
+      },
+      PortalApiTokenStatusResponse: {
+        type: "object",
+        required: ["portalApiToken"],
+        properties: { portalApiToken: { $ref: "#/components/schemas/PortalApiTokenStatus" } },
       },
       DeploymentSettings: {
         type: "object",
@@ -4736,6 +4756,10 @@ export const openApiDocument: OpenApiDocument = {
     },
     "/system-settings/connections/test": {
       post: withStepUp({ tags: ["settings"], summary: "Testar todas as conexões configuradas", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
+    },
+    "/system-settings/portal-api-token": {
+      put: withStepUp({ tags: ["settings"], summary: "Cadastrar ou substituir o token protegido do Portal da Transparência", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/PortalApiTokenWriteRequest") }, responses: { "200": okJson("#/components/schemas/PortalApiTokenStatusResponse"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
+      delete: withStepUp({ tags: ["settings"], summary: "Remover o token protegido armazenado", description: "Se houver token no ambiente, ele volta a ser a fonte efetiva.", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/PortalApiTokenStatusResponse"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
     },
     "/system-settings/connections/{provider}/test": {
       post: withStepUp({ tags: ["settings"], summary: "Testar uma conexão configurada", security: bearerSecurity, parameters: [pathIdParameter("provider", "Integração", { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] })], responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),

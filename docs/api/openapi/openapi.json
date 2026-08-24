@@ -5707,12 +5707,77 @@
             "type": "string"
           },
           "portalApiToken": {
-            "type": "object",
-            "additionalProperties": true
+            "$ref": "#/components/schemas/PortalApiTokenStatus"
           },
           "connections": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "PortalApiTokenStatus": {
+        "type": "object",
+        "required": [
+          "configured",
+          "source"
+        ],
+        "properties": {
+          "configured": {
+            "type": "boolean"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "DATABASE",
+              "ENVIRONMENT",
+              null
+            ]
+          },
+          "updatedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "encryption": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "DEDICATED",
+              "DERIVED",
+              null
+            ]
+          }
+        }
+      },
+      "PortalApiTokenWriteRequest": {
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "properties": {
+          "token": {
+            "type": "string",
+            "minLength": 8,
+            "maxLength": 512,
+            "writeOnly": true
+          }
+        }
+      },
+      "PortalApiTokenStatusResponse": {
+        "type": "object",
+        "required": [
+          "portalApiToken"
+        ],
+        "properties": {
+          "portalApiToken": {
+            "$ref": "#/components/schemas/PortalApiTokenStatus"
           }
         }
       },
@@ -12505,6 +12570,127 @@
         ],
         "x-step-up": true,
         "operationId": "settings_post_systemSettings_connections_test"
+      }
+    },
+    "/system-settings/portal-api-token": {
+      "put": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Cadastrar ou substituir o token protegido do Portal da Transparência",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortalApiTokenWriteRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalApiTokenStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
+        "operationId": "settings_put_systemSettings_portalApiToken"
+      },
+      "delete": {
+        "tags": [
+          "settings"
+        ],
+        "summary": "Remover o token protegido armazenado",
+        "description": "Se houver token no ambiente, ele volta a ser a fonte efetiva.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortalApiTokenStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "settings.manage"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
+        "operationId": "settings_delete_systemSettings_portalApiToken"
       }
     },
     "/system-settings/connections/{provider}/test": {

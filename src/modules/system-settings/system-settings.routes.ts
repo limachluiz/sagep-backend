@@ -11,5 +11,7 @@ const controller = new SystemSettingsController();
 systemSettingsRoutes.use(authMiddleware);
 systemSettingsRoutes.get("/", requirePermission("settings.view"), (req, res) => controller.get(req, res));
 systemSettingsRoutes.put("/", requirePermission("settings.manage"), requireStepUp, (req, res) => controller.update(req, res));
+systemSettingsRoutes.put("/portal-api-token", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.savePortalApiToken(req, res));
+systemSettingsRoutes.delete("/portal-api-token", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.removePortalApiToken(req, res));
 systemSettingsRoutes.post("/connections/test", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.testAll(req, res));
 systemSettingsRoutes.post("/connections/:provider/test", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.testOne(req, res));

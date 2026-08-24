@@ -617,6 +617,52 @@ describe("critical flows", () => {
     expect(response.body.code).toBe("CSRF_ORIGIN_DENIED");
   });
 
+  it("settings: armazena o token do Portal criptografado sem devolvê-lo ou auditá-lo", async () => {
+    const plaintext = "token-do-portal-super-secreto";
+    const reauthenticated = await request(app)
+      .post("/api/auth/reauthenticate")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ password })
+      .expect(200);
+    const authorization = { Authorization: `Bearer ${adminAuth.accessToken}` };
+
+    await request(app)
+      .put("/api/system-settings/portal-api-token")
+      .set(authorization)
+      .send({ token: plaintext })
+      .expect(428);
+
+    const saved = await request(app)
+      .put("/api/system-settings/portal-api-token")
+      .set(authorization)
+      .set("X-SAGEP-Reauth", reauthenticated.body.stepUpToken)
+      .send({ token: plaintext })
+      .expect(200);
+
+    expect(saved.body.portalApiToken).toMatchObject({ configured: true, source: "DATABASE" });
+    expect(JSON.stringify(saved.body)).not.toContain(plaintext);
+    const stored = await prisma.systemConfiguration.findUniqueOrThrow({ where: { id: "default" } });
+    expect(stored.portalApiTokenEncrypted).toBeTruthy();
+    expect(stored.portalApiTokenEncrypted).not.toContain(plaintext);
+
+    const settings = await request(app).get("/api/system-settings").set(authorization).expect(200);
+    expect(JSON.stringify(settings.body)).not.toContain(plaintext);
+    expect(JSON.stringify(settings.body)).not.toContain(stored.portalApiTokenEncrypted);
+
+    const audit = await prisma.auditLog.findFirst({
+      where: { entityType: "SYSTEM_SETTINGS", entityId: "PORTAL_TRANSPARENCIA_API_TOKEN" },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(JSON.stringify(audit)).not.toContain(plaintext);
+    expect(JSON.stringify(audit)).not.toContain(stored.portalApiTokenEncrypted);
+
+    await request(app)
+      .delete("/api/system-settings/portal-api-token")
+      .set(authorization)
+      .set("X-SAGEP-Reauth", reauthenticated.body.stepUpToken)
+      .expect(200);
+  });
+
   it("permissions persistence: role base is governed by persisted role permissions", async () => {
     const operationalPermission = await prisma.permission.findUniqueOrThrow({
       where: { code: "dashboard.view_operational" },

@@ -26,6 +26,7 @@ describe("homologação isolada no Pop!_OS", () => {
     expect(values.DATABASE_URL).toContain(`localhost:${homologationDefaults.postgresPort}`);
     expect(values.DOCKER_DATABASE_URL).toContain("postgres:5432");
     expect(values.CORS_ALLOWED_ORIGINS).toBe("https://sagep.homolog.test:58443");
+    expect(values.SAGEP_SECRETS_ENCRYPTION_KEY).toHaveLength(64);
     expect(values.API_PORT).not.toBe("3000");
     expect(values.POSTGRES_PORT).not.toBe("5432");
   });

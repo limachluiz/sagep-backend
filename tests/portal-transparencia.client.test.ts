@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { env } from "../src/config/env.js";
 import {
   buildCommitmentExternalCode,
   portalTransparenciaClient,
@@ -11,7 +10,10 @@ import {
 } from "../src/modules/financial-execution/financial-execution.schemas.js";
 
 vi.mock("../src/modules/system-settings/system-settings.service.js", () => ({
-  systemSettingsService: { getEffective: vi.fn().mockResolvedValue({ portalTransparenciaBaseUrl: "https://api.portaldatransparencia.gov.br/api-de-dados" }) },
+  systemSettingsService: {
+    getEffective: vi.fn().mockResolvedValue({ portalTransparenciaBaseUrl: "https://api.portaldatransparencia.gov.br/api-de-dados" }),
+    getPortalApiToken: vi.fn().mockResolvedValue("token-de-teste"),
+  },
 }));
 
 afterEach(() => vi.unstubAllGlobals());
@@ -50,7 +52,6 @@ describe("PortalTransparenciaClient", () => {
   });
 
   it("interpreta empenho, liquidação e pagamento retornados pela API pública", async () => {
-    env.PORTAL_TRANSPARENCIA_API_TOKEN = "token-de-teste";
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
       numeroDocumento: "2026NE000534",

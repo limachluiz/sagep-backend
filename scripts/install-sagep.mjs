@@ -53,6 +53,7 @@ export function generateInstallerSecrets(random = (bytes) => randomBytes(bytes).
     pgAdminPassword: random(24),
     jwtAccessSecret: random(32),
     jwtRefreshSecret: random(32),
+    secretsEncryptionKey: random(32),
     setupToken: random(32),
   };
 }
@@ -71,6 +72,7 @@ export function buildProductionEnvironment(inputAnswers, secrets = generateInsta
     DOCKER_DATABASE_URL: `postgresql://${postgresUser}:${secrets.postgresPassword}@postgres:5432/${postgresDatabase}?schema=public`,
     JWT_SECRET: secrets.jwtAccessSecret,
     JWT_REFRESH_SECRET: secrets.jwtRefreshSecret,
+    SAGEP_SECRETS_ENCRYPTION_KEY: secrets.secretsEncryptionKey,
     JWT_ACCESS_EXPIRES_IN: "15m",
     JWT_REFRESH_EXPIRES_IN: "7d",
     AUTH_REFRESH_COOKIE_NAME: "sagep_refresh",

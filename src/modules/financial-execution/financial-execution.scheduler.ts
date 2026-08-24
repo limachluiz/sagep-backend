@@ -3,16 +3,15 @@ import { portalTransparenciaClient } from "./portal-transparencia.client.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 
 export function startFinancialExecutionScheduler() {
-  if (!portalTransparenciaClient.isConfigured()) {
-    console.info("Sincronização automática de NE desativada: token do Portal da Transparência não configurado");
-    return null;
-  }
-
   let synchronizationRunning = false;
   let stopped = false;
   let timer: NodeJS.Timeout | null = null;
 
   const synchronize = async (trigger: "STARTUP" | "INTERVAL") => {
+    if (!await portalTransparenciaClient.isConfigured()) {
+      console.info("Sincronização automática de NE ignorada: token do Portal da Transparência não configurado", { trigger });
+      return;
+    }
     if (synchronizationRunning) {
       console.info("Sincronização automática de NE ignorada: ciclo anterior ainda em execução", { trigger });
       return;

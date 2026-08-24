@@ -1,4 +1,3 @@
-import { env } from "../../config/env.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { AppError } from "../../shared/app-error.js";
 
@@ -187,12 +186,12 @@ export function buildCommitmentExternalCode(managementUnit: string, management: 
 }
 
 export class PortalTransparenciaClient {
-  isConfigured() {
-    return Boolean(env.PORTAL_TRANSPARENCIA_API_TOKEN?.trim());
+  async isConfigured() {
+    return Boolean(await systemSettingsService.getPortalApiToken());
   }
 
   async fetchCommitmentNote(managementUnit: string, management: string, number: string): Promise<PortalCommitmentSnapshot> {
-    const token = env.PORTAL_TRANSPARENCIA_API_TOKEN?.trim();
+    const token = await systemSettingsService.getPortalApiToken();
     if (!token) {
       throw new AppError("Token do Portal da Transparência não configurado", 503, "PORTAL_TRANSPARENCIA_NOT_CONFIGURED");
     }

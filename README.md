@@ -138,6 +138,7 @@ Variáveis usadas atualmente:
 | `CORS_ALLOWED_ORIGINS` | nao | Lista de origens de navegador autorizadas, separadas por virgula. Vazia bloqueia origens externas |
 | `CORS_ALLOW_CREDENTIALS` | nao | Habilita credenciais CORS. Padrao `false` no modelo Bearer atual |
 | `JWT_REFRESH_SECRET` | sim | Segredo do refresh token |
+| `SAGEP_SECRETS_ENCRYPTION_KEY` | recomendada | Chave hexadecimal de 256 bits para segredos cadastrados pela interface; instalações anteriores usam derivação compatível até sua configuração |
 | `JWT_ACCESS_EXPIRES_IN` | sim | Expiração do access token |
 | `JWT_REFRESH_EXPIRES_IN` | sim | Expiração do refresh token |
 | `AUTH_REFRESH_COOKIE_NAME` | nao | Nome do cookie HttpOnly de renovação. Padrão `sagep_refresh` |
