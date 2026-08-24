@@ -82,7 +82,7 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/assets ./src/assets
 COPY --from=build /app/src/generated ./src/generated
 
-RUN mkdir -p /app/backups \
+RUN mkdir -p /app/backups /app/evidence-files \
   && chown -R sagep:sagep /app /home/sagep \
   && test -x /usr/bin/chromium \
   && chromium --version \
