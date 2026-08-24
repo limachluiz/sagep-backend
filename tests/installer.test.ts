@@ -9,6 +9,7 @@ import {
   atomicEnvironmentWrite,
   generateInstallerSecrets,
   renderFirewallService,
+  renderHomologationNetworkService,
   validateInstallerAnswers,
 } from "../scripts/install-sagep.mjs";
 
@@ -54,6 +55,14 @@ describe("instalador assistido", () => {
       "/opt/sagep-homolog/sagep-backend/.env.homolog",
     );
     expect(homologation).toContain("--env /opt/sagep-homolog/sagep-backend/.env.homolog");
+  });
+
+  it("restaura o IPv4 da homologação antes do Docker iniciar", () => {
+    const unit = renderHomologationNetworkService("192.168.250.10");
+    expect(unit).toContain("Before=docker.service");
+    expect(unit).toContain("ExecStart=/usr/sbin/ip address replace 192.168.250.10/32 dev lo");
+    expect(unit).toContain("WantedBy=multi-user.target");
+    expect(() => renderHomologationNetworkService("0.0.0.0")).toThrow(/inválido/);
   });
 
   it("preserva proprietário, grupo e permissão ao finalizar o ambiente", async () => {

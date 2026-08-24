@@ -51,7 +51,10 @@ getent hosts sagep.homolog.test
 ```
 
 Se o endereço já existir, `ip` responderá `File exists`; isso não exige nova
-alteração. O nome deve resolver exatamente para `192.168.250.10`.
+alteração. O nome deve resolver exatamente para `192.168.250.10`. O comando é
+necessário apenas na primeira implantação: o instalador habilita
+`sagep-homolog-network.service`, que restaura o endereço antes do Docker nos
+boots seguintes.
 
 ## 4. Pré-validar e implantar
 
@@ -64,13 +67,16 @@ sudo /usr/bin/env node scripts/install-sagep.mjs \
 
 O instalador constrói as imagens, inicializa a autoridade da homologação, aplica
 somente o namespace `SAGEP-HML` do firewall, sobe os containers isolados e
-instala `sagep-homolog-firewall.service`. O ambiente já existente mantém seus
-containers, volumes, portas e regras.
+instala `sagep-homolog-network.service` e `sagep-homolog-firewall.service`. O
+primeiro restaura o IPv4 antes do Docker; o segundo reaplica somente as regras
+da homologação depois que a cadeia `DOCKER-USER` estiver disponível. O ambiente
+já existente mantém seus containers, volumes, portas e regras.
 
 ## 5. Conferir o resultado
 
 ```bash
 docker compose --env-file .env.homolog --profile https ps
+systemctl is-active sagep-homolog-network.service
 sudo node scripts/manage-firewall.mjs --env .env.homolog --check
 curl -fsS http://127.0.0.1:53000/api/health/status
 ```
@@ -100,6 +106,7 @@ Execute somente ao encerrar definitivamente a homologação:
 
 ```bash
 sudo systemctl disable --now sagep-homolog-firewall.service
+sudo systemctl disable --now sagep-homolog-network.service
 sudo node scripts/manage-firewall.mjs --env .env.homolog --remove --confirm
 sudo ip address del 192.168.250.10/32 dev lo
 ```

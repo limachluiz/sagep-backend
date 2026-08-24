@@ -130,6 +130,11 @@ export function renderFirewallService(rootDirectory, environmentPath = path.join
   return `[Unit]\nDescription=SAGEP - restrição de acesso HTTPS por CIDR\nRequires=docker.service\nAfter=docker.service network-online.target\nPartOf=docker.service\n\n[Service]\nType=oneshot\nWorkingDirectory=${rootDirectory}\nExecStart=/usr/bin/env node ${rootDirectory}/scripts/manage-firewall.mjs --apply --env ${environmentPath}\nExecReload=/usr/bin/env node ${rootDirectory}/scripts/manage-firewall.mjs --apply --env ${environmentPath}\nRemainAfterExit=yes\n\n[Install]\nWantedBy=docker.service\n`;
 }
 
+export function renderHomologationNetworkService(bindIp) {
+  if (!isPrivateIpv4(bindIp)) throw new Error("SAGEP_BIND_IP inválido para persistência da homologação");
+  return `[Unit]\nDescription=SAGEP homologação - endereço IPv4 de loopback\nAfter=network-pre.target\nBefore=docker.service\n\n[Service]\nType=oneshot\nExecStart=/usr/sbin/ip address replace ${bindIp}/32 dev lo\nRemainAfterExit=yes\n\n[Install]\nWantedBy=multi-user.target\n`;
+}
+
 export async function atomicEnvironmentWrite(envPath, content, operation) {
   const temporary = `${envPath}.${operation}-${process.pid}`;
   const existingStats = operation === "install" ? undefined : await fsp.lstat(envPath);
@@ -185,12 +190,12 @@ async function askAnswers() {
     const hostName = await terminal.question("Nome DNS interno completo [sagep.4cta.eb.mil.br]: ");
     const bindIp = await terminal.question("IPv4 privado reservado do servidor: ");
     const allowedNetworks = await terminal.question("Redes CIDR autorizadas, separadas por vírgula [10.78.0.0/16]: ");
-    const pgAdminEmail = await terminal.question("E-mail administrativo do pgAdmin [admin@sagep.local]: ");
+    const pgAdminEmail = await terminal.question("E-mail administrativo do pgAdmin [admin@sagep.4cta.eb.mil.br]: ");
     return validateInstallerAnswers({
       hostName: hostName || "sagep.4cta.eb.mil.br",
       bindIp,
       allowedNetworks: allowedNetworks || "10.78.0.0/16",
-      pgAdminEmail: pgAdminEmail || "admin@sagep.local",
+      pgAdminEmail: pgAdminEmail || "admin@sagep.4cta.eb.mil.br",
     });
   } finally {
     terminal.close();
@@ -247,6 +252,16 @@ async function installFirewallService(envPath) {
   await fsp.chmod(servicePath, 0o644);
   run("systemctl", ["daemon-reload"]);
   run("systemctl", ["enable", "--now", `${serviceName}.service`]);
+}
+
+async function installHomologationNetworkService(envPath) {
+  if (path.basename(envPath) !== ".env.homolog") return;
+  const environment = parseEnvironmentFile(await fsp.readFile(envPath, "utf8"));
+  const servicePath = "/etc/systemd/system/sagep-homolog-network.service";
+  await fsp.writeFile(servicePath, renderHomologationNetworkService(environment.SAGEP_BIND_IP), { encoding: "utf8", mode: 0o644 });
+  await fsp.chmod(servicePath, 0o644);
+  run("systemctl", ["daemon-reload"]);
+  run("systemctl", ["enable", "--now", "sagep-homolog-network.service"]);
 }
 
 function deploy(envPath, cloneAllowed) {
@@ -311,6 +326,7 @@ async function main() {
   }
   if (!options.confirmDeploy) throw new Error("A implantação exige --confirm-deploy IMPLANTAR");
   deploy(options.envPath, options.cloneFrontend);
+  await installHomologationNetworkService(options.envPath);
   await installFirewallService(options.envPath);
   const deployedEnvironment = parseEnvironmentFile(fs.readFileSync(options.envPath, "utf8"));
   const httpsPort = deployedEnvironment.SAGEP_HTTPS_PORT || "443";
