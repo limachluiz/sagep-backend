@@ -22,7 +22,7 @@ describe("firewall por CIDR", () => {
   it("autoriza as redes declaradas e rejeita o restante", () => {
     expect(desiredChainRules("SAGEP-INGRESS-A", ["10.78.0.0/16"])).toEqual([
       ["-A", "SAGEP-INGRESS-A", "-s", "10.78.0.0/16", "-j", "RETURN"],
-      ["-A", "SAGEP-INGRESS-A", "-j", "REJECT", "--reject-with", "tcp-reset"],
+      ["-A", "SAGEP-INGRESS-A", "-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset"],
     ]);
   });
 

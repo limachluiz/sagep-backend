@@ -67,7 +67,7 @@ export function parseAllowedNetworks(value) {
 export function desiredChainRules(chain, networks) {
   return [
     ...networks.map((network) => ["-A", chain, "-s", network, "-j", "RETURN"]),
-    ["-A", chain, "-j", "REJECT", "--reject-with", "tcp-reset"],
+    ["-A", chain, "-p", "tcp", "-j", "REJECT", "--reject-with", "tcp-reset"],
   ];
 }
 
