@@ -9,7 +9,9 @@ WORKDIR /app
 
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
-RUN npx puppeteer browsers install chrome \
+RUN rm -rf /opt/puppeteer \
+  && mkdir -p /opt/puppeteer \
+  && npx puppeteer browsers install chrome \
   && node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; const executable = await puppeteer.executablePath(); fs.accessSync(executable, fs.constants.X_OK); console.log(`Chrome disponível em ${executable}`);'
 
 COPY prisma ./prisma

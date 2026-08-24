@@ -46,7 +46,8 @@ describe("homologação isolada no Pop!_OS", () => {
 
   it("inclui e valida o Chrome exigido pelo Puppeteer na imagem final", async () => {
     const dockerfile = await readFile("Dockerfile", "utf8");
-    expect(dockerfile).toContain("RUN npx puppeteer browsers install chrome");
+    expect(dockerfile).toContain("RUN rm -rf /opt/puppeteer");
+    expect(dockerfile).toContain("&& npx puppeteer browsers install chrome");
     expect(dockerfile).toContain("COPY --from=build /opt/puppeteer /opt/puppeteer");
     expect(dockerfile).toContain("ENV PUPPETEER_SKIP_DOWNLOAD=true");
     expect(dockerfile.match(/puppeteer\.executablePath\(\)/g)).toHaveLength(2);
