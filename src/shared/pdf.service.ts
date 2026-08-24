@@ -7,6 +7,11 @@ type PdfRenderOptions = {
   pdfOptions: PDFOptions;
 };
 
+export function configuredBrowserExecutablePath(value = process.env.PUPPETEER_EXECUTABLE_PATH) {
+  const executablePath = value?.trim();
+  return executablePath || undefined;
+}
+
 class PdfService {
   private browserPromise: Promise<Browser> | null = null;
 
@@ -78,6 +83,7 @@ trailer
     this.browserPromise = puppeteer
       .launch({
         headless: true,
+        executablePath: configuredBrowserExecutablePath(),
         args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
         timeout: env.PDF_TIMEOUT_MS,
       })

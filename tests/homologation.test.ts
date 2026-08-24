@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { parseEnvironmentFile } from "../scripts/env-file.mjs";
 import { generateInstallerSecrets } from "../scripts/install-sagep.mjs";
+import { configuredBrowserExecutablePath } from "../src/shared/pdf.service.js";
 import {
   buildHomologationEnvironment,
   homologationDefaults,
@@ -44,13 +45,15 @@ describe("homologação isolada no Pop!_OS", () => {
     expect(compose).toContain("name: ${SAGEP_VOLUME_PREFIX:-sagep}_postgres_data");
   });
 
-  it("inclui e valida o Chrome exigido pelo Puppeteer na imagem final", async () => {
+  it("usa o Chromium empacotado pelo Debian sem download externo do Puppeteer", async () => {
     const dockerfile = await readFile("Dockerfile", "utf8");
-    expect(dockerfile).toContain("RUN rm -rf /opt/puppeteer");
-    expect(dockerfile).toContain("&& npx puppeteer browsers install chrome");
-    expect(dockerfile).toContain("COPY --from=build /opt/puppeteer /opt/puppeteer");
+    expect(dockerfile).toContain("ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium");
     expect(dockerfile).toContain("ENV PUPPETEER_SKIP_DOWNLOAD=true");
-    expect(dockerfile.match(/puppeteer\.executablePath\(\)/g)).toHaveLength(2);
+    expect(dockerfile).toMatch(/\n\s+chromium \\\n/);
+    expect(dockerfile).toContain("&& test -x /usr/bin/chromium");
+    expect(dockerfile).not.toContain("puppeteer browsers install");
+    expect(configuredBrowserExecutablePath(" /usr/bin/chromium ")).toBe("/usr/bin/chromium");
+    expect(configuredBrowserExecutablePath(" ")).toBeUndefined();
   });
 
   it("executa a pré-validação completa e propaga seus bloqueios", () => {

@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim AS build
 
-ENV PUPPETEER_CACHE_DIR=/opt/puppeteer
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 # URL sintaticamente valida usada apenas pelo Prisma durante a geracao.
 # A URL real e injetada em tempo de execucao pelo ambiente.
 ENV DATABASE_URL=postgresql://localhost:5432/sagep?schema=public
@@ -9,10 +9,6 @@ WORKDIR /app
 
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
-RUN rm -rf /opt/puppeteer \
-  && mkdir -p /opt/puppeteer \
-  && npx puppeteer browsers install chrome \
-  && node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; const executable = await puppeteer.executablePath(); fs.accessSync(executable, fs.constants.X_OK); console.log(`Chrome disponível em ${executable}`);'
 
 COPY prisma ./prisma
 COPY tsconfig.json prisma.config.ts ./
@@ -24,8 +20,8 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
-ENV PUPPETEER_CACHE_DIR=/opt/puppeteer
 ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 
 WORKDIR /app
 
@@ -34,6 +30,7 @@ RUN groupadd --system sagep && useradd --system --gid sagep --create-home sagep
 RUN apt-get update \
   && apt-get install -y --no-install-recommends \
     ca-certificates \
+    chromium \
     curl \
     fonts-liberation \
     libasound2 \
@@ -84,11 +81,12 @@ COPY prisma.config.ts ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/assets ./src/assets
 COPY --from=build /app/src/generated ./src/generated
-COPY --from=build /opt/puppeteer /opt/puppeteer
 
 RUN mkdir -p /app/backups \
-  && chown -R sagep:sagep /app /home/sagep /opt/puppeteer \
-  && node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; const executable = await puppeteer.executablePath(); fs.accessSync(executable, fs.constants.X_OK); console.log(`Chrome disponível em ${executable}`);'
+  && chown -R sagep:sagep /app /home/sagep \
+  && test -x /usr/bin/chromium \
+  && chromium --version \
+  && node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; const executable = await puppeteer.executablePath(); fs.accessSync(executable, fs.constants.X_OK); console.log(`Chromium disponível em ${executable}`);'
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
