@@ -63,6 +63,8 @@ services:
       BACKUP_SCHEDULE_HOURS: ${BACKUP_SCHEDULE_HOURS:-24}
       BACKUP_RUN_ON_STARTUP: ${BACKUP_RUN_ON_STARTUP:-true}
       BACKUP_MAX_UPLOAD_MB: ${BACKUP_MAX_UPLOAD_MB:-512}
+      EVIDENCE_DIRECTORY: /app/evidence-files
+      EVIDENCE_MAX_UPLOAD_MB: ${EVIDENCE_MAX_UPLOAD_MB:-100}
       DEPLOYMENT_PKI_DIRECTORY: /app/pki
       DEPLOYMENT_TLS_DIRECTORY: /app/tls
       CERTIFICATE_AUTO_RENEW_ENABLED: ${CERTIFICATE_AUTO_RENEW_ENABLED:-true}
@@ -79,6 +81,7 @@ services:
       - sagep_backups:/app/backups
       - sagep_pki:/app/pki
       - sagep_tls:/app/tls
+      - sagep_evidence_files:/app/evidence-files
     security_opt:
       - no-new-privileges:true
 
@@ -140,6 +143,8 @@ volumes:
     name: ${SAGEP_VOLUME_PREFIX:-sagep}_pki
   sagep_tls:
     name: ${SAGEP_VOLUME_PREFIX:-sagep}_tls
+  sagep_evidence_files:
+    name: ${SAGEP_VOLUME_PREFIX:-sagep}_evidence_files
   sagep_caddy_data:
     name: ${SAGEP_VOLUME_PREFIX:-sagep}_caddy_data
   sagep_caddy_config:

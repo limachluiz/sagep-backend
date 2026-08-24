@@ -35,6 +35,7 @@ type ProjectStageValue =
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
+  | "ENTREGA_TECNICA"
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
@@ -91,6 +92,8 @@ type RegisterSignedServiceOrderInput = {
   signedServiceOrderReceivedAt: Date;
   signedServiceOrderNotes?: string;
 };
+
+type RegisterDeliveryReportSignatureInput = { signedAt: Date; signedLink?: string };
 
 type CancelCommitmentNoteInput = {
   reason: string;
@@ -252,6 +255,7 @@ export class ProjectsService {
       AGUARDANDO_INICIO_EXECUCAO: "Aguardando início da execução",
       SERVICO_EM_EXECUCAO: "Serviço em execução",
       ANALISANDO_AS_BUILT: "Analisando As-Built", ATESTAR_NF: "Atestar NF",
+      ENTREGA_TECNICA: "Entrega técnica",
       SERVICO_CONCLUIDO: "Serviço concluído", CANCELADO: "Cancelado",
     };
     return {
@@ -515,6 +519,8 @@ export class ProjectsService {
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
+    deliveryReportGeneratedAt?: Date | null;
+    deliveryReportSignedAt?: Date | null;
   }) {
     return {
       id: project.id,
@@ -551,6 +557,8 @@ export class ProjectsService {
       asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
       serviceCompletedAt: project.serviceCompletedAt ?? null,
+      deliveryReportGeneratedAt: project.deliveryReportGeneratedAt ?? null,
+      deliveryReportSignedAt: project.deliveryReportSignedAt ?? null,
     };
   }
 
@@ -578,6 +586,8 @@ export class ProjectsService {
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
+    deliveryReportGeneratedAt?: Date | null;
+    deliveryReportSignedAt?: Date | null;
   }) {
     return {
       id: project.id,
@@ -647,6 +657,8 @@ export class ProjectsService {
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
+    deliveryReportGeneratedAt?: Date | null;
+    deliveryReportSignedAt?: Date | null;
     estimates: { status: string }[];
     diexRequests: unknown[];
     serviceOrders: unknown[];
@@ -801,7 +813,7 @@ export class ProjectsService {
           code: "ATESTAR_NF",
           label: "Registrar atesto da NF",
           severity: "BLOCKER",
-          targetStage: "SERVICO_CONCLUIDO",
+          targetStage: "ENTREGA_TECNICA",
         });
       }
 
@@ -810,8 +822,16 @@ export class ProjectsService {
           code: "CONCLUIR_SERVICO",
           label: "Registrar conclusão do serviço",
           severity: "BLOCKER",
-          targetStage: "SERVICO_CONCLUIDO",
+          targetStage: "ENTREGA_TECNICA",
         });
+      }
+    }
+
+    if (project.stage === "ENTREGA_TECNICA") {
+      if (!project.deliveryReportGeneratedAt) {
+        pendingActions.push({ code: "GERAR_RELATORIO_ENTREGA", label: "Gerar relatório técnico de entrega", severity: "BLOCKER", targetStage: "ENTREGA_TECNICA" });
+      } else if (!project.deliveryReportSignedAt) {
+        pendingActions.push({ code: "REGISTRAR_RELATORIO_ASSINADO", label: "Confirmar revisão e assinatura do relatório", severity: "BLOCKER", targetStage: "ENTREGA_TECNICA" });
       }
     }
 
@@ -1390,6 +1410,9 @@ export class ProjectsService {
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
+        deliveryReportGeneratedAt: true,
+        deliveryReportSignedAt: true,
+        deliveryReportSignedLink: true,
         archivedAt: true,
         deletedAt: true,
         createdAt: true,
@@ -1627,6 +1650,9 @@ export class ProjectsService {
           asBuiltRejectionReason: project.asBuiltRejectionReason,
           invoiceAttestedAt: project.invoiceAttestedAt,
           serviceCompletedAt: project.serviceCompletedAt,
+          deliveryReportGeneratedAt: project.deliveryReportGeneratedAt,
+          deliveryReportSignedAt: project.deliveryReportSignedAt,
+          deliveryReportSignedLink: project.deliveryReportSignedLink,
         },
         serviceOrderSignature: {
           required: project.serviceOrderSignatureRequired,
@@ -1803,6 +1829,9 @@ export class ProjectsService {
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
+        deliveryReportGeneratedAt: true,
+        deliveryReportSignedAt: true,
+        deliveryReportSignedLink: true,
       },
     });
 
@@ -1917,6 +1946,9 @@ export class ProjectsService {
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
+        deliveryReportGeneratedAt: true,
+        deliveryReportSignedAt: true,
+        deliveryReportSignedLink: true,
       },
     });
 
@@ -1982,6 +2014,8 @@ export class ProjectsService {
       asBuiltRejectionReason: currentProject.asBuiltRejectionReason,
       invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
       serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
+      deliveryReportGeneratedAt: currentProject.deliveryReportGeneratedAt,
+      deliveryReportSignedAt: currentProject.deliveryReportSignedAt,
     };
     const effectiveCurrentStage =
       currentProject.stage === "DIEX_REQUISITORIO" &&
@@ -2371,6 +2405,21 @@ export class ProjectsService {
       },
     });
 
+    return project;
+  }
+
+  async registerDeliveryReportSignature(projectId: string, data: RegisterDeliveryReportSignatureInput, user: CurrentUser) {
+    await this.ensureCanManage(projectId, user);
+    const current = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!current) throw new AppError("Projeto não encontrado", 404);
+    if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A assinatura do relatório só pode ser registrada na etapa de Entrega Técnica", 409);
+    if (!current.deliveryReportGeneratedAt) throw new AppError("Gere o relatório antes de registrar sua assinatura", 409);
+    if (data.signedAt > new Date()) throw new AppError("A data da assinatura não pode estar no futuro", 400);
+    const generatedDay = new Date(current.deliveryReportGeneratedAt); generatedDay.setUTCHours(0, 0, 0, 0);
+    const signedDay = new Date(data.signedAt); signedDay.setUTCHours(0, 0, 0, 0);
+    if (signedDay < generatedDay) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
+    const project = await prisma.project.update({ where: { id: projectId }, data: { deliveryReportSignedAt: data.signedAt, deliveryReportSignedLink: data.signedLink?.trim() || null }, include: projectInclude });
+    await auditService.log({ entityType: "PROJECT", entityId: projectId, action: "UPDATE", actor: this.getAuditActor(user), summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`, before: this.buildProjectAuditSnapshot(current), after: this.buildProjectAuditSnapshot(project), metadata: { source: "project.delivery-report.signature", signedAt: data.signedAt, signedLink: data.signedLink ?? null } });
     return project;
   }
 

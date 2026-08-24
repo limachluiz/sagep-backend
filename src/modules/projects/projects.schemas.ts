@@ -28,6 +28,7 @@ const projectStageEnum = z.enum([
   "SERVICO_EM_EXECUCAO",
   "ANALISANDO_AS_BUILT",
   "ATESTAR_NF",
+  "ENTREGA_TECNICA",
   "SERVICO_CONCLUIDO",
   "CANCELADO",
 ]);
@@ -177,4 +178,9 @@ export const registerSignedServiceOrderSchema = z.object({
     .trim()
     .max(2000, "Observação da OS assinada muito longa")
     .optional(),
+});
+
+export const registerDeliveryReportSignatureSchema = z.object({
+  signedAt: z.coerce.date(),
+  signedLink: z.string().trim().url().max(2048).optional(),
 });

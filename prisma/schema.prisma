@@ -77,8 +77,27 @@ enum ProjectStage {
   SERVICO_EM_EXECUCAO
   ANALISANDO_AS_BUILT
   ATESTAR_NF
+  ENTREGA_TECNICA
   SERVICO_CONCLUIDO
   CANCELADO
+}
+
+enum EvidenceCategory {
+  IMAGE
+  VIDEO
+  KMZ_KML
+  TECHNICAL_DOCUMENT
+  CERTIFICATION
+  DIAGRAM
+  AS_BUILT
+  OTHER
+}
+
+enum EvidencePhase {
+  BEFORE
+  DURING
+  AFTER
+  GENERAL
 }
 
 enum AuditEntityType {
@@ -215,6 +234,7 @@ model User {
   assignedTasks                 Task[]                       @relation("TaskAssignee")
   completedTasks                Task[]                       @relation("TaskCompleter")
   taskActivities                TaskActivity[]               @relation("TaskActivityAuthor")
+  evidencesUploaded             ProjectEvidence[]            @relation("EvidenceUploader")
   refreshTokens                 RefreshToken[]
   permissionOverrides           UserPermissionOverride[]
   notificationDismissals        NotificationDismissal[]
@@ -331,6 +351,7 @@ model Project {
   serviceOrders                    ServiceOrder[]
   commitmentNotes                  CommitmentNote[]
   invoices                         Invoice[]
+  evidences                        ProjectEvidence[]
   startDate                        DateTime?
   endDate                          DateTime?
   creditNoteNumber                 String?
@@ -356,6 +377,9 @@ model Project {
   asBuiltRejectionReason           String?
   invoiceAttestedAt                DateTime?
   serviceCompletedAt               DateTime?
+  deliveryReportGeneratedAt        DateTime?
+  deliveryReportSignedAt           DateTime?
+  deliveryReportSignedLink         String?
   archivedAt                       DateTime?
   deletedAt                        DateTime?
   createdAt                        DateTime                 @default(now())
@@ -487,11 +511,38 @@ model Task {
   assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id])
   completedBy   User?          @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
   activities    TaskActivity[]
+  evidences     ProjectEvidence[]
   completedAt   DateTime?
   archivedAt    DateTime?
   deletedAt     DateTime?
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
+}
+
+model ProjectEvidence {
+  id              String           @id @default(cuid())
+  projectId       String
+  taskId          String?
+  uploadedById    String?
+  title           String
+  description     String?
+  category        EvidenceCategory
+  phase           EvidencePhase    @default(GENERAL)
+  includeInReport Boolean          @default(false)
+  sortOrder       Int              @default(0)
+  originalName    String
+  storageKey      String           @unique
+  mimeType        String
+  sizeBytes       Int
+  checksumSha256  String
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task            Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  uploadedBy      User?            @relation("EvidenceUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([projectId, includeInReport, sortOrder])
+  @@index([taskId, createdAt])
 }
 
 model TaskActivity {

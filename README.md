@@ -160,6 +160,8 @@ Variáveis usadas atualmente:
 | `BACKUP_SCHEDULE_HOURS` | nao | Intervalo entre backups automáticos. `0` desativa; padrão `24` |
 | `BACKUP_RUN_ON_STARTUP` | nao | Cria backup ao iniciar a API. Padrão `false` |
 | `BACKUP_MAX_UPLOAD_MB` | nao | Limite para importação de arquivo `.dump`. Padrão `512` MB |
+| `EVIDENCE_DIRECTORY` | nao | Diretório persistente para imagens, KMZ/KML, certificações e demais evidências. Padrão `./evidence-files` |
+| `EVIDENCE_MAX_UPLOAD_MB` | nao | Limite por arquivo de evidência. Padrão `100` MB |
 | `DEPLOYMENT_PKI_DIRECTORY` | nao | Volume protegido da autoridade e do certificado HTTPS. No Docker use `/app/pki` |
 | `DEPLOYMENT_TLS_DIRECTORY` | nao | Volume que entrega somente certificado e chave do servidor ao proxy. No Docker use `/app/tls` |
 | `CERTIFICATE_AUTO_RENEW_ENABLED` | nao | Ativa a verificação e renovação automática. Padrão `true` |
@@ -214,6 +216,8 @@ BACKUP_MAX_FILES=30
 BACKUP_SCHEDULE_HOURS=24
 BACKUP_RUN_ON_STARTUP=false
 BACKUP_MAX_UPLOAD_MB=512
+EVIDENCE_DIRECTORY=./evidence-files
+EVIDENCE_MAX_UPLOAD_MB=100
 DEPLOYMENT_PKI_DIRECTORY=./pki
 DEPLOYMENT_TLS_DIRECTORY=./tls
 CERTIFICATE_AUTO_RENEW_ENABLED=true

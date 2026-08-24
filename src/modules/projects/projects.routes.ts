@@ -28,6 +28,7 @@ projectsRoutes.patch("/:id/as-built/review", (req, res) => controller.reviewAsBu
 projectsRoutes.patch("/:id/service-order/signature", (req, res) =>
   controller.registerSignedServiceOrder(req, res)
 );
+projectsRoutes.patch("/:id/delivery-report/signature", (req, res) => controller.registerDeliveryReportSignature(req, res));
 projectsRoutes.post("/:id/commitment-note/cancel", (req, res) =>
   controller.cancelCommitmentNote(req, res)
 );

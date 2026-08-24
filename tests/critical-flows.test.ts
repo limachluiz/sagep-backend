@@ -1870,7 +1870,7 @@ describe("critical flows", () => {
     ).toBe(true);
   });
 
-  it("workflow: concludes service when invoice attestation is already persisted", async () => {
+  it("workflow: opens technical delivery after execution is closed", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 
     await moveToCreditNote(project.id, adminAuth.accessToken);
@@ -1951,29 +1951,29 @@ describe("critical flows", () => {
       })
       .expect(200);
 
-    const concluded = await request(app)
+    const delivery = await request(app)
       .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
-        stage: "SERVICO_CONCLUIDO",
+        stage: "ENTREGA_TECNICA",
         serviceCompletedAt: "2026-04-08T00:00:00.000Z",
       })
       .expect(200);
 
-    expect(concluded.body.status).toBe("CONCLUIDO");
-    expect(concluded.body.stage).toBe("SERVICO_CONCLUIDO");
-    expect(concluded.body.invoiceAttestedAt).toBeTruthy();
-    expect(concluded.body.serviceCompletedAt).toBeTruthy();
+    expect(delivery.body.status).toBe("EM_ANDAMENTO");
+    expect(delivery.body.stage).toBe("ENTREGA_TECNICA");
+    expect(delivery.body.invoiceAttestedAt).toBeTruthy();
+    expect(delivery.body.serviceCompletedAt).toBeTruthy();
 
     const nextAction = await request(app)
       .get(`/api/projects/${project.id}/next-action`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(nextAction.body.code).toBe("SEM_ACAO");
+    expect(nextAction.body.code).toBe("GERAR_RELATORIO_ENTREGA");
   });
 
-  it("workflow: rejects service conclusion without persisted invoice attestation", async () => {
+  it("workflow: rejects skipping invoice attestation and technical delivery", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 
     await moveToCreditNote(project.id, adminAuth.accessToken);
@@ -2054,7 +2054,7 @@ describe("critical flows", () => {
       })
       .expect(409)
       .expect((response) => {
-        expect(response.body.message).toContain("atesto da NF");
+        expect(response.body.message).toContain("Transição inválida");
       });
   });
 

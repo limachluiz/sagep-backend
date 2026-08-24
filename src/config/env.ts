@@ -58,6 +58,8 @@ const envSchema = z
     .default("false")
     .transform((value) => value === "true"),
   BACKUP_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(4096).default(512),
+  EVIDENCE_DIRECTORY: z.string().min(1).default("./evidence-files"),
+  EVIDENCE_MAX_UPLOAD_MB: z.coerce.number().int().min(1).max(250).default(100),
   DEPLOYMENT_PKI_DIRECTORY: z.string().min(1).default("./pki"),
   DEPLOYMENT_TLS_DIRECTORY: z.string().min(1).default("./tls"),
   CERTIFICATE_AUTO_RENEW_ENABLED: z

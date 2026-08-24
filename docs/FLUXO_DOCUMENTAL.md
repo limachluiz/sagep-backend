@@ -16,7 +16,8 @@ O projeto evolui pelas seguintes fases:
 8. `SERVICO_EM_EXECUCAO`
 9. `ANALISANDO_AS_BUILT`
 10. `ATESTAR_NF`
-11. `SERVICO_CONCLUIDO`
+11. `ENTREGA_TECNICA`
+12. `SERVICO_CONCLUIDO`
 
 Também existe a fase `CANCELADO`.
 
@@ -167,6 +168,18 @@ Regras importantes:
 
 - reabertura depende de permissão de negócio apropriada;
 - o projeto passa a status concluído.
+
+### Entrega Técnica
+
+Após o atesto da NF, o responsável registra o término da execução e o projeto avança para `ENTREGA_TECNICA`. Nesta fase:
+
+- imagens, vídeos, KMZ/KML, certificações, diagramas, As-Built e documentos técnicos podem ser organizados no projeto ou em tarefas;
+- cada evidência mantém a tarefa de origem e pode ser marcada para inclusão no relatório;
+- ao menos uma evidência deve ser selecionada para gerar o PDF;
+- a geração produz o **Relatório Técnico de Conclusão e Entrega do Serviço** e registra sua data;
+- uma nova geração invalida a assinatura anterior;
+- a conclusão exige relatório gerado e confirmação posterior de revisão e assinatura;
+- não há etapa obrigatória de ciência ou recebimento pela OM atendida.
 
 ## Regras de transição
 

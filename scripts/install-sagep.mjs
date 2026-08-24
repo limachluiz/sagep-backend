@@ -102,6 +102,8 @@ export function buildProductionEnvironment(inputAnswers, secrets = generateInsta
     BACKUP_SCHEDULE_HOURS: "24",
     BACKUP_RUN_ON_STARTUP: "true",
     BACKUP_MAX_UPLOAD_MB: "512",
+    EVIDENCE_DIRECTORY: "./evidence-files",
+    EVIDENCE_MAX_UPLOAD_MB: "100",
     DEPLOYMENT_PKI_DIRECTORY: "./pki",
     DEPLOYMENT_TLS_DIRECTORY: "./tls",
     CERTIFICATE_AUTO_RENEW_ENABLED: "true",

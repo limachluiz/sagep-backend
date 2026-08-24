@@ -9,6 +9,7 @@ export type ProjectStageValue =
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
+  | "ENTREGA_TECNICA"
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
@@ -24,6 +25,8 @@ export type WorkflowActionCode =
   | "VALIDAR_AS_BUILT"
   | "ATESTAR_NF"
   | "CONCLUIR_SERVICO"
+  | "PREPARAR_ENTREGA_TECNICA"
+  | "GERAR_RELATORIO_ENTREGA"
   | "SEM_ACAO";
 
 export type WorkflowAction = {
@@ -57,6 +60,8 @@ export type WorkflowProjectSnapshot = {
   asBuiltRejectionReason?: string | null;
   invoiceAttestedAt?: Date | null;
   serviceCompletedAt?: Date | null;
+  deliveryReportGeneratedAt?: Date | null;
+  deliveryReportSignedAt?: Date | null;
 };
 
 export type ProjectStatusValue =
