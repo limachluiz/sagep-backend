@@ -1,10 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { readFile } from "node:fs/promises";
 import { parseEnvironmentFile } from "../scripts/env-file.mjs";
 import { generateInstallerSecrets } from "../scripts/install-sagep.mjs";
 import {
   buildHomologationEnvironment,
   homologationDefaults,
+  runDeploymentPreflight,
   validateHomologationEnvironment,
 } from "../scripts/prepare-homologation.mjs";
 
@@ -39,5 +40,18 @@ describe("homologação isolada no Pop!_OS", () => {
     expect(compose).toContain("container_name: ${SAGEP_CONTAINER_PREFIX:-sagep}_api");
     expect(compose).toContain("${SAGEP_BIND_IP:-127.0.0.1}:${SAGEP_HTTPS_PORT:-443}:443");
     expect(compose).toContain("name: ${SAGEP_VOLUME_PREFIX:-sagep}_postgres_data");
+  });
+
+  it("executa a pré-validação completa e propaga seus bloqueios", () => {
+    const successRunner = vi.fn().mockReturnValue({ status: 0 });
+    expect(() => runDeploymentPreflight("/tmp/.env.homolog", successRunner)).not.toThrow();
+    expect(successRunner).toHaveBeenCalledWith(
+      process.execPath,
+      [expect.stringMatching(/check-deployment-preflight\.mjs$/), "/tmp/.env.homolog"],
+      expect.objectContaining({ stdio: "inherit" }),
+    );
+
+    const blockedRunner = vi.fn().mockReturnValue({ status: 1 });
+    expect(() => runDeploymentPreflight("/tmp/.env.homolog", blockedRunner)).toThrow(/encontrou bloqueios/);
   });
 });

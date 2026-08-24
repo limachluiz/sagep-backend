@@ -102,6 +102,14 @@ function runComposeValidation(environmentPath) {
   if (result.status !== 0) throw new Error(`Docker Compose rejeitou a configuração: ${String(result.stderr || result.stdout).trim()}`);
 }
 
+export function runDeploymentPreflight(environmentPath, runner = spawnSync) {
+  const result = runner(process.execPath, [
+    path.join(scriptDirectory, "check-deployment-preflight.mjs"), environmentPath,
+  ], { cwd: projectRoot, encoding: "utf8", stdio: "inherit" });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error("A pré-validação da implantação encontrou bloqueios");
+}
+
 function parseArguments(argv) {
   const envIndex = argv.indexOf("--env");
   return {
@@ -126,6 +134,7 @@ async function main() {
   runComposeValidation(options.environmentPath);
   console.log("Configuração de homologação válida e isolada do projeto sagep-backend existente.");
   console.log(`Acesso HTTPS previsto: https://${homologationDefaults.hostName}:${homologationDefaults.httpsPort}`);
+  if (options.checkOnly) runDeploymentPreflight(options.environmentPath);
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : "";
