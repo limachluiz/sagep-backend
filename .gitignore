@@ -7,6 +7,8 @@ src/generated/prisma/
 !src/generated/openapi.ts
 coverage
 .env
+.env.homolog
+.env.homolog.prepare-*
 .env.install-*
 .env.finalize-*
 .codex

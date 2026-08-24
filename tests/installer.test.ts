@@ -45,5 +45,10 @@ describe("instalador assistido", () => {
     expect(unit).toContain("PartOf=docker.service");
     expect(unit).not.toContain("sshd");
     expect(() => renderFirewallService("/opt/sagep com espaço")).toThrow(/espaços/);
+    const homologation = renderFirewallService(
+      "/opt/sagep-homolog/sagep-backend",
+      "/opt/sagep-homolog/sagep-backend/.env.homolog",
+    );
+    expect(homologation).toContain("--env /opt/sagep-homolog/sagep-backend/.env.homolog");
   });
 });

@@ -88,10 +88,11 @@ export function validateUpdateManifest(manifest) {
   if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(manifest.databaseBackup?.id || ""))) {
     throw new Error("Backup de banco inválido no manifesto");
   }
-  const expectedImages = new Map([["api", "sagep_api"], ["frontend", "sagep_frontend"]]);
+  const expectedSuffixes = new Map([["api", "_api"], ["frontend", "_frontend"]]);
   if (new Set(manifest.images.map((image) => image?.service)).size !== 2) throw new Error("Imagens duplicadas no manifesto");
   for (const image of manifest.images) {
-    if (expectedImages.get(image?.service) !== image?.container) throw new Error("Serviço de imagem inválido no manifesto");
+    const suffix = expectedSuffixes.get(image?.service);
+    if (!suffix || !String(image?.container || "").endsWith(suffix)) throw new Error("Serviço de imagem inválido no manifesto");
     if (!/^sha256:[0-9a-f]{64}$/i.test(String(image?.imageId || ""))) throw new Error("ID de imagem inválido no manifesto");
     if (!/^[a-z0-9][a-z0-9._/-]*:[a-z0-9][a-z0-9._-]*$/i.test(String(image?.rollbackTag || ""))) {
       throw new Error("Tag de imagem inválida no manifesto");
@@ -237,6 +238,18 @@ function restoreImages(images) {
   for (const image of images) run("docker", ["image", "tag", image.rollbackTag || image.imageId, image.imageName]);
 }
 
+export function deploymentContainerNames(environment) {
+  const prefix = String(environment.SAGEP_CONTAINER_PREFIX || "sagep").trim();
+  if (!/^[a-z0-9][a-z0-9_-]{1,40}$/i.test(prefix)) throw new Error("SAGEP_CONTAINER_PREFIX inválido");
+  return {
+    postgres: `${prefix}_postgres`,
+    api: `${prefix}_api`,
+    pgadmin: `${prefix}_pgadmin`,
+    frontend: `${prefix}_frontend`,
+    proxy: `${prefix}_proxy`,
+  };
+}
+
 function moveRepository(repository, commit, mode) {
   if (mode === "update") git(["merge", "--ff-only", commit], repository.directory);
   else git(["reset", "--hard", commit], repository.directory);
@@ -261,14 +274,20 @@ async function waitForHealth(environment, attempts = 30, delayMs = 2000) {
   throw new Error(`A API não ficou saudável em ${url}`);
 }
 
-function assertContainersRunning() {
-  for (const container of ["sagep_postgres", "sagep_api", "sagep_frontend", "sagep_proxy"]) {
+function assertContainersRunning(containers) {
+  for (const container of [containers.postgres, containers.api, containers.frontend, containers.proxy]) {
     const running = String(run("docker", ["inspect", "--format={{.State.Running}}", container]).stdout).trim();
     if (running !== "true") throw new Error(`Container obrigatório indisponível: ${container}`);
   }
 }
 
 async function rollbackRuntime(manifest, envPath, restoreDatabase) {
+  const environment = parseEnvironmentFile(await fsp.readFile(envPath, "utf8"));
+  const containers = deploymentContainerNames(environment);
+  const manifestContainers = Object.fromEntries(manifest.images.map((image) => [image.service, image.container]));
+  if (manifestContainers.api !== containers.api || manifestContainers.frontend !== containers.frontend) {
+    throw new Error("Os containers atuais não correspondem ao manifesto de rollback");
+  }
   repositoryState(projectRoot, "Backend", expectedRepositories.backend);
   repositoryState(frontendRoot, "Frontend", expectedRepositories.frontend);
   moveRepository(manifest.backend, manifest.backend.before, "rollback");
@@ -280,9 +299,8 @@ async function rollbackRuntime(manifest, envPath, restoreDatabase) {
     databaseRestore = restoreDatabaseBackup(envPath, manifest.databaseBackup.id);
   }
   dockerCompose(envPath, ["up", "-d", "--no-build"], { inherit: true });
-  const environment = parseEnvironmentFile(await fsp.readFile(envPath, "utf8"));
   await waitForHealth(environment);
-  assertContainersRunning();
+  assertContainersRunning(containers);
   applyFirewall(envPath);
   return databaseRestore;
 }
@@ -305,6 +323,8 @@ async function applyUpdate(options) {
   assertRoot();
   if (!options.confirmUpdate) throw new Error("A atualização exige --confirm-update ATUALIZAR");
   assertProtectedEnvironment(options.envPath);
+  const environment = parseEnvironmentFile(await fsp.readFile(options.envPath, "utf8"));
+  const containers = deploymentContainerNames(environment);
   const backendState = repositoryState(projectRoot, "Backend", expectedRepositories.backend);
   const frontendState = repositoryState(frontendRoot, "Frontend", expectedRepositories.frontend);
   fetchCandidate(projectRoot);
@@ -315,7 +335,7 @@ async function applyUpdate(options) {
 
   run(process.execPath, [path.join(scriptDirectory, "check-deployment-preflight.mjs"), options.envPath], { inherit: true });
   dockerCompose(options.envPath, ["config", "--quiet"]);
-  assertContainersRunning();
+  assertContainersRunning(containers);
 
   const id = createUpdateId();
   if (fs.existsSync(manifestPath(id))) throw new Error("Já existe uma atualização iniciada neste segundo; tente novamente");
@@ -328,7 +348,7 @@ async function applyUpdate(options) {
     backend,
     frontend,
     databaseBackup: createDatabaseBackup(options.envPath),
-    images: [captureImage("sagep_api", "api", id), captureImage("sagep_frontend", "frontend", id)],
+    images: [captureImage(containers.api, "api", id), captureImage(containers.frontend, "frontend", id)],
     error: null,
   };
   await writeManifest(manifest);
@@ -340,9 +360,8 @@ async function applyUpdate(options) {
     moveRepository(frontend, frontend.target, "update");
     dockerCompose(options.envPath, ["build", "api", "frontend"], { inherit: true });
     dockerCompose(options.envPath, ["up", "-d", "--no-build"], { inherit: true });
-    const environment = parseEnvironmentFile(await fsp.readFile(options.envPath, "utf8"));
     const health = await waitForHealth(environment);
-    assertContainersRunning();
+    assertContainersRunning(containers);
     applyFirewall(options.envPath);
     manifest.status = "SUCCEEDED";
     manifest.completedAt = new Date().toISOString();

@@ -4,9 +4,24 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { parseEnvironmentFile } from "./env-file.mjs";
 
-const MANAGED_CHAINS = ["SAGEP-INGRESS-A", "SAGEP-INGRESS-B"];
-const HTTPS_PORTS = [80, 443];
 const IPTABLES_CANDIDATES = ["/usr/sbin/iptables", "/usr/bin/iptables", "/sbin/iptables"];
+
+export function parseFirewallNamespace(value = "SAGEP-INGRESS") {
+  const namespace = String(value || "SAGEP-INGRESS").trim().toUpperCase();
+  if (!/^[A-Z][A-Z0-9-]{2,20}$/.test(namespace)) throw new Error("SAGEP_FIREWALL_NAMESPACE inválido");
+  return namespace;
+}
+
+export function parseProtectedPorts(httpValue = "80", httpsValue = "443") {
+  const ports = [httpValue, httpsValue].map((value) => Number(value));
+  if (ports.some((port) => !Number.isInteger(port) || port < 1 || port > 65535)) throw new Error("Porta publicada inválida");
+  if (ports[0] === ports[1]) throw new Error("As portas HTTP e HTTPS precisam ser diferentes");
+  return ports;
+}
+
+function managedChains(namespace) {
+  return [`${namespace}-A`, `${namespace}-B`];
+}
 
 function ipv4ToNumber(value) {
   const parts = value.split(".");
@@ -56,8 +71,8 @@ export function desiredChainRules(chain, networks) {
   ];
 }
 
-export function desiredJumpRules(chain, bindIp) {
-  return HTTPS_PORTS.map((port) => [
+export function desiredJumpRules(chain, bindIp, ports = [80, 443]) {
+  return ports.map((port) => [
     "-I", "DOCKER-USER", "1", "-p", "tcp", "-m", "conntrack", "--ctdir", "ORIGINAL",
     "--ctorigdst", bindIp, "--ctorigdstport", String(port), "-j", chain,
   ]);
@@ -92,8 +107,8 @@ function chainRules(chain) {
   return result.stdout.split("\n").map((line) => line.trim()).filter((line) => line.startsWith(`-A ${chain} `));
 }
 
-function managedJumpRules() {
-  return dockerUserRules().filter((line) => MANAGED_CHAINS.some((chain) => line.endsWith(`-j ${chain}`)));
+function managedJumpRules(chains) {
+  return dockerUserRules().filter((line) => chains.some((chain) => line.endsWith(`-j ${chain}`)));
 }
 
 function deleteRuleLine(line) {
@@ -102,8 +117,8 @@ function deleteRuleLine(line) {
   execute(args);
 }
 
-function activeChain(lines) {
-  return MANAGED_CHAINS.find((chain) => lines.some((line) => line.endsWith(`-j ${chain}`))) || null;
+function activeChain(lines, chains) {
+  return chains.find((chain) => lines.some((line) => line.endsWith(`-j ${chain}`))) || null;
 }
 
 function ensureDockerFirewallAvailable() {
@@ -117,48 +132,48 @@ function assertRoot() {
   }
 }
 
-function applyFirewall(bindIp, networks) {
+function applyFirewall(bindIp, networks, ports, chains) {
   assertRoot();
   ensureDockerFirewallAvailable();
-  const oldJumps = managedJumpRules();
-  const current = activeChain(oldJumps);
-  const next = current === MANAGED_CHAINS[0] ? MANAGED_CHAINS[1] : MANAGED_CHAINS[0];
+  const oldJumps = managedJumpRules(chains);
+  const current = activeChain(oldJumps, chains);
+  const next = current === chains[0] ? chains[1] : chains[0];
 
   if (!chainExists(next)) execute(["-N", next]);
   execute(["-F", next]);
   for (const rule of desiredChainRules(next, networks)) execute(rule);
 
-  for (const rule of desiredJumpRules(next, bindIp)) execute(rule);
+  for (const rule of desiredJumpRules(next, bindIp, ports)) execute(rule);
   for (const line of oldJumps) deleteRuleLine(line);
   if (current && chainExists(current)) execute(["-F", current]);
-  console.log(`Firewall aplicado: ${networks.length} rede(s) autorizada(s) em ${bindIp}:80/443.`);
+  console.log(`Firewall aplicado: ${networks.length} rede(s) autorizada(s) em ${bindIp}:${ports.join("/")}.`);
 }
 
-function checkFirewall(bindIp, networks) {
+function checkFirewall(bindIp, networks, ports, chains) {
   assertRoot();
   ensureDockerFirewallAvailable();
-  const jumps = managedJumpRules();
-  const current = activeChain(jumps);
-  if (!current || jumps.length !== HTTPS_PORTS.length) throw new Error("As regras de entrada do SAGEP não estão aplicadas integralmente");
+  const jumps = managedJumpRules(chains);
+  const current = activeChain(jumps, chains);
+  if (!current || jumps.length !== ports.length) throw new Error("As regras de entrada do SAGEP não estão aplicadas integralmente");
 
   const expectedRules = desiredChainRules(current, networks).map((rule) => rule.join(" "));
   const appliedRules = chainRules(current);
   if (JSON.stringify(appliedRules) !== JSON.stringify(expectedRules)) {
     throw new Error("As redes aplicadas no firewall são diferentes de SAGEP_ALLOWED_NETWORKS");
   }
-  for (const rule of desiredJumpRules(current, bindIp)) {
+  for (const rule of desiredJumpRules(current, bindIp, ports)) {
     const checkRule = ["-C", rule[1], ...rule.slice(3)];
     if (!execute(checkRule, { tolerateFailure: true, capture: true }).ok) throw new Error("O IP ou as portas protegidas não correspondem ao .env");
   }
-  console.log(`Firewall conferido: ${networks.length} rede(s) autorizada(s) em ${bindIp}:80/443.`);
+  console.log(`Firewall conferido: ${networks.length} rede(s) autorizada(s) em ${bindIp}:${ports.join("/")}.`);
 }
 
-function removeFirewall(confirmed) {
+function removeFirewall(confirmed, chains, ports) {
   assertRoot();
-  if (!confirmed) throw new Error("A remoção abre 80/443 para as redes alcançáveis; repita com --remove --confirm");
+  if (!confirmed) throw new Error(`A remoção abre ${ports.join("/")} para as redes alcançáveis; repita com --remove --confirm`);
   ensureDockerFirewallAvailable();
-  for (const line of managedJumpRules()) deleteRuleLine(line);
-  for (const chain of MANAGED_CHAINS) {
+  for (const line of managedJumpRules(chains)) deleteRuleLine(line);
+  for (const chain of chains) {
     if (!chainExists(chain)) continue;
     execute(["-F", chain]);
     execute(["-X", chain]);
@@ -166,9 +181,10 @@ function removeFirewall(confirmed) {
   console.log("Regras gerenciadas do SAGEP removidas; nenhuma outra regra do host foi alterada.");
 }
 
-function printDryRun(bindIp, networks) {
+function printDryRun(bindIp, networks, ports, namespace) {
   console.log("Prévia somente leitura; nenhuma regra foi alterada.");
-  console.log(`Destino protegido: ${bindIp}:80/443`);
+  console.log(`Destino protegido: ${bindIp}:${ports.join("/")}`);
+  console.log(`Namespace gerenciado: ${namespace}`);
   for (const network of networks) console.log(`Rede autorizada: ${network}`);
   console.log("A aplicação usa uma cadeia alternada para substituir as regras sem janela de liberação.");
   console.log("Execute: sudo /usr/bin/env node scripts/manage-firewall.mjs --apply");
@@ -176,15 +192,18 @@ function printDryRun(bindIp, networks) {
 
 async function main() {
   const options = argumentsFrom(process.argv.slice(2));
-  if (options.mode === "remove") return removeFirewall(options.confirmed);
   if (!fs.existsSync(options.envPath)) throw new Error(`Arquivo não encontrado: ${options.envPath}`);
   const values = parseEnvironmentFile(fs.readFileSync(options.envPath, "utf8"));
   const bindIp = (values.SAGEP_BIND_IP || "").trim();
   if (!isPrivateIpv4(bindIp)) throw new Error("SAGEP_BIND_IP deve ser um IPv4 privado e não pode ser 0.0.0.0");
   const networks = parseAllowedNetworks(values.SAGEP_ALLOWED_NETWORKS);
-  if (options.mode === "apply") return applyFirewall(bindIp, networks);
-  if (options.mode === "check") return checkFirewall(bindIp, networks);
-  return printDryRun(bindIp, networks);
+  const ports = parseProtectedPorts(values.SAGEP_HTTP_PORT || "80", values.SAGEP_HTTPS_PORT || "443");
+  const namespace = parseFirewallNamespace(values.SAGEP_FIREWALL_NAMESPACE || "SAGEP-INGRESS");
+  const chains = managedChains(namespace);
+  if (options.mode === "remove") return removeFirewall(options.confirmed, chains, ports);
+  if (options.mode === "apply") return applyFirewall(bindIp, networks, ports, chains);
+  if (options.mode === "check") return checkFirewall(bindIp, networks, ports, chains);
+  return printDryRun(bindIp, networks, ports, namespace);
 }
 
 const invokedPath = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : "";

@@ -3,6 +3,8 @@ import {
   desiredChainRules,
   desiredJumpRules,
   parseAllowedNetworks,
+  parseFirewallNamespace,
+  parseProtectedPorts,
 } from "../scripts/manage-firewall.mjs";
 
 describe("firewall por CIDR", () => {
@@ -30,5 +32,14 @@ describe("firewall por CIDR", () => {
     expect(rules.map((rule) => rule[rule.indexOf("--ctorigdstport") + 1])).toEqual(["80", "443"]);
     expect(rules.every((rule) => rule.includes("10.78.10.20") && rule.includes("ORIGINAL"))).toBe(true);
     expect(JSON.stringify(rules)).not.toContain("22");
+  });
+
+  it("isola namespace e portas alternativas da homologação", () => {
+    expect(parseFirewallNamespace("sagep-hml")).toBe("SAGEP-HML");
+    expect(parseProtectedPorts("58080", "58443")).toEqual([58080, 58443]);
+    expect(desiredJumpRules("SAGEP-HML-A", "192.168.250.10", [58080, 58443])
+      .map((rule) => rule[rule.indexOf("--ctorigdstport") + 1])).toEqual(["58080", "58443"]);
+    expect(() => parseFirewallNamespace("nome inválido")).toThrow(/inválido/);
+    expect(() => parseProtectedPorts("443", "443")).toThrow(/diferentes/);
   });
 });

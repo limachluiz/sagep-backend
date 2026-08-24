@@ -168,6 +168,12 @@ Variáveis usadas atualmente:
 | `CERTIFICATE_RELOAD_CHECK_SECONDS` | nao | Intervalo do observador TLS do Caddy. Padrão `15` segundos |
 | `SAGEP_HOSTNAME` | no perfil HTTPS | Nome DNS interno completo, por exemplo `sagep.4cta.eb.mil.br` |
 | `SAGEP_BIND_IP` | no perfil HTTPS | IP privado do host no qual Caddy publicará 80/443. O padrão seguro é `127.0.0.1` |
+| `SAGEP_HTTP_PORT` | nao | Porta HTTP publicada no host. Padrão `80` |
+| `SAGEP_HTTPS_PORT` | nao | Porta HTTPS publicada no host. Padrão `443` |
+| `SAGEP_FIREWALL_NAMESPACE` | nao | Prefixo exclusivo das cadeias gerenciadas na `DOCKER-USER`. Padrão `SAGEP-INGRESS` |
+| `SAGEP_COMPOSE_PROJECT` | nao | Nome isolado do projeto Compose. Padrão `sagep-backend` |
+| `SAGEP_CONTAINER_PREFIX` | nao | Prefixo dos nomes explícitos dos containers. Padrão `sagep` |
+| `SAGEP_VOLUME_PREFIX` | nao | Prefixo dos volumes persistentes. Padrão `sagep` |
 
 Exemplo:
 
@@ -215,6 +221,12 @@ CERTIFICATE_RENEWAL_CHECK_HOURS=24
 CERTIFICATE_PROXY_AUTO_RELOAD=false
 SAGEP_HOSTNAME=sagep.4cta.eb.mil.br
 SAGEP_BIND_IP=10.78.xxx.xxx
+SAGEP_HTTP_PORT=80
+SAGEP_HTTPS_PORT=443
+SAGEP_FIREWALL_NAMESPACE=SAGEP-INGRESS
+SAGEP_COMPOSE_PROJECT=sagep-backend
+SAGEP_CONTAINER_PREFIX=sagep
+SAGEP_VOLUME_PREFIX=sagep
 ```
 
 Requisicoes sem header `Origin`, como scripts, health checks e comunicacao
@@ -296,6 +308,12 @@ dependências npm e sem imprimir segredos:
 ```bash
 node scripts/check-deployment-preflight.mjs .env
 ```
+
+Para homologar em notebook Pop!_OS sem tocar em outro ambiente SAGEP já ativo,
+use o perfil isolado documentado em
+[docs/HOMOLOGATION_POP_OS.md](docs/HOMOLOGATION_POP_OS.md). Ele reserva projeto
+Compose, containers, volumes, portas e namespace de firewall exclusivos e gera
+`.env.homolog` com segredos locais e permissão `0600`.
 
 Atualizações de produção também possuem fluxo transacional. `npm run
 deployment:update` consulta os commits candidatos sem alterar a implantação. A

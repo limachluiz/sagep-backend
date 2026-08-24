@@ -122,9 +122,12 @@ export function buildProductionEnvironment(inputAnswers, secrets = generateInsta
   return `${Object.entries(values).map(([key, value]) => `${key}=${quoteEnvironmentValue(value)}`).join("\n")}\n`;
 }
 
-export function renderFirewallService(rootDirectory) {
-  if (/\s|[\r\n]/.test(rootDirectory)) throw new Error("O caminho de instalação não pode conter espaços");
-  return `[Unit]\nDescription=SAGEP - restrição de acesso HTTPS por CIDR\nRequires=docker.service\nAfter=docker.service network-online.target\nPartOf=docker.service\n\n[Service]\nType=oneshot\nWorkingDirectory=${rootDirectory}\nExecStart=/usr/bin/env node ${rootDirectory}/scripts/manage-firewall.mjs --apply --env ${rootDirectory}/.env\nExecReload=/usr/bin/env node ${rootDirectory}/scripts/manage-firewall.mjs --apply --env ${rootDirectory}/.env\nRemainAfterExit=yes\n\n[Install]\nWantedBy=docker.service\n`;
+export function renderFirewallService(rootDirectory, environmentPath = path.join(rootDirectory, ".env")) {
+  if (/\s|[\r\n]/.test(rootDirectory) || /\s|[\r\n]/.test(environmentPath)) {
+    throw new Error("Os caminhos da instalação e do ambiente não podem conter espaços");
+  }
+  if (!path.isAbsolute(rootDirectory) || !path.isAbsolute(environmentPath)) throw new Error("Os caminhos da unidade precisam ser absolutos");
+  return `[Unit]\nDescription=SAGEP - restrição de acesso HTTPS por CIDR\nRequires=docker.service\nAfter=docker.service network-online.target\nPartOf=docker.service\n\n[Service]\nType=oneshot\nWorkingDirectory=${rootDirectory}\nExecStart=/usr/bin/env node ${rootDirectory}/scripts/manage-firewall.mjs --apply --env ${environmentPath}\nExecReload=/usr/bin/env node ${rootDirectory}/scripts/manage-firewall.mjs --apply --env ${environmentPath}\nRemainAfterExit=yes\n\n[Install]\nWantedBy=docker.service\n`;
 }
 
 async function atomicEnvironmentWrite(envPath, content, operation) {
@@ -232,12 +235,14 @@ function assertProtectedEnvironment(envPath) {
   if ((stats.mode & 0o077) !== 0) throw new Error("O .env deve possuir permissão 0600 antes da implantação");
 }
 
-async function installFirewallService() {
-  const servicePath = "/etc/systemd/system/sagep-firewall.service";
-  await fsp.writeFile(servicePath, renderFirewallService(projectRoot), { encoding: "utf8", mode: 0o644 });
+async function installFirewallService(envPath) {
+  const homologation = path.basename(envPath) === ".env.homolog";
+  const serviceName = homologation ? "sagep-homolog-firewall" : "sagep-firewall";
+  const servicePath = `/etc/systemd/system/${serviceName}.service`;
+  await fsp.writeFile(servicePath, renderFirewallService(projectRoot, envPath), { encoding: "utf8", mode: 0o644 });
   await fsp.chmod(servicePath, 0o644);
   run("systemctl", ["daemon-reload"]);
-  run("systemctl", ["enable", "--now", "sagep-firewall.service"]);
+  run("systemctl", ["enable", "--now", `${serviceName}.service`]);
 }
 
 function deploy(envPath, cloneAllowed) {
@@ -302,8 +307,11 @@ async function main() {
   }
   if (!options.confirmDeploy) throw new Error("A implantação exige --confirm-deploy IMPLANTAR");
   deploy(options.envPath, options.cloneFrontend);
-  await installFirewallService();
-  console.log(`Implantação concluída. Acesse https://${parseEnvironmentFile(fs.readFileSync(options.envPath, "utf8")).SAGEP_HOSTNAME}/setup`);
+  await installFirewallService(options.envPath);
+  const deployedEnvironment = parseEnvironmentFile(fs.readFileSync(options.envPath, "utf8"));
+  const httpsPort = deployedEnvironment.SAGEP_HTTPS_PORT || "443";
+  const portSuffix = httpsPort === "443" ? "" : `:${httpsPort}`;
+  console.log(`Implantação concluída. Acesse https://${deployedEnvironment.SAGEP_HOSTNAME}${portSuffix}/setup`);
   console.log("O certificado raiz público para preparar a estação administrativa está em deployment-output/sagep-om-root-ca.crt.");
   console.log("Após criar o administrador, remova a chave temporária com --finalize --confirm-finalize REMOVER-CHAVE.");
 }

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import path from "node:path";
 import {
   createUpdateId,
+  deploymentContainerNames,
   parseUpdateArguments,
   validatePinnedCommit,
   validateUpdateManifest,
@@ -63,5 +64,16 @@ describe("atualizador seguro da implantação", () => {
       databaseBackup: { id: "123e4567-e89b-42d3-a456-426614174000" },
       images: [],
     })).toThrow(/imagens/);
+  });
+
+  it("deriva containers isolados sem aceitar prefixos perigosos", () => {
+    expect(deploymentContainerNames({ SAGEP_CONTAINER_PREFIX: "sagep_homolog" })).toEqual({
+      postgres: "sagep_homolog_postgres",
+      api: "sagep_homolog_api",
+      pgadmin: "sagep_homolog_pgadmin",
+      frontend: "sagep_homolog_frontend",
+      proxy: "sagep_homolog_proxy",
+    });
+    expect(() => deploymentContainerNames({ SAGEP_CONTAINER_PREFIX: "../outro" })).toThrow(/inválido/);
   });
 });
