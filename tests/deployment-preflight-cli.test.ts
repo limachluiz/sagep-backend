@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { evaluateEnvironment, isPrivateIpv4 } from "../scripts/check-deployment-preflight.mjs";
+import { describe, expect, it, vi } from "vitest";
+import { evaluateEnvironment, isPrivateIpv4, resolveIpv4Addresses } from "../scripts/check-deployment-preflight.mjs";
 
 describe("pré-validação local da implantação", () => {
   it("aceita somente endereços IPv4 privados", () => {
@@ -8,6 +8,16 @@ describe("pré-validação local da implantação", () => {
     expect(isPrivateIpv4("192.168.1.5")).toBe(true);
     expect(isPrivateIpv4("0.0.0.0")).toBe(false);
     expect(isPrivateIpv4("200.160.1.1")).toBe(false);
+  });
+
+  it("resolve o nome pelo resolvedor do sistema, incluindo /etc/hosts", async () => {
+    const lookup = vi.fn().mockResolvedValue([
+      { address: "192.168.250.10", family: 4 },
+      { address: "192.168.250.10", family: 4 },
+    ]);
+
+    await expect(resolveIpv4Addresses("sagep.homolog.test", { lookup })).resolves.toEqual(["192.168.250.10"]);
+    expect(lookup).toHaveBeenCalledWith("sagep.homolog.test", { all: true, family: 4 });
   });
 
   it("aprova um ambiente HTTPS coerente sem expor segredos", () => {

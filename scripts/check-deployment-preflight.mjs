@@ -35,6 +35,11 @@ export function isCanonicalPrivateIpv4Cidr(value) {
   return privateRanges.some(([start, end]) => network >= start && broadcast <= end);
 }
 
+export async function resolveIpv4Addresses(hostName, resolver = dns) {
+  const records = await resolver.lookup(hostName, { all: true, family: 4 });
+  return [...new Set(records.map((record) => record.address))];
+}
+
 function isPlaceholder(value) {
   return !value || /(?:troque|change-?me|example|exemplo|<.*>|x{3,})/i.test(value);
 }
@@ -85,7 +90,7 @@ async function main() {
 
     if (values.SAGEP_HOSTNAME) {
       try {
-        const addresses = await dns.resolve4(values.SAGEP_HOSTNAME);
+        const addresses = await resolveIpv4Addresses(values.SAGEP_HOSTNAME);
         checks.push(item("dns.internal", addresses.includes(values.SAGEP_BIND_IP) ? "PASS" : "FAIL", addresses.includes(values.SAGEP_BIND_IP) ? "O DNS resolve para o IP privado configurado." : "O DNS não resolve para o IP configurado.", "Ajuste o registro A no DNS interno."));
       } catch {
         checks.push(item("dns.internal", "FAIL", "O nome interno não pôde ser resolvido.", "Crie ou corrija o registro A no DNS interno."));
