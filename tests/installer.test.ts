@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { parseEnvironmentFile } from "../scripts/env-file.mjs";
 import { evaluateEnvironment } from "../scripts/check-deployment-preflight.mjs";
 import {
   buildProductionEnvironment,
+  atomicEnvironmentWrite,
   generateInstallerSecrets,
   renderFirewallService,
   validateInstallerAnswers,
@@ -50,5 +54,22 @@ describe("instalador assistido", () => {
       "/opt/sagep-homolog/sagep-backend/.env.homolog",
     );
     expect(homologation).toContain("--env /opt/sagep-homolog/sagep-backend/.env.homolog");
+  });
+
+  it("preserva proprietário, grupo e permissão ao finalizar o ambiente", async () => {
+    const directory = await mkdtemp(path.join(os.tmpdir(), "sagep-installer-"));
+    const envPath = path.join(directory, ".env.homolog");
+    try {
+      await writeFile(envPath, "SAGEP_SETUP_TOKEN=temporaria\n", { mode: 0o600 });
+      const before = await stat(envPath);
+      await atomicEnvironmentWrite(envPath, "SAGEP_SETUP_TOKEN=\n", "finalize");
+      const after = await stat(envPath);
+
+      expect(after.uid).toBe(before.uid);
+      expect(after.gid).toBe(before.gid);
+      expect(after.mode & 0o777).toBe(0o600);
+    } finally {
+      await rm(directory, { recursive: true, force: true });
+    }
   });
 });

@@ -130,11 +130,15 @@ export function renderFirewallService(rootDirectory, environmentPath = path.join
   return `[Unit]\nDescription=SAGEP - restrição de acesso HTTPS por CIDR\nRequires=docker.service\nAfter=docker.service network-online.target\nPartOf=docker.service\n\n[Service]\nType=oneshot\nWorkingDirectory=${rootDirectory}\nExecStart=/usr/bin/env node ${rootDirectory}/scripts/manage-firewall.mjs --apply --env ${environmentPath}\nExecReload=/usr/bin/env node ${rootDirectory}/scripts/manage-firewall.mjs --apply --env ${environmentPath}\nRemainAfterExit=yes\n\n[Install]\nWantedBy=docker.service\n`;
 }
 
-async function atomicEnvironmentWrite(envPath, content, operation) {
+export async function atomicEnvironmentWrite(envPath, content, operation) {
   const temporary = `${envPath}.${operation}-${process.pid}`;
+  const existingStats = operation === "install" ? undefined : await fsp.lstat(envPath);
   let handle;
   try {
     handle = await fsp.open(temporary, "wx", 0o600);
+    if (existingStats && typeof process.getuid === "function" && process.getuid() === 0) {
+      await handle.chown(existingStats.uid, existingStats.gid);
+    }
     await handle.writeFile(content, "utf8");
     await handle.sync();
     await handle.close();
