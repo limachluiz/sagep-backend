@@ -44,9 +44,10 @@ export function evaluateEnvironment(values) {
   const accessSecret = values.JWT_ACCESS_SECRET || values.JWT_SECRET || "";
   const refreshSecret = values.JWT_REFRESH_SECRET || "";
   const hostName = values.SAGEP_HOSTNAME || "";
+  const httpsPort = values.SAGEP_HTTPS_PORT || "443";
   const bindIp = values.SAGEP_BIND_IP || "";
   const origins = (values.CORS_ALLOWED_ORIGINS || "").split(",").map((origin) => origin.trim()).filter(Boolean);
-  const expectedOrigin = hostName ? `https://${hostName}` : "";
+  const expectedOrigin = hostName ? `https://${hostName}${httpsPort === "443" ? "" : `:${httpsPort}`}` : "";
   const allowedNetworks = (values.SAGEP_ALLOWED_NETWORKS || "").split(",").map((network) => network.trim()).filter(Boolean);
 
   checks.push(item("env.production", values.NODE_ENV === "production" ? "PASS" : "FAIL", values.NODE_ENV === "production" ? "NODE_ENV está em produção." : "NODE_ENV não está definido como production.", "Defina NODE_ENV=production."));
