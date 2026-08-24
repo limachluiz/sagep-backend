@@ -75,6 +75,7 @@ jobs:
           node --check scripts/env-file.mjs
           node --check scripts/install-sagep.mjs
           node --check scripts/manage-firewall.mjs
+          node --check scripts/update-sagep.mjs
 
       - name: Gerar Prisma Client
         run: npm run prisma:generate

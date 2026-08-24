@@ -297,6 +297,14 @@ dependências npm e sem imprimir segredos:
 node scripts/check-deployment-preflight.mjs .env
 ```
 
+Atualizações de produção também possuem fluxo transacional. `npm run
+deployment:update` consulta os commits candidatos sem alterar a implantação. A
+aplicação exige SHAs completos e confirmação literal, cria backup validado do
+banco, preserva as imagens em execução e só conclui após verificar API,
+containers e firewall. Falhas restauram automaticamente código e imagens; a
+restauração do banco permanece uma ação separada com confirmação adicional.
+Consulte [docs/INSTALLATION.md](docs/INSTALLATION.md#atualização-segura-e-rollback).
+
 O perfil HTTPS foi projetado para um servidor acessível somente na rede local da
 OM. O registro DNS interno deve apontar o nome escolhido para o IP privado
 reservado no DHCP. A publicação externa deve continuar bloqueada no UTM.

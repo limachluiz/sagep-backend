@@ -26,6 +26,7 @@
     "security:secrets": "node scripts/check-secrets.mjs",
     "deployment:preflight": "node scripts/check-deployment-preflight.mjs",
     "deployment:install": "node scripts/install-sagep.mjs",
+    "deployment:update": "node scripts/update-sagep.mjs --check",
     "firewall:dry-run": "node scripts/manage-firewall.mjs",
     "docker:up": "docker compose up -d --build",
     "docker:down": "docker compose down",

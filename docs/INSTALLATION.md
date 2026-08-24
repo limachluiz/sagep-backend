@@ -124,3 +124,58 @@ foi removida.
 - `.env`, CA e chaves existentes não são substituídos automaticamente.
 - Uma nova tentativa é idempotente quando DNS, `.env`, volumes e certificados
   permanecem coerentes.
+
+## Atualização segura e rollback
+
+O atualizador trabalha somente com a branch `upgrade-security`, exige os dois
+repositórios sem alterações locais e aceita apenas commits completos que sejam o
+topo remoto da branch e avanço fast-forward. Primeiro consulte, sem alterar a
+implantação, os candidatos disponíveis:
+
+```bash
+npm run deployment:update
+```
+
+Registre os dois SHAs completos exibidos e aplique a atualização com confirmação
+literal:
+
+```bash
+sudo /usr/bin/env node scripts/update-sagep.mjs --apply \
+  --backend-ref <SHA_COMPLETO_BACKEND> \
+  --frontend-ref <SHA_COMPLETO_FRONTEND> \
+  --confirm-update ATUALIZAR
+```
+
+Antes de mover qualquer repositório, o processo:
+
+- executa novamente a pré-validação da implantação;
+- cria e valida um backup `SAFETY` no volume persistente `sagep_backups`;
+- preserva as imagens atuais da API e do frontend com tags de rollback;
+- grava um manifesto protegido em `.deployment-updates/<ID>.json`.
+
+Depois do build, o atualizador aplica migrations, aguarda a API responder,
+confirma os quatro containers e reaplica o firewall. Se qualquer verificação
+falhar, o código e as imagens anteriores são restaurados automaticamente. O
+banco não é restaurado automaticamente, evitando apagar dados gravados após o
+backup sem uma decisão administrativa explícita.
+
+Para um rollback planejado, use o identificador de 14 dígitos do manifesto:
+
+```bash
+sudo /usr/bin/env node scripts/update-sagep.mjs \
+  --rollback <ID> --confirm-rollback REVERTER
+```
+
+Somente quando uma migration incompatível exigir retornar também o banco, use a
+segunda confirmação. Essa operação restaura o backup pré-atualização e cria
+antes uma nova cópia de segurança do estado atual:
+
+```bash
+sudo /usr/bin/env node scripts/update-sagep.mjs \
+  --rollback <ID> --confirm-rollback REVERTER \
+  --restore-database --confirm-database RESTAURAR-BANCO
+```
+
+Não execute limpeza de imagens Docker enquanto houver uma janela de rollback
+aberta. As tags `sagep-rollback-api:<ID>` e
+`sagep-rollback-frontend:<ID>` preservam as versões anteriores.
