@@ -150,6 +150,7 @@ enum CommitmentNoteFinancialStatus {
 enum ExternalSyncStatus {
   VALIDADO
   DIVERGENTE
+  NAO_VALIDADO
   ERRO
 }
 

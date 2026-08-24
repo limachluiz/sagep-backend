@@ -14,6 +14,7 @@ import type {
 } from "./financial-execution.schemas.js";
 import {
   portalTransparenciaClient,
+  type CommitmentNoteSnapshot,
   type PortalCommitmentSnapshot,
 } from "./portal-transparencia.client.js";
 
@@ -183,6 +184,10 @@ export class FinancialExecutionService {
   }
 
   async register(input: RegisterCommitmentNoteInput, user: CurrentUser) {
+    if (input.registrationMode === "MANUAL") {
+      return this.registerManual(input, user);
+    }
+
     const preview = await this.preview(input, user);
     if (preview.validation.divergences.length && !input.acceptDivergence) {
       throw new AppError("A Nota de Empenho possui divergências que precisam ser confirmadas", 409, "COMMITMENT_NOTE_DIVERGENCE", preview.validation);
@@ -221,6 +226,89 @@ export class FinancialExecutionService {
     });
 
     return { project, commitmentNote: serializeNote(note), validation: preview.validation };
+  }
+
+  private async registerManual(input: RegisterCommitmentNoteInput, user: CurrentUser) {
+    await projectsService.findById(input.projectId, user);
+    const [coordinates, expected] = await Promise.all([
+      this.portalCoordinates(input),
+      this.expectedProjectFinancials(input.projectId),
+    ]);
+    const registeredAt = new Date();
+    const snapshot: CommitmentNoteSnapshot = {
+      source: "MANUAL",
+      externalCode: `MANUAL:${input.projectId}:${input.number}`,
+      number: input.number,
+      managementUnit: coordinates.managementUnit,
+      management: coordinates.management,
+      supplierName: expected.supplierName,
+      supplierCnpj: expected.supplierCnpj,
+      issuedAt: null,
+      originalAmount: expected.expectedAmount,
+      currentAmount: expected.expectedAmount,
+      liquidatedAmount: 0,
+      paidAmount: 0,
+      cancelledAmount: 0,
+      financialStatus: "NAO_LIQUIDADA",
+      documents: [],
+      rawSnapshot: {
+        registrationMode: "MANUAL",
+        manualReason: input.manualReason!,
+        registeredById: user.id,
+        registeredAt: registeredAt.toISOString(),
+      },
+      fetchedAt: registeredAt,
+    };
+
+    const project = await projectsService.updateFlow(input.projectId, {
+      stage: "AGUARDANDO_NOTA_EMPENHO",
+      commitmentNoteNumber: input.number,
+      commitmentNoteReceivedAt: input.receivedAt,
+    }, user, {
+      commitmentNoteSnapshot: snapshot,
+      commitmentNoteSyncStatus: "NAO_VALIDADO",
+      commitmentNoteDivergenceReason: `Registro manual: ${input.manualReason}`,
+    });
+
+    const note = await prisma.commitmentNote.findUnique({
+      where: { externalCode: snapshot.externalCode },
+      include: { documents: { orderBy: { issuedAt: "asc" } } },
+    });
+    if (!note) throw new AppError("Falha ao persistir a Nota de Empenho manual", 500);
+
+    await auditService.log({
+      entityType: "COMMITMENT_NOTE",
+      entityId: note.id,
+      action: "CREATE",
+      actor: this.actor(user),
+      summary: `NE ${note.number} registrada manualmente no projeto PRJ-${project.projectCode}`,
+      after: {
+        number: note.number,
+        source: note.source,
+        syncStatus: note.syncStatus,
+        currentAmount: Number(note.currentAmount),
+      },
+      metadata: {
+        registrationMode: "MANUAL",
+        manualReason: input.manualReason!,
+        portalValidated: false,
+      },
+    });
+
+    return {
+      project,
+      commitmentNote: serializeNote(note),
+      validation: {
+        status: "NAO_VALIDADO" as const,
+        divergences: [],
+        expected: {
+          supplierName: expected.supplierName,
+          supplierCnpj: expected.supplierCnpj,
+          amount: expected.expectedAmount,
+        },
+        manualReason: input.manualReason!,
+      },
+    };
   }
 
   async list(filters: ListCommitmentNotesInput, user: CurrentUser) {
@@ -324,6 +412,7 @@ export class FinancialExecutionService {
         const note = await tx.commitmentNote.update({
           where: { id },
           data: {
+            source: snapshot.source,
             supplierName: snapshot.supplierName,
             supplierCnpj: snapshot.supplierCnpj,
             issuedAt: snapshot.issuedAt,

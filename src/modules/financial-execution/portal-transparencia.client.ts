@@ -16,8 +16,8 @@ export type ParsedFinancialDocument = {
   rawSnapshot: Record<string, unknown>;
 };
 
-export type PortalCommitmentSnapshot = {
-  source: "PORTAL_TRANSPARENCIA";
+export type CommitmentNoteSnapshot = {
+  source: "PORTAL_TRANSPARENCIA" | "MANUAL";
   externalCode: string;
   number: string;
   managementUnit: string;
@@ -34,6 +34,10 @@ export type PortalCommitmentSnapshot = {
   documents: ParsedFinancialDocument[];
   rawSnapshot: Record<string, unknown>;
   fetchedAt: Date;
+};
+
+export type PortalCommitmentSnapshot = CommitmentNoteSnapshot & {
+  source: "PORTAL_TRANSPARENCIA";
 };
 
 type JsonRecord = Record<string, unknown>;

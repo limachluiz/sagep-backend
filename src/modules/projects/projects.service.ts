@@ -12,7 +12,7 @@ import { ServiceOrdersService } from "../service-orders/service-orders.service.j
 import { TasksService } from "../tasks/tasks.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
-import type { PortalCommitmentSnapshot } from "../financial-execution/portal-transparencia.client.js";
+import type { CommitmentNoteSnapshot } from "../financial-execution/portal-transparencia.client.js";
 
 type CurrentUser = {
   id: string;
@@ -1876,8 +1876,8 @@ export class ProjectsService {
     data: UpdateProjectFlowInput,
     user: CurrentUser,
     options?: {
-      commitmentNoteSnapshot?: PortalCommitmentSnapshot;
-      commitmentNoteSyncStatus?: "VALIDADO" | "DIVERGENTE";
+      commitmentNoteSnapshot?: CommitmentNoteSnapshot;
+      commitmentNoteSyncStatus?: "VALIDADO" | "DIVERGENTE" | "NAO_VALIDADO";
       commitmentNoteDivergenceReason?: string | null;
     },
   ) {

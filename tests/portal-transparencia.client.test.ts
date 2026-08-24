@@ -5,7 +5,10 @@ import {
   buildCommitmentExternalCode,
   portalTransparenciaClient,
 } from "../src/modules/financial-execution/portal-transparencia.client.js";
-import { standaloneCommitmentNoteLookupSchema } from "../src/modules/financial-execution/financial-execution.schemas.js";
+import {
+  registerCommitmentNoteSchema,
+  standaloneCommitmentNoteLookupSchema,
+} from "../src/modules/financial-execution/financial-execution.schemas.js";
 
 vi.mock("../src/modules/system-settings/system-settings.service.js", () => ({
   systemSettingsService: { getEffective: vi.fn().mockResolvedValue({ portalTransparenciaBaseUrl: "https://api.portaldatransparencia.gov.br/api-de-dados" }) },
@@ -17,6 +20,28 @@ describe("PortalTransparenciaClient", () => {
   it("aceita consulta avulsa sem identificador de projeto", () => {
     expect(standaloneCommitmentNoteLookupSchema.parse({ number: "2026ne000534" }))
       .toEqual({ number: "2026NE000534" });
+  });
+
+  it("exige justificativa e confirmação no registro manual", () => {
+    expect(() => registerCommitmentNoteSchema.parse({
+      projectId: "project-1",
+      number: "2026NE000534",
+      receivedAt: "2026-08-24",
+      registrationMode: "MANUAL",
+    })).toThrow();
+
+    expect(registerCommitmentNoteSchema.parse({
+      projectId: "project-1",
+      number: "2026NE000534",
+      receivedAt: "2026-08-24",
+      registrationMode: "MANUAL",
+      manualReason: "Portal indisponível durante o registro",
+      confirmManualRegistration: true,
+    })).toMatchObject({
+      registrationMode: "MANUAL",
+      manualReason: "Portal indisponível durante o registro",
+      confirmManualRegistration: true,
+    });
   });
 
   it("monta o código oficial com UG, gestão e número normalizado", () => {

@@ -1572,6 +1572,56 @@ describe("critical flows", () => {
     ).toBe(true);
   });
 
+  it("workflow: registra NE manual com justificativa, auditoria e status não validado", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-MANUAL-001",
+        creditNoteReceivedAt: "2026-08-23T00:00:00.000Z",
+      })
+      .expect(200);
+    await issueDiex(project.id, estimate.id, adminAuth.accessToken);
+
+    const response = await request(app)
+      .post("/api/financial-execution/commitment-notes")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        projectId: project.id,
+        number: "2026NE000534",
+        receivedAt: "2026-08-24T00:00:00.000Z",
+        registrationMode: "MANUAL",
+        manualReason: "Portal da Transparência indisponível durante o registro",
+        confirmManualRegistration: true,
+      })
+      .expect(201);
+
+    expect(response.body.project.stage).toBe("OS_LIBERADA");
+    expect(response.body.commitmentNote).toMatchObject({
+      number: "2026NE000534",
+      source: "MANUAL",
+      syncStatus: "NAO_VALIDADO",
+    });
+    expect(response.body.validation.status).toBe("NAO_VALIDADO");
+
+    const audit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "COMMITMENT_NOTE",
+        entityId: response.body.commitmentNote.id,
+        action: "CREATE",
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    expect(audit?.metadata).toMatchObject({
+      registrationMode: "MANUAL",
+      portalValidated: false,
+    });
+  });
+
   it("workflow: As-Built review approves to ATESTAR_NF and rejects back to SERVICO_EM_EXECUCAO", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
 

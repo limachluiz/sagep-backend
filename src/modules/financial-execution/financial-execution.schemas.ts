@@ -25,7 +25,18 @@ export const previewCommitmentNoteSchema = z.object(lookupFields);
 export const registerCommitmentNoteSchema = z.object({
   ...lookupFields,
   receivedAt: z.coerce.date(),
+  registrationMode: z.enum(["PORTAL", "MANUAL"]).default("PORTAL"),
+  manualReason: z.string().trim().min(10, "Informe uma justificativa com pelo menos 10 caracteres").max(500).optional(),
+  confirmManualRegistration: z.boolean().default(false),
   acceptDivergence: z.boolean().default(false),
+}).superRefine((input, context) => {
+  if (input.registrationMode !== "MANUAL") return;
+  if (!input.manualReason) {
+    context.addIssue({ code: "custom", path: ["manualReason"], message: "Informe a justificativa do registro manual" });
+  }
+  if (!input.confirmManualRegistration) {
+    context.addIssue({ code: "custom", path: ["confirmManualRegistration"], message: "Confirme que a NE não foi validada no Portal" });
+  }
 });
 
 export const listCommitmentNotesSchema = z.object({
@@ -41,7 +52,7 @@ export const listCommitmentNotesSchema = z.object({
     "PARCIALMENTE_ANULADA",
     "ANULADA",
   ]).optional(),
-  syncStatus: z.enum(["VALIDADO", "DIVERGENTE", "ERRO"]).optional(),
+  syncStatus: z.enum(["VALIDADO", "DIVERGENTE", "NAO_VALIDADO", "ERRO"]).optional(),
   projectId: z.string().trim().optional(),
 });
 

@@ -1647,7 +1647,10 @@ export interface paths {
         /** Listar Notas de Empenho rastreadas */
         get: operations["financialExecution_get_commitmentNotes"];
         put?: never;
-        /** Validar, vincular e registrar uma Nota de Empenho */
+        /**
+         * Validar no Portal ou registrar manualmente uma Nota de Empenho
+         * @description No modo MANUAL, exige justificativa e confirmação explícita e registra a NE como não validada, preservando a trilha de auditoria.
+         */
         post: operations["financialExecution_post_commitmentNotes"];
         delete?: never;
         options?: never;
@@ -3628,6 +3631,14 @@ export interface components {
         CommitmentNoteRegisterRequest: components["schemas"]["CommitmentNoteLookupRequest"] & {
             /** Format: date-time */
             receivedAt: string;
+            /**
+             * @default PORTAL
+             * @enum {string}
+             */
+            registrationMode: "PORTAL" | "MANUAL";
+            manualReason?: string;
+            /** @default false */
+            confirmManualRegistration: boolean;
             /** @default false */
             acceptDivergence: boolean;
         };
@@ -8377,7 +8388,7 @@ export interface operations {
                 /** @description Situação financeira */
                 financialStatus?: "NAO_LIQUIDADA" | "PARCIALMENTE_LIQUIDADA" | "LIQUIDADA" | "PARCIALMENTE_PAGA" | "PAGA" | "PARCIALMENTE_ANULADA" | "ANULADA";
                 /** @description Situação da validação externa */
-                syncStatus?: "VALIDADO" | "DIVERGENTE" | "ERRO";
+                syncStatus?: "VALIDADO" | "DIVERGENTE" | "NAO_VALIDADO" | "ERRO";
             };
             header?: never;
             path?: never;

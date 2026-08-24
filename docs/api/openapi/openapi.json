@@ -4076,6 +4076,23 @@
                 "type": "string",
                 "format": "date-time"
               },
+              "registrationMode": {
+                "type": "string",
+                "enum": [
+                  "PORTAL",
+                  "MANUAL"
+                ],
+                "default": "PORTAL"
+              },
+              "manualReason": {
+                "type": "string",
+                "minLength": 10,
+                "maxLength": 500
+              },
+              "confirmManualRegistration": {
+                "type": "boolean",
+                "default": false
+              },
               "acceptDivergence": {
                 "type": "boolean",
                 "default": false
@@ -13626,6 +13643,7 @@
               "enum": [
                 "VALIDADO",
                 "DIVERGENTE",
+                "NAO_VALIDADO",
                 "ERRO"
               ]
             }
@@ -13670,7 +13688,8 @@
         "tags": [
           "financial-execution"
         ],
-        "summary": "Validar, vincular e registrar uma Nota de Empenho",
+        "summary": "Validar no Portal ou registrar manualmente uma Nota de Empenho",
+        "description": "No modo MANUAL, exige justificativa e confirmação explícita e registra a NE como não validada, preservando a trilha de auditoria.",
         "security": [
           {
             "bearerAuth": []
