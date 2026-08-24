@@ -21,6 +21,7 @@ describe("homologação isolada no Pop!_OS", () => {
     expect(values.SAGEP_CONTAINER_PREFIX).toBe("sagep_homolog");
     expect(values.SAGEP_VOLUME_PREFIX).toBe("sagep_homolog");
     expect(values.SAGEP_FIREWALL_NAMESPACE).toBe("SAGEP-HML");
+    expect(values.PGADMIN_DEFAULT_EMAIL).toBe("admin@sagep.example.com");
     expect(values.DATABASE_URL).toContain(`localhost:${homologationDefaults.postgresPort}`);
     expect(values.DOCKER_DATABASE_URL).toContain("postgres:5432");
     expect(values.CORS_ALLOWED_ORIGINS).toBe("https://sagep.homolog.test:58443");
@@ -32,6 +33,7 @@ describe("homologação isolada no Pop!_OS", () => {
     const values = parseEnvironmentFile(buildHomologationEnvironment());
     expect(() => validateHomologationEnvironment({ ...values, SAGEP_CONTAINER_PREFIX: "sagep" })).toThrow(/divergente/);
     expect(() => validateHomologationEnvironment({ ...values, SAGEP_HTTPS_PORT: "443" })).toThrow(/divergente/);
+    expect(() => validateHomologationEnvironment({ ...values, PGADMIN_DEFAULT_EMAIL: "admin@sagep.homolog.test" })).toThrow(/divergente/);
   });
 
   it("mantém defaults de produção e permite nomes interpolados no Compose", async () => {
