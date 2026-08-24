@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim AS build
 
-ENV PUPPETEER_CACHE_DIR=/root/.cache/puppeteer
+ENV PUPPETEER_CACHE_DIR=/opt/puppeteer
 # URL sintaticamente valida usada apenas pelo Prisma durante a geracao.
 # A URL real e injetada em tempo de execucao pelo ambiente.
 ENV DATABASE_URL=postgresql://localhost:5432/sagep?schema=public
@@ -9,6 +9,8 @@ WORKDIR /app
 
 COPY package.json package-lock.json .npmrc ./
 RUN npm ci
+RUN npx puppeteer browsers install chrome \
+  && node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; const executable = await puppeteer.executablePath(); fs.accessSync(executable, fs.constants.X_OK); console.log(`Chrome disponível em ${executable}`);'
 
 COPY prisma ./prisma
 COPY tsconfig.json prisma.config.ts ./
@@ -20,7 +22,8 @@ RUN npm run build
 FROM node:22-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
-ENV PUPPETEER_CACHE_DIR=/home/sagep/.cache/puppeteer
+ENV PUPPETEER_CACHE_DIR=/opt/puppeteer
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 
 WORKDIR /app
 
@@ -79,10 +82,11 @@ COPY prisma.config.ts ./
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/assets ./src/assets
 COPY --from=build /app/src/generated ./src/generated
-COPY --from=build /root/.cache/puppeteer /home/sagep/.cache/puppeteer
+COPY --from=build /opt/puppeteer /opt/puppeteer
 
 RUN mkdir -p /app/backups \
-  && chown -R sagep:sagep /app /home/sagep
+  && chown -R sagep:sagep /app /home/sagep /opt/puppeteer \
+  && node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; const executable = await puppeteer.executablePath(); fs.accessSync(executable, fs.constants.X_OK); console.log(`Chrome disponível em ${executable}`);'
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \

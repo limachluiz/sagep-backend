@@ -44,6 +44,14 @@ describe("homologação isolada no Pop!_OS", () => {
     expect(compose).toContain("name: ${SAGEP_VOLUME_PREFIX:-sagep}_postgres_data");
   });
 
+  it("inclui e valida o Chrome exigido pelo Puppeteer na imagem final", async () => {
+    const dockerfile = await readFile("Dockerfile", "utf8");
+    expect(dockerfile).toContain("RUN npx puppeteer browsers install chrome");
+    expect(dockerfile).toContain("COPY --from=build /opt/puppeteer /opt/puppeteer");
+    expect(dockerfile).toContain("ENV PUPPETEER_SKIP_DOWNLOAD=true");
+    expect(dockerfile.match(/puppeteer\.executablePath\(\)/g)).toHaveLength(2);
+  });
+
   it("executa a pré-validação completa e propaga seus bloqueios", () => {
     const successRunner = vi.fn().mockReturnValue({ status: 0 });
     expect(() => runDeploymentPreflight("/tmp/.env.homolog", successRunner)).not.toThrow();
