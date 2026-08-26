@@ -13,6 +13,11 @@ import { TasksService } from "../tasks/tasks.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 import type { CommitmentNoteSnapshot } from "../financial-execution/portal-transparencia.client.js";
+import {
+  inferDeliveryUnit,
+  parseDeliveryReportDraft,
+  type DeliveryReportDraft,
+} from "./delivery-report-draft.js";
 
 type CurrentUser = {
   id: string;
@@ -2427,6 +2432,102 @@ export class ProjectsService {
     const project = await prisma.project.update({ where: { id: projectId }, data: { deliveryReportSignedAt: data.signedAt, deliveryReportSignedLink: data.signedLink?.trim() || null }, include: projectInclude });
     await auditService.log({ entityType: "PROJECT", entityId: projectId, action: "UPDATE", actor: this.getAuditActor(user), summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`, before: this.buildProjectAuditSnapshot(current), after: this.buildProjectAuditSnapshot(project), metadata: { source: "project.delivery-report.signature", signedAt: data.signedAt, signedLink: data.signedLink ?? null } });
     return project;
+  }
+
+  async getDeliveryReportDraft(projectId: string, user: CurrentUser) {
+    await this.ensureCanView(projectId, user);
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        projectType: true,
+        deliveryReportDraft: true,
+        estimates: {
+          where: { status: "FINALIZADA", archivedAt: null, deletedAt: null },
+          orderBy: { updatedAt: "desc" },
+          take: 1,
+          select: { items: { orderBy: { referenceCode: "asc" }, select: { id: true, referenceCode: true, description: true, unit: true, quantity: true, subtotal: true } } },
+        },
+        serviceOrders: {
+          where: { archivedAt: null, deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { items: { orderBy: { itemCode: "asc" }, select: { estimateItemId: true, itemCode: true, description: true, supplyUnit: true, quantityOrdered: true, totalPrice: true } } },
+        },
+      },
+    });
+    if (!project) throw new AppError("Projeto não encontrado", 404);
+
+    const sourceItems = project.serviceOrders[0]?.items.length
+      ? project.serviceOrders[0].items.map((item) => ({
+        itemId: item.estimateItemId,
+        itemCode: item.itemCode,
+        description: item.description,
+        sourceUnit: item.supplyUnit,
+        sourceQuantity: item.quantityOrdered.toString(),
+        totalPrice: item.totalPrice.toString(),
+      }))
+      : (project.estimates[0]?.items ?? []).map((item) => ({
+        itemId: item.id,
+        itemCode: item.referenceCode,
+        description: item.description,
+        sourceUnit: item.unit,
+        sourceQuantity: item.quantity.toString(),
+        totalPrice: item.subtotal.toString(),
+      }));
+    const draft = parseDeliveryReportDraft(project.deliveryReportDraft, project.projectType);
+    const details = new Map(draft.itemDetails.map((item) => [item.itemId, item]));
+    const itemDetails = sourceItems.map((item) => details.get(item.itemId) ?? {
+      itemId: item.itemId,
+      unit: inferDeliveryUnit(item.description, item.sourceUnit),
+      quantity: item.sourceQuantity,
+      technicalDescription: "",
+    });
+    if (!project.deliveryReportDraft && project.description) {
+      const purpose = draft.sections.find((section) => section.key === "purpose-scope");
+      if (purpose) purpose.content = project.description;
+    }
+    return {
+      project: { id: project.id, projectCode: project.projectCode, title: project.title, projectType: project.projectType },
+      draft: { ...draft, itemDetails },
+      items: sourceItems,
+      readiness: {
+        sectionsIncluded: draft.sections.filter((section) => section.included).length,
+        sectionsReviewed: draft.sections.filter((section) => section.included && section.reviewed && section.content.trim()).length,
+        itemsDocumented: itemDetails.filter((item) => item.technicalDescription.trim()).length,
+        totalItems: itemDetails.length,
+      },
+    };
+  }
+
+  async updateDeliveryReportDraft(projectId: string, draft: DeliveryReportDraft, user: CurrentUser) {
+    await this.ensureCanManage(projectId, user);
+    const current = await prisma.project.findUnique({ where: { id: projectId }, select: { projectCode: true, deliveryReportDraft: true } });
+    if (!current) throw new AppError("Projeto não encontrado", 404);
+    const updated = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        deliveryReportDraft: draft as unknown as Prisma.InputJsonValue,
+        deliveryReportGeneratedAt: null,
+        deliveryReportSignedAt: null,
+        deliveryReportSignedLink: null,
+      },
+      select: { deliveryReportDraft: true },
+    });
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: projectId,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `Memória técnica do relatório PRJ-${current.projectCode} atualizada`,
+      before: { deliveryReportDraft: current.deliveryReportDraft ? JSON.stringify(current.deliveryReportDraft) : null },
+      after: { deliveryReportDraft: updated.deliveryReportDraft ? JSON.stringify(updated.deliveryReportDraft) : null },
+      metadata: { source: "project.delivery-report.draft", generatedReportInvalidated: true },
+    });
+    return this.getDeliveryReportDraft(projectId, user);
   }
 
   async reviewAsBuilt(projectId: string, data: ReviewAsBuiltInput, user: CurrentUser) {

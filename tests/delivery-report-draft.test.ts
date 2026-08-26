@@ -1,0 +1,23 @@
+import { describe, expect, it } from "vitest";
+import { defaultDeliveryReportSections, inferDeliveryUnit, parseDeliveryReportDraft } from "../src/modules/projects/delivery-report-draft.js";
+
+describe("memória técnica do relatório de entrega", () => {
+  it("sugere metro para cabo linear e unidade para equipamentos e pontos", () => {
+    expect(inferDeliveryUnit("Lançamento e instalação de cabo de fibra óptica tipo DROP", "SERVIÇO")).toBe("m");
+    expect(inferDeliveryUnit("Instalação com fornecimento de Câmera IP PoE Bullet", "SERVIÇO")).toBe("Und.");
+    expect(inferDeliveryUnit("Instalação de Ponto Lógico com cabo UTP", "SERVIÇO")).toBe("Und.");
+    expect(inferDeliveryUnit("Fornecimento de cabo óptico", "METRO")).toBe("METRO");
+  });
+
+  it("cria os blocos profissionais sem inserir instruções no conteúdo do PDF", () => {
+    const sections = defaultDeliveryReportSections("CFTV");
+    expect(sections.some((section) => section.key === "executive-project")).toBe(true);
+    expect(sections.find((section) => section.key === "executive-project")?.content).toBe("");
+    expect(sections.find((section) => section.key === "technical-conclusion")?.content).toContain("SAGEP");
+  });
+
+  it("preserva um rascunho salvo", () => {
+    const stored = { version: 1 as const, sections: [{ key: "custom-test", title: "Memória", content: "Conteúdo", included: true, reviewed: true }], itemDetails: [{ itemId: "item-1", unit: "m", quantity: "320", technicalDescription: "Cabo DROP." }] };
+    expect(parseDeliveryReportDraft(stored, "CFTV")).toEqual(stored);
+  });
+});

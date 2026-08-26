@@ -184,3 +184,20 @@ export const registerDeliveryReportSignatureSchema = z.object({
   signedAt: z.coerce.date(),
   signedLink: z.string().trim().url().max(2048).optional(),
 });
+
+export const deliveryReportDraftSchema = z.object({
+  version: z.literal(1),
+  sections: z.array(z.object({
+    key: z.string().trim().min(2).max(60).regex(/^[a-z0-9-]+$/),
+    title: z.string().trim().min(3).max(160),
+    content: z.string().trim().max(20_000),
+    included: z.boolean(),
+    reviewed: z.boolean(),
+  })).min(1).max(20),
+  itemDetails: z.array(z.object({
+    itemId: z.string().trim().min(1).max(128),
+    unit: z.string().trim().min(1).max(20),
+    quantity: z.string().trim().min(1).max(40),
+    technicalDescription: z.string().trim().max(12_000),
+  })).max(250),
+});

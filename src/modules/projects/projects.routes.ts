@@ -29,6 +29,8 @@ projectsRoutes.patch("/:id/service-order/signature", (req, res) =>
   controller.registerSignedServiceOrder(req, res)
 );
 projectsRoutes.patch("/:id/delivery-report/signature", (req, res) => controller.registerDeliveryReportSignature(req, res));
+projectsRoutes.get("/:id/delivery-report/draft", (req, res) => controller.deliveryReportDraft(req, res));
+projectsRoutes.put("/:id/delivery-report/draft", (req, res) => controller.updateDeliveryReportDraft(req, res));
 projectsRoutes.post("/:id/commitment-note/cancel", (req, res) =>
   controller.cancelCommitmentNote(req, res)
 );

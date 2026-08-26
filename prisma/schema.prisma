@@ -380,6 +380,7 @@ model Project {
   deliveryReportGeneratedAt        DateTime?
   deliveryReportSignedAt           DateTime?
   deliveryReportSignedLink         String?
+  deliveryReportDraft              Json?
   archivedAt                       DateTime?
   deletedAt                        DateTime?
   createdAt                        DateTime                 @default(now())
