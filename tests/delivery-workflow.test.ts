@@ -24,6 +24,16 @@ describe("technical delivery workflow", () => {
     expect(() => workflow.validateStageRequirements("SERVICO_CONCLUIDO", { ...base, stage: "SERVICO_CONCLUIDO", deliveryReportGeneratedAt: new Date(), deliveryReportSignedAt: new Date() }, 1)).not.toThrow();
   });
 
+  it("rejects a signature from before the current report version", () => {
+    const workflow = new WorkflowService();
+    expect(() => workflow.validateStageRequirements("SERVICO_CONCLUIDO", {
+      ...base,
+      stage: "SERVICO_CONCLUIDO",
+      deliveryReportGeneratedAt: new Date("2026-08-26T14:35:00.000Z"),
+      deliveryReportSignedAt: new Date("2026-08-25T00:00:00.000Z"),
+    }, 1)).toThrow(/anterior à versão atual/);
+  });
+
   it("validates evidence metadata", () => {
     expect(evidenceUploadHeadersSchema.parse({ projectId: "p1", filename: "rota.kmz", title: "Traçado da fibra", category: "KMZ_KML", phase: "AFTER", includeInReport: true })).toMatchObject({ category: "KMZ_KML", includeInReport: true });
   });

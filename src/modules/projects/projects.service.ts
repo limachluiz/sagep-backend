@@ -613,6 +613,8 @@ export class ProjectsService {
       asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
       serviceCompletedAt: project.serviceCompletedAt ?? null,
+      deliveryReportGeneratedAt: project.deliveryReportGeneratedAt ?? null,
+      deliveryReportSignedAt: project.deliveryReportSignedAt ?? null,
     };
   }
 
@@ -1597,7 +1599,11 @@ export class ProjectsService {
     }
 
     const workflowSnapshot = this.buildWorkflowSnapshot(project);
-    const nextAction = workflowService.getNextAction(workflowSnapshot);
+    const validDeliveryReportSignedAt = workflowService.isDeliveryReportSignatureValid(workflowSnapshot)
+      ? project.deliveryReportSignedAt
+      : null;
+    const effectiveWorkflowSnapshot = { ...workflowSnapshot, deliveryReportSignedAt: validDeliveryReportSignedAt };
+    const nextAction = workflowService.getNextAction(effectiveWorkflowSnapshot);
     const auditTrail = await this.buildUnifiedTimeline(project);
     const canViewAudit = permissionsService.hasPermission(user, "audit.view");
     const timeline = auditTrail.map((item) => this.toPublicTimelineItem(item));
@@ -1651,7 +1657,7 @@ export class ProjectsService {
           invoiceAttestedAt: project.invoiceAttestedAt,
           serviceCompletedAt: project.serviceCompletedAt,
           deliveryReportGeneratedAt: project.deliveryReportGeneratedAt,
-          deliveryReportSignedAt: project.deliveryReportSignedAt,
+          deliveryReportSignedAt: validDeliveryReportSignedAt,
           deliveryReportSignedLink: project.deliveryReportSignedLink,
         },
         serviceOrderSignature: {
@@ -1662,7 +1668,7 @@ export class ProjectsService {
           registeredBy: project.signedServiceOrderRegisteredBy,
         },
       },
-      pendingActions: this.buildPendingActions(project),
+      pendingActions: this.buildPendingActions({ ...project, deliveryReportSignedAt: validDeliveryReportSignedAt }),
       timeline,
       auditTrail: canViewAudit ? auditTrail : null,
       tasks: project.tasks,
