@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 44509)
-Total output lines: 5038
-
 import bcrypt from "bcryptjs";
 import ExcelJS from "exceljs";
 import request from "supertest";
@@ -1738,383 +1735,144 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "SERVICO_EM_EXECUCAO",
-        executionStartedAt: "2026-04-04T00:00:00.…14509 tokens truncated…nks.self).toContain("/api/users");
-
-    const legacyUsers = await request(app)
-      .get("/api/users")
-      .query({ format: "legacy" })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(Array.isArray(legacyUsers.body)).toBe(true);
-
-    await request(app)
-      .get(`/api/users/${gestor.id}`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .expect(403);
-
-    const userDetail = await request(app)
-      .get(`/api/users/${gestor.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(userDetail.body.id).toBe(gestor.id);
-    expect(userDetail.body.rank).toBe("2º Ten");
-    expect(userDetail.body.cpf).toBe("11122233344");
-
-    const updatedUser = await request(app)
-      .patch(`/api/users/${gestor.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        name: "Gestor Atualizado",
-        email: "gestor.atualizado@sagep.com",
-        rank: "1º Ten",
-        cpf: "99988877766",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
       })
       .expect(200);
 
-    expect(updatedUser.body.name).toBe("Gestor Atualizado");
-    expect(updatedUser.body.email).toBe("gestor.atualizado@sagep.com");
-    expect(updatedUser.body.rank).toBe("1º Ten");
-    expect(updatedUser.body.cpf).toBe("99988877766");
-
-    const inactiveUser = await request(app)
-      .patch(`/api/users/${gestor.id}/status`)
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ active: false })
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
       .expect(200);
 
-    expect(inactiveUser.body.active).toBe(false);
-
-    const reactivatedUser = await request(app)
-      .patch(`/api/users/${gestor.id}/status`)
+    const nextActionBeforeReview = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ active: true })
       .expect(200);
 
-    expect(reactivatedUser.body.active).toBe(true);
+    expect(nextActionBeforeReview.body.code).toBe("VALIDAR_AS_BUILT");
 
     await request(app)
-      .patch(`/api/users/${admin.id}/status`)
+      .patch(`/api/projects/${project.id}/as-built/review`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ active: false })
-      .expect(409);
+      .send({
+        approved: false,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+      })
+      .expect(400);
 
-    const atas = await request(app)
-      .get("/api/atas")
-      .query({ search: catalog.ata.number, pageSize: 1 })
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
+    const rejected = await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: false,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+        rejectionReason: "Documento incompleto",
+      })
       .expect(200);
 
-    expect(atas.body.items).toHaveLength(1);
-    expect(atas.body.items[0].id).toBe(catalog.ata.id);
-    expect(atas.body.filters.search).toBe(catalog.ata.number);
+    expect(rejected.body.stage).toBe("SERVICO_EM_EXECUCAO");
+    expect(rejected.body.asBuiltReceivedAt).toBeNull();
+    expect(rejected.body.asBuiltRejectedAt).toBeTruthy();
+    expect(rejected.body.asBuiltRejectionReason).toBe("Documento incompleto");
 
-    const ataItems = await request(app)
-      .get(`/api/atas/${catalog.ata.id}/items`)
-      .query({ format: "envelope", pageSize: 1 })
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
+    const nextActionAfterReject = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(ataItems.body.items).toHaveLength(1);
-    expect(ataItems.body.items[0].id).toBe(catalog.ataItem.id);
-    expect(ataItems.body.meta.totalItems).toBe(1);
+    expect(nextActionAfterReject.body.code).toBe("ANEXAR_AS_BUILT");
 
-    const legacyAtaItems = await request(app)
-      .get("/api/ata-items")
-      .query({ format: "legacy" })
-      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-07T00:00:00.000Z",
+      })
       .expect(200);
 
-    expect(Array.isArray(legacyAtaItems.body)).toBe(true);
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(400);
 
-    const oms = await request(app)
-      .get("/api/military-organizations")
-      .query({ sigla: catalog.om.sigla })
-      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
+    const approved = await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-08T00:00:00.000Z",
+        asBuiltLink: "https://drive.example.mil.br/pastas/as-built-prj",
+      })
       .expect(200);
 
-    expect(oms.body.items).toHaveLength(1);
-    expect(oms.body.items[0].id).toBe(catalog.om.id);
-    expect(oms.body.filters.sigla).toBe(catalog.om.sigla);
-  });
+    expect(approved.body.stage).toBe("ATESTAR_NF");
+    expect(approved.body.asBuiltReviewedAt).toBeTruthy();
+    expect(approved.body.asBuiltApprovedAt).toBeTruthy();
+    expect(approved.body.asBuiltLink).toBe("https://drive.example.mil.br/pastas/as-built-prj");
+    expect(approved.body.asBuiltRejectedAt).toBeNull();
+    expect(approved.body.asBuiltRejectionReason).toBeNull();
 
-  it("permissions: applies granular task and estimate permissions", async () => {
-    const project = await createProject(adminAuth.accessToken, "Projeto RBAC granular");
-    await prisma.projectMember.create({
-      data: {
-        projectId: project.id,
-        userId: projetista.id,
-        role: "Projetista",
+    const detailsAfterApproval = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsAfterApproval.body.workflow.stage).toBe("ATESTAR_NF");
+    expect(detailsAfterApproval.body.workflow.nextAction.code).toBe("ATESTAR_NF");
+
+    const reviewAudits = await prisma.auditLog.findMany({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        metadata: {
+          path: ["source"],
+          equals: "project.as-built.review",
+        },
       },
+      orderBy: { createdAt: "asc" },
     });
 
-    await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        title: "Tarefa atribuida sem permissao",
-        assigneeId: projetista.id,
-      })
-      .expect(403);
-
-    const task = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        title: "Tarefa operacional",
-      })
-      .expect(201);
-
-    await request(app)
-      .patch(`/api/tasks/${task.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ assigneeId: projetista.id })
-      .expect(200);
-
-    const progress = await request(app)
-      .post(`/api/tasks/${task.body.id}/activities`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .send({ content: "Documentação conferida e encaminhada para revisão." })
-      .expect(201);
-
-    expect(progress.body.status).toBe("EM_ANDAMENTO");
-    expect(progress.body.activities).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "NOTE", author: expect.objectContaining({ id: projetista.id }) }),
-        expect.objectContaining({
-          type: "STATUS_CHANGE",
-          fromStatus: "PENDENTE",
-          toStatus: "EM_ANDAMENTO",
-        }),
-      ]),
-    );
-
-    const completed = await request(app)
-      .post(`/api/tasks/${task.body.id}/complete`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .send({ content: "Entrega final validada." })
-      .expect(200);
-
-    expect(completed.body.status).toBe("CONCLUIDA");
-    expect(completed.body.completedAt).toBeTruthy();
-    expect(completed.body.completedBy.id).toBe(projetista.id);
-    expect(completed.body.activities).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ type: "COMPLETION", content: "Entrega final validada." }),
-      ]),
-    );
-
-    await request(app)
-      .delete(`/api/tasks/${task.body.id}`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .expect(403);
-
-    const catalog = await createCatalog();
-
-    await request(app)
-      .post("/api/estimates")
-      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        ataId: catalog.ata.id,
-        coverageGroupId: catalog.coverageGroup.id,
-        omId: catalog.om.id,
-        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
-      })
-      .expect(403);
-
-    const estimate = await request(app)
-      .post("/api/estimates")
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        ataId: catalog.ata.id,
-        coverageGroupId: catalog.coverageGroup.id,
-        omId: catalog.om.id,
-        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
-      })
-      .expect(201);
-
-    await request(app)
-      .patch(`/api/estimates/${estimate.body.id}/status`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .send({ status: "FINALIZADA" })
-      .expect(200);
-
-    await request(app)
-      .delete(`/api/estimates/${estimate.body.id}`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .expect(403);
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "UPDATE" &&
+          (audit.metadata as Record<string, unknown> | null)?.approved === false &&
+          (audit.metadata as Record<string, unknown> | null)?.rejectionReason ===
+            "Documento incompleto",
+      ),
+    ).toBe(true);
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "STAGE_CHANGE" &&
+          (audit.metadata as Record<string, unknown> | null)?.newStage ===
+            "SERVICO_EM_EXECUCAO" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
+            "ANEXAR_AS_BUILT",
+      ),
+    ).toBe(true);
+    expect(
+      reviewAudits.some(
+        (audit) =>
+          audit.action === "STAGE_CHANGE" &&
+          (audit.metadata as Record<string, unknown> | null)?.newStage === "ATESTAR_NF" &&
+          (audit.metadata as Record<string, unknown> | null)?.nextActionCode ===
+            "ATESTAR_NF",
+      ),
+    ).toBe(true);
   });
 
-  it("tasks archive: hides archived tasks by default, restores and updates open task summary", async () => {
-    const project = await createProject(adminAuth.accessToken, "Projeto Task Archive");
-
-    const task = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        title: "Tarefa a arquivar",
-      })
-      .expect(201);
-
-    const detailsBeforeArchive = await request(app)
-      .get(`/api/projects/${project.id}/details`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(detailsBeforeArchive.body.operationalSummary.openTasksCount).toBe(1);
-
-    await request(app)
-      .delete(`/api/tasks/${task.body.id}`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .expect(403);
-
-    await request(app)
-      .delete(`/api/tasks/${task.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.permissionUsed).toBe("tasks.archive");
-        expect(response.body.task.archivedAt).toBeTruthy();
-      });
-
-    const defaultTasks = await request(app)
-      .get("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(defaultTasks.body.meta.totalItems).toBe(0);
-    expect(defaultTasks.body.items.some((item: { id: string }) => item.id === task.body.id)).toBe(false);
-
-    const detailsAfterArchive = await request(app)
-      .get(`/api/projects/${project.id}/details`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(detailsAfterArchive.body.operationalSummary.openTasksCount).toBe(0);
-
-    const archivedTasks = await request(app)
-      .get("/api/tasks")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(archivedTasks.body.filters.onlyArchived).toBe(true);
-    expect(archivedTasks.body.items.some((item: { id: string; archivedAt: string | null }) => item.id === task.body.id && item.archivedAt)).toBe(true);
-
-    await request(app)
-      .post(`/api/tasks/${task.body.id}/restore`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .expect(403);
-
-    await request(app)
-      .post(`/api/tasks/${task.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.permissionUsed).toBe("tasks.restore");
-        expect(response.body.task.archivedAt).toBeNull();
-      });
-
-    const audit = await prisma.auditLog.findFirst({
-      where: { entityType: "TASK", entityId: task.body.id, action: "RESTORE" },
-      orderBy: { createdAt: "desc" },
-    });
-    expect(audit).toBeTruthy();
-  });
-
-  it("estimates archive: hides archived estimates by default, restores and updates financial summary", async () => {
-    const project = await createProject(adminAuth.accessToken, "Projeto Estimate Archive");
-    const catalog = await createCatalog();
-
-    const estimate = await request(app)
-      .post("/api/estimates")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        ataId: catalog.ata.id,
-        coverageGroupId: catalog.coverageGroup.id,
-        omId: catalog.om.id,
-        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
-      })
-      .expect(201);
-
-    const detailsBeforeArchive = await request(app)
-      .get(`/api/projects/${project.id}/details`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(detailsBeforeArchive.body.financialSummary.estimatesCount).toBe(1);
-    expect(detailsBeforeArchive.body.financialSummary.estimatedTotalAmount).toBe("100.00");
-
-    await request(app)
-      .delete(`/api/estimates/${estimate.body.id}`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .expect(403);
-
-    await request(app)
-      .delete(`/api/estimates/${estimate.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.permissionUsed).toBe("estimates.archive");
-        expect(response.body.estimate.archivedAt).toBeTruthy();
-      });
-
-    const defaultEstimates = await request(app)
-      .get("/api/estimates")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(defaultEstimates.body.meta.totalItems).toBe(0);
-    expect(defaultEstimates.body.items.some((item: { id: string }) => item.id === estimate.body.id)).toBe(false);
-
-    const detailsAfterArchive = await request(app)
-      .get(`/api/projects/${project.id}/details`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(detailsAfterArchive.body.financialSummary.estimatesCount).toBe(0);
-    expect(detailsAfterArchive.body.financialSummary.estimatedTotalAmount).toBe("0.00");
-
-    const archivedEstimates = await request(app)
-      .get("/api/estimates")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(archivedEstimates.body.filters.onlyArchived).toBe(true);
-    expect(archivedEstimates.body.items.some((item: { id: string; archivedAt: string | null }) => item.id === estimate.body.id && item.archivedAt)).toBe(true);
-
-    await request(app)
-      .post(`/api/estimates/${estimate.body.id}/restore`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .expect(403);
-
-    await request(app)
-      .post(`/api/estimates/${estimate.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.permissionUsed).toBe("estimates.restore");
-        expect(response.body.estimate.archivedAt).toBeNull();
-      });
-
-    const audit = await prisma.auditLog.findFirst({
-      where: { entityType: "ESTIMATE", entityId: estimate.body.id, action: "RESTORE" },
-      orderBy: { createdAt: "desc" },
-    });
-    expect(audit).toBeTruthy();
-  });
-
-  it("restore permissions: GESTOR can restore and PROJETISTA/CONSULTA cannot", async () => {
+  it("workflow: opens technical delivery after execution is closed", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
-    const archivedProject = await createProject(adminAuth.accessToken, "Projeto Arquivado");
 
     await moveToCreditNote(project.id, adminAuth.accessToken);
 
@@ -2122,8 +1880,8 @@ describe("critical flows", () => {
       .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
-        stage: "AGUARDANDO_NOTA_CREDITO",
-        creditNoteNumber: "NC-001",
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-020",
         creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
       })
       .expect(200);
@@ -2135,561 +1893,233 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "AGUARDANDO_NOTA_EMPENHO",
-        commitmentNoteNumber: "NE-001",
+        commitmentNoteNumber: "NE-020",
         commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
       })
       .expect(200);
 
-    const serviceOrder = await request(app)
-      .post("/api/service-orders")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        estimateId: estimate.id,
-        serviceOrderNumber: "OS-001",
-        issuedAt: "2026-04-03T00:00:00.000Z",
-        contractorCnpj: "12345678000190",
-        requesterName: "Fiscal Teste",
-        requesterRank: "2 Ten",
-        requesterCpf: "11122233344",
-      })
-      .expect(201);
-
-    // Arquivar na ordem correta
     await request(app)
-      .delete(`/api/service-orders/${serviceOrder.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    await request(app)
-      .delete(`/api/diex/${diex.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    await request(app)
-      .delete(`/api/projects/${archivedProject.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    await request(app)
-      .post(`/api/projects/${archivedProject.id}/restore`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .expect(403);
-
-    await request(app)
-      .post(`/api/projects/${archivedProject.id}/restore`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.permissionUsed).toBe("projects.restore");
-      });
-
-    await request(app)
-      .post(`/api/diex/${diex.id}/restore`)
-      .set("Authorization", `Bearer ${consultaAuth.accessToken}`)
-      .expect(403);
-
-    await request(app)
-      .post(`/api/diex/${diex.id}/restore`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.permissionUsed).toBe("diex.restore");
-      });
-
-    await request(app)
-      .post(`/api/service-orders/${serviceOrder.body.id}/restore`)
-      .set("Authorization", `Bearer ${projetistaAuth.accessToken}`)
-      .expect(403);
-
-    await request(app)
-      .post(`/api/service-orders/${serviceOrder.body.id}/restore`)
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.permissionUsed).toBe("service_orders.restore");
-      });
-  });
-
-  it("restore cascade: project can restore eligible archived children and skip logically deleted ones", async () => {
-    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
-    await moveToCreditNote(project.id, adminAuth.accessToken);
-
-    await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_CREDITO",
-        creditNoteNumber: "NC-CASCADE-001",
-        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
-      })
-      .expect(200);
-
-    const task = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ projectId: project.id, title: "Tarefa restauravel em cascata" })
-      .expect(201);
-
-    const deletedTask = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ projectId: project.id, title: "Tarefa removida logicamente" })
-      .expect(201);
-
-    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
-
-    await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_EMPENHO",
-        commitmentNoteNumber: "NE-CASCADE-001",
-        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
-      })
-      .expect(200);
-
-    const serviceOrder = await request(app)
       .post("/api/service-orders")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         projectId: project.id,
         estimateId: estimate.id,
         diexId: diex.id,
-        serviceOrderNumber: "OS-CASCADE-001",
         issuedAt: "2026-04-03T00:00:00.000Z",
         contractorCnpj: "12345678000190",
-        requesterName: "Fiscal Cascade",
+        requesterName: "Fiscal Teste",
         requesterRank: "2 Ten",
         requesterCpf: "11122233344",
       })
       .expect(201);
 
-    await request(app)
-      .delete(`/api/service-orders/${serviceOrder.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
+    await registerSignedServiceOrder(project.id, adminAuth.accessToken);
 
     await request(app)
-      .delete(`/api/diex/${diex.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    await request(app)
-      .delete(`/api/tasks/${task.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    const lifecycleDate = new Date("2026-04-10T00:00:00.000Z");
-
-    await prisma.estimate.update({
-      where: { id: estimate.id },
-      data: {
-        archivedAt: lifecycleDate,
-      },
-    });
-
-    await prisma.task.update({
-      where: { id: deletedTask.body.id },
-      data: {
-        archivedAt: lifecycleDate,
-        deletedAt: lifecycleDate,
-      },
-    });
-
-    await prisma.project.update({
-      where: { id: project.id },
-      data: {
-        archivedAt: lifecycleDate,
-      },
-    });
-
-    await request(app)
-      .post(`/api/projects/${project.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ cascade: true })
-      .expect(200)
-      .expect((response) => {
-        expect(response.body.permissionUsed).toBe("projects.restore");
-        expect(response.body.cascadeApplied).toBe(true);
-        expect(response.body.project.archivedAt).toBeNull();
-        expect(response.body.cascade.restored).toEqual({
-          tasks: 1,
-          estimates: 1,
-          diexRequests: 1,
-          serviceOrders: 1,
-        });
-        expect(response.body.cascade.skipped.tasksDeleted).toBe(1);
-      });
-
-    const [restoredTask, logicallyDeletedTask, restoredEstimate, restoredDiex, restoredServiceOrder] =
-      await Promise.all([
-        prisma.task.findUnique({ where: { id: task.body.id } }),
-        prisma.task.findUnique({ where: { id: deletedTask.body.id } }),
-        prisma.estimate.findUnique({ where: { id: estimate.id } }),
-        prisma.diexRequest.findUnique({ where: { id: diex.id } }),
-        prisma.serviceOrder.findUnique({ where: { id: serviceOrder.body.id } }),
-      ]);
-
-    expect(restoredTask?.archivedAt).toBeNull();
-    expect(restoredEstimate?.archivedAt).toBeNull();
-    expect(restoredDiex?.archivedAt).toBeNull();
-    expect(restoredServiceOrder?.archivedAt).toBeNull();
-    expect(logicallyDeletedTask?.deletedAt).toBeTruthy();
-    expect(logicallyDeletedTask?.archivedAt).toBeTruthy();
-  });
-
-  it("restore cascade: service order can restore archived dependency chain, but blocks logical deletes", async () => {
-    const firstChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
-    await moveToCreditNote(firstChain.project.id, adminAuth.accessToken);
-
-    await request(app)
-      .patch(`/api/projects/${firstChain.project.id}/flow`)
+      .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
-        stage: "AGUARDANDO_NOTA_CREDITO",
-        creditNoteNumber: "NC-SO-001",
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+        asBuiltLink: "https://drive.example.mil.br/arquivos/as-built-1.pdf",
+      })
+      .expect(200);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ATESTAR_NF",
+        invoiceAttestedAt: "2026-04-07T00:00:00.000Z",
+      })
+      .expect(200);
+
+    const delivery = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ENTREGA_TECNICA",
+        serviceCompletedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(200);
+
+    expect(delivery.body.status).toBe("EM_ANDAMENTO");
+    expect(delivery.body.stage).toBe("ENTREGA_TECNICA");
+    expect(delivery.body.invoiceAttestedAt).toBeTruthy();
+    expect(delivery.body.serviceCompletedAt).toBeTruthy();
+
+    const nextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(nextAction.body.code).toBe("GERAR_RELATORIO_ENTREGA");
+  });
+
+  it("workflow: rejects skipping invoice attestation and technical delivery", async () => {
+    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteNumber: "NC-021",
         creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
       })
       .expect(200);
 
-    const firstDiex = await issueDiex(
-      firstChain.project.id,
-      firstChain.estimate.id,
-      adminAuth.accessToken,
-    );
+    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
 
     await request(app)
-      .patch(`/api/projects/${firstChain.project.id}/flow`)
+      .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "AGUARDANDO_NOTA_EMPENHO",
-        commitmentNoteNumber: "NE-SO-001",
+        commitmentNoteNumber: "NE-021",
         commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
       })
       .expect(200);
 
-    const firstServiceOrder = await request(app)
+    await request(app)
       .post("/api/service-orders")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
-        projectId: firstChain.project.id,
-        estimateId: firstChain.estimate.id,
-        diexId: firstDiex.id,
-        serviceOrderNumber: "OS-UP-001",
+        projectId: project.id,
+        estimateId: estimate.id,
+        diexId: diex.id,
         issuedAt: "2026-04-03T00:00:00.000Z",
         contractorCnpj: "12345678000190",
-        requesterName: "Fiscal Restore",
+        requesterName: "Fiscal Teste",
         requesterRank: "2 Ten",
         requesterCpf: "11122233344",
       })
       .expect(201);
 
+    await registerSignedServiceOrder(project.id, adminAuth.accessToken);
+
     await request(app)
-      .delete(`/api/service-orders/${firstServiceOrder.body.id}`)
+      .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "SERVICO_EM_EXECUCAO",
+        executionStartedAt: "2026-04-04T00:00:00.000Z",
+      })
       .expect(200);
 
     await request(app)
-      .delete(`/api/diex/${firstDiex.id}`)
+      .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "ANALISANDO_AS_BUILT",
+        asBuiltReceivedAt: "2026-04-05T00:00:00.000Z",
+      })
       .expect(200);
 
-    const firstLifecycleDate = new Date("2026-04-15T00:00:00.000Z");
-
-    await prisma.estimate.update({
-      where: { id: firstChain.estimate.id },
-      data: {
-        archivedAt: firstLifecycleDate,
-      },
-    });
-
-    await prisma.project.update({
-      where: { id: firstChain.project.id },
-      data: {
-        archivedAt: firstLifecycleDate,
-      },
-    });
+    await request(app)
+      .patch(`/api/projects/${project.id}/as-built/review`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        approved: true,
+        reviewedAt: "2026-04-06T00:00:00.000Z",
+        asBuiltLink: "https://drive.example.mil.br/arquivos/as-built-2.pdf",
+      })
+      .expect(200);
 
     await request(app)
-      .post(`/api/service-orders/${firstServiceOrder.body.id}/restore`)
+      .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(409);
-
-    await request(app)
-      .post(`/api/service-orders/${firstServiceOrder.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ cascade: true })
-      .expect(200)
+      .send({
+        stage: "SERVICO_CONCLUIDO",
+        serviceCompletedAt: "2026-04-08T00:00:00.000Z",
+      })
+      .expect(409)
       .expect((response) => {
-        expect(response.body.permissionUsed).toBe("service_orders.restore");
-        expect(response.body.cascadeApplied).toBe(true);
-        expect(response.body.serviceOrder.archivedAt).toBeNull();
+        expect(response.body.message).toContain("Transição inválida");
       });
-
-    const [restoredProject, restoredEstimate, restoredDiex, restoredServiceOrder] =
-      await Promise.all([
-        prisma.project.findUnique({ where: { id: firstChain.project.id } }),
-        prisma.estimate.findUnique({ where: { id: firstChain.estimate.id } }),
-        prisma.diexRequest.findUnique({ where: { id: firstDiex.id } }),
-        prisma.serviceOrder.findUnique({ where: { id: firstServiceOrder.body.id } }),
-      ]);
-
-    expect(restoredProject?.archivedAt).toBeNull();
-    expect(restoredEstimate?.archivedAt).toBeNull();
-    expect(restoredDiex?.archivedAt).toBeNull();
-    expect(restoredServiceOrder?.archivedAt).toBeNull();
-
-    const secondChain = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
-    await moveToCreditNote(secondChain.project.id, adminAuth.accessToken);
-
-    await request(app)
-      .patch(`/api/projects/${secondChain.project.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_CREDITO",
-        creditNoteNumber: "NC-SO-002",
-        creditNoteReceivedAt: "2026-04-11T00:00:00.000Z",
-      })
-      .expect(200);
-
-    const secondDiex = await issueDiex(
-      secondChain.project.id,
-      secondChain.estimate.id,
-      adminAuth.accessToken,
-    );
-
-    await request(app)
-      .patch(`/api/projects/${secondChain.project.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_EMPENHO",
-        commitmentNoteNumber: "NE-SO-002",
-        commitmentNoteReceivedAt: "2026-04-12T00:00:00.000Z",
-      })
-      .expect(200);
-
-    const secondServiceOrder = await request(app)
-      .post("/api/service-orders")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: secondChain.project.id,
-        estimateId: secondChain.estimate.id,
-        diexId: secondDiex.id,
-        serviceOrderNumber: "OS-UP-002",
-        issuedAt: "2026-04-13T00:00:00.000Z",
-        contractorCnpj: "12345678000190",
-        requesterName: "Fiscal Block",
-        requesterRank: "2 Ten",
-        requesterCpf: "11122233344",
-      })
-      .expect(201);
-
-    await request(app)
-      .delete(`/api/service-orders/${secondServiceOrder.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    await prisma.diexRequest.update({
-      where: { id: secondDiex.id },
-      data: {
-        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
-        deletedAt: new Date("2026-04-20T00:00:00.000Z"),
-      },
-    });
-
-    await request(app)
-      .post(`/api/service-orders/${secondServiceOrder.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ cascade: true })
-      .expect(409);
   });
 
-  it("archive filters: admin can include or isolate archived records", async () => {
-    const activeProject = await createProject(adminAuth.accessToken, "Projeto Ativo");
-    const archivedProject = await createProject(adminAuth.accessToken, "Projeto Arquivado");
-
-    await request(app)
-      .delete(`/api/projects/${archivedProject.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    const projectForTasks = await createProject(adminAuth.accessToken, "Projeto Filtros Tarefas");
-    const activeTask = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ projectId: projectForTasks.id, title: "Tarefa ativa" })
-      .expect(201);
-    const archivedTask = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ projectId: projectForTasks.id, title: "Tarefa arquivada" })
-      .expect(201);
-
-    await request(app)
-      .delete(`/api/tasks/${archivedTask.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    const projectForEstimates = await createProject(adminAuth.accessToken, "Projeto Filtros Estimativas");
+  it("estimates: finalizing an estimate advances the project workflow to awaiting credit note", async () => {
+    const project = await createProject(adminAuth.accessToken, "Projeto Finalizacao Estimativa");
     const catalog = await createCatalog();
-    const activeEstimate = await request(app)
+
+    const estimate = await request(app)
       .post("/api/estimates")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
-        projectId: projectForEstimates.id,
+        projectId: project.id,
         ataId: catalog.ata.id,
         coverageGroupId: catalog.coverageGroup.id,
         omId: catalog.om.id,
         items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
       })
       .expect(201);
-    const archivedEstimate = await request(app)
-      .post("/api/estimates")
+
+    const initialNextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: projectForEstimates.id,
-        ataId: catalog.ata.id,
-        coverageGroupId: catalog.coverageGroup.id,
-        omId: catalog.om.id,
-        items: [{ ataItemId: catalog.ataItem.id, quantity: 2 }],
-      })
-      .expect(201);
+      .expect(200);
+
+    expect(initialNextAction.body.code).toBe("FINALIZAR_ESTIMATIVA");
 
     await request(app)
-      .delete(`/api/estimates/${archivedEstimate.body.id}`)
+      .patch(`/api/estimates/${estimate.body.id}/status`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({ status: "FINALIZADA" })
+      .expect(200)
+      .expect((response) => {
+        expect(response.body.status).toBe("FINALIZADA");
+      });
+
+    const details = await request(app)
+      .get(`/api/projects/${project.id}/details`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    const projectsWithArchived = await request(app)
-      .get("/api/projects")
-      .query({ includeArchived: true })
+    expect(details.body.workflow.stage).toBe("AGUARDANDO_NOTA_CREDITO");
+    expect(details.body.workflow.status).toBe("EM_ANDAMENTO");
+    expect(details.body.workflow.nextAction.code).toBe("EMITIR_DIEX");
+
+    const nextAction = await request(app)
+      .get(`/api/projects/${project.id}/next-action`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(projectsWithArchived.body.filters.includeArchived).toBe(true);
-    expect(
-      projectsWithArchived.body.items.some((item: { id: string }) => item.id === activeProject.id),
-    ).toBe(true);
-    expect(
-      projectsWithArchived.body.items.some(
-        (item: {
-          id: string;
-          archivedAt: string | null;
-          archiveContext?: { actorUserId: string | null };
-        }) =>
-          item.id === archivedProject.id &&
-          item.archivedAt &&
-          item.archiveContext?.actorUserId === admin.id,
-      ),
-    ).toBe(true);
+    expect(nextAction.body.code).toBe("EMITIR_DIEX");
 
-    const archivedProjectsOnly = await request(app)
-      .get("/api/projects")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
+    const stageAudit = await prisma.auditLog.findFirst({
+      where: {
+        entityType: "PROJECT",
+        entityId: project.id,
+        action: "STAGE_CHANGE",
+        summary: {
+          contains: "após finalização da estimativa",
+        },
+      },
+    });
 
-    expect(archivedProjectsOnly.body.filters.onlyArchived).toBe(true);
-    expect(
-      archivedProjectsOnly.body.items.every((item: { archivedAt: string | null }) =>
-        Boolean(item.archivedAt),
-      ),
-    ).toBe(true);
+    expect(stageAudit).toBeTruthy();
 
-    const projectsWithArchivedForManager = await request(app)
-      .get("/api/projects")
-      .query({ includeArchived: true })
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .expect(200);
-
-    expect(projectsWithArchivedForManager.body.filters.includeArchived).toBe(true);
-    expect(
-      projectsWithArchivedForManager.body.items.some(
-        (item: { id: string; archivedAt: string | null }) =>
-          item.id === archivedProject.id && Boolean(item.archivedAt),
-      ),
-    ).toBe(true);
-
-    const tasksWithArchived = await request(app)
-      .get("/api/tasks")
-      .query({ includeArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(tasksWithArchived.body.filters.includeArchived).toBe(true);
-    expect(
-      tasksWithArchived.body.items.some((item: { id: string }) => item.id === activeTask.body.id),
-    ).toBe(true);
-    expect(
-      tasksWithArchived.body.items.some(
-        (item: {
-          id: string;
-          archivedAt: string | null;
-          archiveContext?: { actorUserId: string | null; summary: string | null };
-        }) =>
-          item.id === archivedTask.body.id &&
-          item.archivedAt &&
-          item.archiveContext?.actorUserId === admin.id &&
-          item.archiveContext.summary?.includes("arquivada"),
-      ),
-    ).toBe(true);
-
-    const tasksArchivedByPeriod = await request(app)
-      .get("/api/tasks")
-      .query({
-        archivedFrom: "2000-01-01T00:00:00.000Z",
-        archivedUntil: "2999-12-31T23:59:59.999Z",
-      })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(tasksArchivedByPeriod.body.filters.archivedFrom).toBeDefined();
-    expect(
-      tasksArchivedByPeriod.body.items.every((item: { archivedAt: string | null }) =>
-        Boolean(item.archivedAt),
-      ),
-    ).toBe(true);
-
-    const tasksArchivedByPeriodForManager = await request(app)
-      .get("/api/tasks")
-      .query({ archivedFrom: "2000-01-01T00:00:00.000Z" })
-      .set("Authorization", `Bearer ${gestorAuth.accessToken}`)
-      .expect(200);
-
-    expect(tasksArchivedByPeriodForManager.body.filters.archivedFrom).toBeDefined();
-    expect(
-      tasksArchivedByPeriodForManager.body.items.every(
-        (item: { archivedAt: string | null }) => Boolean(item.archivedAt),
-      ),
-    ).toBe(true);
-
-    const estimatesOnlyArchived = await request(app)
-      .get("/api/estimates")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(estimatesOnlyArchived.body.filters.onlyArchived).toBe(true);
-    expect(
-      estimatesOnlyArchived.body.items.some(
-        (item: {
-          id: string;
-          archivedAt: string | null;
-          archiveContext?: { actorUserId: string | null };
-        }) =>
-          item.id === archivedEstimate.body.id &&
-          item.archivedAt &&
-          item.archiveContext?.actorUserId === admin.id,
-      ),
-    ).toBe(true);
-    expect(
-      estimatesOnlyArchived.body.items.some(
-        (item: { id: string }) => item.id === activeEstimate.body.id,
-      ),
-    ).toBe(false);
-
-    const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
     await request(app)
       .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
@@ -2699,557 +2129,23 @@ describe("critical flows", () => {
         creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
       })
       .expect(200);
-    const diex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
-    await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_EMPENHO",
-        commitmentNoteNumber: "NE-001",
-        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
-      })
-      .expect(200);
 
-    const serviceOrder = await request(app)
-      .post("/api/service-orders")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        estimateId: estimate.id,
-        serviceOrderNumber: "OS-ARCHIVE-FILTER",
-        issuedAt: "2026-04-03T00:00:00.000Z",
-        contractorCnpj: "12345678000190",
-        requesterName: "Fiscal Teste",
-        requesterRank: "2 Ten",
-        requesterCpf: "11122233344",
-      })
-      .expect(201);
-
-    await request(app)
-      .delete(`/api/service-orders/${serviceOrder.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    await request(app)
-      .delete(`/api/diex/${diex.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    const archivedServiceOrders = await request(app)
-      .get("/api/service-orders")
-      .query({ onlyArchived: true, archivedFrom: "2000-01-01T00:00:00.000Z" })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(
-      archivedServiceOrders.body.items.some(
-        (item: {
-          id: string;
-          archivedAt: string | null;
-          archiveContext?: { actorUserId: string | null };
-        }) =>
-          item.id === serviceOrder.body.id &&
-          item.archivedAt &&
-          item.archiveContext?.actorUserId === admin.id,
-      ),
-    ).toBe(true);
-
-    const archivedDiex = await request(app)
-      .get("/api/diex")
-      .query({ onlyArchived: true, archivedUntil: "2999-12-31T23:59:59.999Z" })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(
-      archivedDiex.body.items.some(
-        (item: {
-          id: string;
-          archivedAt: string | null;
-          archiveContext?: { actorUserId: string | null };
-        }) =>
-          item.id === diex.id &&
-          item.archivedAt &&
-          item.archiveContext?.actorUserId === admin.id,
-      ),
-    ).toBe(true);
+    await issueDiex(project.id, estimate.body.id, adminAuth.accessToken);
   });
 
-  it("logical delete filters: deleted records stay out of default and archived views, but can be isolated administratively", async () => {
-    const deletedProject = await createProject(adminAuth.accessToken, "Projeto Deleted");
-    await prisma.project.update({
-      where: { id: deletedProject.id },
-      data: {
-        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
-        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
-      },
-    });
-
-    const taskProject = await createProject(adminAuth.accessToken, "Projeto Deleted Task");
-    const deletedTask = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ projectId: taskProject.id, title: "Tarefa deleted" })
-      .expect(201);
-    await prisma.task.update({
-      where: { id: deletedTask.body.id },
-      data: {
-        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
-        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
-      },
-    });
-
-    const estimateProject = await createProject(adminAuth.accessToken, "Projeto Deleted Estimate");
-    const catalog = await createCatalog();
-    const deletedEstimate = await request(app)
-      .post("/api/estimates")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: estimateProject.id,
-        ataId: catalog.ata.id,
-        coverageGroupId: catalog.coverageGroup.id,
-        omId: catalog.om.id,
-        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
-      })
-      .expect(201);
-    await prisma.estimate.update({
-      where: { id: deletedEstimate.body.id },
-      data: {
-        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
-        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
-      },
-    });
-
+  it("workflow and alerts: keeps AGUARDANDO_NOTA_EMPENHO aligned with commitment note state", async () => {
     const { project, estimate } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
     await request(app)
       .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "AGUARDANDO_NOTA_CREDITO",
-        creditNoteNumber: "NC-DELETE-001",
+        creditNoteNumber: "NC-001",
         creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
       })
       .expect(200);
-
-    const deletedDiex = await issueDiex(project.id, estimate.id, adminAuth.accessToken);
-    await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_EMPENHO",
-        commitmentNoteNumber: "NE-DELETE-001",
-        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
-      })
-      .expect(200);
-
-    const deletedServiceOrder = await request(app)
-      .post("/api/service-orders")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: project.id,
-        estimateId: estimate.id,
-        serviceOrderNumber: "OS-DELETE-001",
-        issuedAt: "2026-04-03T00:00:00.000Z",
-        contractorCnpj: "12345678000190",
-        requesterName: "Fiscal Delete",
-        requesterRank: "2 Ten",
-        requesterCpf: "11122233344",
-      })
-      .expect(201);
-
-    await prisma.diexRequest.update({
-      where: { id: deletedDiex.id },
-      data: {
-        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
-        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
-      },
-    });
-    await prisma.serviceOrder.update({
-      where: { id: deletedServiceOrder.body.id },
-      data: {
-        archivedAt: new Date("2026-04-20T00:00:00.000Z"),
-        deletedAt: new Date("2026-04-21T00:00:00.000Z"),
-      },
-    });
-
-    const defaultProjects = await request(app)
-      .get("/api/projects")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(defaultProjects.body.items.some((item: { id: string }) => item.id === deletedProject.id)).toBe(false);
-
-    const archivedProjects = await request(app)
-      .get("/api/projects")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(archivedProjects.body.items.some((item: { id: string }) => item.id === deletedProject.id)).toBe(false);
-
-    const deletedProjects = await request(app)
-      .get("/api/projects")
-      .query({ onlyDeleted: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(deletedProjects.body.filters.onlyDeleted).toBe(true);
-    expect(deletedProjects.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedProject.id && item.deletedAt)).toBe(true);
-
-    const archivedTasks = await request(app)
-      .get("/api/tasks")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(archivedTasks.body.items.some((item: { id: string }) => item.id === deletedTask.body.id)).toBe(false);
-
-    const deletedTasks = await request(app)
-      .get("/api/tasks")
-      .query({ onlyDeleted: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(deletedTasks.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedTask.body.id && item.deletedAt)).toBe(true);
-
-    const archivedEstimates = await request(app)
-      .get("/api/estimates")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(archivedEstimates.body.items.some((item: { id: string }) => item.id === deletedEstimate.body.id)).toBe(false);
-
-    const deletedEstimates = await request(app)
-      .get("/api/estimates")
-      .query({ onlyDeleted: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(deletedEstimates.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedEstimate.body.id && item.deletedAt)).toBe(true);
-
-    const archivedDiex = await request(app)
-      .get("/api/diex")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(archivedDiex.body.items.some((item: { id: string }) => item.id === deletedDiex.id)).toBe(false);
-
-    const deletedDiexList = await request(app)
-      .get("/api/diex")
-      .query({ onlyDeleted: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(deletedDiexList.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedDiex.id && item.deletedAt)).toBe(true);
-
-    const archivedServiceOrders = await request(app)
-      .get("/api/service-orders")
-      .query({ onlyArchived: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(archivedServiceOrders.body.items.some((item: { id: string }) => item.id === deletedServiceOrder.body.id)).toBe(false);
-
-    const deletedServiceOrders = await request(app)
-      .get("/api/service-orders")
-      .query({ onlyDeleted: true })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(deletedServiceOrders.body.items.some((item: { id: string; deletedAt: string | null }) => item.id === deletedServiceOrder.body.id && item.deletedAt)).toBe(true);
-
-    await request(app)
-      .post(`/api/projects/${deletedProject.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(404);
-    await request(app)
-      .post(`/api/tasks/${deletedTask.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(404);
-    await request(app)
-      .post(`/api/estimates/${deletedEstimate.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(404);
-    await request(app)
-      .post(`/api/diex/${deletedDiex.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(404);
-    await request(app)
-      .post(`/api/service-orders/${deletedServiceOrder.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(404);
-  });
-
-  it("logical delete on project parent hides active child records from operational reads", async () => {
-    const { project: activeProject, estimate: finalizedEstimate } =
-      await createProjectWithFinalizedEstimate(adminAuth.accessToken, "Projeto Pai Deleted");
-    const task = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ projectId: activeProject.id, title: "Tarefa do projeto deletado" })
-      .expect(201);
-
-    await request(app)
-      .patch(`/api/projects/${activeProject.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_CREDITO",
-        creditNoteNumber: "NC-PARENT-001",
-        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
-      })
-      .expect(200);
-
-    const diex = await issueDiex(activeProject.id, finalizedEstimate.id, adminAuth.accessToken);
-    await request(app)
-      .patch(`/api/projects/${activeProject.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_EMPENHO",
-        commitmentNoteNumber: "NE-PARENT-001",
-        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
-      })
-      .expect(200);
-
-    const serviceOrder = await request(app)
-      .post("/api/service-orders")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: activeProject.id,
-        estimateId: finalizedEstimate.id,
-        serviceOrderNumber: "OS-PARENT-001",
-        issuedAt: "2026-04-03T00:00:00.000Z",
-        contractorCnpj: "12345678000190",
-        requesterName: "Fiscal Parent",
-        requesterRank: "2 Ten",
-        requesterCpf: "11122233344",
-      })
-      .expect(201);
-
-    await prisma.project.update({
-      where: { id: activeProject.id },
-      data: {
-        deletedAt: new Date("2026-04-22T00:00:00.000Z"),
-      },
-    });
-
-    const tasks = await request(app)
-      .get("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(tasks.body.items.some((item: { id: string }) => item.id === task.body.id)).toBe(false);
-
-    const estimates = await request(app)
-      .get("/api/estimates")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(estimates.body.items.some((item: { id: string }) => item.id === finalizedEstimate.id)).toBe(false);
-
-    const diexList = await request(app)
-      .get("/api/diex")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(diexList.body.items.some((item: { id: string }) => item.id === diex.id)).toBe(false);
-
-    const serviceOrders = await request(app)
-      .get("/api/service-orders")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-    expect(serviceOrders.body.items.some((item: { id: string }) => item.id === serviceOrder.body.id)).toBe(false);
-  });
-
-  it("archive/restore: rejects invalid repeated operations and parent archive conflicts", async () => {
-    const project = await createProject(adminAuth.accessToken, "Projeto Conflitos Archive");
-    const task = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ projectId: project.id, title: "Tarefa com conflitos" })
-      .expect(201);
-
-    await request(app)
-      .post(`/api/tasks/${task.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(409);
-
-    await request(app)
-      .delete(`/api/tasks/${task.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    await request(app)
-      .delete(`/api/tasks/${task.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(409);
-
-    await request(app)
-      .post(`/api/tasks/${task.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    await request(app)
-      .post(`/api/tasks/${task.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(409);
-
-    const estimateProject = await createProject(adminAuth.accessToken, "Projeto Estimativa Pai");
-    const catalog = await createCatalog();
-    const estimate = await request(app)
-      .post("/api/estimates")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        projectId: estimateProject.id,
-        ataId: catalog.ata.id,
-        coverageGroupId: catalog.coverageGroup.id,
-        omId: catalog.om.id,
-        items: [{ ataItemId: catalog.ataItem.id, quantity: 1 }],
-      })
-      .expect(201);
-
-    await request(app)
-      .delete(`/api/estimates/${estimate.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    await prisma.project.update({
-      where: { id: estimateProject.id },
-      data: { archivedAt: new Date() },
-    });
-
-    await request(app)
-      .post(`/api/estimates/${estimate.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(409);
-  });
-
-  it("dashboards: applies manual, monthly and invalid temporal filters", async () => {
-    const january = await createProjectWithFinalizedEstimate(
-      adminAuth.accessToken,
-    );
-    const february = await createProjectWithFinalizedEstimate(
-      adminAuth.accessToken,
-    );
-
-    await setProjectAndEstimateCreatedAt(
-      january.project.id,
-      january.estimate.id,
-      new Date("2026-01-10T12:00:00.000Z"),
-    );
-    await setProjectAndEstimateCreatedAt(
-      february.project.id,
-      february.estimate.id,
-      new Date("2026-02-10T12:00:00.000Z"),
-    );
-
-    const overview = await request(app)
-      .get("/api/dashboard")
-      .query({
-        startDate: "2026-01-01T00:00:00.000Z",
-        endDate: "2026-01-31T23:59:59.999Z",
-      })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(overview.body.filter.mode).toBe("interval");
-    expect(overview.body.totals.projects).toBe(1);
-    expect(overview.body.totals.estimates).toBe(1);
-    expect(overview.body.financial.totalEstimatedAmount).toBe("200.00");
-
-    const executive = await request(app)
-      .get("/api/dashboard/executive")
-      .query({ periodType: "month", referenceDate: "2026-02-15T00:00:00.000Z" })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(executive.body.filter.mode).toBe("interval");
-    expect(executive.body.filter.periodType).toBe("month");
-    expect(executive.body.summary.projectsTotal).toBe(1);
-    expect(executive.body.summary.totalEstimatedAmount).toBe("200.00");
-
-    await request(app)
-      .get("/api/dashboard/executive")
-      .query({
-        asOfDate: "2026-02-15T00:00:00.000Z",
-        periodType: "month",
-      })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(400);
-  });
-
-  it("audit: stores archive and restore metadata with before/after snapshots", async () => {
-    const project = await createProject(adminAuth.accessToken, "Projeto Auditoria Archive");
-    const task = await request(app)
-      .post("/api/tasks")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({ projectId: project.id, title: "Tarefa auditada" })
-      .expect(201);
-
-    await request(app)
-      .delete(`/api/tasks/${task.body.id}`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    const archiveAudit = await prisma.auditLog.findFirst({
-      where: { entityType: "TASK", entityId: task.body.id, action: "ARCHIVE" },
-      orderBy: { createdAt: "desc" },
-    });
-
-    expect(archiveAudit?.actorUserId).toBe(admin.id);
-    expect(archiveAudit?.summary).toContain("arquivada");
-    expect((archiveAudit?.metadata as Record<string, unknown>).permissionUsed).toBe(
-      "tasks.archive",
-    );
-    expect((archiveAudit?.beforeJson as Record<string, unknown>).archivedAt).toBeNull();
-    expect((archiveAudit?.afterJson as Record<string, unknown>).archivedAt).toBeTruthy();
-
-    await request(app)
-      .post(`/api/tasks/${task.body.id}/restore`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    const restoreAudit = await prisma.auditLog.findFirst({
-      where: { entityType: "TASK", entityId: task.body.id, action: "RESTORE" },
-      orderBy: { createdAt: "desc" },
-    });
-
-    expect(restoreAudit?.actorUserId).toBe(admin.id);
-    expect((restoreAudit?.metadata as Record<string, unknown>).permissionUsed).toBe(
-      "tasks.restore",
-    );
-    expect((restoreAudit?.beforeJson as Record<string, unknown>).archivedAt).toBeTruthy();
-    expect((restoreAudit?.afterJson as Record<string, unknown>).archivedAt).toBeNull();
-  });
-
-  it("global search and dashboards return grouped operational data", async () => {
-    await createProjectWithFinalizedEstimate(adminAuth.accessToken);
-
-    const search = await request(app)
-      .get("/api/search")
-      .query({ q: "Manaus" })
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(search.body.groups.projects.length).toBeGreaterThanOrEqual(1);
-
-    const operational = await request(app)
-      .get("/api/dashboard/operational")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(operational.body.alerts.summary).toBeDefined();
-
-    const executive = await request(app)
-      .get("/api/dashboard/executive")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(executive.body.summary.projectsTotal).toBeGreaterThanOrEqual(1);
-  });
-
-  it("dashboards: expose inventory balance indicators for operational and executive views", async () => {
-    const project = await createProject(adminAuth.accessToken, "Projeto Dashboard Saldo");
-    const { estimate, ataItem } = await seedFinalizedEstimateWithBalance(project.id, {
-      initialQuantity: "3.00",
-      quantity: "2.00",
-    });
-
-    await request(app)
-      .patch(`/api/projects/${project.id}/flow`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .send({
-        stage: "AGUARDANDO_NOTA_CREDITO",
-        creditNoteNumber: "NC-DASH-001",
-        creditNoteReceivedAt: "2026-04-01T00:00:00.000Z",
-      })
-      .expect(200);
-
     await issueDiex(project.id, estimate.id, adminAuth.accessToken);
 
     await request(app)
@@ -3257,125 +2153,48 @@ describe("critical flows", () => {
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .send({
         stage: "AGUARDANDO_NOTA_EMPENHO",
-        commitmentNoteNumber: "NE-DASH-001",
-        commitmentNoteReceivedAt: "2026-04-02T00:00:00.000Z",
       })
       .expect(200);
 
-    const operational = await request(app)
+    const detailsWithoutCommitment = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(detailsWithoutCommitment.body.workflow.stage).toBe("AGUARDANDO_NOTA_EMPENHO");
+    expect(detailsWithoutCommitment.body.workflow.nextAction.code).toBe(
+      "INFORMAR_NOTA_EMPENHO",
+    );
+
+    const alertsWithoutCommitment = await request(app)
+      .get("/api/operational-alerts")
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(
+      alertsWithoutCommitment.body.alerts.some(
+        (alert: { project: { id: string }; category: string; nextAction: { code: string } }) =>
+          alert.project.id === project.id &&
+          alert.category === "AGUARDANDO_NOTA_EMPENHO" &&
+          alert.nextAction.code === "INFORMAR_NOTA_EMPENHO",
+      ),
+    ).toBe(true);
+
+    const dashboardWithoutCommitment = await request(app)
       .get("/api/dashboard/operational")
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(operational.body.inventory.summary.lowStockItems).toBeGreaterThanOrEqual(1);
-    expect(operational.body.inventory.summary.itemsWithActiveConsumption).toBeGreaterThanOrEqual(1);
-    expect(operational.body.inventory.summary.totalConsumedAmount).toBe("200.00");
+    expect(dashboardWithoutCommitment.body.pendingByStage.awaitingCommitmentNote).toBe(1);
+    expect(dashboardWithoutCommitment.body.pendingByStage.awaitingServiceOrder).toBe(0);
     expect(
-      operational.body.inventory.criticalItems.some(
-        (item: { id: string; balance: { availableQuantity: string } }) =>
-          item.id === ataItem.id && item.balance.availableQuantity === "1",
-      ),
-    ).toBe(true);
-
-    const executive = await request(app)
-      .get("/api/dashboard/executive")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(executive.body.summary.ataItemsAtRisk).toBeGreaterThanOrEqual(1);
-    expect(executive.body.financial.inventoryCurrentConsumedAmount).toBe("200.00");
-    expect(executive.body.inventory.snapshot.itemsWithActiveConsumption).toBeGreaterThanOrEqual(1);
-    expect(
-      executive.body.inventory.criticalItems.some(
-        (item: { id: string; balance: { availableQuantity: string } }) =>
-          item.id === ataItem.id && item.balance.availableQuantity === "1",
-      ),
-    ).toBe(true);
-  });
-
-  it("exports and reports expose authorized project outputs", async () => {
-    const { project } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
-
-    const xlsx = await request(app)
-      .get("/api/exports/projects.xlsx")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .buffer(true)
-      .parse(binaryParser)
-      .expect(200);
-
-    expect(xlsx.headers["content-type"]).toContain(
-      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    );
-    expect(Buffer.isBuffer(xlsx.body)).toBe(true);
-
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(xlsx.body);
-    const worksheet = workbook.getWorksheet("Projetos");
-    expect(worksheet).toBeDefined();
-
-    const headerRow = worksheet!.getRow(1);
-    expect(String(headerRow.getCell(1).value).toLowerCase()).toContain("projeto");
-    expect(String(headerRow.getCell(3).value).toLowerCase()).toBe("status");
-    expect(String(headerRow.getCell(10).value).toLowerCase()).toContain("valor");
-
-    const projectRow = worksheet!.getRows(2, worksheet!.rowCount - 1)?.find((row) =>
-      row.values.toString().includes(project.title),
-    );
-
-    expect(projectRow).toBeDefined();
-    expect(projectRow!.getCell(1).value).toBe(`PRJ-${project.projectCode}`);
-    expect(projectRow!.getCell(2).value).toBe(project.title);
-    expect(String(projectRow!.getCell(6).value)).toContain("OMT");
-    expect(projectRow!.getCell(7).value).toBe("Manaus");
-    expect(projectRow!.getCell(10).value).toBe(200);
-
-    const executiveReport = await request(app)
-      .get("/api/reports/projects/executive-summary?staleDays=30")
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(executiveReport.body.filter.scope).toBe(
-      "Visão geral da Seção de Projetos",
-    );
-    expect(executiveReport.body.filter.staleDays).toBe(30);
-    expect(executiveReport.body.summary.projectsTotal).toBeGreaterThanOrEqual(1);
-    expect(executiveReport.body.summary.projectsOpen).toBeGreaterThanOrEqual(1);
-    expect(executiveReport.body.summary).toHaveProperty("totalInProgressAmount");
-    expect(executiveReport.body.summary).toHaveProperty("totalCompletedAmount");
-    expect(
-      executiveReport.body.projects.some(
+      dashboardWithoutCommitment.body.operationalQueue.find(
         (item: { id: string }) => item.id === project.id,
-      ),
-    ).toBe(true);
+      ).nextAction.code,
+    ).toBe("INFORMAR_NOTA_EMPENHO");
 
-    const executivePdf = await request(app)
-      .get("/api/reports/projects/executive-summary.pdf?staleDays=30")
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .buffer(true)
-      .parse(binaryParser)
-      .expect(200);
-
-    expect(executivePdf.headers["content-type"]).toContain("application/pdf");
-    expect(executivePdf.body.subarray(0, 4).toString("utf8")).toBe("%PDF");
-
-    const dossier = await request(app)
-      .get(`/api/reports/projects/${project.id}/dossier`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .expect(200);
-
-    expect(dossier.body.project.id).toBe(project.id);
-    expect(Array.isArray(dossier.body.timelineSummary)).toBe(true);
-
-    const pdf = await request(app)
-      .get(`/api/reports/projects/${project.id}/dossier.pdf`)
-      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
-      .buffer(true)
-      .parse(binaryParser)
-      .expect(200);
-
-    expect(pdf.headers["content-type"]).toContain("application/pdf");
-    expect(Buffer.isBuffer(pdf.body)).toBe(true);
-    expect(pdf.body.subarray(0, 4).toString("utf8")).toBe("%PDF");
-    expect(pdf.body.length).toBeGreaterThan(1000);
-  });
-});
+      .send({
+        stage: "AGUARDANDO_NOTA_EMPENHO",
