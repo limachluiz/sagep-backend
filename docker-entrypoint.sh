@@ -5,6 +5,8 @@ backup_directory="${BACKUP_DIRECTORY:-/app/backups}"
 evidence_directory="${EVIDENCE_DIRECTORY:-/app/evidence-files}"
 pki_directory="${DEPLOYMENT_PKI_DIRECTORY:-/app/pki}"
 tls_directory="${DEPLOYMENT_TLS_DIRECTORY:-/app/tls}"
+setup_token_file="${SAGEP_SETUP_TOKEN_FILE:-/app/bootstrap/setup-token}"
+bootstrap_directory="$(dirname "$setup_token_file")"
 
 if [ "$backup_directory" != "/app/backups" ]; then
   echo "BACKUP_DIRECTORY deve ser /app/backups no container" >&2
@@ -23,6 +25,11 @@ fi
 
 if [ "$pki_directory" != "/app/pki" ]; then
   echo "DEPLOYMENT_PKI_DIRECTORY deve ser /app/pki no container" >&2
+  exit 1
+fi
+
+if [ "$setup_token_file" != "/app/bootstrap/setup-token" ]; then
+  echo "SAGEP_SETUP_TOKEN_FILE deve ser /app/bootstrap/setup-token no container" >&2
   exit 1
 fi
 
@@ -47,5 +54,10 @@ chown -R sagep:sagep /app/tls
 find /app/tls -type d -exec chmod 0700 {} +
 find /app/tls -type f -name '*.key' -exec chmod 0600 {} +
 find /app/tls -type f ! -name '*.key' -exec chmod 0644 {} +
+
+install -d -o sagep -g sagep -m 0700 "$bootstrap_directory"
+chown -R sagep:sagep /app/bootstrap
+find /app/bootstrap -type d -exec chmod 0700 {} +
+find /app/bootstrap -type f -exec chmod 0600 {} +
 
 exec gosu sagep "$@"
