@@ -90,6 +90,9 @@ type ComprasGovAtaItem = Record<string, unknown> & {
   codigoItem?: number;
   descricaoItem?: string;
   tipoItem?: string;
+  unidadeFornecimento?: string;
+  unidadeMedida?: string;
+  nomeUnidadeMedida?: string;
   quantidadeHomologadaItem?: number;
   quantidadeHomologadaVencedor?: number;
   valorUnitario?: number;
@@ -117,6 +120,8 @@ type FoundAtaPreview = {
   validFrom: string | null;
   validUntil: string | null;
   sampleItems: NormalizedPreviewItem[];
+  importedAtaId?: string;
+  importedAt?: string;
 };
 
 type AtaIdentifier = {
@@ -151,7 +156,28 @@ export class ComprasGovService {
   private requestDebug: ComprasGovRequestDebug[] = [];
 
   private normalizeText(value: unknown) {
-    return normalizeMojibakeText(value).trim();
+    return normalizeMojibakeText(value)
+      .replace(/\s+/g, " ")
+      .replace(/\s+([,.;:])/g, "$1")
+      .trim();
+  }
+
+  private normalizeItemUnit(item: ComprasGovAtaItem, description: string) {
+    const sourceUnit = this.normalizeText(
+      item.unidadeFornecimento ?? item.unidadeMedida ?? item.nomeUnidadeMedida,
+    ).toUpperCase();
+    if (sourceUnit && !["SERVIÇO", "SERVICO", "MATERIAL"].includes(sourceUnit)) {
+      return sourceUnit;
+    }
+
+    const normalizedDescription = description.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (
+      normalizedDescription.includes("LANCAMENTO") &&
+      (normalizedDescription.includes("CABO") || normalizedDescription.includes("FIBRA OPTICA"))
+    ) {
+      return "M";
+    }
+    return "UND";
   }
 
   private uniqueBy<T>(items: T[], getKey: (item: T, index: number) => string) {
@@ -391,7 +417,14 @@ export class ComprasGovService {
     }
 
     try {
-      return (await response.json()) as T;
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      let body: string;
+      try {
+        body = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      } catch {
+        body = new TextDecoder("windows-1252").decode(bytes);
+      }
+      return JSON.parse(body.replace(/^\uFEFF/, "")) as T;
     } catch {
       throw new AppError("Resposta invalida da API do Compras.gov.br", 502);
     }
@@ -646,7 +679,7 @@ export class ComprasGovService {
       const externalItemNumber = this.normalizeText(item.numeroItem || index + 1);
       const referenceCode = externalItemNumber || this.normalizeText(item.codigoItem || index + 1);
       const description = this.normalizeText(item.descricaoItem) || "Item sem descricao";
-      const unit = this.normalizeText(item.tipoItem) || "UN";
+      const unit = this.normalizeItemUnit(item, description);
       const unitPrice = this.normalizeNumber(item.valorUnitario);
       const initialQuantity = this.normalizeNumber(
         item.quantidadeHomologadaVencedor ?? item.quantidadeHomologadaItem,
@@ -696,6 +729,25 @@ export class ComprasGovService {
       validUntil: this.normalizeDateString(ata.dataVigenciaFinal),
       sampleItems: normalizedItems.slice(0, 3),
     };
+  }
+
+  private async markImportedAtas(input: PreviewInput, foundAtas: FoundAtaPreview[]) {
+    const imported = await prisma.ata.findMany({
+      where: {
+        externalSource: COMPRAS_GOV_SOURCE,
+        externalUasg: input.uasg.trim(),
+        externalPregaoNumber: input.numeroPregao.trim(),
+        externalPregaoYear: input.anoPregao.trim(),
+      },
+      select: { id: true, externalAtaNumber: true, externalLastSyncAt: true },
+    });
+
+    return foundAtas.map((found) => {
+      const match = imported.find((ata) => this.matchesAtaNumber(ata.externalAtaNumber, found.ataNumber));
+      return match
+        ? { ...found, importedAtaId: match.id, importedAt: match.externalLastSyncAt?.toISOString() }
+        : found;
+    });
   }
 
   private groupItemsByAta(items: ComprasGovAtaItem[]) {
@@ -786,9 +838,9 @@ export class ComprasGovService {
       }
 
       const itemsByAta = this.groupItemsByAta(items);
-      const atasFound = atas.map((ata) =>
+      const atasFound = await this.markImportedAtas(input, atas.map((ata) =>
         this.buildFoundAta(ata, itemsByAta.get(this.getAtaNumber(ata.numeroAtaRegistroPreco)) ?? [])
-      );
+      ));
 
       if (!hasAtaFilter && atasFound.length > 1) {
         return this.withPreviewDebug(input, {
@@ -948,8 +1000,36 @@ export class ComprasGovService {
     );
     const now = new Date();
 
+    const pregao = await prisma.pregao.upsert({
+      where: {
+        uasg_number_year: {
+          uasg: data.uasg.trim(),
+          number: data.numeroPregao.trim(),
+          year: data.anoPregao.trim(),
+        },
+      },
+      update: {
+        type: data.ataType,
+        managingAgency: preview.ata.managingAgency,
+        isActive: true,
+        externalSource: COMPRAS_GOV_SOURCE,
+        externalLastSyncAt: now,
+      },
+      create: {
+        uasg: data.uasg.trim(),
+        number: data.numeroPregao.trim(),
+        year: data.anoPregao.trim(),
+        type: data.ataType,
+        managingAgency: preview.ata.managingAgency,
+        externalSource: COMPRAS_GOV_SOURCE,
+        externalLastSyncAt: now,
+      },
+      select: { id: true },
+    });
+
     const existingAta = await prisma.ata.findFirst({
       where: {
+        pregaoId: pregao.id,
         externalSource: COMPRAS_GOV_SOURCE,
         externalUasg: data.uasg.trim(),
         externalPregaoNumber: data.numeroPregao.trim(),
@@ -960,6 +1040,7 @@ export class ComprasGovService {
     });
 
     const ataData = {
+      pregao: { connect: { id: pregao.id } },
       number: preview.ata.number,
       type: data.ataType,
       vendorName: preview.ata.vendorName ?? "Fornecedor nao informado",

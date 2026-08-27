@@ -562,9 +562,33 @@ model TaskActivity {
   @@index([authorId, createdAt])
 }
 
+model Pregao {
+  id                 String    @id @default(cuid())
+  pregaoCode         Int       @unique @default(autoincrement())
+  uasg               String
+  number             String
+  year               String
+  modality           String    @default("PREGÃO ELETRÔNICO")
+  object             String?
+  type               AtaType?
+  managingAgency     String?
+  isActive           Boolean   @default(true)
+  externalSource     String?
+  externalLastSyncAt DateTime?
+  atas               Ata[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([uasg, number, year])
+  @@index([year, number])
+  @@index([type, isActive])
+}
+
 model Ata {
   id                   String             @id @default(cuid())
   ataCode              Int                @unique @default(autoincrement())
+  pregaoId             String?
+  pregao               Pregao?            @relation(fields: [pregaoId], references: [id], onDelete: SetNull)
   items                AtaItem[]
   number               String
   type                 AtaType
@@ -587,6 +611,8 @@ model Ata {
   coverageGroups       AtaCoverageGroup[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+
+  @@index([pregaoId, isActive])
 }
 
 model AtaCoverageGroup {

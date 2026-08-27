@@ -55,6 +55,12 @@ function preserveWordCase(match: string, replacement: string) {
 
 function repairReplacementCharacters(value: string) {
   return value
+    .replace(/regi�o/gi, (match) => preserveWordCase(match, "região"))
+    .replace(/micr�metros/gi, (match) => preserveWordCase(match, "micrômetros"))
+    .replace(/l�gico/gi, (match) => preserveWordCase(match, "lógico"))
+    .replace(/fus�o/gi, (match) => preserveWordCase(match, "fusão"))
+    .replace(/conex�o/gi, (match) => preserveWordCase(match, "conexão"))
+    .replace(/necess�ria/gi, (match) => preserveWordCase(match, "necessária"))
     .replace(/lan�amento/gi, (match) => match[0] === "L" ? "Lançamento" : "lançamento")
     .replace(/�ptica/gi, (match) => match.slice(1) === "PTICA" ? "ÓPTICA" : "óptica")
     .replace(/acess�rios/gi, (match) => match[0] === "A" ? "Acessórios" : "acessórios")
@@ -79,6 +85,12 @@ function repairReplacementCharacters(value: string) {
     .replace(/\bmoni\s+toramento\b/gi, (match) => preserveWordCase(match, "monitoramento"))
     .replace(/\blong\s+o\b/gi, (match) => preserveWordCase(match, "longo"))
     .replace(/\bcaracterística\s+s\b/gi, (match) => preserveWordCase(match, "características"))
+    .replace(/\bincluin\s+do\b/gi, (match) => preserveWordCase(match, "incluindo"))
+    .replace(/\bpa\s+ra\b/gi, (match) => preserveWordCase(match, "para"))
+    .replace(/\bdem\s+ais\b/gi, (match) => preserveWordCase(match, "demais"))
+    .replace(/\bc\s+onectores\b/gi, (match) => preserveWordCase(match, "conectores"))
+    .replace(/\bide\s+ntificação\b/gi, (match) => preserveWordCase(match, "identificação"))
+    .replace(/\bre\s+ferência\b/gi, (match) => preserveWordCase(match, "referência"))
     .replace(/\bSERVI�O\b/g, "SERVIÇO")
     .replace(/\bServi�o\b/g, "Serviço")
     .replace(/\bservi�o\b/g, "serviço")

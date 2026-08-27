@@ -17,6 +17,11 @@ describe("normalizeMojibakeText", () => {
     expect(normalizeMojibakeText("fixa\ufffd\ufffdo")).toBe("fixa\u00e7\u00e3o");
     expect(normalizeMojibakeText("identifica\ufffd\ufffdo")).toBe("identifica\u00e7\u00e3o");
     expect(normalizeMojibakeText("SERVI\ufffdO")).toBe("SERVI\u00c7O");
+    expect(normalizeMojibakeText("REGI\ufffdO 1 - MANAUS-AM")).toBe("REGIÃO 1 - MANAUS-AM");
+    expect(normalizeMojibakeText("9/125 micr\ufffdmetros")).toBe("9/125 micrômetros");
+    expect(normalizeMojibakeText("ponto l\ufffdgico")).toBe("ponto lógico");
+    expect(normalizeMojibakeText("FUS\ufffdO e conex\ufffdo")).toBe("FUSÃO e conexão");
+    expect(normalizeMojibakeText("infraestrutura necess\ufffdria")).toBe("infraestrutura necessária");
   });
 
   it("repairs a technical ATA description without corrupting valid accents", () => {
@@ -31,6 +36,14 @@ describe("normalizeMojibakeText", () => {
       "incluindo material para fixação, terminação SC/UPC Rosca e identificação: Cabo com uma " +
       "Fibra óptica monomodo, contemplando: acessórios para fixação e identificação do cabo; " +
       "utilizando método de CABEAMENTO SUBTERRÂNEO ou MND (Método não Destrutível).",
+    );
+  });
+
+  it("repairs the known SIDI Manaus description fragments", () => {
+    expect(normalizeMojibakeText(
+      "Serviço incluin do material pa ra fixação. Dem ais características conforme Termo de Re ferência.",
+    )).toBe(
+      "Serviço incluindo material para fixação. Demais características conforme Termo de Referência.",
     );
   });
 

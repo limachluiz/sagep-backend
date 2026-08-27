@@ -49,9 +49,24 @@ type ListAtasFilters = {
   stateUf?: UfValue;
   active?: boolean;
   search?: string;
+  pregaoId?: string;
 };
 
 const ataInclude = {
+  pregao: {
+    select: {
+      id: true,
+      pregaoCode: true,
+      uasg: true,
+      number: true,
+      year: true,
+      modality: true,
+      object: true,
+      type: true,
+      managingAgency: true,
+      isActive: true,
+    },
+  },
   coverageGroups: {
     select: {
       id: true,
@@ -187,6 +202,10 @@ export class AtasService {
 
   async list(filters: ListAtasFilters) {
     const andConditions: Prisma.AtaWhereInput[] = [];
+
+    if (filters.pregaoId) {
+      andConditions.push({ pregaoId: filters.pregaoId });
+    }
 
     if (filters.code) {
       andConditions.push({ ataCode: filters.code });

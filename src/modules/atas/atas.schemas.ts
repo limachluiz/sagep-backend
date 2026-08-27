@@ -79,6 +79,7 @@ export const updateAtaSchema = z
   );
 
 export const listAtasQuerySchema = paginationQuerySchema.extend({
+  pregaoId: z.string().trim().min(1).optional(),
   code: z.coerce.number().int().positive().optional(),
   type: ataTypeEnum.optional(),
   groupCode: z.string().trim().optional(),

@@ -25,6 +25,7 @@ import { backupsRoutes } from "./modules/backups/backups.routes.js";
 import { deploymentRoutes } from "./modules/deployment/deployment.routes.js";
 import { setupRoutes } from "./modules/setup/setup.routes.js";
 import { evidencesRoutes } from "./modules/evidences/evidences.routes.js";
+import { pregoesRoutes } from "./modules/pregoes/pregoes.routes.js";
 
 export const routes = Router();
 
@@ -38,6 +39,7 @@ routes.use("/projects", projectsRoutes);
 routes.use("/permissions", permissionsRoutes);
 routes.use("/tasks", tasksRoutes);
 routes.use("/atas", atasRoutes);
+routes.use("/pregoes", pregoesRoutes);
 routes.use("/ata-items", ataItemsRoutes);
 routes.use("/integrations/compras-gov", comprasGovRoutes);
 routes.use("/estimates", estimatesRoutes);
