@@ -2505,8 +2505,9 @@ export class ProjectsService {
 
   async updateDeliveryReportDraft(projectId: string, draft: DeliveryReportDraft, user: CurrentUser) {
     await this.ensureCanManage(projectId, user);
-    const current = await prisma.project.findUnique({ where: { id: projectId }, select: { projectCode: true, deliveryReportDraft: true } });
+    const current = await prisma.project.findUnique({ where: { id: projectId }, select: { projectCode: true, stage: true, deliveryReportDraft: true } });
     if (!current) throw new AppError("Projeto não encontrado", 404);
+    if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A memória técnica só pode ser alterada durante a etapa de Entrega Técnica", 409, "DELIVERY_REPORT_DRAFT_LOCKED");
     const updated = await prisma.project.update({
       where: { id: projectId },
       data: {

@@ -31,7 +31,7 @@ export class DeliveryReportService {
     if (!project || project.deletedAt) throw new AppError("Projeto não encontrado", 404);
     const related = project.ownerId === user.id || project.members.some((member) => member.userId === user.id);
     if (!permissionsService.hasPermission(user, "projects.view_all") && !related) throw new AppError("Você não possui acesso ao projeto", 403);
-    if (project.stage !== "ENTREGA_TECNICA" && project.stage !== "SERVICO_CONCLUIDO") throw new AppError("O relatório de entrega só pode ser gerado na etapa de Entrega Técnica", 409);
+    if (project.stage !== "ENTREGA_TECNICA") throw new AppError("Uma nova versão do relatório só pode ser gerada na etapa de Entrega Técnica", 409);
     if (!project.evidences.length) throw new AppError("Selecione ao menos uma evidência para o relatório", 409);
 
     const imageData = async (asset: string) => readFile(path.resolve(asset)).then((buffer) => `data:image/png;base64,${buffer.toString("base64")}`).catch(() => "");
