@@ -3022,6 +3022,7 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           requiresSetup: { type: "boolean" },
           setupTokenConfigured: { type: "boolean" },
+          setupTokenGenerated: { type: "boolean" },
         },
       },
       InitializeSetupRequest: {

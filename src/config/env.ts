@@ -79,6 +79,7 @@ const envSchema = z
     (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
     z.string().min(32).max(256).optional(),
   ),
+  SAGEP_SETUP_TOKEN_FILE: z.string().min(1).default("./.sagep/setup-token"),
 })
   .transform((env) => ({
     ...env,

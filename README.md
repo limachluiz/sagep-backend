@@ -372,7 +372,11 @@ Depois de mudar `SAGEP_ALLOWED_NETWORKS`, atualize também o painel e execute
 `sudo /usr/bin/env node scripts/manage-firewall.mjs --remove --confirm`; ela não altera
 nenhuma regra que não seja gerenciada pelo SAGEP.
 
-1. Suba o ambiente padrão e acesse **Configurações → Rede, servidores e HTTPS**.
+1. Suba o ambiente padrão. Se ainda não existir administrador e
+   `SAGEP_SETUP_TOKEN` estiver vazio, a API gera automaticamente uma chave
+   temporária no volume `sagep_bootstrap`. Consulte-a com
+   `docker compose logs api`; ela é removida após a configuração inicial.
+   Depois, acesse **Configurações → Rede, servidores e HTTPS**.
 2. Salve o nome DNS e os parâmetros esperados, execute o diagnóstico e inicialize
    o certificado interno. A operação exige ADMIN e confirmação recente da senha.
    O quadro **Prontidão para produção** consolida bloqueios e alertas de runtime,

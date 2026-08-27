@@ -1,16 +1,16 @@
 import bcrypt from "bcryptjs";
 import { createHash, timingSafeEqual } from "node:crypto";
-import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import type { InitializeSetupInput } from "./setup.schemas.js";
+import { getSetupToken, removeGeneratedSetupToken, setupTokenWasGenerated } from "./setup-token.js";
 
 function tokenDigest(value: string) {
   return createHash("sha256").update(value, "utf8").digest();
 }
 
 function assertSetupToken(candidate: string) {
-  const configured = env.SAGEP_SETUP_TOKEN;
+  const configured = getSetupToken();
   if (!configured) {
     throw new AppError(
       "A chave de instalação não foi configurada no servidor",
@@ -34,7 +34,8 @@ export class SetupService {
     const userCount = await prisma.user.count();
     return {
       requiresSetup: userCount === 0,
-      setupTokenConfigured: Boolean(env.SAGEP_SETUP_TOKEN),
+      setupTokenConfigured: Boolean(getSetupToken()),
+      setupTokenGenerated: setupTokenWasGenerated(),
     };
   }
 
@@ -42,7 +43,7 @@ export class SetupService {
     assertSetupToken(input.setupToken);
     const passwordHash = await bcrypt.hash(input.administrator.password, 12);
 
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(731947221)`;
 
       if (await tx.user.count()) {
@@ -145,5 +146,13 @@ export class SetupService {
         },
       };
     }, { isolationLevel: "Serializable" });
+    try {
+      await removeGeneratedSetupToken();
+    } catch (error) {
+      console.error("Administrador criado, mas o arquivo da chave temporária não pôde ser removido imediatamente", {
+        errorName: error instanceof Error ? error.name : "UnknownError",
+      });
+    }
+    return result;
   }
 }

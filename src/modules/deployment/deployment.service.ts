@@ -38,6 +38,7 @@ import {
   SERVER_CERT,
   SERVER_KEY,
 } from "./pki-provisioning.js";
+import { getSetupToken } from "../setup/setup-token.js";
 
 const runFile = promisify(execFile);
 const auditService = new AuditService();
@@ -282,7 +283,7 @@ export class DeploymentService {
       trustProxyHops: env.TRUST_PROXY_HOPS,
       corsOrigins: env.CORS_ALLOWED_ORIGINS,
       publicRegistrationAllowed: env.ALLOW_PUBLIC_REGISTRATION,
-      setupTokenConfigured: Boolean(env.SAGEP_SETUP_TOKEN),
+      setupTokenConfigured: Boolean(getSetupToken()),
       userCount,
       hostName: configuration.deploymentHostName,
       environmentHostName: env.SAGEP_HOSTNAME ?? null,
