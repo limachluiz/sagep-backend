@@ -16,26 +16,44 @@ function titleCase(value: string) {
   return value.toLocaleLowerCase("pt-BR").replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toLocaleUpperCase("pt-BR"));
 }
 
+function normalizeKey(value: string) {
+  return value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+}
+
 function fallbackCode(city: string, uf: string) {
-  const letters = city.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z]/g, "").toUpperCase();
-  return KNOWN_CODES[`${letters.replace(/ /g, "")}:${uf}`] ?? `${letters.slice(0, 3) || "REG"}-${uf}`;
+  const letters = normalizeKey(city).replace(/[^A-Z]/g, "");
+  return KNOWN_CODES[`${normalizeKey(city)}:${uf}`] ?? `${letters.slice(0, 3) || "REG"}-${uf}`;
+}
+
+function extractLocalities(value: string) {
+  const localities: InferredCoverage["localities"] = [];
+  const expression = /([A-ZÀ-ÖØ-Ý][A-ZÀ-ÖØ-Ý\s'-]{2,}?)\s*[-/]\s*(AM|RO|RR|AC)\b/giu;
+  for (const match of value.matchAll(expression)) {
+    const cityName = titleCase(match[1]
+      .replace(/^.*?REGI(?:Ã|A)O\s*\d*\s*[-–:]\s*/i, "")
+      .replace(/^\s*(?:E|,|;)\s*/i, "")
+      .trim());
+    const stateUf = match[2].toUpperCase() as "AM" | "RO" | "RR" | "AC";
+    if (!cityName || localities.some((item) => normalizeKey(item.cityName) === normalizeKey(cityName) && item.stateUf === stateUf)) continue;
+    localities.push({ cityName, stateUf });
+  }
+  return localities;
 }
 
 export function inferCoverageFromDescription(description: string): InferredCoverage | null {
   const normalized = description.replace(/\s+/g, " ");
-  const match = normalized.match(/REGI(?:Ã|A)O\s*(\d+)?\s*[-–:]\s*([^();:]+?)\s*[-/]\s*(AM|RO|RR|AC)\b/i);
-  if (!match) return null;
+  const regionMatch = normalized.match(/REGI(?:Ã|A)O\s*(\d+)/i);
+  const localities = extractLocalities(normalized);
+  if (!localities.length) return null;
 
-  const cityName = titleCase(match[2].trim().replace(/[.,]+$/, ""));
-  const stateUf = match[3].toUpperCase() as "AM" | "RO" | "RR" | "AC";
-  const normalizedCity = cityName.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-  const code = KNOWN_CODES[`${normalizedCity}:${stateUf}`] ?? fallbackCode(cityName, stateUf);
-  const region = match[1] ? `Região ${match[1]}` : null;
+  const regionNumber = regionMatch?.[1] ?? null;
+  const region = regionNumber ? `Região ${Number(regionNumber)}` : null;
+  const first = localities[0];
 
   return {
-    code,
-    name: region ? `${region} · ${cityName}/${stateUf}` : `${cityName}/${stateUf}`,
+    code: regionNumber ? `REG-${regionNumber.padStart(2, "0")}` : fallbackCode(first.cityName, first.stateUf),
+    name: region ?? `${first.cityName}/${first.stateUf}`,
     region,
-    localities: [{ cityName, stateUf }],
+    localities,
   };
 }
