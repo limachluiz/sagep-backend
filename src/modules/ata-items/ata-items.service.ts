@@ -179,6 +179,20 @@ export class AtaItemsService {
     return coverageGroup;
   }
 
+  private compareItemOrder(
+    left: { ataItemCode: number; referenceCode: string; ata?: { ataCode: number } | null },
+    right: { ataItemCode: number; referenceCode: string; ata?: { ataCode: number } | null },
+  ) {
+    const ataOrder = (left.ata?.ataCode ?? 0) - (right.ata?.ataCode ?? 0);
+    if (ataOrder !== 0) return ataOrder;
+
+    const referenceOrder = left.referenceCode.localeCompare(right.referenceCode, "pt-BR", {
+      numeric: true,
+      sensitivity: "base",
+    });
+    return referenceOrder !== 0 ? referenceOrder : left.ataItemCode - right.ataItemCode;
+  }
+
   private normalizeMoney(value: number) {
     return value.toFixed(2);
   }
@@ -300,7 +314,8 @@ export class AtaItemsService {
       ],
     });
 
-    return (await ataItemBalanceService.enrichAtaItemsWithBalance(items)).map((item) =>
+    const orderedItems = [...items].sort((left, right) => this.compareItemOrder(left, right));
+    return (await ataItemBalanceService.enrichAtaItemsWithBalance(orderedItems)).map((item) =>
       this.normalizeReturnedAtaItemText(item),
     );
   }
@@ -403,7 +418,8 @@ export class AtaItemsService {
       ],
     });
 
-    return (await ataItemBalanceService.enrichAtaItemsWithBalance(items)).map((item) =>
+    const orderedItems = [...items].sort((left, right) => this.compareItemOrder(left, right));
+    return (await ataItemBalanceService.enrichAtaItemsWithBalance(orderedItems)).map((item) =>
       this.normalizeReturnedAtaItemText(item),
     );
   }
