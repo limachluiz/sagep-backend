@@ -194,6 +194,19 @@ export class PregoesService {
     return (await this.withMetrics([pregao]))[0];
   }
 
+  async remove(id: string) {
+    const pregao = await prisma.pregao.findUnique({
+      where: { id },
+      select: { id: true, _count: { select: { atas: true } } },
+    });
+    if (!pregao) throw new AppError("Pregão não encontrado", 404);
+    if (pregao._count.atas > 0) {
+      throw new AppError("Exclua primeiro as ATAs vinculadas a este pregão", 409);
+    }
+    await prisma.pregao.delete({ where: { id } });
+    return { message: "Pregão excluído com sucesso" };
+  }
+
   async sync(id: string) {
     const pregao = await prisma.pregao.findUnique({
       where: { id },
