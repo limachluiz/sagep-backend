@@ -521,7 +521,7 @@ export class AtasService {
       const groups = await tx.ataCoverageGroup.findMany({
         where: { ataId },
         include: {
-          items: { where: { deletedAt: null }, select: { id: true, referenceCode: true } },
+          items: { select: { id: true, referenceCode: true } },
         },
         orderBy: { createdAt: "asc" },
       });
