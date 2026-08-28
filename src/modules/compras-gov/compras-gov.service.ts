@@ -44,6 +44,9 @@ type ComprasGovRequestDebug = {
   url: string;
   status?: number;
   errorBody?: string;
+  contentType?: string;
+  decoder?: "utf-8" | "windows-1252";
+  replacementCharactersBeforeParse?: number;
 };
 
 type ComprasGovRequestFailure = {
@@ -56,6 +59,12 @@ type ComprasGovPreviewDebug = {
   externalUrls: string[];
   externalStatus: number[];
   externalErrorBody: string[];
+  textIntegrity: Array<{
+    url: string;
+    contentType: string | null;
+    decoder: "utf-8" | "windows-1252" | null;
+    replacementCharactersBeforeParse: number;
+  }>;
   filters: Record<string, string | null>;
 };
 
@@ -114,6 +123,11 @@ type NormalizedPreviewItem = {
   externalItemId: string;
   externalItemNumber: string;
   coverage: InferredCoverage | null;
+  textIntegrity: {
+    status: "OK" | "NEEDS_REVIEW";
+    replacementCharactersBefore: number;
+    replacementCharactersAfter: number;
+  };
 };
 
 type FoundAtaPreview = {
@@ -129,6 +143,7 @@ type FoundAtaPreview = {
   importStatus?: "NOT_IMPORTED" | "IMPORTED" | "UPDATE_AVAILABLE" | "INACTIVE";
   coverageGroups: InferredCoverage[];
   coverageDetected: boolean;
+  textIssuesCount: number;
   externalFingerprint: string;
 };
 
@@ -162,6 +177,10 @@ type NormalizedPreview = {
 
 export class ComprasGovService {
   private requestDebug: ComprasGovRequestDebug[] = [];
+
+  private countReplacementCharacters(value: unknown) {
+    return (String(value ?? "").match(/\uFFFD/g) ?? []).length;
+  }
 
   private normalizeText(value: unknown) {
     return normalizeMojibakeText(value)
@@ -245,6 +264,12 @@ export class ComprasGovService {
       externalErrorBody: this.requestDebug
         .map((entry) => entry.errorBody)
         .filter((body): body is string => Boolean(body)),
+      textIntegrity: this.requestDebug.map((entry) => ({
+        url: entry.url,
+        contentType: entry.contentType ?? null,
+        decoder: entry.decoder ?? null,
+        replacementCharactersBeforeParse: entry.replacementCharactersBeforeParse ?? 0,
+      })),
       filters: {
         uasg: input.uasg.trim(),
         numeroPregao: input.numeroPregao.trim(),
@@ -432,7 +457,12 @@ export class ComprasGovService {
     }
 
     debugEntry.status = response.status;
-    this.debug("Status HTTP externo", { url: url.toString(), status: response.status });
+    debugEntry.contentType = response.headers.get("content-type") ?? undefined;
+    this.debug("Status HTTP externo", {
+      url: url.toString(),
+      status: response.status,
+      contentType: debugEntry.contentType ?? null,
+    });
 
     if (!response.ok) {
       const body = this.summarizeExternalBody(await response.text());
@@ -448,8 +478,19 @@ export class ComprasGovService {
       let body: string;
       try {
         body = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        debugEntry.decoder = "utf-8";
       } catch {
         body = new TextDecoder("windows-1252").decode(bytes);
+        debugEntry.decoder = "windows-1252";
+      }
+      debugEntry.replacementCharactersBeforeParse = this.countReplacementCharacters(body);
+      if (debugEntry.replacementCharactersBeforeParse > 0) {
+        this.debug("Resposta externa contém caracteres de substituição", {
+          url: url.toString(),
+          contentType: debugEntry.contentType ?? null,
+          decoder: debugEntry.decoder,
+          replacementCharacters: debugEntry.replacementCharactersBeforeParse,
+        });
       }
       return JSON.parse(body.replace(/^\uFEFF/, "")) as T;
     } catch {
@@ -705,7 +746,10 @@ export class ComprasGovService {
     return externalItems.map((item, index) => {
       const externalItemNumber = this.normalizeText(item.numeroItem || index + 1);
       const referenceCode = externalItemNumber || this.normalizeText(item.codigoItem || index + 1);
-      const description = this.normalizeText(item.descricaoItem) || "Item sem descricao";
+      const rawDescription = String(item.descricaoItem ?? "");
+      const replacementCharactersBefore = this.countReplacementCharacters(rawDescription);
+      const description = this.normalizeText(rawDescription) || "Item sem descricao";
+      const replacementCharactersAfter = this.countReplacementCharacters(description);
       const unit = this.normalizeItemUnit(item, description);
       const unitPrice = this.normalizeNumber(item.valorUnitario);
       const initialQuantity = this.normalizeNumber(
@@ -724,6 +768,12 @@ export class ComprasGovService {
         warnings.push(`Item ${referenceCode} sem valor unitario na origem; importado como 0.`);
       }
 
+      if (warnings && replacementCharactersAfter > 0) {
+        warnings.push(
+          `Item ${referenceCode} contém ${replacementCharactersAfter} caractere(s) de codificação não recuperado(s); revise a descrição.`,
+        );
+      }
+
       return {
         referenceCode,
         description,
@@ -733,6 +783,11 @@ export class ComprasGovService {
         externalItemId: `${externalItemId}:${externalItemNumber}`,
         externalItemNumber,
         coverage: inferCoverageFromDescription(description),
+        textIntegrity: {
+          status: replacementCharactersAfter > 0 ? "NEEDS_REVIEW" : "OK",
+          replacementCharactersBefore,
+          replacementCharactersAfter,
+        },
       };
     });
   }
@@ -770,6 +825,7 @@ export class ComprasGovService {
         normalizedItems.flatMap((item) => item.coverage ? [item.coverage] : []),
       ),
       coverageDetected: normalizedItems.length > 0 && normalizedItems.every((item) => item.coverage !== null),
+      textIssuesCount: normalizedItems.filter((item) => item.textIntegrity.status === "NEEDS_REVIEW").length,
       externalFingerprint,
     };
   }
