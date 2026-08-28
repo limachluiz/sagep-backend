@@ -27,6 +27,11 @@ export class PregoesController {
     return res.status(200).json(await service.update(id, data));
   }
 
+  async remove(req: Request, res: Response) {
+    const { id } = pregaoIdParamSchema.parse(req.params);
+    return res.status(200).json(await service.remove(id));
+  }
+
   async sync(req: Request, res: Response) {
     const { id } = pregaoIdParamSchema.parse(req.params);
     return res.status(200).json(await service.sync(id));
