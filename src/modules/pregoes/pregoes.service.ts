@@ -13,12 +13,25 @@ type ListFilters = {
 };
 
 type UpdateInput = {
+  uasg?: string;
+  number?: string;
+  year?: string;
   modality?: string;
-  object?: string;
+  object?: string | null;
   type?: "CFTV" | "FIBRA_OPTICA" | null;
-  managingAgency?: string;
+  managingAgency?: string | null;
+  openingAt?: string | null;
+  homologatedAt?: string | null;
   isActive?: boolean;
 };
+
+type CreateInput = UpdateInput & {
+  uasg: string;
+  number: string;
+  year: string;
+};
+
+const optionalDate = (value?: string | null) => value ? new Date(value) : null;
 
 const ataSummarySelect = {
   id: true,
@@ -47,9 +60,28 @@ const ataSummarySelect = {
 } satisfies Prisma.AtaSelect;
 
 export class PregoesService {
+  async create(data: CreateInput) {
+    const duplicate = await prisma.pregao.findUnique({
+      where: { uasg_number_year: { uasg: data.uasg.trim(), number: data.number.trim(), year: data.year.trim() } },
+      select: { id: true },
+    });
+    if (duplicate) throw new AppError("Já existe um pregão com esta UASG, número e ano", 409);
+    const pregao = await prisma.pregao.create({
+      data: {
+        uasg: data.uasg.trim(), number: data.number.trim(), year: data.year.trim(),
+        modality: data.modality?.trim() || "PREGÃO ELETRÔNICO",
+        object: data.object?.trim() || null, type: data.type ?? null,
+        managingAgency: data.managingAgency?.trim() || null,
+        openingAt: optionalDate(data.openingAt), homologatedAt: optionalDate(data.homologatedAt),
+        isActive: data.isActive ?? true, externalSource: "MANUAL",
+      },
+      include: { atas: { select: ataSummarySelect }, _count: { select: { atas: true } } },
+    });
+    return (await this.withMetrics([pregao]))[0];
+  }
   private async withMetrics<T extends {
     id: string;
-    atas: Array<{ id: string; isActive: boolean; vendorName: string }>;
+    atas: Array<{ id: string; isActive: boolean; vendorName: string; validFrom: Date | null; validUntil: Date | null }>;
   }>(pregoes: T[]) {
     if (!pregoes.length) return [];
     const items = await prisma.ataItem.findMany({
@@ -74,8 +106,11 @@ export class PregoesService {
         ...pregao,
         metrics: {
           ataCount: pregao.atas.length,
-          activeAtaCount: pregao.atas.filter((ata) => ata.isActive).length,
-          supplierCount: new Set(pregao.atas.map((ata) => ata.vendorName)).size,
+          activeAtaCount: pregao.atas.filter((ata) => {
+            const now = Date.now();
+            return ata.isActive && (!ata.validFrom || ata.validFrom.getTime() <= now) && (!ata.validUntil || ata.validUntil.getTime() >= now);
+          }).length,
+          supplierCount: new Set(pregao.atas.map((ata) => ata.vendorName).filter(Boolean)).size,
           itemCount: pregaoItems.length,
           totalAmount: sum("initialAmount"),
           reservedAmount: sum("reservedAmount"),
@@ -127,14 +162,28 @@ export class PregoesService {
   }
 
   async update(id: string, data: UpdateInput) {
-    await this.findById(id);
+    const current = await this.findById(id);
+    const identity = {
+      uasg: data.uasg?.trim() ?? current.uasg,
+      number: data.number?.trim() ?? current.number,
+      year: data.year?.trim() ?? current.year,
+    };
+    const duplicate = await prisma.pregao.findFirst({
+      where: { ...identity, id: { not: id } }, select: { id: true },
+    });
+    if (duplicate) throw new AppError("Já existe um pregão com esta UASG, número e ano", 409);
     const pregao = await prisma.pregao.update({
       where: { id },
       data: {
+        ...(data.uasg !== undefined && { uasg: data.uasg.trim() }),
+        ...(data.number !== undefined && { number: data.number.trim() }),
+        ...(data.year !== undefined && { year: data.year.trim() }),
         ...(data.modality !== undefined && { modality: data.modality.trim() }),
         ...(data.object !== undefined && { object: data.object?.trim() || null }),
         ...(data.type !== undefined && { type: data.type }),
         ...(data.managingAgency !== undefined && { managingAgency: data.managingAgency?.trim() || null }),
+        ...(data.openingAt !== undefined && { openingAt: optionalDate(data.openingAt) }),
+        ...(data.homologatedAt !== undefined && { homologatedAt: optionalDate(data.homologatedAt) }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
       },
       include: {
@@ -190,5 +239,20 @@ export class PregoesService {
       itemsCreated: results.reduce((sum, result) => sum + result.itemsCreated, 0),
       itemsUpdated: results.reduce((sum, result) => sum + result.itemsUpdated, 0),
     };
+  }
+
+  async checkUpdates(id: string) {
+    const pregao = await prisma.pregao.findUnique({ where: { id } });
+    if (!pregao) throw new AppError("Pregão não encontrado", 404);
+    if (pregao.externalSource !== "COMPRAS_GOV") throw new AppError("Este pregão não possui origem no Compras.gov.br", 409);
+    const preview = await new ComprasGovService().preview({
+      uasg: pregao.uasg, numeroPregao: pregao.number, anoPregao: pregao.year,
+    });
+    const statuses = preview.atasFound.reduce<Record<string, number>>((result, ata) => {
+      const status = ata.importStatus ?? "NOT_IMPORTED";
+      result[status] = (result[status] ?? 0) + 1;
+      return result;
+    }, {});
+    return { pregaoId: id, checkedAt: new Date(), totalAtas: preview.atasFound.length, statuses, atas: preview.atasFound };
   }
 }

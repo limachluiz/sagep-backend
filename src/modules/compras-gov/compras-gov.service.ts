@@ -1,4 +1,5 @@
 import { Prisma } from "../../generated/prisma/client.js";
+import { createHash } from "node:crypto";
 import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
@@ -128,6 +129,7 @@ type FoundAtaPreview = {
   importStatus?: "NOT_IMPORTED" | "IMPORTED" | "UPDATE_AVAILABLE" | "INACTIVE";
   coverageGroups: InferredCoverage[];
   coverageDetected: boolean;
+  externalFingerprint: string;
 };
 
 type AtaIdentifier = {
@@ -727,19 +729,30 @@ export class ComprasGovService {
       this.normalizeText(items.find((item) => item.nomeRazaoSocialFornecedor)?.nomeRazaoSocialFornecedor) ||
       null;
 
+    const validFrom = this.normalizeDateString(ata.dataVigenciaInicial);
+    const validUntil = this.normalizeDateString(ata.dataVigenciaFinal);
+    const externalFingerprint = createHash("sha256").update(JSON.stringify({
+      ataNumber, vendorName, validFrom, validUntil,
+      items: normalizedItems.map((item) => ({
+        referenceCode: item.referenceCode, description: item.description, unit: item.unit,
+        unitPrice: item.unitPrice, initialQuantity: item.initialQuantity,
+      })),
+    })).digest("hex");
+
     return {
       ataNumber,
       vendorName,
       itemCount: items.length,
       totalAmount: items.length > 0 ? totalAmount : null,
-      validFrom: this.normalizeDateString(ata.dataVigenciaInicial),
-      validUntil: this.normalizeDateString(ata.dataVigenciaFinal),
+      validFrom,
+      validUntil,
       sampleItems: normalizedItems.slice(0, 3),
       coverageGroups: this.uniqueBy(
         normalizedItems.flatMap((item) => item.coverage ? [item.coverage] : []),
         (coverage) => coverage.code,
       ),
       coverageDetected: normalizedItems.length > 0 && normalizedItems.every((item) => item.coverage !== null),
+      externalFingerprint,
     };
   }
 
@@ -755,6 +768,7 @@ export class ComprasGovService {
         id: true,
         externalAtaNumber: true,
         externalLastSyncAt: true,
+        externalFingerprint: true,
         items: { where: { deletedAt: null }, select: { initialQuantity: true, unitPrice: true } },
       },
     });
@@ -764,7 +778,9 @@ export class ComprasGovService {
       const expired = Boolean(found.validUntil && new Date(found.validUntil).getTime() < Date.now());
       if (!match) return { ...found, importStatus: expired ? "INACTIVE" as const : "NOT_IMPORTED" as const };
       const localTotal = match.items.reduce((sum, item) => sum + Number(item.initialQuantity) * Number(item.unitPrice), 0);
-      const changed = match.items.length !== found.itemCount ||
+      const changed = match.externalFingerprint
+        ? match.externalFingerprint !== found.externalFingerprint
+        : match.items.length !== found.itemCount ||
         (found.totalAmount !== null && Math.abs(localTotal - found.totalAmount) > 0.01);
       return {
         ...found,
@@ -1085,6 +1101,7 @@ export class ComprasGovService {
       externalAtaNumber: externalAtaNumber || null,
       externalPncpControlNumber: externalPncpControlNumber || null,
       externalLastSyncAt: now,
+      externalFingerprint: preview.selectedAta?.externalFingerprint,
     } satisfies Prisma.AtaUpdateInput;
 
     const ata = existingAta

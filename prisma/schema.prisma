@@ -570,6 +570,8 @@ model Pregao {
   year               String
   modality           String    @default("PREGÃO ELETRÔNICO")
   object             String?
+  openingAt          DateTime?
+  homologatedAt      DateTime?
   type               AtaType?
   managingAgency     String?
   isActive           Boolean   @default(true)
@@ -606,6 +608,7 @@ model Ata {
   externalAtaNumber    String?
   externalPncpControlNumber String?
   externalLastSyncAt   DateTime?
+  externalFingerprint  String?
   pncpLastSyncAt       DateTime?
   pncpSnapshot         Json?
   coverageGroups       AtaCoverageGroup[]
