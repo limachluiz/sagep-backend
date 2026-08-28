@@ -13,3 +13,4 @@ pregoesRoutes.get("/:id", (req, res) => controller.findById(req, res));
 pregoesRoutes.post("/:id/check-updates", requirePermission("atas.manage"), (req, res) => controller.checkUpdates(req, res));
 pregoesRoutes.post("/:id/sync", requirePermission("atas.manage"), (req, res) => controller.sync(req, res));
 pregoesRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) => controller.update(req, res));
+pregoesRoutes.delete("/:id", requirePermission("atas.manage"), (req, res) => controller.remove(req, res));
