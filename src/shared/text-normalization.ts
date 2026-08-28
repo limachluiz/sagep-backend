@@ -56,7 +56,13 @@ function preserveWordCase(match: string, replacement: string) {
 function repairReplacementCharacters(value: string) {
   return value
     .replace(/s�{1,2}o/gi, (match) => preserveWordCase(match, "são"))
+    .replace(/regi�{1,2}o/gi, (match) => preserveWordCase(match, "região"))
+    .replace(/guajar�(?:-| |\s)*mirim/gi, (match) => preserveWordCase(match, "guajará-mirim"))
     .replace(/guajar�/gi, (match) => preserveWordCase(match, "guajará"))
+    .replace(/humait�/gi, (match) => preserveWordCase(match, "humaitá"))
+    .replace(/tabating�/gi, (match) => preserveWordCase(match, "tabatinga"))
+    .replace(/l�brea/gi, (match) => preserveWordCase(match, "lábrea"))
+    .replace(/tef�/gi, (match) => preserveWordCase(match, "tefé"))
     .replace(/regi�o/gi, (match) => preserveWordCase(match, "região"))
     .replace(/micr�metros/gi, (match) => preserveWordCase(match, "micrômetros"))
     .replace(/l�gico/gi, (match) => preserveWordCase(match, "lógico"))
