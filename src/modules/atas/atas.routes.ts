@@ -22,6 +22,12 @@ atasRoutes.post(
   (req, res) => controller.syncPncp(req, res)
 );
 
+atasRoutes.put(
+  "/:id/coverage",
+  requirePermission("atas.manage"),
+  (req, res) => controller.replaceCoverage(req, res)
+);
+
 atasRoutes.post(
   "/:id/coverage-groups",
   requireRole("ADMIN"),
