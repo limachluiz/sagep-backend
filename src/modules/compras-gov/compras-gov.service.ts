@@ -202,6 +202,25 @@ export class ComprasGovService {
     return uniqueItems;
   }
 
+  private mergeCoverageGroups(items: InferredCoverage[]) {
+    const groups = new Map<string, InferredCoverage>();
+    for (const coverage of items) {
+      const current = groups.get(coverage.code);
+      if (!current) {
+        groups.set(coverage.code, { ...coverage, localities: [...coverage.localities] });
+        continue;
+      }
+      for (const locality of coverage.localities) {
+        const exists = current.localities.some((item) =>
+          item.stateUf === locality.stateUf &&
+          item.cityName.localeCompare(locality.cityName, "pt-BR", { sensitivity: "base" }) === 0
+        );
+        if (!exists) current.localities.push(locality);
+      }
+    }
+    return [...groups.values()];
+  }
+
   private isDevelopment() {
     return process.env.NODE_ENV === "development";
   }
@@ -747,9 +766,8 @@ export class ComprasGovService {
       validFrom,
       validUntil,
       sampleItems: normalizedItems.slice(0, 3),
-      coverageGroups: this.uniqueBy(
+      coverageGroups: this.mergeCoverageGroups(
         normalizedItems.flatMap((item) => item.coverage ? [item.coverage] : []),
-        (coverage) => coverage.code,
       ),
       coverageDetected: normalizedItems.length > 0 && normalizedItems.every((item) => item.coverage !== null),
       externalFingerprint,
