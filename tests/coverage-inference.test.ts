@@ -3,14 +3,25 @@ import { inferCoverageFromDescription } from "../src/modules/compras-gov/coverag
 
 describe("inferCoverageFromDescription", () => {
   it.each([
-    ["(REGIÃO 1 - MANAUS-AM)", "MNS", "Manaus", "AM"],
-    ["REGIAO 2 - BOA VISTA-RR", "BVB", "Boa Vista", "RR"],
-    ["REGIÃO 3 - PORTO VELHO-RO", "PVH", "Porto Velho", "RO"],
-    ["REGIÃO 4 - RIO BRANCO-AC", "RBC", "Rio Branco", "AC"],
+    ["(REGIÃO 1 - MANAUS-AM)", "REG-01", "Manaus", "AM"],
+    ["REGIAO 2 - BOA VISTA-RR", "REG-02", "Boa Vista", "RR"],
+    ["REGIÃO 3 - PORTO VELHO-RO", "REG-03", "Porto Velho", "RO"],
+    ["REGIÃO 4 - RIO BRANCO-AC", "REG-04", "Rio Branco", "AC"],
   ])("detects %s", (description, code, cityName, stateUf) => {
     expect(inferCoverageFromDescription(description)).toMatchObject({
       code,
       localities: [{ cityName, stateUf }],
+    });
+  });
+
+  it("groups multiple localities from the same region", () => {
+    expect(inferCoverageFromDescription("REGIÃO 5 - PORTO VELHO-RO, GUAJARÁ-MIRIM/RO")).toMatchObject({
+      code: "REG-05",
+      name: "Região 5",
+      localities: [
+        { cityName: "Porto Velho", stateUf: "RO" },
+        { cityName: "Guajará-Mirim", stateUf: "RO" },
+      ],
     });
   });
 
