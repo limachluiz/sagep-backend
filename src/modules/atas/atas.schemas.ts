@@ -19,6 +19,11 @@ const coverageGroupSchema = z.object({
 
 export const createAtaCoverageGroupSchema = coverageGroupSchema;
 
+export const replaceAtaCoverageSchema = z.object({
+  regionNumber: z.coerce.number().int().positive().max(99),
+  localities: z.array(localitySchema).min(1, "Informe ao menos uma localidade"),
+});
+
 export const updateAtaCoverageGroupSchema = coverageGroupSchema.partial().refine(
   (data) => Object.keys(data).length > 0,
   {
