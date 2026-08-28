@@ -6,6 +6,7 @@ import {
   createAtaCoverageGroupSchema,
   createAtaSchema,
   listAtasQuerySchema,
+  replaceAtaCoverageSchema,
   updateAtaCoverageGroupSchema,
   updateAtaSchema,
 } from "./atas.schemas.js";
@@ -61,6 +62,12 @@ export class AtasController {
     const data = updateAtaSchema.parse(req.body);
     const ata = await atasService.update(id, data);
     return res.status(200).json(ata);
+  }
+
+  async replaceCoverage(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    const data = replaceAtaCoverageSchema.parse(req.body);
+    return res.status(200).json(await atasService.replaceCoverage(id, data));
   }
 
   async createCoverageGroup(req: Request, res: Response) {
