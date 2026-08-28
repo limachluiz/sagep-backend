@@ -295,8 +295,8 @@ export class AtaItemsService {
       },
       include: ataItemInclude,
       orderBy: [
-        { coverageGroup: { code: "asc" } },
         { referenceCode: "asc" },
+        { ataItemCode: "asc" },
       ],
     });
 
@@ -398,8 +398,8 @@ export class AtaItemsService {
       include: ataItemInclude,
       orderBy: [
         { ata: { ataCode: "asc" } },
-        { coverageGroup: { code: "asc" } },
         { referenceCode: "asc" },
+        { ataItemCode: "asc" },
       ],
     });
 
