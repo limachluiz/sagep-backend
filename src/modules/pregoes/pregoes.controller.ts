@@ -23,4 +23,9 @@ export class PregoesController {
     const data = updatePregaoSchema.parse(req.body);
     return res.status(200).json(await service.update(id, data));
   }
+
+  async sync(req: Request, res: Response) {
+    const { id } = pregaoIdParamSchema.parse(req.params);
+    return res.status(200).json(await service.sync(id));
+  }
 }

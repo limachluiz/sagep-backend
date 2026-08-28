@@ -24,4 +24,5 @@ export const comprasGovAtaImportSchema = comprasGovAtaPreviewQuerySchema.extend(
   coverageGroupCityName: z.string().trim().min(2).optional(),
   coverageGroupLocalities: z.array(coverageLocalitySchema).min(1).optional(),
   dryRun: optionalBoolean,
+  autoDetectCoverage: optionalBoolean,
 });

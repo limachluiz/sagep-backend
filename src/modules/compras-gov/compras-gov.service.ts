@@ -3,6 +3,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
+import { inferCoverageFromDescription, type InferredCoverage } from "./coverage-inference.js";
 
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
@@ -30,6 +31,7 @@ type ImportInput = PreviewInput & {
     stateUf: "AM" | "RO" | "RR" | "AC";
   }>;
   dryRun?: boolean;
+  autoDetectCoverage?: boolean;
 };
 
 type ComprasGovListResponse<T> = {
@@ -110,6 +112,7 @@ type NormalizedPreviewItem = {
   initialQuantity: number;
   externalItemId: string;
   externalItemNumber: string;
+  coverage: InferredCoverage | null;
 };
 
 type FoundAtaPreview = {
@@ -122,6 +125,9 @@ type FoundAtaPreview = {
   sampleItems: NormalizedPreviewItem[];
   importedAtaId?: string;
   importedAt?: string;
+  importStatus?: "NOT_IMPORTED" | "IMPORTED" | "UPDATE_AVAILABLE" | "INACTIVE";
+  coverageGroups: InferredCoverage[];
+  coverageDetected: boolean;
 };
 
 type AtaIdentifier = {
@@ -705,6 +711,7 @@ export class ComprasGovService {
         initialQuantity,
         externalItemId: `${externalItemId}:${externalItemNumber}`,
         externalItemNumber,
+        coverage: inferCoverageFromDescription(description),
       };
     });
   }
@@ -728,6 +735,11 @@ export class ComprasGovService {
       validFrom: this.normalizeDateString(ata.dataVigenciaInicial),
       validUntil: this.normalizeDateString(ata.dataVigenciaFinal),
       sampleItems: normalizedItems.slice(0, 3),
+      coverageGroups: this.uniqueBy(
+        normalizedItems.flatMap((item) => item.coverage ? [item.coverage] : []),
+        (coverage) => coverage.code,
+      ),
+      coverageDetected: normalizedItems.length > 0 && normalizedItems.every((item) => item.coverage !== null),
     };
   }
 
@@ -739,14 +751,27 @@ export class ComprasGovService {
         externalPregaoNumber: input.numeroPregao.trim(),
         externalPregaoYear: input.anoPregao.trim(),
       },
-      select: { id: true, externalAtaNumber: true, externalLastSyncAt: true },
+      select: {
+        id: true,
+        externalAtaNumber: true,
+        externalLastSyncAt: true,
+        items: { where: { deletedAt: null }, select: { initialQuantity: true, unitPrice: true } },
+      },
     });
 
     return foundAtas.map((found) => {
       const match = imported.find((ata) => this.matchesAtaNumber(ata.externalAtaNumber, found.ataNumber));
-      return match
-        ? { ...found, importedAtaId: match.id, importedAt: match.externalLastSyncAt?.toISOString() }
-        : found;
+      const expired = Boolean(found.validUntil && new Date(found.validUntil).getTime() < Date.now());
+      if (!match) return { ...found, importStatus: expired ? "INACTIVE" as const : "NOT_IMPORTED" as const };
+      const localTotal = match.items.reduce((sum, item) => sum + Number(item.initialQuantity) * Number(item.unitPrice), 0);
+      const changed = match.items.length !== found.itemCount ||
+        (found.totalAmount !== null && Math.abs(localTotal - found.totalAmount) > 0.01);
+      return {
+        ...found,
+        importedAtaId: match.id,
+        importedAt: match.externalLastSyncAt?.toISOString(),
+        importStatus: expired ? "INACTIVE" as const : changed ? "UPDATE_AVAILABLE" as const : "IMPORTED" as const,
+      };
     });
   }
 
@@ -784,6 +809,12 @@ export class ComprasGovService {
     }
 
     const items = this.normalizePreviewItems(externalItems, ataNumber, warnings);
+    const undetectedCoverageItems = items.filter((item) => !item.coverage);
+    if (undetectedCoverageItems.length > 0) {
+      warnings.push(
+        `${undetectedCoverageItems.length} item(ns) sem região/localidade identificável na descrição; revise a cobertura antes de importar.`,
+      );
+    }
 
     const vendorName =
       this.normalizeText(externalItems.find((item) => item.nomeRazaoSocialFornecedor)?.nomeRazaoSocialFornecedor) ||
@@ -1085,75 +1116,98 @@ export class ComprasGovService {
           },
         });
 
-    const coverageGroup = await this.resolveCoverageGroup(ata.id, data);
-
     let createdItems = 0;
     let updatedItems = 0;
+    const coverageGroups = new Map<
+      string,
+      Awaited<ReturnType<typeof this.resolveCoverageGroup>>
+    >();
+
+    const resolveItemCoverage = async (item: NormalizedPreviewItem) => {
+      const inferred = data.autoDetectCoverage !== false ? item.coverage : null;
+      const groupInput: ImportInput = inferred
+        ? {
+            ...data,
+            coverageGroupId: undefined,
+            coverageGroupCode: inferred.code,
+            coverageGroupName: inferred.name,
+            coverageGroupLocalities: inferred.localities,
+          }
+        : data;
+      const cacheKey = inferred?.code ?? data.coverageGroupId ?? data.coverageGroupCode ?? "COMPRAS";
+      const cached = coverageGroups.get(cacheKey);
+      if (cached) return cached;
+      const resolved = await this.resolveCoverageGroup(ata.id, groupInput);
+      coverageGroups.set(cacheKey, resolved);
+      return resolved;
+    };
 
     for (const item of preview.items) {
-      const existingItem = await prisma.ataItem.findUnique({
+      const coverageGroup = await resolveItemCoverage(item);
+      const existingItem = await prisma.ataItem.findFirst({
         where: {
-          ataId_coverageGroupId_referenceCode: {
-            ataId: ata.id,
-            coverageGroupId: coverageGroup.id,
-            referenceCode: item.referenceCode,
-          },
+          ataId: ata.id,
+          OR: [
+            { externalItemId: item.externalItemId },
+            { externalItemNumber: item.externalItemNumber },
+            { referenceCode: item.referenceCode },
+          ],
         },
         select: { id: true },
       });
 
-      await prisma.ataItem.upsert({
-        where: {
-          ataId_coverageGroupId_referenceCode: {
+      if (existingItem) {
+        await prisma.ataItem.update({
+          where: { id: existingItem.id },
+          data: {
+            coverageGroupId: coverageGroup.id,
+            referenceCode: item.referenceCode,
+            description: item.description,
+            unit: item.unit.trim().toUpperCase(),
+            unitPrice: item.unitPrice.toFixed(2),
+            initialQuantity: item.initialQuantity.toFixed(2),
+            externalSource: COMPRAS_GOV_SOURCE,
+            externalItemId: item.externalItemId,
+            externalItemNumber: item.externalItemNumber,
+            externalLastSyncAt: now,
+          },
+        });
+        updatedItems += 1;
+      } else {
+        await prisma.ataItem.create({
+          data: {
             ataId: ata.id,
             coverageGroupId: coverageGroup.id,
             referenceCode: item.referenceCode,
+            description: item.description,
+            unit: item.unit.trim().toUpperCase(),
+            unitPrice: item.unitPrice.toFixed(2),
+            initialQuantity: item.initialQuantity.toFixed(2),
+            externalSource: COMPRAS_GOV_SOURCE,
+            externalItemId: item.externalItemId,
+            externalItemNumber: item.externalItemNumber,
+            externalLastSyncAt: now,
           },
-        },
-        update: {
-          description: item.description,
-          unit: item.unit.trim().toUpperCase(),
-          unitPrice: item.unitPrice.toFixed(2),
-          initialQuantity: item.initialQuantity.toFixed(2),
-          externalSource: COMPRAS_GOV_SOURCE,
-          externalItemId: item.externalItemId,
-          externalItemNumber: item.externalItemNumber,
-          externalLastSyncAt: now,
-        },
-        create: {
-          ataId: ata.id,
-          coverageGroupId: coverageGroup.id,
-          referenceCode: item.referenceCode,
-          description: item.description,
-          unit: item.unit.trim().toUpperCase(),
-          unitPrice: item.unitPrice.toFixed(2),
-          initialQuantity: item.initialQuantity.toFixed(2),
-          externalSource: COMPRAS_GOV_SOURCE,
-          externalItemId: item.externalItemId,
-          externalItemNumber: item.externalItemNumber,
-          externalLastSyncAt: now,
-        },
-      });
-
-      if (existingItem) {
-        updatedItems += 1;
-      } else {
+        });
         createdItems += 1;
       }
     }
 
+    const importedCoverageGroups = [...coverageGroups.values()];
+    const primaryCoverageGroup = importedCoverageGroups[0] ?? null;
     return {
       dryRun: false,
       preview,
       ata,
-      coverageGroup,
+      coverageGroup: primaryCoverageGroup,
+      coverageGroups: importedCoverageGroups,
       itemsCreated: createdItems,
       itemsUpdated: updatedItems,
       warnings: preview.warnings,
       imported: {
         ataId: ata.id,
-        coverageGroupId: coverageGroup.id,
-        coverageGroupCode: coverageGroup.code,
+        coverageGroupId: primaryCoverageGroup?.id ?? null,
+        coverageGroupCode: primaryCoverageGroup?.code ?? null,
         createdItems,
         updatedItems,
       },
