@@ -15,6 +15,9 @@ ataItemsRoutes.get("/:id", (req, res) => controller.findById(req, res));
 ataItemsRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.update(req, res)
 );
+ataItemsRoutes.post("/:id/correct-description", requirePermission("atas.manage"), (req, res) =>
+  controller.correctDescription(req, res)
+);
 ataItemsRoutes.delete("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.remove(req, res)
 );

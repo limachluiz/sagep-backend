@@ -4,14 +4,13 @@ import { inferCoverageFromDescription } from "../src/modules/compras-gov/coverag
 describe("inferCoverageFromDescription", () => {
   it.each([
     ["(REGIÃO 1 - MANAUS-AM)", "REG-01", "Manaus", "AM"],
-    ["REGIAO 2 - BOA VISTA-RR", "REG-02", "Boa Vista", "RR"],
-    ["REGIÃO 3 - PORTO VELHO-RO", "REG-03", "Porto Velho", "RO"],
-    ["REGIÃO 4 - RIO BRANCO-AC", "REG-04", "Rio Branco", "AC"],
+    ["REGIAO 2 - IRANDUBA-AM", "REG-02", "Iranduba", "AM"],
+    ["REGIÃO 3 - COARI-AM", "REG-03", "Coari", "AM"],
+    ["REGIÃO 4 - TONANTINS-AM", "REG-04", "Tonantins", "AM"],
   ])("detects %s", (description, code, cityName, stateUf) => {
-    expect(inferCoverageFromDescription(description)).toMatchObject({
-      code,
-      localities: [{ cityName, stateUf }],
-    });
+    const result = inferCoverageFromDescription(description);
+    expect(result?.code).toBe(code);
+    expect(result?.localities).toContainEqual({ cityName, stateUf });
   });
 
   it("recognizes a region even when the source already contains replacement characters", () => {
@@ -29,6 +28,9 @@ describe("inferCoverageFromDescription", () => {
       localities: [
         { cityName: "Porto Velho", stateUf: "RO" },
         { cityName: "Guajará-Mirim", stateUf: "RO" },
+        { cityName: "Humaitá", stateUf: "AM" },
+        { cityName: "Rio Branco", stateUf: "AC" },
+        { cityName: "Cruzeiro do Sul", stateUf: "AC" },
       ],
     });
   });

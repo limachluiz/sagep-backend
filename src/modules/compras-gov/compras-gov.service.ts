@@ -1248,16 +1248,18 @@ export class ComprasGovService {
             { referenceCode: item.referenceCode },
           ],
         },
-        select: { id: true },
+        select: { id: true, descriptionEditedAt: true } as any,
       });
 
       if (existingItem) {
+        const importedItem = existingItem as unknown as { id: string; descriptionEditedAt: Date | null };
         await prisma.ataItem.update({
-          where: { id: existingItem.id },
+          where: { id: importedItem.id },
           data: {
             coverageGroupId: coverageGroup.id,
             referenceCode: item.referenceCode,
-            description: item.description,
+            externalDescription: item.description,
+            ...(importedItem.descriptionEditedAt ? {} : { description: item.description }),
             unit: item.unit.trim().toUpperCase(),
             unitPrice: item.unitPrice.toFixed(2),
             initialQuantity: item.initialQuantity.toFixed(2),
@@ -1265,7 +1267,7 @@ export class ComprasGovService {
             externalItemId: item.externalItemId,
             externalItemNumber: item.externalItemNumber,
             externalLastSyncAt: now,
-          },
+          } as any,
         });
         updatedItems += 1;
       } else {
@@ -1275,6 +1277,7 @@ export class ComprasGovService {
             coverageGroupId: coverageGroup.id,
             referenceCode: item.referenceCode,
             description: item.description,
+            externalDescription: item.description,
             unit: item.unit.trim().toUpperCase(),
             unitPrice: item.unitPrice.toFixed(2),
             initialQuantity: item.initialQuantity.toFixed(2),
@@ -1282,7 +1285,7 @@ export class ComprasGovService {
             externalItemId: item.externalItemId,
             externalItemNumber: item.externalItemNumber,
             externalLastSyncAt: now,
-          },
+          } as any,
         });
         createdItems += 1;
       }

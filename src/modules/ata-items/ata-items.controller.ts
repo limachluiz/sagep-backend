@@ -94,6 +94,16 @@ export class AtaItemsController {
     return res.status(200).json(item);
   }
 
+  async correctDescription(req: Request, res: Response) {
+    const { id } = ataItemIdParamSchema.parse(req.params);
+    return res.status(200).json(await ataItemsService.correctDescription(id));
+  }
+
+  async correctDescriptionsByAta(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    return res.status(200).json(await ataItemsService.correctDescriptionsByAta(id));
+  }
+
   async remove(req: Request, res: Response) {
     const { id } = ataItemIdParamSchema.parse(req.params);
 

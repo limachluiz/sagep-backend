@@ -537,7 +537,10 @@ export class AtaItemsService {
       where: { id: itemId },
       data: {
         ...(data.referenceCode !== undefined && { referenceCode: data.referenceCode.trim() }),
-        ...(data.description !== undefined && { description: data.description.trim() }),
+        ...(data.description !== undefined && {
+          description: data.description.trim(),
+          descriptionEditedAt: new Date(),
+        }),
         ...(data.unit !== undefined && { unit: data.unit.trim().toUpperCase() }),
         ...(data.unitPrice !== undefined && {
           unitPrice: this.normalizeMoney(data.unitPrice),
@@ -555,6 +558,66 @@ export class AtaItemsService {
     return this.normalizeReturnedAtaItemText(
       (await ataItemBalanceService.enrichAtaItemsWithBalance([item]))[0],
     );
+  }
+
+  async correctDescription(itemId: string) {
+    const existingItem = await prisma.ataItem.findUnique({
+      where: { id: itemId },
+      select: { id: true, description: true, deletedAt: true },
+    });
+
+    if (!existingItem || existingItem.deletedAt) {
+      throw new AppError("Item da ata não encontrado", 404);
+    }
+
+    const correctedDescription = normalizeMojibakeText(existingItem.description);
+    if (correctedDescription !== existingItem.description) {
+      await prisma.ataItem.update({
+        where: { id: itemId },
+        data: { description: correctedDescription, descriptionEditedAt: new Date() } as any,
+      });
+    }
+
+    return {
+      itemId,
+      changed: correctedDescription !== existingItem.description,
+      description: correctedDescription,
+      unresolvedCharacters: (correctedDescription.match(/�/g) ?? []).length,
+    };
+  }
+
+  async correctDescriptionsByAta(ataId: string) {
+    await this.ensureAtaExists(ataId);
+    const items = await prisma.ataItem.findMany({
+      where: { ataId, deletedAt: null },
+      select: { id: true, description: true },
+    });
+    const corrections = items.map((item) => ({
+      ...item,
+      correctedDescription: normalizeMojibakeText(item.description),
+    }));
+    const changed = corrections.filter((item) => item.correctedDescription !== item.description);
+
+    if (changed.length) {
+      const editedAt = new Date();
+      await prisma.$transaction(
+        changed.map((item) => prisma.ataItem.update({
+          where: { id: item.id },
+          data: { description: item.correctedDescription, descriptionEditedAt: editedAt } as any,
+        })),
+      );
+    }
+
+    return {
+      ataId,
+      total: items.length,
+      corrected: changed.length,
+      unchanged: items.length - changed.length,
+      unresolvedCharacters: corrections.reduce(
+        (total, item) => total + (item.correctedDescription.match(/�/g) ?? []).length,
+        0,
+      ),
+    };
   }
 
   async remove(itemId: string) {

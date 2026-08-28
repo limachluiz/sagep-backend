@@ -51,6 +51,9 @@ atasRoutes.post("/:id/items", requirePermission("atas.manage"), (req, res) =>
   ataItemsController.create(req, res)
 );
 atasRoutes.get("/:id/items", (req, res) => ataItemsController.listByAta(req, res));
+atasRoutes.post("/:id/items/correct-descriptions", requirePermission("atas.manage"), (req, res) =>
+  ataItemsController.correctDescriptionsByAta(req, res)
+);
 atasRoutes.get("/:id", (req, res) => controller.findById(req, res));
 atasRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.update(req, res)

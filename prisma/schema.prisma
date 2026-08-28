@@ -651,6 +651,8 @@ model AtaItem {
   coverageGroupId         String
   referenceCode           String
   description             String
+  externalDescription     String?
+  descriptionEditedAt     DateTime?
   unit                    String
   estimateItems           EstimateItem[]
   balanceMovements        AtaItemBalanceMovement[]
