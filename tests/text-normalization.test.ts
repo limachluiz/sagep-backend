@@ -85,6 +85,15 @@ describe("normalizeMojibakeText", () => {
     expect(normalizeMojibakeText(damaged)).toBe(expected);
   });
 
+  it.each([
+    ["infraestrutura met�lica", "infraestrutura metálica"],
+    ["utilizando m�to do subterrâneo", "utilizando método subterrâneo"],
+    ["R EGI�O 1", "REGIÃO 1"],
+    ["Demais características conforme Re fer�ncia.", "Demais características conforme Referência."],
+  ])("repairs words damaged and split during import: %s", (damaged, expected) => {
+    expect(normalizeMojibakeText(damaged)).toBe(expected);
+  });
+
   it("repairs descriptions from items 2 through 6 of ARP 00001/2026", () => {
     const damagedDescriptions = [
       "Servi�o TIPO I-B de lan�amento e instala��o de cabo de fibra �ptica tipo DROP, " +

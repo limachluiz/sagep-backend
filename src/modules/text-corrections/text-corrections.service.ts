@@ -77,6 +77,13 @@ export class TextCorrectionsService {
     }
     return {
       rules,
+      builtInRules: REPLACEMENT_CHARACTER_DICTIONARY.map(({ damagedText, replacement }, index) => ({
+        id: `built-in-${index + 1}`,
+        damagedText,
+        correctedText: replacement,
+        isActive: true,
+        source: "BUILT_IN" as const,
+      })),
       builtInRuleCount: REPLACEMENT_CHARACTER_DICTIONARY.length,
       unresolvedTokens: [...occurrenceMap.entries()]
         .map(([token, occurrences]) => ({ token, occurrences }))

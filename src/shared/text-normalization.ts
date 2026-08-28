@@ -54,31 +54,36 @@ function preserveWordCase(match: string, replacement: string) {
 }
 
 export const REPLACEMENT_CHARACTER_DICTIONARY: ReadonlyArray<{
+  damagedText: string;
   pattern: RegExp;
   replacement: string;
 }> = [
-  { pattern: /s[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "são" },
-  { pattern: /regi[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "região" },
-  { pattern: /alvar[\s\u00a0]*�+[\s\u00a0]*es/gi, replacement: "alvarães" },
-  { pattern: /air[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "airão" },
-  { pattern: /anam[\s\u00a0]*�+/gi, replacement: "anamã" },
-  { pattern: /codaj[\s\u00a0]*�+[\s\u00a0]*s/gi, replacement: "codajás" },
-  { pattern: /v[\s\u00a0]*�+[\s\u00a0]*rzea/gi, replacement: "várzea" },
-  { pattern: /guajar[\s\u00a0]*�+[\s\u00a0]*(?:-| |\s)*mirim/gi, replacement: "guajará-mirim" },
-  { pattern: /guajar[\s\u00a0]*�+/gi, replacement: "guajará" },
-  { pattern: /humait[\s\u00a0]*�+/gi, replacement: "humaitá" },
-  { pattern: /tabating[\s\u00a0]*�+/gi, replacement: "tabatinga" },
-  { pattern: /l[\s\u00a0]*�+[\s\u00a0]*brea/gi, replacement: "lábrea" },
-  { pattern: /tef[\s\u00a0]*�+/gi, replacement: "tefé" },
-  { pattern: /micr[\s\u00a0]*�+[\s\u00a0]*metros/gi, replacement: "micrômetros" },
-  { pattern: /l[\s\u00a0]*�+[\s\u00a0]*gico/gi, replacement: "lógico" },
-  { pattern: /fus[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "fusão" },
-  { pattern: /conex[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "conexão" },
-  { pattern: /necess[\s\u00a0]*�+[\s\u00a0]*ria/gi, replacement: "necessária" },
-  { pattern: /c[\s\u00a0]*�+[\s\u00a0]*mera/gi, replacement: "câmera" },
-  { pattern: /caracter[\s\u00a0]*�+[\s\u00a0]*sticas/gi, replacement: "características" },
-  { pattern: /refer[\s\u00a0]*�+[\s\u00a0]*ncia/gi, replacement: "referência" },
-  { pattern: /a[\s\u00a0]*�+[\s\u00a0]*reo/gi, replacement: "aéreo" },
+  { damagedText: "S�O", pattern: /s[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "são" },
+  { damagedText: "REGI�O", pattern: /regi[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "região" },
+  { damagedText: "R EGI�O", pattern: /r[\s\u00a0]+egi[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "região" },
+  { damagedText: "ALVAR�ES", pattern: /alvar[\s\u00a0]*�+[\s\u00a0]*es/gi, replacement: "alvarães" },
+  { damagedText: "AIR�O", pattern: /air[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "airão" },
+  { damagedText: "ANAM�", pattern: /anam[\s\u00a0]*�+/gi, replacement: "anamã" },
+  { damagedText: "CODAJ�S", pattern: /codaj[\s\u00a0]*�+[\s\u00a0]*s/gi, replacement: "codajás" },
+  { damagedText: "V�RZEA", pattern: /v[\s\u00a0]*�+[\s\u00a0]*rzea/gi, replacement: "várzea" },
+  { damagedText: "GUAJAR�-MIRIM", pattern: /guajar[\s\u00a0]*�+[\s\u00a0]*(?:-| |\s)*mirim/gi, replacement: "guajará-mirim" },
+  { damagedText: "GUAJAR�", pattern: /guajar[\s\u00a0]*�+/gi, replacement: "guajará" },
+  { damagedText: "HUMAIT�", pattern: /humait[\s\u00a0]*�+/gi, replacement: "humaitá" },
+  { damagedText: "TABATING�", pattern: /tabating[\s\u00a0]*�+/gi, replacement: "tabatinga" },
+  { damagedText: "L�BREA", pattern: /l[\s\u00a0]*�+[\s\u00a0]*brea/gi, replacement: "lábrea" },
+  { damagedText: "TEF�", pattern: /tef[\s\u00a0]*�+/gi, replacement: "tefé" },
+  { damagedText: "MICR�METROS", pattern: /micr[\s\u00a0]*�+[\s\u00a0]*metros/gi, replacement: "micrômetros" },
+  { damagedText: "MET�LICA", pattern: /met[\s\u00a0]*�+[\s\u00a0]*lica/gi, replacement: "metálica" },
+  { damagedText: "M�TO DO", pattern: /m[\s\u00a0]*�+[\s\u00a0]*to[\s\u00a0]+do/gi, replacement: "método" },
+  { damagedText: "L�GICO", pattern: /l[\s\u00a0]*�+[\s\u00a0]*gico/gi, replacement: "lógico" },
+  { damagedText: "FUS�O", pattern: /fus[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "fusão" },
+  { damagedText: "CONEX�O", pattern: /conex[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "conexão" },
+  { damagedText: "NECESS�RIA", pattern: /necess[\s\u00a0]*�+[\s\u00a0]*ria/gi, replacement: "necessária" },
+  { damagedText: "C�MERA", pattern: /c[\s\u00a0]*�+[\s\u00a0]*mera/gi, replacement: "câmera" },
+  { damagedText: "CARACTER�STICAS", pattern: /caracter[\s\u00a0]*�+[\s\u00a0]*sticas/gi, replacement: "características" },
+  { damagedText: "REFER�NCIA", pattern: /refer[\s\u00a0]*�+[\s\u00a0]*ncia/gi, replacement: "referência" },
+  { damagedText: "RE FER�NCIA", pattern: /re[\s\u00a0]+fer[\s\u00a0]*�+[\s\u00a0]*ncia/gi, replacement: "referência" },
+  { damagedText: "A�REO", pattern: /a[\s\u00a0]*�+[\s\u00a0]*reo/gi, replacement: "aéreo" },
 ];
 
 function applyReplacementCharacterDictionary(value: string) {
