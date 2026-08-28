@@ -57,28 +57,28 @@ export const REPLACEMENT_CHARACTER_DICTIONARY: ReadonlyArray<{
   pattern: RegExp;
   replacement: string;
 }> = [
-  { pattern: /s�{1,2}o/gi, replacement: "são" },
-  { pattern: /regi�{1,2}o/gi, replacement: "região" },
-  { pattern: /alvar�es/gi, replacement: "alvarães" },
-  { pattern: /air�o/gi, replacement: "airão" },
-  { pattern: /anam�/gi, replacement: "anamã" },
-  { pattern: /codaj�s/gi, replacement: "codajás" },
-  { pattern: /v�rzea/gi, replacement: "várzea" },
-  { pattern: /guajar�(?:-| |\s)*mirim/gi, replacement: "guajará-mirim" },
-  { pattern: /guajar�/gi, replacement: "guajará" },
-  { pattern: /humait�/gi, replacement: "humaitá" },
-  { pattern: /tabating�/gi, replacement: "tabatinga" },
-  { pattern: /l�brea/gi, replacement: "lábrea" },
-  { pattern: /tef�/gi, replacement: "tefé" },
-  { pattern: /micr�metros/gi, replacement: "micrômetros" },
-  { pattern: /l�gico/gi, replacement: "lógico" },
-  { pattern: /fus�o/gi, replacement: "fusão" },
-  { pattern: /conex�o/gi, replacement: "conexão" },
-  { pattern: /necess�ria/gi, replacement: "necessária" },
-  { pattern: /c�mera/gi, replacement: "câmera" },
-  { pattern: /caracter�sticas/gi, replacement: "características" },
-  { pattern: /refer�ncia/gi, replacement: "referência" },
-  { pattern: /a�reo/gi, replacement: "aéreo" },
+  { pattern: /s[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "são" },
+  { pattern: /regi[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "região" },
+  { pattern: /alvar[\s\u00a0]*�+[\s\u00a0]*es/gi, replacement: "alvarães" },
+  { pattern: /air[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "airão" },
+  { pattern: /anam[\s\u00a0]*�+/gi, replacement: "anamã" },
+  { pattern: /codaj[\s\u00a0]*�+[\s\u00a0]*s/gi, replacement: "codajás" },
+  { pattern: /v[\s\u00a0]*�+[\s\u00a0]*rzea/gi, replacement: "várzea" },
+  { pattern: /guajar[\s\u00a0]*�+[\s\u00a0]*(?:-| |\s)*mirim/gi, replacement: "guajará-mirim" },
+  { pattern: /guajar[\s\u00a0]*�+/gi, replacement: "guajará" },
+  { pattern: /humait[\s\u00a0]*�+/gi, replacement: "humaitá" },
+  { pattern: /tabating[\s\u00a0]*�+/gi, replacement: "tabatinga" },
+  { pattern: /l[\s\u00a0]*�+[\s\u00a0]*brea/gi, replacement: "lábrea" },
+  { pattern: /tef[\s\u00a0]*�+/gi, replacement: "tefé" },
+  { pattern: /micr[\s\u00a0]*�+[\s\u00a0]*metros/gi, replacement: "micrômetros" },
+  { pattern: /l[\s\u00a0]*�+[\s\u00a0]*gico/gi, replacement: "lógico" },
+  { pattern: /fus[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "fusão" },
+  { pattern: /conex[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "conexão" },
+  { pattern: /necess[\s\u00a0]*�+[\s\u00a0]*ria/gi, replacement: "necessária" },
+  { pattern: /c[\s\u00a0]*�+[\s\u00a0]*mera/gi, replacement: "câmera" },
+  { pattern: /caracter[\s\u00a0]*�+[\s\u00a0]*sticas/gi, replacement: "características" },
+  { pattern: /refer[\s\u00a0]*�+[\s\u00a0]*ncia/gi, replacement: "referência" },
+  { pattern: /a[\s\u00a0]*�+[\s\u00a0]*reo/gi, replacement: "aéreo" },
 ];
 
 function applyReplacementCharacterDictionary(value: string) {
@@ -94,20 +94,19 @@ export function findUnresolvedMojibakeTokens(value: string) {
 
 function repairReplacementCharacters(value: string) {
   return applyReplacementCharacterDictionary(value)
-    .replace(/lan�amento/gi, (match) => match[0] === "L" ? "Lançamento" : "lançamento")
-    .replace(/�ptica/gi, (match) => match.slice(1) === "PTICA" ? "ÓPTICA" : "óptica")
-    .replace(/acess�rios/gi, (match) => match[0] === "A" ? "Acessórios" : "acessórios")
-    .replace(/m�todo/gi, (match) => match[0] === "M" ? "Método" : "método")
-    .replace(/subterr�neo/gi, (match) => {
+    .replace(/lan[\s\u00a0]*�+[\s\u00a0]*amento/gi, (match) => match.trimStart()[0] === "L" ? "Lançamento" : "lançamento")
+    .replace(/�+[\s\u00a0]*ptica/gi, (match) => match.trim().slice(-5) === "PTICA" ? "ÓPTICA" : "óptica")
+    .replace(/acess[\s\u00a0]*�+[\s\u00a0]*rios/gi, (match) => match.trimStart()[0] === "A" ? "Acessórios" : "acessórios")
+    .replace(/m[\s\u00a0]*�+[\s\u00a0]*todo/gi, (match) => match.trimStart()[0] === "M" ? "Método" : "método")
+    .replace(/subterr[\s\u00a0]*�+[\s\u00a0]*neo/gi, (match) => {
       if (match === match.toUpperCase()) return "SUBTERRÂNEO";
       return match[0] === "S" ? "Subterrâneo" : "subterrâneo";
     })
-    .replace(/destrut�vel/gi, (match) => {
+    .replace(/destrut[\s\u00a0]*�+[\s\u00a0]*vel/gi, (match) => {
       if (match === match.toUpperCase()) return "DESTRUTÍVEL";
       return match[0] === "D" ? "Destrutível" : "destrutível";
     })
-    .replace(/\bn\s+�o\b/gi, (match) => match[0] === "N" ? "Não" : "não")
-    .replace(/\bn�o\b/gi, (match) => match[0] === "N" ? "Não" : "não")
+    .replace(/\bn[\s\u00a0]*�+[\s\u00a0]*o\b/gi, (match) => match.trimStart()[0] === "N" ? "Não" : "não")
     .replace(/\bCab\s+o\b/g, "Cabo")
     .replace(/\bident\s+ificação\b/gi, "identificação")
     .replace(/\bmo\s+nitoramento\b/gi, (match) => preserveWordCase(match, "monitoramento"))
@@ -120,13 +119,13 @@ function repairReplacementCharacters(value: string) {
     .replace(/\bc\s+onectores\b/gi, (match) => preserveWordCase(match, "conectores"))
     .replace(/\bide\s+ntificação\b/gi, (match) => preserveWordCase(match, "identificação"))
     .replace(/\bre\s+ferência\b/gi, (match) => preserveWordCase(match, "referência"))
-    .replace(/\bSERVI�O\b/g, "SERVIÇO")
-    .replace(/\bServi�o\b/g, "Serviço")
-    .replace(/\bservi�o\b/g, "serviço")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])��o\b/g, "$1ção")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])��es\b/g, "$1ções")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])�o\b/g, "$1ço")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])�es\b/g, "$1ções");
+    .replace(/\bSERVI[\s\u00a0]*�+[\s\u00a0]*O\b/g, "SERVIÇO")
+    .replace(/\bServi[\s\u00a0]*�+[\s\u00a0]*o\b/g, "Serviço")
+    .replace(/\bservi[\s\u00a0]*�+[\s\u00a0]*o\b/g, "serviço")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])[\s\u00a0]*�[\s\u00a0]*�[\s\u00a0]*o\b/g, "$1ção")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])[\s\u00a0]*�[\s\u00a0]*�[\s\u00a0]*es\b/g, "$1ções")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])[\s\u00a0]*�+[\s\u00a0]*o\b/g, "$1ço")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])[\s\u00a0]*�+[\s\u00a0]*es\b/g, "$1ções");
 }
 
 export function normalizeMojibakeText(value: string): string;

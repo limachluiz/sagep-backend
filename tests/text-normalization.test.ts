@@ -71,6 +71,20 @@ describe("normalizeMojibakeText", () => {
     );
   });
 
+  it.each(["ALVAR � ES", "ALVAR� ES", "ALVAR �ES", "ALVAR � ES"])(
+    "ignores spaces around the replacement marker in %s",
+    (damaged) => expect(normalizeMojibakeText(damaged)).toBe("ALVARÃES"),
+  );
+
+  it.each([
+    ["REGI � O 3", "REGIÃO 3"],
+    ["instala � � o", "instalação"],
+    ["fibra � ptica", "fibra óptica"],
+    ["m � todo subterr � neo", "método subterrâneo"],
+  ])("repairs spacing variations in technical text: %s", (damaged, expected) => {
+    expect(normalizeMojibakeText(damaged)).toBe(expected);
+  });
+
   it("repairs descriptions from items 2 through 6 of ARP 00001/2026", () => {
     const damagedDescriptions = [
       "Servi�o TIPO I-B de lan�amento e instala��o de cabo de fibra �ptica tipo DROP, " +

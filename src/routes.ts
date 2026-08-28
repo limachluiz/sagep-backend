@@ -26,6 +26,7 @@ import { deploymentRoutes } from "./modules/deployment/deployment.routes.js";
 import { setupRoutes } from "./modules/setup/setup.routes.js";
 import { evidencesRoutes } from "./modules/evidences/evidences.routes.js";
 import { pregoesRoutes } from "./modules/pregoes/pregoes.routes.js";
+import { textCorrectionsRoutes } from "./modules/text-corrections/text-corrections.routes.js";
 
 export const routes = Router();
 
@@ -56,3 +57,4 @@ routes.use("/system-settings", systemSettingsRoutes);
 routes.use("/backups", backupsRoutes);
 routes.use("/deployment", deploymentRoutes);
 routes.use("/evidences", evidencesRoutes);
+routes.use("/text-corrections", textCorrectionsRoutes);

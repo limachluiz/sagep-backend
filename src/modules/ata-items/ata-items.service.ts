@@ -3,6 +3,7 @@ import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { findUnresolvedMojibakeTokens, normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { ataItemBalanceService } from "./ata-item-balance.service.js";
+import { textCorrectionsService } from "../text-corrections/text-corrections.service.js";
 
 type UfValue = "AM" | "RO" | "RR" | "AC";
 
@@ -570,7 +571,7 @@ export class AtaItemsService {
       throw new AppError("Item da ata não encontrado", 404);
     }
 
-    const correctedDescription = normalizeMojibakeText(existingItem.description);
+    const correctedDescription = await textCorrectionsService.correctText(existingItem.description);
     if (correctedDescription !== existingItem.description) {
       await prisma.ataItem.update({
         where: { id: itemId },
@@ -593,10 +594,10 @@ export class AtaItemsService {
       where: { ataId, deletedAt: null },
       select: { id: true, description: true },
     });
-    const corrections = items.map((item) => ({
+    const corrections = await Promise.all(items.map(async (item) => ({
       ...item,
-      correctedDescription: normalizeMojibakeText(item.description),
-    }));
+      correctedDescription: await textCorrectionsService.correctText(item.description),
+    })));
     const changed = corrections.filter((item) => item.correctedDescription !== item.description);
 
     if (changed.length) {

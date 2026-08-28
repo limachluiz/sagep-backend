@@ -673,6 +673,15 @@ model AtaItem {
   @@unique([ataId, coverageGroupId, referenceCode])
 }
 
+model TextCorrectionRule {
+  id            String   @id @default(cuid())
+  damagedText   String   @unique
+  correctedText String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
 model AtaItemBalanceMovement {
   id             String                     @id @default(cuid())
   ataItemId      String

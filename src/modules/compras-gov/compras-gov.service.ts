@@ -7,6 +7,7 @@ import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { inferCoverageFromDescription, type InferredCoverage } from "./coverage-inference.js";
 
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
+import { applyTextCorrectionRules, textCorrectionsService } from "../text-corrections/text-corrections.service.js";
 const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGES = 20;
@@ -1237,8 +1238,10 @@ export class ComprasGovService {
       return resolved;
     };
 
+    const activeTextCorrectionRules = await textCorrectionsService.activeRules();
     for (const item of preview.items) {
       const coverageGroup = await resolveItemCoverage(item);
+      const correctedDescription = applyTextCorrectionRules(item.description, activeTextCorrectionRules);
       const existingItem = await prisma.ataItem.findFirst({
         where: {
           ataId: ata.id,
@@ -1259,7 +1262,7 @@ export class ComprasGovService {
             coverageGroupId: coverageGroup.id,
             referenceCode: item.referenceCode,
             externalDescription: item.description,
-            ...(importedItem.descriptionEditedAt ? {} : { description: item.description }),
+            ...(importedItem.descriptionEditedAt ? {} : { description: correctedDescription }),
             unit: item.unit.trim().toUpperCase(),
             unitPrice: item.unitPrice.toFixed(2),
             initialQuantity: item.initialQuantity.toFixed(2),
@@ -1276,7 +1279,7 @@ export class ComprasGovService {
             ataId: ata.id,
             coverageGroupId: coverageGroup.id,
             referenceCode: item.referenceCode,
-            description: item.description,
+            description: correctedDescription,
             externalDescription: item.description,
             unit: item.unit.trim().toUpperCase(),
             unitPrice: item.unitPrice.toFixed(2),
