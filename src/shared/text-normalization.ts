@@ -53,30 +53,51 @@ function preserveWordCase(match: string, replacement: string) {
   return replacement;
 }
 
+export const REPLACEMENT_CHARACTER_DICTIONARY: ReadonlyArray<{
+  pattern: RegExp;
+  replacement: string;
+}> = [
+  { pattern: /s�{1,2}o/gi, replacement: "são" },
+  { pattern: /regi�{1,2}o/gi, replacement: "região" },
+  { pattern: /alvar�es/gi, replacement: "alvarães" },
+  { pattern: /air�o/gi, replacement: "airão" },
+  { pattern: /anam�/gi, replacement: "anamã" },
+  { pattern: /codaj�s/gi, replacement: "codajás" },
+  { pattern: /v�rzea/gi, replacement: "várzea" },
+  { pattern: /guajar�(?:-| |\s)*mirim/gi, replacement: "guajará-mirim" },
+  { pattern: /guajar�/gi, replacement: "guajará" },
+  { pattern: /humait�/gi, replacement: "humaitá" },
+  { pattern: /tabating�/gi, replacement: "tabatinga" },
+  { pattern: /l�brea/gi, replacement: "lábrea" },
+  { pattern: /tef�/gi, replacement: "tefé" },
+  { pattern: /micr�metros/gi, replacement: "micrômetros" },
+  { pattern: /l�gico/gi, replacement: "lógico" },
+  { pattern: /fus�o/gi, replacement: "fusão" },
+  { pattern: /conex�o/gi, replacement: "conexão" },
+  { pattern: /necess�ria/gi, replacement: "necessária" },
+  { pattern: /c�mera/gi, replacement: "câmera" },
+  { pattern: /caracter�sticas/gi, replacement: "características" },
+  { pattern: /refer�ncia/gi, replacement: "referência" },
+  { pattern: /a�reo/gi, replacement: "aéreo" },
+];
+
+function applyReplacementCharacterDictionary(value: string) {
+  return REPLACEMENT_CHARACTER_DICTIONARY.reduce(
+    (text, entry) => text.replace(entry.pattern, (match) => preserveWordCase(match, entry.replacement)),
+    value,
+  );
+}
+
+export function findUnresolvedMojibakeTokens(value: string) {
+  return [...new Set(value.match(/[\p{L}\d/-]*�+[\p{L}\d/-]*/gu) ?? [])];
+}
+
 function repairReplacementCharacters(value: string) {
-  return value
-    .replace(/s�{1,2}o/gi, (match) => preserveWordCase(match, "são"))
-    .replace(/regi�{1,2}o/gi, (match) => preserveWordCase(match, "região"))
-    .replace(/guajar�(?:-| |\s)*mirim/gi, (match) => preserveWordCase(match, "guajará-mirim"))
-    .replace(/guajar�/gi, (match) => preserveWordCase(match, "guajará"))
-    .replace(/humait�/gi, (match) => preserveWordCase(match, "humaitá"))
-    .replace(/tabating�/gi, (match) => preserveWordCase(match, "tabatinga"))
-    .replace(/l�brea/gi, (match) => preserveWordCase(match, "lábrea"))
-    .replace(/tef�/gi, (match) => preserveWordCase(match, "tefé"))
-    .replace(/regi�o/gi, (match) => preserveWordCase(match, "região"))
-    .replace(/micr�metros/gi, (match) => preserveWordCase(match, "micrômetros"))
-    .replace(/l�gico/gi, (match) => preserveWordCase(match, "lógico"))
-    .replace(/fus�o/gi, (match) => preserveWordCase(match, "fusão"))
-    .replace(/conex�o/gi, (match) => preserveWordCase(match, "conexão"))
-    .replace(/necess�ria/gi, (match) => preserveWordCase(match, "necessária"))
+  return applyReplacementCharacterDictionary(value)
     .replace(/lan�amento/gi, (match) => match[0] === "L" ? "Lançamento" : "lançamento")
     .replace(/�ptica/gi, (match) => match.slice(1) === "PTICA" ? "ÓPTICA" : "óptica")
     .replace(/acess�rios/gi, (match) => match[0] === "A" ? "Acessórios" : "acessórios")
     .replace(/m�todo/gi, (match) => match[0] === "M" ? "Método" : "método")
-    .replace(/c�mera/gi, (match) => preserveWordCase(match, "câmera"))
-    .replace(/caracter�sticas/gi, (match) => preserveWordCase(match, "características"))
-    .replace(/refer�ncia/gi, (match) => preserveWordCase(match, "referência"))
-    .replace(/a�reo/gi, (match) => preserveWordCase(match, "aéreo"))
     .replace(/subterr�neo/gi, (match) => {
       if (match === match.toUpperCase()) return "SUBTERRÂNEO";
       return match[0] === "S" ? "Subterrâneo" : "subterrâneo";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeMojibakeText } from "../src/shared/text-normalization.js";
+import { findUnresolvedMojibakeTokens, normalizeMojibakeText } from "../src/shared/text-normalization.js";
 
 describe("normalizeMojibakeText", () => {
   it("fixes common Compras.gov mojibake without changing valid UTF-8 text", () => {
@@ -48,6 +48,26 @@ describe("normalizeMojibakeText", () => {
       "Serviço incluin do material pa ra fixação. Dem ais características conforme Termo de Re ferência.",
     )).toBe(
       "Serviço incluindo material para fixação. Demais características conforme Termo de Referência.",
+    );
+  });
+
+  it("repairs the corrupted Region 3 locality names", () => {
+    const damaged = "(REGI�O 3 - COARI-AM, TEF�-AM, ALVAR�ES-AM, CODAJ�S-AM, MANAQUIRI-AM, CAREIRO-AM E CAREIRO DA V�RZEA-AM)";
+    const corrected = normalizeMojibakeText(damaged);
+
+    expect(corrected).toBe(
+      "(REGIÃO 3 - COARI-AM, TEFÉ-AM, ALVARÃES-AM, CODAJÁS-AM, MANAQUIRI-AM, CAREIRO-AM E CAREIRO DA VÁRZEA-AM)",
+    );
+    expect(findUnresolvedMojibakeTokens(corrected)).toEqual([]);
+  });
+
+  it("reports unknown damaged tokens for future dictionary entries", () => {
+    expect(findUnresolvedMojibakeTokens("PALAVR� DESCONHECIDA")).toEqual(["PALAVR�"]);
+  });
+
+  it("repairs accented locality names from the official ATA regions", () => {
+    expect(normalizeMojibakeText("NOVO AIR�O-AM, ANAM�-AM, S�O GABRIEL DA CACHOEIRA-AM")).toBe(
+      "NOVO AIRÃO-AM, ANAMÃ-AM, SÃO GABRIEL DA CACHOEIRA-AM",
     );
   });
 

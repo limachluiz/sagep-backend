@@ -1,7 +1,7 @@
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
-import { normalizeMojibakeText } from "../../shared/text-normalization.js";
+import { findUnresolvedMojibakeTokens, normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { ataItemBalanceService } from "./ata-item-balance.service.js";
 
 type UfValue = "AM" | "RO" | "RR" | "AC";
@@ -583,6 +583,7 @@ export class AtaItemsService {
       changed: correctedDescription !== existingItem.description,
       description: correctedDescription,
       unresolvedCharacters: (correctedDescription.match(/�/g) ?? []).length,
+      unresolvedTokens: findUnresolvedMojibakeTokens(correctedDescription),
     };
   }
 
@@ -608,6 +609,10 @@ export class AtaItemsService {
       );
     }
 
+    const unresolvedTokens = [...new Set(corrections.flatMap((item) =>
+      findUnresolvedMojibakeTokens(item.correctedDescription),
+    ))];
+
     return {
       ataId,
       total: items.length,
@@ -617,6 +622,7 @@ export class AtaItemsService {
         (total, item) => total + (item.correctedDescription.match(/�/g) ?? []).length,
         0,
       ),
+      unresolvedTokens,
     };
   }
 
