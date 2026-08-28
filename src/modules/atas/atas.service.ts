@@ -638,10 +638,6 @@ export class AtasService {
       throw new AppError("Ata não encontrada", 404);
     }
 
-    if (ata.isActive) {
-      throw new AppError("Inative a ata antes de excluí-la", 409);
-    }
-
     const hasBalanceHistory = ata.items.some(
       (item) => item._count.balanceMovements > 0,
     );
