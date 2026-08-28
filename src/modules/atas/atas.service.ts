@@ -41,6 +41,11 @@ type UpdateAtaInput = {
 
 type UpdateCoverageGroupInput = Partial<CoverageGroupInput>;
 
+type ReplaceCoverageInput = {
+  regionNumber: number;
+  localities: CoverageLocalityInput[];
+};
+
 type ListAtasFilters = {
   code?: number;
   type?: "CFTV" | "FIBRA_OPTICA";
@@ -499,6 +504,77 @@ export class AtasService {
         }),
       },
       select: coverageGroupSelect,
+    });
+  }
+
+  async replaceCoverage(ataId: string, data: ReplaceCoverageInput) {
+    await this.ensureAtaExists(ataId);
+    const code = `REG-${String(data.regionNumber).padStart(2, "0")}`;
+    const name = `Região ${data.regionNumber}`;
+    const localities = this.normalizeCoverageGroup({
+      code,
+      name,
+      localities: data.localities,
+    }).localities;
+
+    return prisma.$transaction(async (tx) => {
+      const groups = await tx.ataCoverageGroup.findMany({
+        where: { ataId },
+        include: {
+          items: { where: { deletedAt: null }, select: { id: true, referenceCode: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      let target = groups.find((group) => group.code === code) ?? groups[0];
+      if (!target) {
+        target = await tx.ataCoverageGroup.create({
+          data: { ataId, code, name },
+          include: { items: { where: { deletedAt: null }, select: { id: true, referenceCode: true } } },
+        });
+      }
+
+      const references = new Map<string, string>();
+      for (const group of groups) {
+        for (const item of group.items) {
+          const key = item.referenceCode.trim().toLocaleUpperCase("pt-BR");
+          const owner = references.get(key);
+          if (owner && owner !== group.id) {
+            throw new AppError(
+              `Não foi possível consolidar: o item ${item.referenceCode} aparece em mais de um grupo.`,
+              409,
+            );
+          }
+          references.set(key, group.id);
+        }
+      }
+
+      const obsoleteIds = groups.filter((group) => group.id !== target.id).map((group) => group.id);
+      if (obsoleteIds.length > 0) {
+        await tx.ataItem.updateMany({
+          where: { ataId, coverageGroupId: { in: obsoleteIds } },
+          data: { coverageGroupId: target.id },
+        });
+        await tx.estimate.updateMany({
+          where: { ataId, coverageGroupId: { in: obsoleteIds } },
+          data: { coverageGroupId: target.id },
+        });
+        await tx.ataCoverageGroup.deleteMany({ where: { id: { in: obsoleteIds } } });
+      }
+
+      return tx.ataCoverageGroup.update({
+        where: { id: target.id },
+        data: {
+          code,
+          name,
+          description: null,
+          localities: {
+            deleteMany: {},
+            create: localities,
+          },
+        },
+        select: coverageGroupSelect,
+      });
     });
   }
 
