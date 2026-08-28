@@ -22,6 +22,8 @@ describe("normalizeMojibakeText", () => {
     expect(normalizeMojibakeText("ponto l\ufffdgico")).toBe("ponto lógico");
     expect(normalizeMojibakeText("FUS\ufffdO e conex\ufffdo")).toBe("FUSÃO e conexão");
     expect(normalizeMojibakeText("infraestrutura necess\ufffdria")).toBe("infraestrutura necessária");
+    expect(normalizeMojibakeText("S\ufffd\ufffdO GABRIEL DA CACHOEIRA")).toBe("SÃO GABRIEL DA CACHOEIRA");
+    expect(normalizeMojibakeText("GUAJAR\ufffd-MIRIM")).toBe("GUAJARÁ-MIRIM");
   });
 
   it("repairs a technical ATA description without corrupting valid accents", () => {
