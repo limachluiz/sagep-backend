@@ -24,6 +24,8 @@ describe("normalizeMojibakeText", () => {
     expect(normalizeMojibakeText("infraestrutura necess\ufffdria")).toBe("infraestrutura necessária");
     expect(normalizeMojibakeText("S\ufffd\ufffdO GABRIEL DA CACHOEIRA")).toBe("SÃO GABRIEL DA CACHOEIRA");
     expect(normalizeMojibakeText("GUAJAR\ufffd-MIRIM")).toBe("GUAJARÁ-MIRIM");
+    expect(normalizeMojibakeText("HUMAIT\ufffd-AM")).toBe("HUMAITÁ-AM");
+    expect(normalizeMojibakeText("REGI\ufffd\ufffdO 5")).toBe("REGIÃO 5");
   });
 
   it("repairs a technical ATA description without corrupting valid accents", () => {
