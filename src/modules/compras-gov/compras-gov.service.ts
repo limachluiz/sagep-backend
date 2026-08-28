@@ -742,7 +742,11 @@ export class ComprasGovService {
     return { ata: selectedAta, items };
   }
 
-  private normalizePreviewItems(externalItems: ComprasGovAtaItem[], ataNumber: string, warnings?: string[]) {
+  private normalizePreviewItems(
+    externalItems: ComprasGovAtaItem[],
+    ataNumber: string,
+    warnings?: string[],
+  ): NormalizedPreviewItem[] {
     return externalItems.map((item, index) => {
       const externalItemNumber = this.normalizeText(item.numeroItem || index + 1);
       const referenceCode = externalItemNumber || this.normalizeText(item.codigoItem || index + 1);
