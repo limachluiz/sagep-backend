@@ -102,6 +102,12 @@ export function findUnresolvedMojibakeTokens(value: string) {
 
 function repairReplacementCharacters(value: string) {
   return applyReplacementCharacterDictionary(value)
+    // O Compras.gov também pode preservar o acento, mas inserir espaços no
+    // identificador territorial (ex.: "R EGIÃO 1"). Normalizamos o marcador
+    // antes que a cobertura da ATA seja inferida.
+    .replace(/\bR[\s\u00a0]*E[\s\u00a0]*G[\s\u00a0]*I[\s\u00a0]*(?:Ã|A)[\s\u00a0]*O\b/gi, (match) =>
+      preserveWordCase(match, "região"),
+    )
     .replace(/lan[\s\u00a0]*�+[\s\u00a0]*amento/gi, (match) => match.trimStart()[0] === "L" ? "Lançamento" : "lançamento")
     .replace(/�+[\s\u00a0]*ptica/gi, (match) => match.trim().slice(-5) === "PTICA" ? "ÓPTICA" : "óptica")
     .replace(/acess[\s\u00a0]*�+[\s\u00a0]*rios/gi, (match) => match.trimStart()[0] === "A" ? "Acessórios" : "acessórios")

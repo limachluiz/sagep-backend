@@ -1,4 +1,5 @@
 import { ATA_REGION_LOCALITIES } from "./ata-regions.js";
+import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 
 export type InferredCoverage = {
   code: string;
@@ -31,7 +32,7 @@ function extractLocalities(value: string) {
 }
 
 export function inferCoverageFromDescription(description: string): InferredCoverage | null {
-  const normalized = description.replace(/\s+/g, " ");
+  const normalized = normalizeMojibakeText(description).replace(/\s+/g, " ");
   const regionMatch = normalized.match(/REGI(?:Ã|A|�{1,2})O\s*(\d+)/i);
   const extractedLocalities = extractLocalities(normalized);
 

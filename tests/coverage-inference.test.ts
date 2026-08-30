@@ -21,6 +21,14 @@ describe("inferCoverageFromDescription", () => {
     });
   });
 
+  it("recognizes a region when Compras.gov splits a correctly accented word", () => {
+    expect(inferCoverageFromDescription("Serviço TIPO I-B (R EGIÃO 1 - MANAUS-AM)")).toMatchObject({
+      code: "REG-01",
+      name: "Região 1",
+      localities: [{ cityName: "Manaus", stateUf: "AM" }],
+    });
+  });
+
   it("groups multiple localities from the same region", () => {
     expect(inferCoverageFromDescription("REGIÃO 5 - PORTO VELHO-RO, GUAJARÁ-MIRIM/RO")).toMatchObject({
       code: "REG-05",

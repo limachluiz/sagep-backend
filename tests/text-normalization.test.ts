@@ -90,6 +90,7 @@ describe("normalizeMojibakeText", () => {
   });
 
   it.each([
+    ["(R EGIÃO 1 - MANAUS-AM)", "(REGIÃO 1 - MANAUS-AM)"],
     ["infraestrutura met�lica", "infraestrutura metálica"],
     ["utilizando m�to do subterrâneo", "utilizando método subterrâneo"],
     ["R EGI�O 1", "REGIÃO 1"],
