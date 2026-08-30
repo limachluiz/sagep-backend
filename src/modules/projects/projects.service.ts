@@ -12,6 +12,12 @@ import { ServiceOrdersService } from "../service-orders/service-orders.service.j
 import { TasksService } from "../tasks/tasks.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
+import type { CommitmentNoteSnapshot } from "../financial-execution/portal-transparencia.client.js";
+import {
+  inferDeliveryUnit,
+  parseDeliveryReportDraft,
+  type DeliveryReportDraft,
+} from "./delivery-report-draft.js";
 
 type CurrentUser = {
   id: string;
@@ -34,6 +40,7 @@ type ProjectStageValue =
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
+  | "ENTREGA_TECNICA"
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
@@ -91,6 +98,8 @@ type RegisterSignedServiceOrderInput = {
   signedServiceOrderNotes?: string;
 };
 
+type RegisterDeliveryReportSignatureInput = { signedAt: Date; signedLink?: string };
+
 type CancelCommitmentNoteInput = {
   reason: string;
 };
@@ -138,6 +147,7 @@ const projectInclude = {
       id: true,
       userCode: true,
       name: true,
+      avatarDataUrl: true,
       email: true,
       role: true,
     },
@@ -225,7 +235,7 @@ export class ProjectsService {
           { description: { contains: filters.search, mode: "insensitive" } },
         ],
       }),
-      ...(!this.isPrivileged(user.role) && {
+      ...(!this.isPrivileged(user) && {
         OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }],
       }),
     };
@@ -233,7 +243,7 @@ export class ProjectsService {
       where,
       orderBy: [{ stage: "asc" }, { updatedAt: "desc" }],
       include: {
-        owner: { select: { id: true, name: true, email: true } },
+        owner: { select: { id: true, name: true, avatarDataUrl: true, email: true } },
         om: { select: { id: true, sigla: true, cityName: true, stateUf: true } },
         serviceOrders: {
           where: { archivedAt: null, deletedAt: null },
@@ -251,6 +261,7 @@ export class ProjectsService {
       AGUARDANDO_INICIO_EXECUCAO: "Aguardando início da execução",
       SERVICO_EM_EXECUCAO: "Serviço em execução",
       ANALISANDO_AS_BUILT: "Analisando As-Built", ATESTAR_NF: "Atestar NF",
+      ENTREGA_TECNICA: "Entrega técnica",
       SERVICO_CONCLUIDO: "Serviço concluído", CANCELADO: "Cancelado",
     };
     return {
@@ -346,8 +357,8 @@ export class ProjectsService {
     };
   }
 
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "projects.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private async getProjectAccessData(projectId: string, includeArchived = false) {
@@ -425,7 +436,7 @@ export class ProjectsService {
   private async ensureCanView(projectId: string, user: CurrentUser, includeArchived = false) {
     const project = await this.getProjectAccessData(projectId, includeArchived);
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return project;
     }
 
@@ -442,7 +453,7 @@ export class ProjectsService {
   private async ensureCanViewByCode(projectCode: number, user: CurrentUser, includeArchived = false) {
     const project = await this.getProjectAccessDataByCode(projectCode, includeArchived);
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return project;
     }
 
@@ -514,6 +525,8 @@ export class ProjectsService {
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
+    deliveryReportGeneratedAt?: Date | null;
+    deliveryReportSignedAt?: Date | null;
   }) {
     return {
       id: project.id,
@@ -550,6 +563,8 @@ export class ProjectsService {
       asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
       serviceCompletedAt: project.serviceCompletedAt ?? null,
+      deliveryReportGeneratedAt: project.deliveryReportGeneratedAt ?? null,
+      deliveryReportSignedAt: project.deliveryReportSignedAt ?? null,
     };
   }
 
@@ -577,6 +592,8 @@ export class ProjectsService {
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
+    deliveryReportGeneratedAt?: Date | null;
+    deliveryReportSignedAt?: Date | null;
   }) {
     return {
       id: project.id,
@@ -602,6 +619,8 @@ export class ProjectsService {
       asBuiltRejectionReason: project.asBuiltRejectionReason ?? null,
       invoiceAttestedAt: project.invoiceAttestedAt ?? null,
       serviceCompletedAt: project.serviceCompletedAt ?? null,
+      deliveryReportGeneratedAt: project.deliveryReportGeneratedAt ?? null,
+      deliveryReportSignedAt: project.deliveryReportSignedAt ?? null,
     };
   }
 
@@ -646,6 +665,8 @@ export class ProjectsService {
     asBuiltRejectionReason?: string | null;
     invoiceAttestedAt?: Date | null;
     serviceCompletedAt?: Date | null;
+    deliveryReportGeneratedAt?: Date | null;
+    deliveryReportSignedAt?: Date | null;
     estimates: { status: string }[];
     diexRequests: unknown[];
     serviceOrders: unknown[];
@@ -800,7 +821,7 @@ export class ProjectsService {
           code: "ATESTAR_NF",
           label: "Registrar atesto da NF",
           severity: "BLOCKER",
-          targetStage: "SERVICO_CONCLUIDO",
+          targetStage: "ENTREGA_TECNICA",
         });
       }
 
@@ -809,8 +830,16 @@ export class ProjectsService {
           code: "CONCLUIR_SERVICO",
           label: "Registrar conclusão do serviço",
           severity: "BLOCKER",
-          targetStage: "SERVICO_CONCLUIDO",
+          targetStage: "ENTREGA_TECNICA",
         });
+      }
+    }
+
+    if (project.stage === "ENTREGA_TECNICA") {
+      if (!project.deliveryReportGeneratedAt) {
+        pendingActions.push({ code: "GERAR_RELATORIO_ENTREGA", label: "Gerar relatório técnico de entrega", severity: "BLOCKER", targetStage: "ENTREGA_TECNICA" });
+      } else if (!project.deliveryReportSignedAt) {
+        pendingActions.push({ code: "REGISTRAR_RELATORIO_ASSINADO", label: "Confirmar revisão e assinatura do relatório", severity: "BLOCKER", targetStage: "ENTREGA_TECNICA" });
       }
     }
 
@@ -1128,7 +1157,7 @@ export class ProjectsService {
         : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     );
 
-    if (!this.isPrivileged(user.role)) {
+    if (!this.isPrivileged(user)) {
       andConditions.push({
         OR: [
           { ownerId: user.id },
@@ -1219,6 +1248,7 @@ export class ProjectsService {
             id: true,
             userCode: true,
             name: true,
+            avatarDataUrl: true,
             email: true,
             role: true,
           },
@@ -1232,6 +1262,7 @@ export class ProjectsService {
                 id: true,
                 userCode: true,
                 name: true,
+                avatarDataUrl: true,
                 email: true,
                 role: true,
               },
@@ -1260,6 +1291,7 @@ export class ProjectsService {
                 id: true,
                 userCode: true,
                 name: true,
+                avatarDataUrl: true,
                 email: true,
               },
             },
@@ -1376,6 +1408,7 @@ export class ProjectsService {
             id: true,
             userCode: true,
             name: true,
+            avatarDataUrl: true,
             email: true,
             role: true,
           },
@@ -1389,6 +1422,9 @@ export class ProjectsService {
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
+        deliveryReportGeneratedAt: true,
+        deliveryReportSignedAt: true,
+        deliveryReportSignedLink: true,
         archivedAt: true,
         deletedAt: true,
         createdAt: true,
@@ -1398,6 +1434,7 @@ export class ProjectsService {
             id: true,
             userCode: true,
             name: true,
+            avatarDataUrl: true,
             email: true,
             role: true,
           },
@@ -1411,6 +1448,7 @@ export class ProjectsService {
                 id: true,
                 userCode: true,
                 name: true,
+                avatarDataUrl: true,
                 email: true,
                 role: true,
               },
@@ -1441,6 +1479,7 @@ export class ProjectsService {
                 id: true,
                 userCode: true,
                 name: true,
+                avatarDataUrl: true,
                 email: true,
                 role: true,
               },
@@ -1573,7 +1612,11 @@ export class ProjectsService {
     }
 
     const workflowSnapshot = this.buildWorkflowSnapshot(project);
-    const nextAction = workflowService.getNextAction(workflowSnapshot);
+    const validDeliveryReportSignedAt = workflowService.isDeliveryReportSignatureValid(workflowSnapshot)
+      ? project.deliveryReportSignedAt
+      : null;
+    const effectiveWorkflowSnapshot = { ...workflowSnapshot, deliveryReportSignedAt: validDeliveryReportSignedAt };
+    const nextAction = workflowService.getNextAction(effectiveWorkflowSnapshot);
     const auditTrail = await this.buildUnifiedTimeline(project);
     const canViewAudit = permissionsService.hasPermission(user, "audit.view");
     const timeline = auditTrail.map((item) => this.toPublicTimelineItem(item));
@@ -1626,6 +1669,9 @@ export class ProjectsService {
           asBuiltRejectionReason: project.asBuiltRejectionReason,
           invoiceAttestedAt: project.invoiceAttestedAt,
           serviceCompletedAt: project.serviceCompletedAt,
+          deliveryReportGeneratedAt: project.deliveryReportGeneratedAt,
+          deliveryReportSignedAt: validDeliveryReportSignedAt,
+          deliveryReportSignedLink: project.deliveryReportSignedLink,
         },
         serviceOrderSignature: {
           required: project.serviceOrderSignatureRequired,
@@ -1635,7 +1681,7 @@ export class ProjectsService {
           registeredBy: project.signedServiceOrderRegisteredBy,
         },
       },
-      pendingActions: this.buildPendingActions(project),
+      pendingActions: this.buildPendingActions({ ...project, deliveryReportSignedAt: validDeliveryReportSignedAt }),
       timeline,
       auditTrail: canViewAudit ? auditTrail : null,
       tasks: project.tasks,
@@ -1692,6 +1738,7 @@ export class ProjectsService {
             id: true,
             userCode: true,
             name: true,
+            avatarDataUrl: true,
             email: true,
             role: true,
           },
@@ -1705,6 +1752,7 @@ export class ProjectsService {
                 id: true,
                 userCode: true,
                 name: true,
+                avatarDataUrl: true,
                 email: true,
                 role: true,
               },
@@ -1724,6 +1772,7 @@ export class ProjectsService {
                 id: true,
                 userCode: true,
                 name: true,
+                avatarDataUrl: true,
                 email: true,
               },
             },
@@ -1802,6 +1851,9 @@ export class ProjectsService {
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
+        deliveryReportGeneratedAt: true,
+        deliveryReportSignedAt: true,
+        deliveryReportSignedLink: true,
       },
     });
 
@@ -1870,7 +1922,16 @@ export class ProjectsService {
     return project;
   }
   
-  async updateFlow(projectId: string, data: UpdateProjectFlowInput, user: CurrentUser) {
+  async updateFlow(
+    projectId: string,
+    data: UpdateProjectFlowInput,
+    user: CurrentUser,
+    options?: {
+      commitmentNoteSnapshot?: CommitmentNoteSnapshot;
+      commitmentNoteSyncStatus?: "VALIDADO" | "DIVERGENTE" | "NAO_VALIDADO";
+      commitmentNoteDivergenceReason?: string | null;
+    },
+  ) {
     await this.ensureCanManage(projectId, user);
 
     const currentProject = await prisma.project.findUnique({
@@ -1907,6 +1968,9 @@ export class ProjectsService {
         asBuiltRejectionReason: true,
         invoiceAttestedAt: true,
         serviceCompletedAt: true,
+        deliveryReportGeneratedAt: true,
+        deliveryReportSignedAt: true,
+        deliveryReportSignedLink: true,
       },
     });
 
@@ -1972,6 +2036,8 @@ export class ProjectsService {
       asBuiltRejectionReason: currentProject.asBuiltRejectionReason,
       invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
       serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
+      deliveryReportGeneratedAt: currentProject.deliveryReportGeneratedAt,
+      deliveryReportSignedAt: currentProject.deliveryReportSignedAt,
     };
     const effectiveCurrentStage =
       currentProject.stage === "DIEX_REQUISITORIO" &&
@@ -2056,6 +2122,81 @@ export class ProjectsService {
           updatedProject.commitmentNoteNumber ?? "sem-numero",
           tx,
         );
+      }
+
+      if (options?.commitmentNoteSnapshot) {
+        const snapshot = options.commitmentNoteSnapshot;
+        await tx.commitmentNote.updateMany({
+          where: {
+            projectId,
+            active: true,
+            externalCode: { not: snapshot.externalCode },
+          },
+          data: { active: false },
+        });
+
+        const commitmentNote = await tx.commitmentNote.upsert({
+          where: { externalCode: snapshot.externalCode },
+          create: {
+            projectId,
+            number: snapshot.number,
+            externalCode: snapshot.externalCode,
+            managementUnit: snapshot.managementUnit,
+            management: snapshot.management,
+            source: snapshot.source,
+            supplierName: snapshot.supplierName,
+            supplierCnpj: snapshot.supplierCnpj,
+            issuedAt: snapshot.issuedAt,
+            originalAmount: snapshot.originalAmount,
+            currentAmount: snapshot.currentAmount,
+            liquidatedAmount: snapshot.liquidatedAmount,
+            paidAmount: snapshot.paidAmount,
+            cancelledAmount: snapshot.cancelledAmount,
+            financialStatus: snapshot.financialStatus,
+            syncStatus: options.commitmentNoteSyncStatus ?? "VALIDADO",
+            divergenceReason: options.commitmentNoteDivergenceReason,
+            rawSnapshot: snapshot.rawSnapshot as Prisma.InputJsonValue,
+            lastSyncAt: snapshot.fetchedAt,
+            active: true,
+          },
+          update: {
+            projectId,
+            number: snapshot.number,
+            supplierName: snapshot.supplierName,
+            supplierCnpj: snapshot.supplierCnpj,
+            issuedAt: snapshot.issuedAt,
+            originalAmount: snapshot.originalAmount,
+            currentAmount: snapshot.currentAmount,
+            liquidatedAmount: snapshot.liquidatedAmount,
+            paidAmount: snapshot.paidAmount,
+            cancelledAmount: snapshot.cancelledAmount,
+            financialStatus: snapshot.financialStatus,
+            syncStatus: options.commitmentNoteSyncStatus ?? "VALIDADO",
+            divergenceReason: options.commitmentNoteDivergenceReason,
+            rawSnapshot: snapshot.rawSnapshot as Prisma.InputJsonValue,
+            lastSyncAt: snapshot.fetchedAt,
+            lastSyncError: null,
+            active: true,
+          },
+        });
+
+        await tx.financialDocument.deleteMany({ where: { commitmentNoteId: commitmentNote.id } });
+        if (snapshot.documents.length) {
+          await tx.financialDocument.createMany({
+            data: snapshot.documents.map((document) => ({
+              commitmentNoteId: commitmentNote.id,
+              externalCode: document.externalCode,
+              number: document.number,
+              phase: document.phase,
+              species: document.species,
+              issuedAt: document.issuedAt,
+              amount: document.amount,
+              supplierName: document.supplierName,
+              supplierCnpj: document.supplierCnpj,
+              rawSnapshot: document.rawSnapshot as Prisma.InputJsonValue,
+            })),
+          });
+        }
       }
 
       return updatedProject;
@@ -2287,6 +2428,118 @@ export class ProjectsService {
     });
 
     return project;
+  }
+
+  async registerDeliveryReportSignature(projectId: string, data: RegisterDeliveryReportSignatureInput, user: CurrentUser) {
+    await this.ensureCanManage(projectId, user);
+    const current = await prisma.project.findUnique({ where: { id: projectId } });
+    if (!current) throw new AppError("Projeto não encontrado", 404);
+    if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A assinatura do relatório só pode ser registrada na etapa de Entrega Técnica", 409);
+    if (!current.deliveryReportGeneratedAt) throw new AppError("Gere o relatório antes de registrar sua assinatura", 409);
+    if (data.signedAt > new Date()) throw new AppError("A data da assinatura não pode estar no futuro", 400);
+    const generatedDay = new Date(current.deliveryReportGeneratedAt); generatedDay.setUTCHours(0, 0, 0, 0);
+    const signedDay = new Date(data.signedAt); signedDay.setUTCHours(0, 0, 0, 0);
+    if (signedDay < generatedDay) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
+    const project = await prisma.project.update({ where: { id: projectId }, data: { deliveryReportSignedAt: data.signedAt, deliveryReportSignedLink: data.signedLink?.trim() || null }, include: projectInclude });
+    await auditService.log({ entityType: "PROJECT", entityId: projectId, action: "UPDATE", actor: this.getAuditActor(user), summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`, before: this.buildProjectAuditSnapshot(current), after: this.buildProjectAuditSnapshot(project), metadata: { source: "project.delivery-report.signature", signedAt: data.signedAt, signedLink: data.signedLink ?? null } });
+    return project;
+  }
+
+  async getDeliveryReportDraft(projectId: string, user: CurrentUser) {
+    await this.ensureCanView(projectId, user);
+    const project = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: {
+        id: true,
+        projectCode: true,
+        title: true,
+        description: true,
+        projectType: true,
+        deliveryReportDraft: true,
+        estimates: {
+          where: { status: "FINALIZADA", archivedAt: null, deletedAt: null },
+          orderBy: { updatedAt: "desc" },
+          take: 1,
+          select: { items: { orderBy: { referenceCode: "asc" }, select: { id: true, referenceCode: true, description: true, unit: true, quantity: true, subtotal: true } } },
+        },
+        serviceOrders: {
+          where: { archivedAt: null, deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { items: { orderBy: { itemCode: "asc" }, select: { estimateItemId: true, itemCode: true, description: true, supplyUnit: true, quantityOrdered: true, totalPrice: true } } },
+        },
+      },
+    });
+    if (!project) throw new AppError("Projeto não encontrado", 404);
+
+    const sourceItems = project.serviceOrders[0]?.items.length
+      ? project.serviceOrders[0].items.map((item) => ({
+        itemId: item.estimateItemId,
+        itemCode: item.itemCode,
+        description: item.description,
+        sourceUnit: item.supplyUnit,
+        sourceQuantity: item.quantityOrdered.toString(),
+        totalPrice: item.totalPrice.toString(),
+      }))
+      : (project.estimates[0]?.items ?? []).map((item) => ({
+        itemId: item.id,
+        itemCode: item.referenceCode,
+        description: item.description,
+        sourceUnit: item.unit,
+        sourceQuantity: item.quantity.toString(),
+        totalPrice: item.subtotal.toString(),
+      }));
+    const draft = parseDeliveryReportDraft(project.deliveryReportDraft, project.projectType);
+    const details = new Map(draft.itemDetails.map((item) => [item.itemId, item]));
+    const itemDetails = sourceItems.map((item) => details.get(item.itemId) ?? {
+      itemId: item.itemId,
+      unit: inferDeliveryUnit(item.description, item.sourceUnit),
+      quantity: item.sourceQuantity,
+      technicalDescription: "",
+    });
+    if (!project.deliveryReportDraft && project.description) {
+      const purpose = draft.sections.find((section) => section.key === "purpose-scope");
+      if (purpose) purpose.content = project.description;
+    }
+    return {
+      project: { id: project.id, projectCode: project.projectCode, title: project.title, projectType: project.projectType },
+      draft: { ...draft, itemDetails },
+      items: sourceItems,
+      readiness: {
+        sectionsIncluded: draft.sections.filter((section) => section.included).length,
+        sectionsReviewed: draft.sections.filter((section) => section.included && section.reviewed && section.content.trim()).length,
+        itemsDocumented: itemDetails.filter((item) => item.technicalDescription.trim()).length,
+        totalItems: itemDetails.length,
+      },
+    };
+  }
+
+  async updateDeliveryReportDraft(projectId: string, draft: DeliveryReportDraft, user: CurrentUser) {
+    await this.ensureCanManage(projectId, user);
+    const current = await prisma.project.findUnique({ where: { id: projectId }, select: { projectCode: true, stage: true, deliveryReportDraft: true } });
+    if (!current) throw new AppError("Projeto não encontrado", 404);
+    if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A memória técnica só pode ser alterada durante a etapa de Entrega Técnica", 409, "DELIVERY_REPORT_DRAFT_LOCKED");
+    const updated = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        deliveryReportDraft: draft as unknown as Prisma.InputJsonValue,
+        deliveryReportGeneratedAt: null,
+        deliveryReportSignedAt: null,
+        deliveryReportSignedLink: null,
+      },
+      select: { deliveryReportDraft: true },
+    });
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: projectId,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `Memória técnica do relatório PRJ-${current.projectCode} atualizada`,
+      before: { deliveryReportDraft: current.deliveryReportDraft ? JSON.stringify(current.deliveryReportDraft) : null },
+      after: { deliveryReportDraft: updated.deliveryReportDraft ? JSON.stringify(updated.deliveryReportDraft) : null },
+      metadata: { source: "project.delivery-report.draft", generatedReportInvalidated: true },
+    });
+    return this.getDeliveryReportDraft(projectId, user);
   }
 
   async reviewAsBuilt(projectId: string, data: ReviewAsBuiltInput, user: CurrentUser) {
@@ -2696,6 +2949,11 @@ export class ProjectsService {
           serviceCompletedAt: null,
         },
         include: projectInclude,
+      });
+
+      await tx.commitmentNote.updateMany({
+        where: { projectId, active: true },
+        data: { active: false },
       });
 
       return {

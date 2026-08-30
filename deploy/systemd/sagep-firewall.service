@@ -1,0 +1,15 @@
+[Unit]
+Description=SAGEP - restrição de acesso HTTPS por CIDR
+Requires=docker.service
+After=docker.service network-online.target
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/sagep/sagep-backend
+ExecStart=/usr/bin/env node scripts/manage-firewall.mjs --apply --env .env
+ExecReload=/usr/bin/env node scripts/manage-firewall.mjs --apply --env .env
+RemainAfterExit=yes
+
+[Install]
+WantedBy=docker.service

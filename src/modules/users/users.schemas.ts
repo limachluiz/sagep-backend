@@ -8,8 +8,8 @@ const optionalMilitaryRank = z.enum(MILITARY_RANKS).optional();
 export const createUserByAdminSchema = z.object({
   name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres"),
   warName: optionalString,
-  email: z.email("E-mail inválido"),
-  password: z.string().min(6, "Senha deve ter pelo menos 6 caracteres"),
+  email: z.string().trim().toLowerCase().pipe(z.email("E-mail inválido")),
+  password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres").max(128),
   role: z.enum(["PROJETISTA", "GESTOR", "CONSULTA"]),
   rank: optionalMilitaryRank,
   cpf: optionalString,
@@ -25,7 +25,7 @@ export const updateUserSchema = z
   .object({
     name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").optional(),
     warName: z.string().trim().max(80).nullable().optional(),
-    email: z.email("E-mail invalido").optional(),
+    email: z.string().trim().toLowerCase().pipe(z.email("E-mail invalido")).optional(),
     rank: z.enum(MILITARY_RANKS).nullable().optional(),
     cpf: optionalString,
   })

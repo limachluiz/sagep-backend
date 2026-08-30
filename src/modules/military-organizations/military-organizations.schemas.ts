@@ -37,3 +37,8 @@ export const militaryOrganizationIdParamSchema = z.object({
 export const militaryOrganizationCodeParamSchema = z.object({
   code: z.coerce.number().int().positive("Código da OM inválido"),
 });
+
+export const militaryOrganizationsCsvRequestSchema = z.object({
+  content: z.string().min(1, "Conteúdo CSV obrigatório").max(1_500_000, "Arquivo CSV muito grande"),
+  mode: z.enum(["CREATE_ONLY", "UPSERT"]).default("CREATE_ONLY"),
+});

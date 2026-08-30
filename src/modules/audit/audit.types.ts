@@ -4,10 +4,13 @@ export type AuditEntityType =
   | "DIEX_REQUEST"
   | "SERVICE_ORDER"
   | "TASK"
-  | "ATA"
   | "ATA_ITEM"
   | "USER"
-  | "AUTH";
+  | "AUTH"
+  | "COMMITMENT_NOTE"
+  | "INVOICE"
+  | "NOTIFICATION"
+  | "SYSTEM_SETTINGS";
 
 export type AuditActionType =
   | "CREATE"
@@ -22,15 +25,18 @@ export type AuditActionType =
   | "CANCEL"
   | "LOGIN"
   | "LOGIN_FAILED"
+  | "REAUTHENTICATION_SUCCESS"
+  | "REAUTHENTICATION_FAILED"
   | "LOGOUT"
   | "TOKEN_REFRESH"
-  | "REGISTER_EXTERNAL_CONSUMPTION"
   | "SESSION_REVOKE"
   | "SESSION_REVOKE_ALL"
   | "SESSION_EXPIRE"
   | "SESSION_CLEANUP"
-  | "ATA_DELETE"
-  | "ATA_ARCHIVE";
+  | "SYNC"
+  | "DISMISS"
+  | "CONNECTION_TEST"
+  | "EXPORT";
 
 export type AuditPrimitive = string | number | boolean | null;
 export type AuditValue =

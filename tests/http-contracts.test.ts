@@ -50,9 +50,29 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(136);
+    expect(operationIds).toHaveLength(177);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
+  });
+
+  it("documenta reautenticacao e a barreira das operacoes criticas", () => {
+    const paths = openApiDocument.paths as Record<string, any>;
+    const components = openApiDocument.components as Record<string, any>;
+
+    expect(paths["/auth/reauthenticate"].post.requestBody.content["application/json"])
+      .toEqual(expect.objectContaining({
+        schema: { $ref: "#/components/schemas/ReauthenticateRequest" },
+      }));
+    expect(paths["/auth/sessions/revoke-all"].post.parameters).toContainEqual({
+      $ref: "#/components/parameters/StepUpToken",
+    });
+    expect(paths["/auth/sessions/revoke-all"].post.responses["428"]).toEqual({
+      $ref: "#/components/responses/StepUpRequired",
+    });
+    expect(components.schemas.StepUpResponse.required).toEqual([
+      "stepUpToken",
+      "expiresInSeconds",
+    ]);
   });
 
   it("separa a saude publica sanitizada do diagnostico tecnico administrativo", () => {
@@ -68,6 +88,36 @@ describe("contratos HTTP transversais", () => {
     expect(paths["/health/details"].get["x-permissions"]).toEqual([
       "system_health.view_details",
     ]);
+  });
+
+  it("protege a pré-validação detalhada da implantação", () => {
+    const paths = openApiDocument.paths as Record<string, any>;
+    expect(paths["/deployment/preflight"].get["x-permissions"]).toEqual([
+      "system_health.view_details",
+    ]);
+    expect(paths["/deployment/preflight"].get.responses["200"].content["application/json"].schema)
+      .toEqual({ $ref: "#/components/schemas/DeploymentPreflight" });
+  });
+
+  it("protege a renovação do certificado com reautenticação administrativa", () => {
+    const operation = (openApiDocument.paths as Record<string, any>)["/deployment/certificate/renew"].post;
+    expect(operation["x-permissions"]).toEqual(["settings.manage"]);
+    expect(operation["x-roles"]).toEqual(["ADMIN"]);
+    expect(operation.parameters).toContainEqual({ $ref: "#/components/parameters/StepUpToken" });
+    expect(operation.responses["201"].content["application/json"].schema).toEqual({ $ref: "#/components/schemas/CertificateStatus" });
+    const certificateSchema = (openApiDocument.components.schemas as Record<string, any>).CertificateStatus;
+    expect(certificateSchema.required).toContain("renewalAutomation");
+    expect(certificateSchema.properties.renewalAutomation.properties.proxyReloadMode.enum).toEqual(["AUTOMATIC", "MANUAL"]);
+  });
+
+  it("protege exportação e restauração da autoridade com reautenticação administrativa", () => {
+    const paths = openApiDocument.paths as Record<string, any>;
+    for (const route of ["/deployment/certificate/authority/export", "/deployment/certificate/authority/restore"]) {
+      const operation = paths[route].post;
+      expect(operation["x-permissions"]).toEqual(["settings.manage"]);
+      expect(operation["x-roles"]).toEqual(["ADMIN"]);
+      expect(operation.parameters).toContainEqual({ $ref: "#/components/parameters/StepUpToken" });
+    }
   });
 
   it("documenta tarefas no detalhe contextual do projeto", () => {
@@ -135,6 +185,74 @@ describe("contratos HTTP transversais", () => {
       details: { requiredPermissions: ["projects.edit_all"] },
       requiredPermissions: ["projects.edit_all"],
       requestId,
+    });
+  });
+
+  it("não expõe mensagem nem detalhes internos de AppError 5xx", () => {
+    const requestId = "2c4a3610-9e9f-40d7-97d0-886bf983302e";
+    const json = vi.fn();
+    const status = vi.fn(() => ({ json }));
+    const response = { locals: { requestId }, status } as unknown as Response;
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const error = new AppError(
+      "Falha interna em postgresql://usuario:senha@database/sagep",
+      502,
+      "PORTAL_TRANSPARENCIA_UNAVAILABLE",
+      { cause: "ECONNREFUSED 10.0.0.5:5432" },
+    );
+
+    errorMiddleware(error, {} as Request, response, vi.fn() as NextFunction);
+
+    expect(status).toHaveBeenCalledWith(502);
+    expect(json).toHaveBeenCalledWith({
+      code: "PORTAL_TRANSPARENCIA_UNAVAILABLE",
+      message: "Portal da Transparência indisponível",
+      requestId,
+    });
+    expect(JSON.stringify(json.mock.calls)).not.toContain("postgresql://");
+    expect(JSON.stringify(json.mock.calls)).not.toContain("ECONNREFUSED");
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("usuario:senha");
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("ECONNREFUSED");
+    consoleError.mockRestore();
+  });
+
+  it("não grava o conteúdo bruto de erro inesperado no log HTTP", () => {
+    const json = vi.fn();
+    const status = vi.fn(() => ({ json }));
+    const response = {
+      locals: { requestId: "request-secret-test" },
+      status,
+    } as unknown as Response;
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+
+    errorMiddleware(
+      new Error("Bearer token-super-secreto"),
+      {} as Request,
+      response,
+      vi.fn() as NextFunction,
+    );
+
+    expect(status).toHaveBeenCalledWith(500);
+    expect(JSON.stringify(consoleError.mock.calls)).not.toContain("token-super-secreto");
+    expect(json).toHaveBeenCalledWith({
+      code: "INTERNAL_ERROR",
+      message: "Erro interno do servidor",
+      requestId: "request-secret-test",
+    });
+    consoleError.mockRestore();
+  });
+
+  it("exige reautenticação também para baixar o backup completo", () => {
+    const operation = (openApiDocument.paths as Record<string, any>)[
+      "/backups/{id}/download"
+    ].get;
+
+    expect(operation.parameters).toContainEqual({
+      $ref: "#/components/parameters/StepUpToken",
+    });
+    expect(operation.responses["428"]).toEqual({
+      $ref: "#/components/responses/StepUpRequired",
     });
   });
 

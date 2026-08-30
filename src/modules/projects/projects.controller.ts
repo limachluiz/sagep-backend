@@ -8,6 +8,8 @@ import {
   projectCodeParamSchema,
   projectIdParamSchema,
   registerSignedServiceOrderSchema,
+  registerDeliveryReportSignatureSchema,
+  deliveryReportDraftSchema,
   reviewAsBuiltSchema,
   updateProjectFlowSchema,
   updateProjectSchema,
@@ -108,6 +110,23 @@ export class ProjectsController {
     const data = registerSignedServiceOrderSchema.parse(req.body);
     const project = await projectsService.registerSignedServiceOrder(id, data, req.user!);
     return res.status(200).json(project);
+  }
+
+  async registerDeliveryReportSignature(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const data = registerDeliveryReportSignatureSchema.parse(req.body);
+    return res.status(200).json(await projectsService.registerDeliveryReportSignature(id, data, req.user!));
+  }
+
+  async deliveryReportDraft(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    return res.status(200).json(await projectsService.getDeliveryReportDraft(id, req.user!));
+  }
+
+  async updateDeliveryReportDraft(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const draft = deliveryReportDraftSchema.parse(req.body);
+    return res.status(200).json(await projectsService.updateDeliveryReportDraft(id, draft, req.user!));
   }
 
   async remove(req: Request, res: Response) {

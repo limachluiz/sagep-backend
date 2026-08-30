@@ -40,6 +40,14 @@ type UpdateTaskStatusInput = {
   status: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA";
 };
 
+type CreateTaskActivityInput = {
+  content: string;
+};
+
+type CompleteTaskInput = {
+  content?: string;
+};
+
 type ListTasksFilters = {
   code?: number;
   projectCode?: number;
@@ -69,9 +77,67 @@ const taskInclude = {
       id: true,
       userCode: true,
       name: true,
+      avatarDataUrl: true,
       email: true,
       role: true,
       active: true,
+    },
+  },
+} satisfies Prisma.TaskInclude;
+
+const taskDetailInclude = {
+  project: {
+    select: {
+      id: true,
+      projectCode: true,
+      title: true,
+      status: true,
+      owner: {
+        select: {
+          id: true,
+          userCode: true,
+          name: true,
+          avatarDataUrl: true,
+          email: true,
+          role: true,
+        },
+      },
+    },
+  },
+  assignee: {
+    select: {
+      id: true,
+      userCode: true,
+      name: true,
+      avatarDataUrl: true,
+      email: true,
+      role: true,
+      active: true,
+    },
+  },
+  completedBy: {
+    select: {
+      id: true,
+      userCode: true,
+      name: true,
+      avatarDataUrl: true,
+      email: true,
+      role: true,
+    },
+  },
+  activities: {
+    orderBy: [{ createdAt: "desc" as const }, { id: "desc" as const }],
+    include: {
+      author: {
+        select: {
+          id: true,
+          userCode: true,
+          name: true,
+          avatarDataUrl: true,
+          email: true,
+          role: true,
+        },
+      },
     },
   },
 } satisfies Prisma.TaskInclude;
@@ -81,8 +147,8 @@ export class TasksService {
     return role === "ADMIN";
   }
 
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "tasks.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "tasks.view_all");
   }
 
   private resolveArchivedAccess(
@@ -374,7 +440,10 @@ export class TasksService {
       select: {
         id: true,
         taskCode: true,
+        title: true,
+        status: true,
         assigneeId: true,
+        completedAt: true,
         archivedAt: true,
         deletedAt: true,
         project: {
@@ -407,7 +476,10 @@ export class TasksService {
       select: {
         id: true,
         taskCode: true,
+        title: true,
+        status: true,
         assigneeId: true,
+        completedAt: true,
         archivedAt: true,
         deletedAt: true,
         project: {
@@ -441,7 +513,7 @@ export class TasksService {
       throw new AppError("Tarefa não encontrada", 404);
     }
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return task;
     }
 
@@ -463,7 +535,7 @@ export class TasksService {
       throw new AppError("Tarefa não encontrada", 404);
     }
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return task;
     }
 
@@ -504,6 +576,27 @@ export class TasksService {
     }
 
     throw new AppError("Você não tem permissão para gerenciar esta tarefa", 403);
+  }
+
+  private ensureCanRegisterWork(
+    task: Awaited<ReturnType<TasksService["getTaskAccessData"]>>,
+    user: CurrentUser,
+  ) {
+    if (task.archivedAt) {
+      throw new AppError("Tarefa arquivada não pode receber andamentos", 409);
+    }
+
+    const canManage =
+      permissionsService.hasPermission(user, "tasks.edit_all") ||
+      (permissionsService.hasPermission(user, "tasks.edit_own") &&
+        (task.project.ownerId === user.id ||
+          task.project.members.some((member) => member.userId === user.id)));
+    const canWorkOnOwn =
+      task.assigneeId === user.id && permissionsService.hasPermission(user, "tasks.complete");
+
+    if (!canManage && !canWorkOnOwn) {
+      throw new AppError("Você não tem permissão para registrar andamento nesta tarefa", 403);
+    }
   }
 
   async create(data: CreateTaskInput, user: CurrentUser) {
@@ -572,7 +665,7 @@ export class TasksService {
       });
     }
 
-    if (!this.isPrivileged(user.role)) {
+    if (!this.isPrivileged(user)) {
       andConditions.push({
         OR: [
           { assigneeId: user.id },
@@ -657,35 +750,7 @@ export class TasksService {
 
     const task = await prisma.task.findUnique({
       where: { id: taskId },
-      include: {
-        project: {
-          select: {
-            id: true,
-            projectCode: true,
-            title: true,
-            status: true,
-            owner: {
-              select: {
-                id: true,
-                userCode: true,
-                name: true,
-                email: true,
-                role: true,
-              },
-            },
-          },
-        },
-        assignee: {
-          select: {
-            id: true,
-            userCode: true,
-            name: true,
-            email: true,
-            role: true,
-            active: true,
-          },
-        },
-      },
+      include: taskDetailInclude,
     });
 
     if (!task) {
@@ -705,35 +770,7 @@ export class TasksService {
 
     const task = await prisma.task.findUnique({
       where: { taskCode },
-      include: {
-        project: {
-          select: {
-            id: true,
-            projectCode: true,
-            title: true,
-            status: true,
-            owner: {
-              select: {
-                id: true,
-                userCode: true,
-                name: true,
-                email: true,
-                role: true,
-              },
-            },
-          },
-        },
-        assignee: {
-          select: {
-            id: true,
-            userCode: true,
-            name: true,
-            email: true,
-            role: true,
-            active: true,
-          },
-        },
-      },
+      include: taskDetailInclude,
     });
 
     if (!task) {
@@ -772,7 +809,6 @@ export class TasksService {
       data: {
         ...(data.title !== undefined && { title: data.title }),
         ...(data.description !== undefined && { description: data.description }),
-        ...(data.status !== undefined && { status: data.status }),
         ...(data.priority !== undefined && { priority: data.priority }),
         ...(data.dueDate !== undefined && { dueDate: data.dueDate }),
         ...(data.clearDueDate === true && { dueDate: null }),
@@ -782,6 +818,10 @@ export class TasksService {
       },
       include: taskInclude,
     });
+
+    if (data.status !== undefined && data.status !== taskAccess.status) {
+      return this.updateStatus(taskId, { status: data.status }, user);
+    }
 
     return task;
   }
@@ -813,15 +853,144 @@ export class TasksService {
       throw new AppError("Você não tem permissão para alterar o status desta tarefa", 403);
     }
 
-    const task = await prisma.task.update({
-      where: { id: taskId },
-      data: {
-        status: data.status,
-      },
-      include: taskInclude,
+    if (taskAccess.status === data.status) {
+      return this.findById(taskId, user);
+    }
+
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          status: data.status,
+          completedAt: data.status === "CONCLUIDA" ? now : null,
+          completedById: data.status === "CONCLUIDA" ? user.id : null,
+        },
+      });
+
+      const reopened = taskAccess.status === "CONCLUIDA" && data.status !== "CONCLUIDA";
+      await tx.taskActivity.create({
+        data: {
+          taskId,
+          authorId: user.id,
+          type: data.status === "CONCLUIDA" ? "COMPLETION" : reopened ? "REOPENED" : "STATUS_CHANGE",
+          content:
+            data.status === "CONCLUIDA"
+              ? "Tarefa concluída"
+              : reopened
+                ? "Tarefa reaberta"
+                : `Status alterado para ${data.status}`,
+          fromStatus: taskAccess.status,
+          toStatus: data.status,
+        },
+      });
     });
 
-    return task;
+    await auditService.log({
+      entityType: "TASK",
+      entityId: taskId,
+      action: "STATUS_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Status da tarefa TSK-${taskAccess.taskCode} alterado para ${data.status}`,
+      before: { status: taskAccess.status },
+      after: { status: data.status },
+    });
+
+    return this.findById(taskId, user);
+  }
+
+  async addActivity(taskId: string, data: CreateTaskActivityInput, user: CurrentUser) {
+    const taskAccess = await this.getTaskAccessData(taskId);
+    this.ensureCanRegisterWork(taskAccess, user);
+
+    if (taskAccess.status === "CONCLUIDA" || taskAccess.status === "CANCELADA") {
+      throw new AppError("Reabra a tarefa antes de registrar um novo andamento", 409);
+    }
+
+    const activity = await prisma.$transaction(async (tx) => {
+      if (taskAccess.status === "PENDENTE") {
+        await tx.task.update({
+          where: { id: taskId },
+          data: { status: "EM_ANDAMENTO" },
+        });
+        await tx.taskActivity.create({
+          data: {
+            taskId,
+            authorId: user.id,
+            type: "STATUS_CHANGE",
+            content: "Tarefa iniciada automaticamente com o primeiro andamento",
+            fromStatus: "PENDENTE",
+            toStatus: "EM_ANDAMENTO",
+          },
+        });
+      }
+
+      return tx.taskActivity.create({
+        data: {
+          taskId,
+          authorId: user.id,
+          type: "NOTE",
+          content: data.content,
+        },
+      });
+    });
+
+    await auditService.log({
+      entityType: "TASK",
+      entityId: taskId,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `Andamento registrado na tarefa TSK-${taskAccess.taskCode}`,
+      metadata: { activityId: activity.id },
+    });
+
+    return this.findById(taskId, user);
+  }
+
+  async complete(taskId: string, data: CompleteTaskInput, user: CurrentUser) {
+    const taskAccess = await this.getTaskAccessData(taskId);
+    this.ensureCanRegisterWork(taskAccess, user);
+
+    if (taskAccess.status === "CONCLUIDA") {
+      throw new AppError("A tarefa já está concluída", 409);
+    }
+    if (taskAccess.status === "CANCELADA") {
+      throw new AppError("Uma tarefa cancelada não pode ser concluída", 409);
+    }
+
+    const now = new Date();
+    await prisma.$transaction(async (tx) => {
+      await tx.task.update({
+        where: { id: taskId },
+        data: {
+          status: "CONCLUIDA",
+          completedAt: now,
+          completedById: user.id,
+        },
+      });
+      await tx.taskActivity.create({
+        data: {
+          taskId,
+          authorId: user.id,
+          type: "COMPLETION",
+          content: data.content?.trim() || "Tarefa concluída",
+          fromStatus: taskAccess.status,
+          toStatus: "CONCLUIDA",
+        },
+      });
+    });
+
+    await auditService.log({
+      entityType: "TASK",
+      entityId: taskId,
+      action: "STATUS_CHANGE",
+      actor: this.getAuditActor(user),
+      summary: `Tarefa TSK-${taskAccess.taskCode} concluída`,
+      before: { status: taskAccess.status },
+      after: { status: "CONCLUIDA", completedAt: now },
+    });
+
+    return this.findById(taskId, user);
   }
 
   async remove(taskId: string, user: CurrentUser) {

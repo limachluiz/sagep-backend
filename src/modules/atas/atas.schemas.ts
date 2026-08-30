@@ -19,6 +19,11 @@ const coverageGroupSchema = z.object({
 
 export const createAtaCoverageGroupSchema = coverageGroupSchema;
 
+export const replaceAtaCoverageSchema = z.object({
+  regionNumber: z.coerce.number().int().positive().max(99),
+  localities: z.array(localitySchema).min(1, "Informe ao menos uma localidade"),
+});
+
 export const updateAtaCoverageGroupSchema = coverageGroupSchema.partial().refine(
   (data) => Object.keys(data).length > 0,
   {
@@ -79,18 +84,14 @@ export const updateAtaSchema = z
   );
 
 export const listAtasQuerySchema = paginationQuerySchema.extend({
+  pregaoId: z.string().trim().min(1).optional(),
   code: z.coerce.number().int().positive().optional(),
   type: ataTypeEnum.optional(),
   groupCode: z.string().trim().optional(),
   cityName: z.string().trim().optional(),
   stateUf: ufEnum.optional(),
   active: optionalBoolean,
-  includeArchived: optionalBoolean,
   search: z.string().trim().optional(),
-});
-
-export const deleteAtaSchema = z.object({
-  reason: z.string().trim().max(500, "Motivo deve ter no máximo 500 caracteres").optional(),
 });
 
 export const ataIdParamSchema = z.object({

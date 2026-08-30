@@ -23,6 +23,7 @@ type ProjectExportFilters = {
     | "SERVICO_EM_EXECUCAO"
     | "ANALISANDO_AS_BUILT"
     | "ATESTAR_NF"
+    | "ENTREGA_TECNICA"
     | "SERVICO_CONCLUIDO"
     | "CANCELADO";
   search?: string;

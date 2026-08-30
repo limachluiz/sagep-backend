@@ -1,5 +1,44 @@
 # Dashboards, Busca, Alertas, Relatorios E Administracao
 
+## Backup E Restauracao
+
+Base: `/api/backups`. Todas as rotas exigem role `ADMIN` e a permissao critica
+`backups.manage`.
+
+| Metodo | Rota | Uso |
+|---|---|---|
+| `GET` | `/backups` | Lista arquivos, espaco usado e politica de retencao. |
+| `POST` | `/backups` | Cria backup PostgreSQL completo, valida e calcula SHA-256. |
+| `POST` | `/backups/import` | Recebe um `.dump` como `application/octet-stream` e valida sua origem. |
+| `POST` | `/backups/export` | Exporta modulos selecionados em SQL. |
+| `GET` | `/backups/:id/download` | Baixa a copia integral. |
+| `POST` | `/backups/:id/restore` | Restaura o banco apos confirmacao literal `RESTAURAR BANCO`. |
+| `DELETE` | `/backups/:id` | Exclui arquivo e manifesto. |
+
+O formato integral e o `custom archive` nativo do PostgreSQL. Antes da
+restauracao, o SAGEP confere o checksum e o catalogo do arquivo e cria um backup
+de seguranca do estado corrente. Ao final, as migracoes pendentes da versao atual
+do SAGEP sao reaplicadas automaticamente. A rotina automatica e controlada pelas
+variaveis `BACKUP_SCHEDULE_HOURS`, `BACKUP_RUN_ON_STARTUP`,
+`BACKUP_RETENTION_DAYS` e `BACKUP_MAX_FILES`. Os arquivos ficam no volume Docker
+persistente `sagep_backups`.
+
+## Custodia Da Autoridade Da OM
+
+Base: `/api/deployment/certificate/authority`. As duas operacoes exigem role
+`ADMIN`, permissao `settings.manage`, limite sensivel e reautenticacao recente.
+
+| Metodo | Rota | Uso |
+|---|---|---|
+| `POST` | `/deployment/certificate/authority/export` | Exporta a raiz e sua chave em arquivo `.sagep-pki` autenticado e criptografado. |
+| `POST` | `/deployment/certificate/authority/restore` | Valida a custodia, cria uma copia de recuperacao e reemite o certificado do servidor. |
+
+A senha de no minimo 20 caracteres existe apenas durante a operacao. O arquivo
+usa AES-256-GCM com chave derivada por scrypt e fica vinculado a sigla da OM. A
+restauracao rejeita adulteracao, senha incorreta, raiz nao autossinada, chave
+divergente ou fraca e validade insuficiente. Senhas e chaves nunca entram na
+auditoria; somente checksum, impressoes digitais e metadados operacionais.
+
 ## Auditoria
 
 Base:
@@ -143,6 +182,23 @@ Permissoes: `reports.export` e `dashboard.view_executive`.
 
 Uso: gerar dossie consolidado do projeto em JSON ou PDF.
 
+## Importacao Em Lote De Organizacoes Militares
+
+A tela de Organizacoes Militares oferece um modelo CSV UTF-8 separado por
+ponto e virgula, compativel com Excel. Tambem sao aceitos CSVs separados por
+virgula. Os cabecalhos obrigatorios sao `sigla`, `nome`, `cidade` e `uf`; a
+coluna `ativo` e opcional e aceita `SIM/NAO`, `true/false` ou `1/0`.
+
+| Metodo | Rota | Uso |
+|---|---|---|
+| `GET` | `/military-organizations/import/template` | Baixa o modelo oficial. |
+| `POST` | `/military-organizations/import/preview` | Valida ate 1.000 linhas sem gravar. |
+| `POST` | `/military-organizations/import` | Revalida e grava somente linhas validas. |
+
+O modo `CREATE_ONLY` ignora siglas existentes. O modo `UPSERT` atualiza nome,
+cidade, UF e status das OMs encontradas pela sigla. Siglas repetidas no mesmo
+arquivo e linhas invalidas sao identificadas individualmente na previa.
+
 ## Users
 
 Base:
@@ -202,7 +258,7 @@ Resposta com envelope:
       "id": "cmabc123",
       "userCode": 7,
       "name": "Cap Joao Silva",
-      "email": "joao.silva@sagep.mil.br",
+      "email": "usuario.exemplo@example.invalid",
       "role": "PROJETISTA",
       "active": true,
       "createdAt": "2026-04-29T00:00:00.000Z",
@@ -239,11 +295,11 @@ Payload:
 ```json
 {
   "name": "1 Ten Maria Souza",
-  "email": "maria.souza@sagep.mil.br",
+  "email": "usuario.exemplo@example.invalid",
   "password": "<senha-forte-do-usuario>",
   "role": "GESTOR",
   "rank": "1 Ten",
-  "cpf": "12345678900"
+  "cpf": "<cpf-do-usuario>"
 }
 ```
 
@@ -260,7 +316,7 @@ Resposta tipica:
   "id": "cmuser123",
   "userCode": 8,
   "name": "1 Ten Maria Souza",
-  "email": "maria.souza@sagep.mil.br",
+  "email": "usuario.exemplo@example.invalid",
   "role": "GESTOR",
   "active": true,
   "createdAt": "2026-04-29T00:00:00.000Z"
@@ -279,7 +335,7 @@ Payload aceito pelo schema:
 {
   "role": "CONSULTA",
   "rank": "1 Ten",
-  "cpf": "12345678900"
+  "cpf": "<cpf-do-usuario>"
 }
 ```
 
@@ -296,7 +352,7 @@ Resposta tipica:
   "id": "cmuser123",
   "userCode": 8,
   "name": "1 Ten Maria Souza",
-  "email": "maria.souza@sagep.mil.br",
+  "email": "usuario.exemplo@example.invalid",
   "role": "CONSULTA",
   "active": true,
   "createdAt": "2026-04-29T00:00:00.000Z",
@@ -366,7 +422,7 @@ No fluxo de estimativas:
 | `GET` | `/atas/:id` | Detalhe por id. | Autenticado |
 | `GET` | `/atas/code/:code` | Detalhe por codigo amigavel. | Autenticado |
 | `PATCH` | `/atas/:id` | Atualiza cabecalho e, se enviado, substitui todos os grupos/localidades. | `atas.manage` |
-| `DELETE` | `/atas/:id` | Exclui fisicamente ATA sem vinculos ou arquiva/inativa quando houver historico. | `ADMIN` ou `GESTOR` + `atas.manage` |
+| `DELETE` | `/atas/:id` | Remove ata. | `atas.manage` |
 | `POST` | `/atas/:id/coverage-groups` | Cria grupo de cobertura sem substituir os demais. | `ADMIN` + `atas.manage` |
 | `PATCH` | `/atas/:id/coverage-groups/:groupId` | Atualiza um grupo de cobertura especifico. | `ADMIN` + `atas.manage` |
 | `DELETE` | `/atas/:id/coverage-groups/:groupId` | Remove um grupo de cobertura sem itens/estimativas vinculadas. | `ADMIN` + `atas.manage` |
@@ -388,7 +444,6 @@ No fluxo de estimativas:
 | `cityName` | string | Filtra por localidade coberta. |
 | `stateUf` | `AM`, `RO`, `RR`, `AC` | Filtra por UF coberta. |
 | `active` | boolean | Filtra por `isActive`. |
-| `includeArchived` | boolean | Quando `true`, inclui ATAs arquivadas. Padrao omite `archivedAt != null`. |
 | `search` | string | Busca em numero, fornecedor, orgao gerenciador, notas, grupos e cidades. |
 
 Exemplo:
@@ -496,48 +551,6 @@ Exemplo de update parcial:
 }
 ```
 
-### Excluir Ou Arquivar ATA
-
-```http
-DELETE /api/atas/:id
-```
-
-Payload opcional:
-
-```json
-{
-  "reason": "texto opcional"
-}
-```
-
-Regras:
-
-- `CONSULTA` nao pode excluir ou arquivar ATA.
-- `ADMIN` pode executar a operacao.
-- `GESTOR` pode executar somente se tiver `atas.manage`.
-- se nao houver vinculos importantes, a ATA e excluida fisicamente.
-- se houver itens, estimativas, movimentacoes de saldo, snapshots externos ou documentos vinculados, a ATA e marcada com `archivedAt` e `isActive=false`.
-- estimativas, movimentacoes e historico nao sao apagados.
-- a auditoria registra `ATA_DELETE` ou `ATA_ARCHIVE` com `ataId`, `ataNumber`, `action`, `reason`, vinculos encontrados e `userId`.
-
-Resposta de exclusao fisica:
-
-```json
-{
-  "action": "DELETED",
-  "message": "ATA excluída com sucesso."
-}
-```
-
-Resposta de arquivamento:
-
-```json
-{
-  "action": "ARCHIVED",
-  "message": "ATA possui vínculos e foi arquivada com segurança."
-}
-```
-
 ### Detalhar Usuario
 
 ```http
@@ -557,9 +570,9 @@ Payload:
 ```json
 {
   "name": "1 Ten Maria Souza",
-  "email": "maria.souza.atualizada@sagep.mil.br",
+  "email": "usuario.atualizado@example.invalid",
   "rank": "1 Ten",
-  "cpf": "12345678900"
+  "cpf": "<cpf-do-usuario>"
 }
 ```
 
@@ -678,31 +691,13 @@ Observacoes:
 - itens sao criados/atualizados por `ataId`, grupo e `referenceCode`.
 - a integracao grava os campos externos em `Ata` e `AtaItem`, mas nao altera movimentos de saldo local.
 
-### Funcionalidades externas descontinuadas
+### Saldo operacional e metadados oficiais
 
-As rotas de comparação, sincronização de saldo por ATA/item e registro de
-consumo externo foram removidas. A lista abaixo fica apenas como referência
-histórica e não representa endpoints disponíveis:
-
-- `GET /api/atas/{id}/external-balance` le apenas snapshots externos persistidos localmente para os itens da ATA; nao consulta Compras.gov.br.
-- `POST /api/atas/{id}/sync-external-balance` consulta Compras.gov.br e atualiza snapshots persistidos dos itens processados, sem alterar saldo local.
-- `GET /api/ata-items/{id}/balance-comparison` le apenas o ultimo snapshot persistido do item; se nao existir, retorna `NAO_SINCRONIZADO`.
-- `POST /api/ata-items/{id}/sync-external-balance` consulta Compras.gov.br apenas para esse item e atualiza o snapshot persistido correspondente.
-- `GET /api/ata-items` pode retornar `latestExternalBalanceSnapshot` resumido por item para a tela reaproveitar o ultimo snapshot salvo sem nova consulta externa.
-- Quando houver snapshot salvo, os GET locais devolvem `externalBalance` completo com `source`, `externalItemNumber`, `registeredQuantity`, `committedQuantity`, `availableQuantity`, `commitments`, `lastUpdatedAt` e `rawRecords`.
-- `POST /api/ata-items/{id}/register-external-consumption` registra manualmente um consumo externo no saldo interno com justificativa obrigatoria, sem consultar Compras.gov.br nem alterar `initialQuantity`.
-- Status possiveis: `OK`, `DIVERGENTE`, `CONSUMO_OFICIAL_DETECTADO`, `NAO_SINCRONIZADO`, `NAO_ENCONTRADO`, `ERRO_CONSULTA_EXTERNA`, `RATE_LIMIT_COMPRAS_GOV`.
-- HTTP `429` do Compras.gov.br e tratado como `RATE_LIMIT_COMPRAS_GOV`: nao aplica fallback importado e a sincronizacao nao atualiza `externalLastSyncAt`. Quando disponivel, `retryAfterSeconds` informa a espera sugerida.
-- O backend consulta `4_consultarEmpenhosSaldoItem` por ATA (`numeroAta` e `unidadeGerenciadora`). Se esse endpoint retornar vazio, usa o `externalItemId` salvo no item para consultar `2.1_consultarARPItem_Id` e cruza os dados oficiais de `3_consultarUnidadesItem` por `numeroItem`, `externalItemNumber` e `referenceCode`, normalizando zeros a esquerda.
-- `Ata.externalUasg` e a UASG principal. O backend so considera a linha dessa UASG para quantidade registrada, empenhada, saldo disponivel e empenhos.
-- Linhas de outras UASGs, adesoes, caronas e orgaos nao participantes sao ignoradas integralmente.
-- Snapshot persistido por item: tabela/model `AtaItemExternalBalanceSnapshot`, contendo `source`, `status`, `externalBalance`, `difference`, `warnings` e `lastSyncAt`.
-- O lançamento manual cria movimentação `EXTERNAL_CONSUMPTION`, reduz apenas o saldo disponível/eleva o consumido no cálculo local e gera audit log `REGISTER_EXTERNAL_CONSUMPTION`.
-- Valores estimados aparecem somente em `estimatedAmount`; `numeroEmpenho` permanece `null` quando a API externa nao informar.
-- A normalizacao revisada considera aliases de NE, fornecedor, data, quantidade e valor nos endpoints `3_consultarUnidadesItem`, `4_consultarEmpenhosSaldoItem` e `2.1_consultarARPItem_Id`.
-- Em `development`, cada item normalizado pode trazer `rawKeyDebug` com as chaves cruas disponiveis, endpoint de origem, item e unidade.
-- Se a API retornar `200` sem registros, itens importados do Compras.gov.br usam fallback com `externalBalance.source = COMPRAS_GOV_IMPORT_FALLBACK`, quantidade registrada importada e empenhado zero.
-- Em `development`, o retorno inclui `debug` com URLs chamadas, status HTTP, quantidade de registros, sample dos primeiros registros e itens locais sem match.
+- O saldo dos itens e calculado exclusivamente pelas movimentacoes internas do SAGEP.
+- Nao existem rotas de consulta, comparacao ou sincronizacao de saldo externo.
+- A importacao do Compras.gov.br continua responsavel pelos dados cadastrais da ATA, itens, valores e fornecedores.
+- `POST /api/atas/{id}/sync-pncp` atualiza somente vigencia, cancelamento e contratos vinculados no PNCP.
+- A sincronizacao do PNCP nao cria movimentos, nao bloqueia estimativas e nao altera o saldo disponivel.
 
 Exemplo de update com substituicao de grupos:
 

@@ -41,6 +41,11 @@ type UpdateAtaInput = {
 
 type UpdateCoverageGroupInput = Partial<CoverageGroupInput>;
 
+type ReplaceCoverageInput = {
+  regionNumber: number;
+  localities: CoverageLocalityInput[];
+};
+
 type ListAtasFilters = {
   code?: number;
   type?: "CFTV" | "FIBRA_OPTICA";
@@ -48,32 +53,25 @@ type ListAtasFilters = {
   cityName?: string;
   stateUf?: UfValue;
   active?: boolean;
-  includeArchived?: boolean;
   search?: string;
-};
-
-type AtaDeleteActor = {
-  id: string;
-  name: string;
-  role: string;
-  permissions?: string[];
-};
-
-type RemoveAtaInput = {
-  reason?: string;
-};
-
-type AtaLinkSummary = {
-  items: number;
-  estimates: number;
-  balanceMovements: number;
-  externalBalanceSnapshots: number;
-  diexRequests: number;
-  serviceOrders: number;
-  linkedDocuments: number;
+  pregaoId?: string;
 };
 
 const ataInclude = {
+  pregao: {
+    select: {
+      id: true,
+      pregaoCode: true,
+      uasg: true,
+      number: true,
+      year: true,
+      modality: true,
+      object: true,
+      type: true,
+      managingAgency: true,
+      isActive: true,
+    },
+  },
   coverageGroups: {
     select: {
       id: true,
@@ -210,8 +208,8 @@ export class AtasService {
   async list(filters: ListAtasFilters) {
     const andConditions: Prisma.AtaWhereInput[] = [];
 
-    if (!filters.includeArchived) {
-      andConditions.push({ archivedAt: null });
+    if (filters.pregaoId) {
+      andConditions.push({ pregaoId: filters.pregaoId });
     }
 
     if (filters.code) {
@@ -509,6 +507,77 @@ export class AtasService {
     });
   }
 
+  async replaceCoverage(ataId: string, data: ReplaceCoverageInput) {
+    await this.ensureAtaExists(ataId);
+    const code = `REG-${String(data.regionNumber).padStart(2, "0")}`;
+    const name = `Região ${data.regionNumber}`;
+    const localities = this.normalizeCoverageGroup({
+      code,
+      name,
+      localities: data.localities,
+    }).localities;
+
+    return prisma.$transaction(async (tx) => {
+      const groups = await tx.ataCoverageGroup.findMany({
+        where: { ataId },
+        include: {
+          items: { select: { id: true, referenceCode: true } },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+
+      let target = groups.find((group) => group.code === code) ?? groups[0];
+      if (!target) {
+        target = await tx.ataCoverageGroup.create({
+          data: { ataId, code, name },
+          include: { items: { where: { deletedAt: null }, select: { id: true, referenceCode: true } } },
+        });
+      }
+
+      const references = new Map<string, string>();
+      for (const group of groups) {
+        for (const item of group.items) {
+          const key = item.referenceCode.trim().toLocaleUpperCase("pt-BR");
+          const owner = references.get(key);
+          if (owner && owner !== group.id) {
+            throw new AppError(
+              `Não foi possível consolidar: o item ${item.referenceCode} aparece em mais de um grupo.`,
+              409,
+            );
+          }
+          references.set(key, group.id);
+        }
+      }
+
+      const obsoleteIds = groups.filter((group) => group.id !== target.id).map((group) => group.id);
+      if (obsoleteIds.length > 0) {
+        await tx.ataItem.updateMany({
+          where: { ataId, coverageGroupId: { in: obsoleteIds } },
+          data: { coverageGroupId: target.id },
+        });
+        await tx.estimate.updateMany({
+          where: { ataId, coverageGroupId: { in: obsoleteIds } },
+          data: { coverageGroupId: target.id },
+        });
+        await tx.ataCoverageGroup.deleteMany({ where: { id: { in: obsoleteIds } } });
+      }
+
+      return tx.ataCoverageGroup.update({
+        where: { id: target.id },
+        data: {
+          code,
+          name,
+          description: null,
+          localities: {
+            deleteMany: {},
+            create: localities,
+          },
+        },
+        select: coverageGroupSelect,
+      });
+    });
+  }
+
   async removeCoverageGroup(ataId: string, groupId: string) {
     await this.ensureAtaExists(ataId);
 
@@ -542,173 +611,50 @@ export class AtasService {
     };
   }
 
-  private assertCanRemoveAta(actor: AtaDeleteActor) {
-    if (actor.role === "ADMIN") {
-      return;
-    }
-
-    if (actor.role === "GESTOR" && actor.permissions?.includes("atas.manage")) {
-      return;
-    }
-
-    throw new AppError("Você não tem permissão para excluir ou arquivar ATA", 403);
-  }
-
-  private hasImportantLinks(links: AtaLinkSummary) {
-    return Object.values(links).some((count) => count > 0);
-  }
-
-  private async getAtaLinkSummary(
-    ataId: string,
-    db: Prisma.TransactionClient | typeof prisma = prisma,
-  ): Promise<AtaLinkSummary> {
-    const [
-      items,
-      estimates,
-      balanceMovements,
-      externalBalanceSnapshots,
-      diexRequests,
-      serviceOrders,
-      linkedDocuments,
-    ] = await Promise.all([
-      db.ataItem.count({ where: { ataId } }),
-      db.estimate.count({ where: { ataId } }),
-      db.ataItemBalanceMovement.count({
-        where: { ataItem: { ataId } },
-      }),
-      db.ataItemExternalBalanceSnapshot.count({
-        where: { ataItem: { ataId } },
-      }),
-      db.diexRequest.count({
-        where: { estimate: { ataId } },
-      }),
-      db.serviceOrder.count({
-        where: { estimate: { ataId } },
-      }),
-      db.serviceOrderDeliveredDocument.count({
-        where: { serviceOrder: { estimate: { ataId } } },
-      }),
-    ]);
-    return {
-      items,
-      estimates,
-      balanceMovements,
-      externalBalanceSnapshots,
-      diexRequests,
-      serviceOrders,
-      linkedDocuments,
-    };
-  }
-
-  async remove(ataId: string, actor: AtaDeleteActor, data: RemoveAtaInput = {}) {
-    this.assertCanRemoveAta(actor);
-
-    const reason = data.reason?.trim() || undefined;
-
-    return prisma.$transaction(async (tx) => {
-      const ata = await tx.ata.findUnique({
-        where: { id: ataId },
-        select: {
-          id: true,
-          ataCode: true,
-          number: true,
-          isActive: true,
-          archivedAt: true,
-        },
-      });
-
-      if (!ata) {
-        throw new AppError("Ata não encontrada", 404);
-      }
-
-      if (ata.archivedAt) {
-        throw new AppError("ATA já está arquivada", 409);
-      }
-
-      const links = await this.getAtaLinkSummary(ataId, tx);
-      const hasLinks = this.hasImportantLinks(links);
-      const action = hasLinks ? "ARCHIVED" : "DELETED";
-      const auditAction = hasLinks ? "ATA_ARCHIVE" : "ATA_DELETE";
-      const metadata = {
-        ataId: ata.id,
-        ataNumber: ata.number,
-        action,
-        reason: reason ?? null,
-        links,
-        userId: actor.id,
-      };
-      const beforeSnapshot = {
-        id: ata.id,
-        ataCode: ata.ataCode,
-        number: ata.number,
-        isActive: ata.isActive,
-        archivedAt: ata.archivedAt,
-      };
-
-      if (!hasLinks) {
-        await tx.ata.delete({
-          where: { id: ataId },
-        });
-
-        await tx.auditLog.create({
-          data: {
-            entityType: "ATA",
-            entityId: ata.id,
-            action: auditAction,
-            actorUserId: actor.id,
-            actorName: actor.name,
-            summary: `ATA ${ata.number} excluída com segurança`,
-            beforeJson: beforeSnapshot,
-            metadata,
+  async remove(ataId: string) {
+    const ata = await prisma.ata.findUnique({
+      where: { id: ataId },
+      select: {
+        id: true,
+        isActive: true,
+        _count: {
+          select: {
+            estimates: true,
           },
-        });
-
-        return {
-          action,
-          message: "ATA excluída com sucesso.",
-        };
-      }
-
-      const archivedAt = new Date();
-      const archivedAta = await tx.ata.update({
-        where: { id: ataId },
-        data: {
-          archivedAt,
-          isActive: false,
         },
-        select: {
-          id: true,
-          ataCode: true,
-          number: true,
-          isActive: true,
-          archivedAt: true,
-        },
-      });
-
-      await tx.auditLog.create({
-        data: {
-          entityType: "ATA",
-          entityId: ata.id,
-          action: auditAction,
-          actorUserId: actor.id,
-          actorName: actor.name,
-          summary: `ATA ${ata.number} arquivada com segurança`,
-          beforeJson: beforeSnapshot,
-          afterJson: {
-            id: archivedAta.id,
-            ataCode: archivedAta.ataCode,
-            number: archivedAta.number,
-            isActive: archivedAta.isActive,
-            archivedAt: archivedAta.archivedAt,
+        items: {
+          select: {
+            _count: {
+              select: {
+                balanceMovements: true,
+              },
+            },
           },
-          metadata,
         },
-      });
-
-      return {
-        action,
-        message: "ATA possui vínculos e foi arquivada com segurança.",
-      };
+      },
     });
+
+    if (!ata) {
+      throw new AppError("Ata não encontrada", 404);
+    }
+
+    const hasBalanceHistory = ata.items.some(
+      (item) => item._count.balanceMovements > 0,
+    );
+
+    if (ata._count.estimates > 0 || hasBalanceHistory) {
+      throw new AppError(
+        "Ata com estimativas ou movimentações de saldo não pode ser excluída",
+        409,
+      );
+    }
+
+    await prisma.ata.delete({
+      where: { id: ataId },
+    });
+
+    return {
+      message: "Ata excluída com sucesso",
+    };
   }
 }

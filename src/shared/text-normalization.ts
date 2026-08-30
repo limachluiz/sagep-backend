@@ -1,4 +1,7 @@
-const REVERSIBLE_MOJIBAKE_MARKERS = /Ã|Â|â|ð/;
+// Detecta sequências típicas de bytes UTF-8 exibidos como Windows-1252.
+// Uma letra portuguesa válida, como o "â" de "distância", não pode por si só
+// disparar a recodificação da frase inteira.
+const REVERSIBLE_MOJIBAKE_MARKERS = /(?:Ã(?:[¡-¿À-ÿ]|[\u2010-\u203a])|Â[ -¿]|â(?:€|‚|ƒ|„|…|†|‡|ˆ|‰|Š|‹|Œ|Ž|‘|’|“|”|•|–|—|˜|™|š|›|œ|ž|Ÿ)|ð[\u0080-\u00bf])/u;
 const WINDOWS_1252_REVERSE: Record<string, number> = {
   "€": 0x80,
   "‚": 0x82,
@@ -53,39 +56,90 @@ function preserveWordCase(match: string, replacement: string) {
   return replacement;
 }
 
+export const REPLACEMENT_CHARACTER_DICTIONARY: ReadonlyArray<{
+  damagedText: string;
+  pattern: RegExp;
+  replacement: string;
+}> = [
+  { damagedText: "S�O", pattern: /s[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "são" },
+  { damagedText: "REGI�O", pattern: /regi[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "região" },
+  { damagedText: "R EGI�O", pattern: /r[\s\u00a0]+egi[\s\u00a0]*�{1,2}[\s\u00a0]*o/gi, replacement: "região" },
+  { damagedText: "ALVAR�ES", pattern: /alvar[\s\u00a0]*�+[\s\u00a0]*es/gi, replacement: "alvarães" },
+  { damagedText: "AIR�O", pattern: /air[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "airão" },
+  { damagedText: "ANAM�", pattern: /anam[\s\u00a0]*�+/gi, replacement: "anamã" },
+  { damagedText: "CODAJ�S", pattern: /codaj[\s\u00a0]*�+[\s\u00a0]*s/gi, replacement: "codajás" },
+  { damagedText: "V�RZEA", pattern: /v[\s\u00a0]*�+[\s\u00a0]*rzea/gi, replacement: "várzea" },
+  { damagedText: "GUAJAR�-MIRIM", pattern: /guajar[\s\u00a0]*�+[\s\u00a0]*(?:-| |\s)*mirim/gi, replacement: "guajará-mirim" },
+  { damagedText: "GUAJAR�", pattern: /guajar[\s\u00a0]*�+/gi, replacement: "guajará" },
+  { damagedText: "HUMAIT�", pattern: /humait[\s\u00a0]*�+/gi, replacement: "humaitá" },
+  { damagedText: "TABATING�", pattern: /tabating[\s\u00a0]*�+/gi, replacement: "tabatinga" },
+  { damagedText: "L�BREA", pattern: /l[\s\u00a0]*�+[\s\u00a0]*brea/gi, replacement: "lábrea" },
+  { damagedText: "TEF�", pattern: /tef[\s\u00a0]*�+/gi, replacement: "tefé" },
+  { damagedText: "MICR�METROS", pattern: /micr[\s\u00a0]*�+[\s\u00a0]*metros/gi, replacement: "micrômetros" },
+  { damagedText: "MET�LICA", pattern: /met[\s\u00a0]*�+[\s\u00a0]*lica/gi, replacement: "metálica" },
+  { damagedText: "M�TO DO", pattern: /m[\s\u00a0]*�+[\s\u00a0]*to[\s\u00a0]+do/gi, replacement: "método" },
+  { damagedText: "L�GICO", pattern: /l[\s\u00a0]*�+[\s\u00a0]*gico/gi, replacement: "lógico" },
+  { damagedText: "FUS�O", pattern: /fus[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "fusão" },
+  { damagedText: "CONEX�O", pattern: /conex[\s\u00a0]*�+[\s\u00a0]*o/gi, replacement: "conexão" },
+  { damagedText: "NECESS�RIA", pattern: /necess[\s\u00a0]*�+[\s\u00a0]*ria/gi, replacement: "necessária" },
+  { damagedText: "C�MERA", pattern: /c[\s\u00a0]*�+[\s\u00a0]*mera/gi, replacement: "câmera" },
+  { damagedText: "CARACTER�STICAS", pattern: /caracter[\s\u00a0]*�+[\s\u00a0]*sticas/gi, replacement: "características" },
+  { damagedText: "REFER�NCIA", pattern: /refer[\s\u00a0]*�+[\s\u00a0]*ncia/gi, replacement: "referência" },
+  { damagedText: "RE FER�NCIA", pattern: /re[\s\u00a0]+fer[\s\u00a0]*�+[\s\u00a0]*ncia/gi, replacement: "referência" },
+  { damagedText: "A�REO", pattern: /a[\s\u00a0]*�+[\s\u00a0]*reo/gi, replacement: "aéreo" },
+];
+
+function applyReplacementCharacterDictionary(value: string) {
+  return REPLACEMENT_CHARACTER_DICTIONARY.reduce(
+    (text, entry) => text.replace(entry.pattern, (match) => preserveWordCase(match, entry.replacement)),
+    value,
+  );
+}
+
+export function findUnresolvedMojibakeTokens(value: string) {
+  return [...new Set(value.match(/[\p{L}\d/-]*�+[\p{L}\d/-]*/gu) ?? [])];
+}
+
 function repairReplacementCharacters(value: string) {
-  return value
-    .replace(/lan�amento/gi, (match) => match[0] === "L" ? "Lançamento" : "lançamento")
-    .replace(/�ptica/gi, (match) => match.slice(1) === "PTICA" ? "ÓPTICA" : "óptica")
-    .replace(/acess�rios/gi, (match) => match[0] === "A" ? "Acessórios" : "acessórios")
-    .replace(/m�todo/gi, (match) => match[0] === "M" ? "Método" : "método")
-    .replace(/c�mera/gi, (match) => preserveWordCase(match, "câmera"))
-    .replace(/caracter�sticas/gi, (match) => preserveWordCase(match, "características"))
-    .replace(/refer�ncia/gi, (match) => preserveWordCase(match, "referência"))
-    .replace(/a�reo/gi, (match) => preserveWordCase(match, "aéreo"))
-    .replace(/subterr�neo/gi, (match) => {
+  return applyReplacementCharacterDictionary(value)
+    // O Compras.gov também pode preservar o acento, mas inserir espaços no
+    // identificador territorial (ex.: "R EGIÃO 1"). Normalizamos o marcador
+    // antes que a cobertura da ATA seja inferida.
+    .replace(/\bR[\s\u00a0]*E[\s\u00a0]*G[\s\u00a0]*I[\s\u00a0]*(?:Ã|A)[\s\u00a0]*O\b/gi, (match) =>
+      preserveWordCase(match, "região"),
+    )
+    .replace(/lan[\s\u00a0]*�+[\s\u00a0]*amento/gi, (match) => match.trimStart()[0] === "L" ? "Lançamento" : "lançamento")
+    .replace(/�+[\s\u00a0]*ptica/gi, (match) => match.trim().slice(-5) === "PTICA" ? "ÓPTICA" : "óptica")
+    .replace(/acess[\s\u00a0]*�+[\s\u00a0]*rios/gi, (match) => match.trimStart()[0] === "A" ? "Acessórios" : "acessórios")
+    .replace(/m[\s\u00a0]*�+[\s\u00a0]*todo/gi, (match) => match.trimStart()[0] === "M" ? "Método" : "método")
+    .replace(/subterr[\s\u00a0]*�+[\s\u00a0]*neo/gi, (match) => {
       if (match === match.toUpperCase()) return "SUBTERRÂNEO";
       return match[0] === "S" ? "Subterrâneo" : "subterrâneo";
     })
-    .replace(/destrut�vel/gi, (match) => {
+    .replace(/destrut[\s\u00a0]*�+[\s\u00a0]*vel/gi, (match) => {
       if (match === match.toUpperCase()) return "DESTRUTÍVEL";
       return match[0] === "D" ? "Destrutível" : "destrutível";
     })
-    .replace(/\bn\s+�o\b/gi, (match) => match[0] === "N" ? "Não" : "não")
-    .replace(/\bn�o\b/gi, (match) => match[0] === "N" ? "Não" : "não")
+    .replace(/\bn[\s\u00a0]*�+[\s\u00a0]*o\b/gi, (match) => match.trimStart()[0] === "N" ? "Não" : "não")
     .replace(/\bCab\s+o\b/g, "Cabo")
     .replace(/\bident\s+ificação\b/gi, "identificação")
     .replace(/\bmo\s+nitoramento\b/gi, (match) => preserveWordCase(match, "monitoramento"))
     .replace(/\bmoni\s+toramento\b/gi, (match) => preserveWordCase(match, "monitoramento"))
     .replace(/\blong\s+o\b/gi, (match) => preserveWordCase(match, "longo"))
     .replace(/\bcaracterística\s+s\b/gi, (match) => preserveWordCase(match, "características"))
-    .replace(/\bSERVI�O\b/g, "SERVIÇO")
-    .replace(/\bServi�o\b/g, "Serviço")
-    .replace(/\bservi�o\b/g, "serviço")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])��o\b/g, "$1ção")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])��es\b/g, "$1ções")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])�o\b/g, "$1ço")
-    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])�es\b/g, "$1ções");
+    .replace(/\bincluin\s+do\b/gi, (match) => preserveWordCase(match, "incluindo"))
+    .replace(/\bpa\s+ra\b/gi, (match) => preserveWordCase(match, "para"))
+    .replace(/\bdem\s+ais\b/gi, (match) => preserveWordCase(match, "demais"))
+    .replace(/\bc\s+onectores\b/gi, (match) => preserveWordCase(match, "conectores"))
+    .replace(/\bide\s+ntificação\b/gi, (match) => preserveWordCase(match, "identificação"))
+    .replace(/\bre\s+ferência\b/gi, (match) => preserveWordCase(match, "referência"))
+    .replace(/\bSERVI[\s\u00a0]*�+[\s\u00a0]*O\b/g, "SERVIÇO")
+    .replace(/\bServi[\s\u00a0]*�+[\s\u00a0]*o\b/g, "Serviço")
+    .replace(/\bservi[\s\u00a0]*�+[\s\u00a0]*o\b/g, "serviço")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])[\s\u00a0]*�[\s\u00a0]*�[\s\u00a0]*o\b/g, "$1ção")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])[\s\u00a0]*�[\s\u00a0]*�[\s\u00a0]*es\b/g, "$1ções")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])[\s\u00a0]*�+[\s\u00a0]*o\b/g, "$1ço")
+    .replace(/([A-Za-zÀ-ÖØ-öø-ÿ])[\s\u00a0]*�+[\s\u00a0]*es\b/g, "$1ções");
 }
 
 export function normalizeMojibakeText(value: string): string;

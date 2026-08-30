@@ -6,13 +6,18 @@ import {
   cleanupSessionsSchema,
   listSessionsQuerySchema,
   loginSchema,
-  logoutSchema,
-  refreshTokenSchema,
+  reauthenticateSchema,
   registerSchema,
   sessionIdParamSchema,
   updateOwnProfileSchema,
 } from "./auth.schemas.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import {
+  clearRefreshTokenCookie,
+  getRefreshTokenCookie,
+  setRefreshTokenCookie,
+} from "../../shared/auth-cookie.js";
+import { AppError } from "../../shared/app-error.js";
 
 const authService = new AuthService();
 
@@ -33,7 +38,8 @@ export class AuthController {
 
   async login(req: Request, res: Response) {
     const data = loginSchema.parse(req.body);
-    const result = await authService.login(data, getRequestContext(req));
+    const { refreshToken, ...result } = await authService.login(data, getRequestContext(req));
+    setRefreshTokenCookie(res, refreshToken);
 
     return res.status(200).json(result);
   }
@@ -43,6 +49,12 @@ export class AuthController {
     const user = await authService.me(userId);
 
     return res.status(200).json(user);
+  }
+
+  async reauthenticate(req: Request, res: Response) {
+    const data = reauthenticateSchema.parse(req.body);
+    const result = await authService.reauthenticate(data, req.user!, getRequestContext(req));
+    return res.status(200).json(result);
   }
 
   async updateOwnProfile(req: Request, res: Response) {
@@ -68,15 +80,25 @@ export class AuthController {
   }
 
   async refresh(req: Request, res: Response) {
-    const { refreshToken } = refreshTokenSchema.parse(req.body);
-    const tokens = await authService.refresh(refreshToken, getRequestContext(req));
+    const refreshToken = getRefreshTokenCookie(req);
+    if (!refreshToken) {
+      throw new AppError("Sessão de renovação ausente", 401, "AUTH_REFRESH_COOKIE_MISSING");
+    }
+    const { refreshToken: rotatedRefreshToken, ...tokens } = await authService.refresh(
+      refreshToken,
+      getRequestContext(req),
+    );
+    setRefreshTokenCookie(res, rotatedRefreshToken);
 
     return res.status(200).json(tokens);
   }
 
   async logout(req: Request, res: Response) {
-    const { refreshToken } = logoutSchema.parse(req.body);
-    const result = await authService.logout(refreshToken, getRequestContext(req));
+    const refreshToken = getRefreshTokenCookie(req);
+    const result = refreshToken
+      ? await authService.logout(refreshToken, getRequestContext(req))
+      : { message: "Logout realizado com sucesso" };
+    clearRefreshTokenCookie(res);
     return res.status(200).json(result);
   }
 

@@ -35,6 +35,13 @@ enum TaskStatus {
   CANCELADA
 }
 
+enum TaskActivityType {
+  NOTE
+  STATUS_CHANGE
+  COMPLETION
+  REOPENED
+}
+
 enum AtaType {
   CFTV
   FIBRA_OPTICA
@@ -70,8 +77,27 @@ enum ProjectStage {
   SERVICO_EM_EXECUCAO
   ANALISANDO_AS_BUILT
   ATESTAR_NF
+  ENTREGA_TECNICA
   SERVICO_CONCLUIDO
   CANCELADO
+}
+
+enum EvidenceCategory {
+  IMAGE
+  VIDEO
+  KMZ_KML
+  TECHNICAL_DOCUMENT
+  CERTIFICATION
+  DIAGRAM
+  AS_BUILT
+  OTHER
+}
+
+enum EvidencePhase {
+  BEFORE
+  DURING
+  AFTER
+  GENERAL
 }
 
 enum AuditEntityType {
@@ -80,10 +106,13 @@ enum AuditEntityType {
   DIEX_REQUEST
   SERVICE_ORDER
   TASK
-  ATA
   ATA_ITEM
   USER
   AUTH
+  COMMITMENT_NOTE
+  INVOICE
+  NOTIFICATION
+  SYSTEM_SETTINGS
 }
 
 enum AuditActionType {
@@ -99,15 +128,57 @@ enum AuditActionType {
   CANCEL
   LOGIN
   LOGIN_FAILED
+  REAUTHENTICATION_SUCCESS
+  REAUTHENTICATION_FAILED
   LOGOUT
   TOKEN_REFRESH
-  REGISTER_EXTERNAL_CONSUMPTION
   SESSION_REVOKE
   SESSION_REVOKE_ALL
   SESSION_EXPIRE
   SESSION_CLEANUP
-  ATA_DELETE
-  ATA_ARCHIVE
+  SYNC
+  DISMISS
+  CONNECTION_TEST
+  EXPORT
+}
+
+enum IntegrationProvider {
+  DATABASE
+  PORTAL_TRANSPARENCIA
+  COMPRAS_GOV
+  PNCP
+}
+
+enum IntegrationConnectionStatus {
+  OPERATIONAL
+  DEGRADED
+  UNAVAILABLE
+  NOT_CONFIGURED
+}
+
+enum CommitmentNoteFinancialStatus {
+  NAO_LIQUIDADA
+  PARCIALMENTE_LIQUIDADA
+  LIQUIDADA
+  PARCIALMENTE_PAGA
+  PAGA
+  PARCIALMENTE_ANULADA
+  ANULADA
+}
+
+enum ExternalSyncStatus {
+  VALIDADO
+  DIVERGENTE
+  NAO_VALIDADO
+  ERRO
+}
+
+enum FinancialDocumentPhase {
+  EMPENHO
+  LIQUIDACAO
+  PAGAMENTO
+  ANULACAO
+  OUTRO
 }
 
 enum RefreshTokenRevocationReason {
@@ -133,38 +204,98 @@ enum AtaItemBalanceMovementType {
   RESERVE
   RELEASE
   CONSUME
-  EXTERNAL_CONSUMPTION
   REVERSE_CONSUME
   ADJUSTMENT
 }
 
 model User {
-  id                            String                   @id @default(cuid())
-  userCode                      Int                      @unique @default(autoincrement())
+  id                            String                       @id @default(cuid())
+  userCode                      Int                          @unique @default(autoincrement())
   name                          String
   warName                       String?
-  email                         String                   @unique
+  email                         String                       @unique
   passwordHash                  String
-  role                          UserRole                 @default(CONSULTA)
+  role                          UserRole                     @default(CONSULTA)
   rank                          String?
   cpf                           String?
   phone                         String?
   avatarDataUrl                 String?
-  themePreference               UserThemePreference      @default(DARK)
-  notifyTaskAssignments         Boolean                  @default(true)
-  notifyDeadlines               Boolean                  @default(true)
-  notifyWorkflowUpdates         Boolean                  @default(true)
-  active                        Boolean                  @default(true)
-  ownedProjects                 Project[]                @relation("ProjectOwner")
-  signedServiceOrdersRegistered Project[]                @relation("SignedServiceOrderRegistrar")
+  themePreference               UserThemePreference          @default(DARK)
+  notifyTaskAssignments         Boolean                      @default(true)
+  notifyDeadlines               Boolean                      @default(true)
+  notifyWorkflowUpdates         Boolean                      @default(true)
+  active                        Boolean                      @default(true)
+  failedLoginAttempts           Int                          @default(0)
+  lockedUntil                   DateTime?
+  ownedProjects                 Project[]                    @relation("ProjectOwner")
+  signedServiceOrdersRegistered Project[]                    @relation("SignedServiceOrderRegistrar")
   memberships                   ProjectMember[]
   auditLogs                     AuditLog[]
-  assignedTasks                 Task[]                   @relation("TaskAssignee")
+  assignedTasks                 Task[]                       @relation("TaskAssignee")
+  completedTasks                Task[]                       @relation("TaskCompleter")
+  taskActivities                TaskActivity[]               @relation("TaskActivityAuthor")
+  evidencesUploaded             ProjectEvidence[]            @relation("EvidenceUploader")
   refreshTokens                 RefreshToken[]
   permissionOverrides           UserPermissionOverride[]
+  notificationDismissals        NotificationDismissal[]
+  invoicesRegistered            Invoice[]                    @relation("InvoiceRegistrar")
+  systemConfigurationsUpdated   SystemConfiguration[]        @relation("SystemConfigurationUpdater")
+  portalApiTokensUpdated        SystemConfiguration[]        @relation("PortalApiTokenUpdater")
+  integrationChecksPerformed    IntegrationConnectionCheck[] @relation("IntegrationCheckActor")
   lastLoginAt                   DateTime?
-  createdAt                     DateTime                 @default(now())
-  updatedAt                     DateTime                 @updatedAt
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
+}
+
+model SystemConfiguration {
+  id                         String   @id @default("default")
+  organizationName           String   @default("4º Centro de Telemática de Área")
+  organizationAcronym        String   @default("4º CTA")
+  uasg                       String   @default("160016")
+  management                 String   @default("00001")
+  timeZone                   String   @default("America/Manaus")
+  commandName                String   @default("COMANDO MILITAR DA AMAZÔNIA")
+  portalTransparenciaBaseUrl String   @default("https://api.portaldatransparencia.gov.br/api-de-dados")
+  portalSyncIntervalMinutes  Int      @default(1440)
+  portalSyncOnStartup        Boolean  @default(true)
+  comprasGovBaseUrl          String   @default("https://dadosabertos.compras.gov.br")
+  pncpBaseUrl                String   @default("https://pncp.gov.br/api/pncp")
+  defaultBiddingNumber       String?
+  defaultBiddingYear         Int?
+  defaultImmediateCommitment Boolean  @default(true)
+  defaultEstimateGroup       String   @default("3")
+  deploymentHostName         String?
+  deploymentExpectedIp       String?
+  deploymentGateway          String?
+  deploymentDnsServers       String[] @default([])
+  deploymentNtpServers       String[] @default([])
+  deploymentAllowedNetworks  String[] @default([])
+  deploymentProxyUrl         String?
+  deploymentCertificateMode  String   @default("INTERNAL_CA")
+  portalApiTokenEncrypted    String?
+  portalApiTokenUpdatedAt    DateTime?
+  portalApiTokenUpdatedById  String?
+  updatedById                String?
+  updatedBy                  User?    @relation("SystemConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  portalApiTokenUpdatedBy    User?    @relation("PortalApiTokenUpdater", fields: [portalApiTokenUpdatedById], references: [id], onDelete: SetNull)
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model IntegrationConnectionCheck {
+  id          String                      @id @default(cuid())
+  provider    IntegrationProvider
+  status      IntegrationConnectionStatus
+  latencyMs   Int?
+  httpStatus  Int?
+  message     String
+  details     Json?
+  checkedById String?
+  checkedBy   User?                       @relation("IntegrationCheckActor", fields: [checkedById], references: [id], onDelete: SetNull)
+  checkedAt   DateTime                    @default(now())
+
+  @@index([provider, checkedAt])
+  @@index([checkedById, checkedAt])
 }
 
 model Permission {
@@ -218,6 +349,9 @@ model Project {
   estimates                        Estimate[]
   ataItemBalanceMovements          AtaItemBalanceMovement[]
   serviceOrders                    ServiceOrder[]
+  commitmentNotes                  CommitmentNote[]
+  invoices                         Invoice[]
+  evidences                        ProjectEvidence[]
   startDate                        DateTime?
   endDate                          DateTime?
   creditNoteNumber                 String?
@@ -243,6 +377,10 @@ model Project {
   asBuiltRejectionReason           String?
   invoiceAttestedAt                DateTime?
   serviceCompletedAt               DateTime?
+  deliveryReportGeneratedAt        DateTime?
+  deliveryReportSignedAt           DateTime?
+  deliveryReportSignedLink         String?
+  deliveryReportDraft              Json?
   archivedAt                       DateTime?
   deletedAt                        DateTime?
   createdAt                        DateTime                 @default(now())
@@ -251,6 +389,100 @@ model Project {
   @@index([projectType])
   @@index([omId])
   @@index([signedServiceOrderRegisteredById])
+}
+
+model CommitmentNote {
+  id                 String                        @id @default(cuid())
+  commitmentNoteCode Int                           @unique @default(autoincrement())
+  projectId          String
+  number             String
+  externalCode       String                        @unique
+  managementUnit     String                        @default("160016")
+  management         String                        @default("00001")
+  source             String                        @default("PORTAL_TRANSPARENCIA")
+  supplierName       String?
+  supplierCnpj       String?
+  issuedAt           DateTime?
+  originalAmount     Decimal                       @default(0) @db.Decimal(14, 2)
+  currentAmount      Decimal                       @default(0) @db.Decimal(14, 2)
+  liquidatedAmount   Decimal                       @default(0) @db.Decimal(14, 2)
+  paidAmount         Decimal                       @default(0) @db.Decimal(14, 2)
+  cancelledAmount    Decimal                       @default(0) @db.Decimal(14, 2)
+  financialStatus    CommitmentNoteFinancialStatus @default(NAO_LIQUIDADA)
+  syncStatus         ExternalSyncStatus            @default(VALIDADO)
+  divergenceReason   String?
+  rawSnapshot        Json?
+  lastSyncAt         DateTime
+  lastSyncError      String?
+  active             Boolean                       @default(true)
+  project            Project                       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  documents          FinancialDocument[]
+  invoices           Invoice[]
+  createdAt          DateTime                      @default(now())
+  updatedAt          DateTime                      @updatedAt
+
+  @@index([projectId, active])
+  @@index([financialStatus])
+  @@index([syncStatus])
+  @@index([lastSyncAt])
+}
+
+model FinancialDocument {
+  id               String                 @id @default(cuid())
+  commitmentNoteId String
+  externalCode     String
+  number           String
+  phase            FinancialDocumentPhase
+  species          String?
+  issuedAt         DateTime?
+  amount           Decimal                @default(0) @db.Decimal(14, 2)
+  supplierName     String?
+  supplierCnpj     String?
+  rawSnapshot      Json?
+  commitmentNote   CommitmentNote         @relation(fields: [commitmentNoteId], references: [id], onDelete: Cascade)
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@unique([commitmentNoteId, externalCode])
+  @@index([phase, issuedAt])
+}
+
+model Invoice {
+  id               String          @id @default(cuid())
+  invoiceCode      Int             @unique @default(autoincrement())
+  projectId        String
+  commitmentNoteId String?
+  number           String
+  series           String?
+  accessKey        String?         @unique
+  supplierCnpj     String
+  issuedAt         DateTime
+  grossAmount      Decimal         @db.Decimal(14, 2)
+  attestedAmount   Decimal?        @db.Decimal(14, 2)
+  attestedAt       DateTime?
+  documentLink     String?
+  notes            String?
+  registeredById   String?
+  project          Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  commitmentNote   CommitmentNote? @relation(fields: [commitmentNoteId], references: [id], onDelete: SetNull)
+  registeredBy     User?           @relation("InvoiceRegistrar", fields: [registeredById], references: [id], onDelete: SetNull)
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  @@index([projectId, issuedAt])
+  @@index([commitmentNoteId])
+}
+
+model NotificationDismissal {
+  id              String   @id @default(cuid())
+  userId          String
+  notificationKey String
+  sourceUpdatedAt DateTime
+  dismissedAt     DateTime @default(now())
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, notificationKey])
+  @@index([userId, dismissedAt])
 }
 
 model ProjectMember {
@@ -266,26 +498,99 @@ model ProjectMember {
 }
 
 model Task {
-  id          String     @id @default(cuid())
-  taskCode    Int        @unique @default(autoincrement())
-  title       String
-  description String?
-  status      TaskStatus @default(PENDENTE)
-  priority    Int        @default(3)
-  projectId   String
-  assigneeId  String?
-  dueDate     DateTime?
-  project     Project    @relation(fields: [projectId], references: [id])
-  assignee    User?      @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  archivedAt  DateTime?
-  deletedAt   DateTime?
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
+  id            String         @id @default(cuid())
+  taskCode      Int            @unique @default(autoincrement())
+  title         String
+  description   String?
+  status        TaskStatus     @default(PENDENTE)
+  priority      Int            @default(3)
+  projectId     String
+  assigneeId    String?
+  completedById String?
+  dueDate       DateTime?
+  project       Project        @relation(fields: [projectId], references: [id])
+  assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  completedBy   User?          @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  activities    TaskActivity[]
+  evidences     ProjectEvidence[]
+  completedAt   DateTime?
+  archivedAt    DateTime?
+  deletedAt     DateTime?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model ProjectEvidence {
+  id              String           @id @default(cuid())
+  projectId       String
+  taskId          String?
+  uploadedById    String?
+  title           String
+  description     String?
+  category        EvidenceCategory
+  phase           EvidencePhase    @default(GENERAL)
+  includeInReport Boolean          @default(false)
+  sortOrder       Int              @default(0)
+  originalName    String
+  storageKey      String           @unique
+  mimeType        String
+  sizeBytes       Int
+  checksumSha256  String
+  project         Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task            Task?            @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  uploadedBy      User?            @relation("EvidenceUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@index([projectId, includeInReport, sortOrder])
+  @@index([taskId, createdAt])
+}
+
+model TaskActivity {
+  id         String           @id @default(cuid())
+  taskId     String
+  authorId   String?
+  type       TaskActivityType @default(NOTE)
+  content    String
+  fromStatus TaskStatus?
+  toStatus   TaskStatus?
+  task       Task             @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author     User?            @relation("TaskActivityAuthor", fields: [authorId], references: [id], onDelete: SetNull)
+  createdAt  DateTime         @default(now())
+
+  @@index([taskId, createdAt])
+  @@index([authorId, createdAt])
+}
+
+model Pregao {
+  id                 String    @id @default(cuid())
+  pregaoCode         Int       @unique @default(autoincrement())
+  uasg               String
+  number             String
+  year               String
+  modality           String    @default("PREGÃO ELETRÔNICO")
+  object             String?
+  openingAt          DateTime?
+  homologatedAt      DateTime?
+  type               AtaType?
+  managingAgency     String?
+  isActive           Boolean   @default(true)
+  externalSource     String?
+  externalLastSyncAt DateTime?
+  atas               Ata[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@unique([uasg, number, year])
+  @@index([year, number])
+  @@index([type, isActive])
 }
 
 model Ata {
   id                   String             @id @default(cuid())
   ataCode              Int                @unique @default(autoincrement())
+  pregaoId             String?
+  pregao               Pregao?            @relation(fields: [pregaoId], references: [id], onDelete: SetNull)
   items                AtaItem[]
   number               String
   type                 AtaType
@@ -301,11 +606,16 @@ model Ata {
   externalPregaoNumber String?
   externalPregaoYear   String?
   externalAtaNumber    String?
+  externalPncpControlNumber String?
   externalLastSyncAt   DateTime?
+  externalFingerprint  String?
+  pncpLastSyncAt       DateTime?
+  pncpSnapshot         Json?
   coverageGroups       AtaCoverageGroup[]
-  archivedAt           DateTime?
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
+
+  @@index([pregaoId, isActive])
 }
 
 model AtaCoverageGroup {
@@ -341,10 +651,15 @@ model AtaItem {
   coverageGroupId         String
   referenceCode           String
   description             String
+  externalDescription     String?
+  automaticDescription    String?
+  descriptionCorrectionStatus String                        @default("OK")
+  descriptionCorrectionConfidence Int?
+  descriptionCorrectionSuggestions Json?
+  descriptionEditedAt     DateTime?
   unit                    String
   estimateItems           EstimateItem[]
   balanceMovements        AtaItemBalanceMovement[]
-  externalBalanceSnapshot AtaItemExternalBalanceSnapshot?
   unitPrice               Decimal                         @db.Decimal(14, 2)
   initialQuantity         Decimal                         @default(1000) @db.Decimal(14, 2)
   notes                   String?
@@ -362,20 +677,13 @@ model AtaItem {
   @@unique([ataId, coverageGroupId, referenceCode])
 }
 
-model AtaItemExternalBalanceSnapshot {
-  id              String   @id @default(cuid())
-  ataItemId       String   @unique
-  source          String
-  status          String
-  externalBalance Json?
-  difference      String?
-  lastSyncAt      DateTime
-  warnings        Json?
-  ataItem         AtaItem  @relation(fields: [ataItemId], references: [id], onDelete: Cascade)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  @@index([lastSyncAt])
+model TextCorrectionRule {
+  id            String   @id @default(cuid())
+  damagedText   String   @unique
+  correctedText String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model AtaItemBalanceMovement {

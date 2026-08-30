@@ -1,7 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { normalizeMojibakeText } from "../src/shared/text-normalization.js";
+import { findUnresolvedMojibakeTokens, normalizeMojibakeText } from "../src/shared/text-normalization.js";
 
 describe("normalizeMojibakeText", () => {
+  it.each(["distância máxima", "cabeamento subterrâneo", "câmera eletrônica"])(
+    "preserva texto português válido sem tentar recodificá-lo: %s",
+    (text) => expect(normalizeMojibakeText(text)).toBe(text),
+  );
   it("fixes common Compras.gov mojibake without changing valid UTF-8 text", () => {
     expect(normalizeMojibakeText("SERVI\u00c3\u2021O")).toBe("SERVI\u00c7O");
     expect(normalizeMojibakeText("Elabora\u00c3\u00a7\u00c3\u00a3o")).toBe("Elabora\u00e7\u00e3o");
@@ -17,6 +21,15 @@ describe("normalizeMojibakeText", () => {
     expect(normalizeMojibakeText("fixa\ufffd\ufffdo")).toBe("fixa\u00e7\u00e3o");
     expect(normalizeMojibakeText("identifica\ufffd\ufffdo")).toBe("identifica\u00e7\u00e3o");
     expect(normalizeMojibakeText("SERVI\ufffdO")).toBe("SERVI\u00c7O");
+    expect(normalizeMojibakeText("REGI\ufffdO 1 - MANAUS-AM")).toBe("REGIÃO 1 - MANAUS-AM");
+    expect(normalizeMojibakeText("9/125 micr\ufffdmetros")).toBe("9/125 micrômetros");
+    expect(normalizeMojibakeText("ponto l\ufffdgico")).toBe("ponto lógico");
+    expect(normalizeMojibakeText("FUS\ufffdO e conex\ufffdo")).toBe("FUSÃO e conexão");
+    expect(normalizeMojibakeText("infraestrutura necess\ufffdria")).toBe("infraestrutura necessária");
+    expect(normalizeMojibakeText("S\ufffd\ufffdO GABRIEL DA CACHOEIRA")).toBe("SÃO GABRIEL DA CACHOEIRA");
+    expect(normalizeMojibakeText("GUAJAR\ufffd-MIRIM")).toBe("GUAJARÁ-MIRIM");
+    expect(normalizeMojibakeText("HUMAIT\ufffd-AM")).toBe("HUMAITÁ-AM");
+    expect(normalizeMojibakeText("REGI\ufffd\ufffdO 5")).toBe("REGIÃO 5");
   });
 
   it("repairs a technical ATA description without corrupting valid accents", () => {
@@ -32,6 +45,58 @@ describe("normalizeMojibakeText", () => {
       "Fibra óptica monomodo, contemplando: acessórios para fixação e identificação do cabo; " +
       "utilizando método de CABEAMENTO SUBTERRÂNEO ou MND (Método não Destrutível).",
     );
+  });
+
+  it("repairs the known SIDI Manaus description fragments", () => {
+    expect(normalizeMojibakeText(
+      "Serviço incluin do material pa ra fixação. Dem ais características conforme Termo de Re ferência.",
+    )).toBe(
+      "Serviço incluindo material para fixação. Demais características conforme Termo de Referência.",
+    );
+  });
+
+  it("repairs the corrupted Region 3 locality names", () => {
+    const damaged = "(REGI�O 3 - COARI-AM, TEF�-AM, ALVAR�ES-AM, CODAJ�S-AM, MANAQUIRI-AM, CAREIRO-AM E CAREIRO DA V�RZEA-AM)";
+    const corrected = normalizeMojibakeText(damaged);
+
+    expect(corrected).toBe(
+      "(REGIÃO 3 - COARI-AM, TEFÉ-AM, ALVARÃES-AM, CODAJÁS-AM, MANAQUIRI-AM, CAREIRO-AM E CAREIRO DA VÁRZEA-AM)",
+    );
+    expect(findUnresolvedMojibakeTokens(corrected)).toEqual([]);
+  });
+
+  it("reports unknown damaged tokens for future dictionary entries", () => {
+    expect(findUnresolvedMojibakeTokens("PALAVR� DESCONHECIDA")).toEqual(["PALAVR�"]);
+  });
+
+  it("repairs accented locality names from the official ATA regions", () => {
+    expect(normalizeMojibakeText("NOVO AIR�O-AM, ANAM�-AM, S�O GABRIEL DA CACHOEIRA-AM")).toBe(
+      "NOVO AIRÃO-AM, ANAMÃ-AM, SÃO GABRIEL DA CACHOEIRA-AM",
+    );
+  });
+
+  it.each(["ALVAR � ES", "ALVAR� ES", "ALVAR �ES", "ALVAR � ES"])(
+    "ignores spaces around the replacement marker in %s",
+    (damaged) => expect(normalizeMojibakeText(damaged)).toBe("ALVARÃES"),
+  );
+
+  it.each([
+    ["REGI � O 3", "REGIÃO 3"],
+    ["instala � � o", "instalação"],
+    ["fibra � ptica", "fibra óptica"],
+    ["m � todo subterr � neo", "método subterrâneo"],
+  ])("repairs spacing variations in technical text: %s", (damaged, expected) => {
+    expect(normalizeMojibakeText(damaged)).toBe(expected);
+  });
+
+  it.each([
+    ["(R EGIÃO 1 - MANAUS-AM)", "(REGIÃO 1 - MANAUS-AM)"],
+    ["infraestrutura met�lica", "infraestrutura metálica"],
+    ["utilizando m�to do subterrâneo", "utilizando método subterrâneo"],
+    ["R EGI�O 1", "REGIÃO 1"],
+    ["Demais características conforme Re fer�ncia.", "Demais características conforme Referência."],
+  ])("repairs words damaged and split during import: %s", (damaged, expected) => {
+    expect(normalizeMojibakeText(damaged)).toBe(expected);
   });
 
   it("repairs descriptions from items 2 through 6 of ARP 00001/2026", () => {

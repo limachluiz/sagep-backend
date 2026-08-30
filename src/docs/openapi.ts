@@ -15,6 +15,7 @@ const tagExternalDocs = {
   dashboard: "./insights-and-admin.md",
   search: "./insights-and-admin.md",
   "operational-alerts": "./insights-and-admin.md",
+  "financial-execution": "./financial-execution.md",
   exports: "./insights-and-admin.md",
   reports: "./insights-and-admin.md",
   users: "./insights-and-admin.md",
@@ -23,7 +24,11 @@ const tagExternalDocs = {
   "ata-items": "./insights-and-admin.md",
   integrations: "./insights-and-admin.md",
   "military-organizations": "./insights-and-admin.md",
+  settings: "./insights-and-admin.md",
+  deployment: "./insights-and-admin.md",
+  backups: "./insights-and-admin.md",
   health: "./README.md",
+  setup: "./insights-and-admin.md",
 };
 
 function jsonContent(schemaRef: string, example?: unknown) {
@@ -118,6 +123,25 @@ const defaultErrorResponses = {
   "500": { $ref: "#/components/responses/InternalServerError" },
 };
 
+const stepUpErrorResponse = {
+  "428": { $ref: "#/components/responses/StepUpRequired" },
+};
+
+function withStepUp(operation: Record<string, any>) {
+  return {
+    ...operation,
+    parameters: [
+      ...(Array.isArray(operation.parameters) ? operation.parameters : []),
+      { $ref: "#/components/parameters/StepUpToken" },
+    ],
+    responses: {
+      ...(operation.responses ?? {}),
+      ...stepUpErrorResponse,
+    },
+    "x-step-up": true,
+  };
+}
+
 const archiveResponseExample = {
   message: "Tarefa arquivada com sucesso",
   permissionUsed: "tasks.archive",
@@ -181,6 +205,7 @@ export const openApiDocument: OpenApiDocument = {
     "dashboard",
     "search",
     "operational-alerts",
+    "financial-execution",
     "exports",
     "reports",
     "users",
@@ -189,6 +214,9 @@ export const openApiDocument: OpenApiDocument = {
     "ata-items",
     "integrations",
     "military-organizations",
+    "settings",
+    "deployment",
+    "backups",
   ].map((name) => ({
     name,
     description: `Modulo ${name} do backend SAGEP`,
@@ -297,6 +325,14 @@ export const openApiDocument: OpenApiDocument = {
         "Codigo da permissao no catalogo RBAC persistido.",
       ),
       SessionId: pathIdParameter("sessionId", "Identificador da sessao."),
+      StepUpToken: {
+        name: "X-SAGEP-Reauth",
+        in: "header",
+        required: false,
+        description:
+          "Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente.",
+        schema: { type: "string" },
+      },
       AtaId: pathIdParameter("id", "Identificador UUID da ata."),
       AtaCoverageGroupId: pathIdParameter(
         "groupId",
@@ -344,6 +380,22 @@ export const openApiDocument: OpenApiDocument = {
             requiredPermissions: ["projects.edit_all"],
           },
           requiredPermissions: ["projects.edit_all"],
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
+        }),
+      },
+      StepUpRequired: {
+        description: "A operação crítica exige confirmação recente da senha.",
+        content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "AUTH_STEP_UP_REQUIRED",
+          message: "Confirme sua senha para realizar esta operação",
+          requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
+        }),
+      },
+      TooManyRequests: {
+        description: "Limite de tentativas por IP ou conta excedido.",
+        content: jsonContent("#/components/schemas/ErrorResponse", {
+          code: "TOO_MANY_REQUESTS",
+          message: "Muitas tentativas. Aguarde antes de tentar novamente.",
           requestId: "2c4a3610-9e9f-40d7-97d0-886bf983302e",
         }),
       },
@@ -669,6 +721,21 @@ export const openApiDocument: OpenApiDocument = {
           logoutRequired: { type: "boolean", enum: [true] },
         },
       },
+      ReauthenticateRequest: {
+        type: "object",
+        required: ["password"],
+        properties: {
+          password: { type: "string", minLength: 1, maxLength: 128 },
+        },
+      },
+      StepUpResponse: {
+        type: "object",
+        required: ["stepUpToken", "expiresInSeconds"],
+        properties: {
+          stepUpToken: { type: "string" },
+          expiresInSeconds: { type: "integer", minimum: 60, maximum: 900 },
+        },
+      },
       UserOptionsResponse: {
         type: "object",
         required: ["items"],
@@ -914,11 +981,17 @@ export const openApiDocument: OpenApiDocument = {
       },
       AuthTokensResponse: {
         type: "object",
-        required: ["accessToken", "refreshToken", "user"],
+        required: ["accessToken", "user"],
         properties: {
           accessToken: { type: "string" },
-          refreshToken: { type: "string" },
           user: { $ref: "#/components/schemas/UserSummary" },
+        },
+      },
+      RefreshResponse: {
+        type: "object",
+        required: ["accessToken"],
+        properties: {
+          accessToken: { type: "string" },
         },
       },
       SessionStatusDetail: {
@@ -1361,7 +1434,17 @@ export const openApiDocument: OpenApiDocument = {
           priority: { type: "integer", minimum: 1, maximum: 5, nullable: true },
           assigneeId: { type: "string", nullable: true },
           assigneeName: { type: "string", nullable: true },
+          completedById: { type: "string", nullable: true },
           dueDate: { type: "string", format: "date-time", nullable: true },
+          completedAt: { type: "string", format: "date-time", nullable: true },
+          completedBy: {
+            allOf: [{ $ref: "#/components/schemas/UserSummary" }],
+            nullable: true,
+          },
+          activities: {
+            type: "array",
+            items: { $ref: "#/components/schemas/TaskActivity" },
+          },
           archivedAt: { type: "string", format: "date-time", nullable: true },
           deletedAt: { type: "string", format: "date-time", nullable: true },
           archiveContext: { $ref: "#/components/schemas/ArchiveContext" },
@@ -1410,6 +1493,46 @@ export const openApiDocument: OpenApiDocument = {
             type: "string",
             enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
           },
+        },
+      },
+      TaskActivity: {
+        type: "object",
+        required: ["id", "type", "content", "createdAt"],
+        properties: {
+          id: { type: "string" },
+          type: {
+            type: "string",
+            enum: ["NOTE", "STATUS_CHANGE", "COMPLETION", "REOPENED"],
+          },
+          content: { type: "string" },
+          fromStatus: {
+            type: "string",
+            enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
+            nullable: true,
+          },
+          toStatus: {
+            type: "string",
+            enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
+            nullable: true,
+          },
+          author: {
+            allOf: [{ $ref: "#/components/schemas/UserSummary" }],
+            nullable: true,
+          },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      TaskActivityCreateRequest: {
+        type: "object",
+        required: ["content"],
+        properties: {
+          content: { type: "string", minLength: 2, maxLength: 4000 },
+        },
+      },
+      TaskCompleteRequest: {
+        type: "object",
+        properties: {
+          content: { type: "string", maxLength: 4000 },
         },
       },
       TaskListEnvelope: {
@@ -2014,6 +2137,82 @@ export const openApiDocument: OpenApiDocument = {
           },
         },
       },
+      CommitmentNoteLookupRequest: {
+        type: "object",
+        required: ["projectId", "number"],
+        properties: {
+          projectId: { type: "string" },
+          number: { type: "string", pattern: "^\\d{4}NE\\d{6}$", example: "2026NE000534" },
+          managementUnit: { type: "string", default: "160016" },
+          management: { type: "string", default: "00001" },
+        },
+      },
+      CommitmentNoteStandaloneLookupRequest: {
+        type: "object",
+        required: ["number"],
+        properties: {
+          number: { type: "string", pattern: "^\\d{4}NE\\d{6}$", example: "2026NE000534" },
+          managementUnit: { type: "string", pattern: "^\\d{6}$", default: "160016" },
+          management: { type: "string", pattern: "^\\d{5}$", default: "00001" },
+        },
+      },
+      CommitmentNoteStandaloneLookupResponse: {
+        type: "object",
+        required: ["snapshot"],
+        properties: {
+          snapshot: { $ref: "#/components/schemas/CommitmentNoteResponse" },
+          registered: {
+            allOf: [{ $ref: "#/components/schemas/CommitmentNoteResponse" }],
+            nullable: true,
+          },
+        },
+      },
+      CommitmentNoteRegisterRequest: {
+        allOf: [
+          { $ref: "#/components/schemas/CommitmentNoteLookupRequest" },
+          {
+            type: "object",
+            required: ["receivedAt"],
+            properties: {
+              receivedAt: { type: "string", format: "date-time" },
+              registrationMode: { type: "string", enum: ["PORTAL", "MANUAL"], default: "PORTAL" },
+              manualReason: { type: "string", minLength: 10, maxLength: 500 },
+              confirmManualRegistration: { type: "boolean", default: false },
+              acceptDivergence: { type: "boolean", default: false },
+            },
+          },
+        ],
+      },
+      CommitmentNoteResponse: {
+        type: "object",
+        additionalProperties: true,
+      },
+      CommitmentNoteListResponse: {
+        type: "object",
+        properties: {
+          items: { type: "array", items: { $ref: "#/components/schemas/CommitmentNoteResponse" } },
+          summary: { type: "object", additionalProperties: true },
+          meta: { type: "object", additionalProperties: true },
+        },
+      },
+      InvoiceCreateRequest: {
+        type: "object",
+        required: ["projectId", "number", "supplierCnpj", "issuedAt", "grossAmount"],
+        properties: {
+          projectId: { type: "string" },
+          commitmentNoteId: { type: "string" },
+          number: { type: "string" },
+          series: { type: "string" },
+          accessKey: { type: "string", minLength: 44, maxLength: 44 },
+          supplierCnpj: { type: "string" },
+          issuedAt: { type: "string", format: "date-time" },
+          grossAmount: { type: "number", format: "double" },
+          attestedAmount: { type: "number", format: "double" },
+          attestedAt: { type: "string", format: "date-time" },
+          documentLink: { type: "string", format: "uri" },
+          notes: { type: "string" },
+        },
+      },
       PublicRegisterRequest: {
         type: "object",
         required: ["name", "email", "password"],
@@ -2021,7 +2220,7 @@ export const openApiDocument: OpenApiDocument = {
           name: { type: "string", minLength: 3 },
           warName: { type: "string", nullable: true },
           email: { type: "string", format: "email" },
-          password: { type: "string", minLength: 6 },
+          password: { type: "string", minLength: 8, maxLength: 128 },
         },
       },
       UserCreateRequest: {
@@ -2032,7 +2231,7 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           name: { type: "string", minLength: 3 },
           email: { type: "string", format: "email" },
-          password: { type: "string", minLength: 6 },
+          password: { type: "string", minLength: 8, maxLength: 128 },
           role: {
             type: "string",
             enum: ["PROJETISTA", "GESTOR", "CONSULTA"],
@@ -2043,7 +2242,7 @@ export const openApiDocument: OpenApiDocument = {
         example: {
           name: "1 Ten Maria Souza",
           warName: "Souza",
-          email: "maria.souza@sagep.mil.br",
+          email: "usuario.exemplo@example.invalid",
           password: "<senha-forte-do-usuario>",
           role: "GESTOR",
           rank: "1º Ten",
@@ -2160,7 +2359,6 @@ export const openApiDocument: OpenApiDocument = {
           externalPregaoYear: { type: "string", nullable: true },
           externalAtaNumber: { type: "string", nullable: true },
           externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
-          archivedAt: { type: "string", format: "date-time", nullable: true },
           coverageGroups: {
             type: "array",
             items: { $ref: "#/components/schemas/AtaCoverageGroup" },
@@ -2226,34 +2424,6 @@ export const openApiDocument: OpenApiDocument = {
             items: { $ref: "#/components/schemas/AtaCoverageGroup" },
           },
         },
-      },
-      AtaDeleteRequest: {
-        type: "object",
-        properties: {
-          reason: {
-            type: "string",
-            maxLength: 500,
-            description: "Motivo opcional registrado na auditoria.",
-          },
-        },
-      },
-      AtaDeleteResponse: {
-        type: "object",
-        required: ["action", "message"],
-        properties: {
-          action: { type: "string", enum: ["DELETED", "ARCHIVED"] },
-          message: { type: "string" },
-        },
-        examples: [
-          {
-            action: "DELETED",
-            message: "ATA excluída com sucesso.",
-          },
-          {
-            action: "ARCHIVED",
-            message: "ATA possui vínculos e foi arquivada com segurança.",
-          },
-        ],
       },
       AtaListEnvelope: {
         type: "object",
@@ -2458,26 +2628,6 @@ export const openApiDocument: OpenApiDocument = {
               lastMovementAt: { type: "string", format: "date-time", nullable: true },
             },
           },
-          latestExternalBalanceSnapshot: {
-            type: "object",
-            nullable: true,
-            properties: {
-              source: { type: "string" },
-              status: { type: "string" },
-              externalBalance: {
-                type: "object",
-                nullable: true,
-                additionalProperties: true,
-              },
-              difference: { type: "string", nullable: true },
-              lastSyncAt: { type: "string", format: "date-time" },
-              warnings: {
-                type: "array",
-                nullable: true,
-                items: { type: "string" },
-              },
-            },
-          },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
           ata: {
@@ -2598,33 +2748,6 @@ export const openApiDocument: OpenApiDocument = {
           isActive: false,
         },
       },
-      AtaItemRegisterExternalConsumptionRequest: {
-        type: "object",
-        required: ["quantity", "reason", "source", "externalStatus", "externalReference"],
-        properties: {
-          quantity: { type: "number", exclusiveMinimum: 0 },
-          reason: { type: "string" },
-          source: { type: "string" },
-          externalStatus: {
-            type: "string",
-            description: "Status oficial da UASG principal; origens de adesao/carona nao sao aceitas.",
-          },
-          externalReference: { type: "string" },
-          commitmentNumber: { type: "string", nullable: true },
-          unit: { type: "string", nullable: true },
-          notes: { type: "string", nullable: true },
-        },
-        example: {
-          quantity: 2,
-          reason: "Consumo externo confirmado manualmente apos conferencia do snapshot",
-          source: "COMPRAS_GOV",
-          externalStatus: "CONSUMO_OFICIAL_DETECTADO",
-          externalReference: "SNAPSHOT-2026-05-15T10:30:00.000Z",
-          commitmentNumber: "2026NE000567",
-          unit: "160016",
-          notes: "Conferencia manual aprovada pelo gestor",
-        },
-      },
       AtaItemsEnvelope: {
         type: "object",
         properties: {
@@ -2652,7 +2775,6 @@ export const openApiDocument: OpenApiDocument = {
               "RESERVE",
               "RELEASE",
               "CONSUME",
-              "EXTERNAL_CONSUMPTION",
               "REVERSE_CONSUME",
               "ADJUSTMENT",
             ],
@@ -2694,172 +2816,6 @@ export const openApiDocument: OpenApiDocument = {
       AtaItemBalanceMovementsResponse: {
         type: "array",
         items: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
-      },
-      AtaItemRegisterExternalConsumptionResponse: {
-        type: "object",
-        properties: {
-          item: { $ref: "#/components/schemas/AtaItem" },
-          movement: { $ref: "#/components/schemas/AtaItemBalanceMovement" },
-          localBalance: {
-            type: "object",
-            additionalProperties: true,
-          },
-          message: { type: "string" },
-        },
-      },
-      ComprasGovExternalBalanceComparisonItem: {
-        type: "object",
-        properties: {
-          item: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              ataItemCode: { type: "integer" },
-              referenceCode: { type: "string" },
-              description: { type: "string" },
-              externalItemId: { type: "string", nullable: true },
-              externalItemNumber: { type: "string", nullable: true },
-            },
-          },
-          localBalance: {
-            type: "object",
-            additionalProperties: true,
-          },
-          externalBalance: {
-            nullable: true,
-            type: "object",
-            properties: {
-              externalItemNumber: { type: "string" },
-              source: { type: "string", enum: ["COMPRAS_GOV", "COMPRAS_GOV_IMPORT_FALLBACK"] },
-              registeredQuantity: { type: "string" },
-              committedQuantity: { type: "string" },
-              availableQuantity: { type: "string" },
-              commitments: {
-                type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    numeroEmpenho: { type: "string", nullable: true },
-                    unidade: { type: "string", nullable: true },
-                    tipoUnidade: { type: "string", nullable: true },
-                    fornecedor: { type: "string", nullable: true },
-                    dataEmpenho: { type: "string", format: "date-time", nullable: true },
-                    quantidadeIncluida: { type: "string", nullable: true },
-                    quantidadeEmpenhada: { type: "string", nullable: true },
-                    estimatedAmount: { type: "string", nullable: true },
-                    affectsManagedBalance: { type: "boolean" },
-                    rawKeyDebug: {
-                      type: "object",
-                      nullable: true,
-                      properties: {
-                        availableKeys: {
-                          type: "array",
-                          items: { type: "string" },
-                        },
-                        sourceEndpoint: { type: "string" },
-                        item: { type: "string", nullable: true },
-                        unidade: { type: "string", nullable: true },
-                      },
-                    },
-                  },
-                },
-              },
-              lastUpdatedAt: { type: "string", format: "date-time", nullable: true },
-              rawRecords: { type: "integer" },
-            },
-          },
-          difference: { type: "string", nullable: true },
-          lastSyncAt: { type: "string", format: "date-time", nullable: true },
-          status: {
-            type: "string",
-            enum: [
-              "OK",
-              "DIVERGENTE",
-              "CONSUMO_OFICIAL_DETECTADO",
-              "NAO_SINCRONIZADO",
-              "NAO_ENCONTRADO",
-              "ERRO_CONSULTA_EXTERNA",
-              "RATE_LIMIT_COMPRAS_GOV",
-            ],
-          },
-          externalError: {
-            type: "object",
-            nullable: true,
-            properties: {
-              status: { type: "integer", nullable: true },
-              url: { type: "string", nullable: true },
-              body: { type: "string", nullable: true },
-              retryAfterSeconds: { type: "integer", nullable: true },
-            },
-          },
-        },
-      },
-      ComprasGovExternalBalanceComparison: {
-        type: "object",
-        properties: {
-          source: { type: "string", enum: ["COMPRAS_GOV"] },
-          ata: {
-            type: "object",
-            properties: {
-              id: { type: "string" },
-              ataCode: { type: "integer" },
-              number: { type: "string" },
-              externalUasg: { type: "string", nullable: true },
-              externalPregaoNumber: { type: "string", nullable: true },
-              externalPregaoYear: { type: "string", nullable: true },
-              externalAtaNumber: { type: "string", nullable: true },
-              externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
-            },
-          },
-          comparedAt: { type: "string", format: "date-time" },
-          summary: {
-            type: "object",
-            properties: {
-              totalItems: { type: "integer" },
-              ok: { type: "integer" },
-              divergent: { type: "integer" },
-              externalConsumptionDetected: { type: "integer" },
-              naoSincronizado: { type: "integer" },
-              notFound: { type: "integer" },
-              externalQueryErrors: { type: "integer" },
-              rateLimitErrors: { type: "integer" },
-              semEmpenhoRegistrado: { type: "integer" },
-            },
-          },
-          items: {
-            type: "array",
-            items: { $ref: "#/components/schemas/ComprasGovExternalBalanceComparisonItem" },
-          },
-          warnings: {
-            type: "array",
-            items: { type: "string" },
-          },
-          retryAfterSeconds: { type: "integer", nullable: true },
-          debug: {
-            type: "array",
-            nullable: true,
-            items: {
-              type: "object",
-              additionalProperties: true,
-            },
-          },
-        },
-      },
-      ComprasGovExternalBalanceSyncResponse: {
-        allOf: [
-          { $ref: "#/components/schemas/ComprasGovExternalBalanceComparison" },
-          {
-            type: "object",
-            properties: {
-              syncedAt: { type: "string", format: "date-time", nullable: true },
-              updatedItems: { type: "integer" },
-              warnings: {
-                type: "array",
-                items: { type: "string" },
-              },
-            },
-          },
-        ],
       },
       MilitaryOrganization: {
         type: "object",
@@ -2907,6 +2863,29 @@ export const openApiDocument: OpenApiDocument = {
           isActive: false,
         },
       },
+      MilitaryOrganizationsCsvRequest: {
+        type: "object",
+        required: ["content", "mode"],
+        properties: {
+          content: { type: "string", description: "CSV UTF-8 com cabeçalhos sigla, nome, cidade, uf e ativo opcional." },
+          mode: { type: "string", enum: ["CREATE_ONLY", "UPSERT"] },
+        },
+      },
+      MilitaryOrganizationsCsvPreview: {
+        type: "object",
+        properties: {
+          mode: { type: "string", enum: ["CREATE_ONLY", "UPSERT"] },
+          rows: { type: "array", items: { type: "object", additionalProperties: true } },
+          summary: { type: "object", additionalProperties: true },
+        },
+      },
+      MilitaryOrganizationsCsvImportResponse: {
+        type: "object",
+        properties: {
+          message: { type: "string" }, imported: { type: "integer" }, total: { type: "integer" },
+          create: { type: "integer" }, update: { type: "integer" }, unchanged: { type: "integer" }, skipped: { type: "integer" }, invalid: { type: "integer" },
+        },
+      },
       MilitaryOrganizationListEnvelope: {
         type: "object",
         properties: {
@@ -2930,6 +2909,243 @@ export const openApiDocument: OpenApiDocument = {
           status: { type: "string", enum: ["ok"] },
           timestamp: { type: "string", format: "date-time" },
         },
+      },
+      SystemSettings: {
+        type: "object",
+        required: ["organizationName", "organizationAcronym", "uasg", "management", "commandName", "timeZone", "portalTransparenciaBaseUrl", "portalSyncIntervalMinutes", "portalSyncOnStartup", "comprasGovBaseUrl", "pncpBaseUrl"],
+        properties: {
+          organizationName: { type: "string" }, organizationAcronym: { type: "string" },
+          uasg: { type: "string", pattern: "^\\d{6}$" }, management: { type: "string", pattern: "^\\d{5}$" },
+          commandName: { type: "string" }, timeZone: { type: "string" },
+          portalTransparenciaBaseUrl: { type: "string", format: "uri" }, portalSyncIntervalMinutes: { type: "integer", minimum: 15 }, portalSyncOnStartup: { type: "boolean" },
+          comprasGovBaseUrl: { type: "string", format: "uri" }, pncpBaseUrl: { type: "string", format: "uri" }, defaultBiddingNumber: { type: ["string", "null"] }, defaultBiddingYear: { type: ["integer", "null"] },
+          defaultImmediateCommitment: { type: "boolean" }, defaultEstimateGroup: { type: "string" },
+          portalApiToken: { $ref: "#/components/schemas/PortalApiTokenStatus" }, connections: { type: "object", additionalProperties: true },
+        },
+      },
+      PortalApiTokenStatus: {
+        type: "object",
+        required: ["configured", "source"],
+        properties: {
+          configured: { type: "boolean" },
+          source: { type: ["string", "null"], enum: ["DATABASE", "ENVIRONMENT", null] },
+          updatedAt: { type: ["string", "null"], format: "date-time" },
+          encryption: { type: ["string", "null"], enum: ["DEDICATED", "DERIVED", null] },
+        },
+      },
+      PortalApiTokenWriteRequest: {
+        type: "object",
+        required: ["token"],
+        properties: { token: { type: "string", minLength: 8, maxLength: 512, writeOnly: true } },
+      },
+      PortalApiTokenStatusResponse: {
+        type: "object",
+        required: ["portalApiToken"],
+        properties: { portalApiToken: { $ref: "#/components/schemas/PortalApiTokenStatus" } },
+      },
+      DeploymentSettings: {
+        type: "object",
+        properties: {
+          id: { type: "string" }, hostName: { type: ["string", "null"] }, expectedIp: { type: ["string", "null"] },
+          gateway: { type: ["string", "null"] }, dnsServers: { type: "array", items: { type: "string" } },
+          ntpServers: { type: "array", items: { type: "string" } }, allowedNetworks: { type: "array", items: { type: "string" } },
+          proxyUrl: { type: ["string", "null"] }, certificateMode: { type: "string", enum: ["INTERNAL_CA"] },
+          certificate: { $ref: "#/components/schemas/CertificateStatus" }, updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      CertificateStatus: {
+        type: "object",
+        required: ["configured", "toolAvailable", "status", "renewalAutomation"],
+        properties: {
+          configured: { type: "boolean" }, toolAvailable: { type: "boolean" },
+          status: { type: "string", enum: ["NOT_CONFIGURED", "VALID", "EXPIRING", "EXPIRED", "INVALID"] },
+          subject: { type: "string" }, issuer: { type: "string" }, validFrom: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time" }, daysRemaining: { type: "integer" },
+          fingerprintSha256: { type: "string" }, rootFingerprintSha256: { type: "string" },
+          proxyRestartRequired: { type: "boolean" },
+          renewalAutomation: {
+            type: "object",
+            required: ["enabled", "renewBeforeDays", "checkIntervalHours", "proxyReloadMode", "lastCheckedAt", "lastAttemptAt", "lastRenewedAt", "lastResult", "lastErrorCode"],
+            properties: {
+              enabled: { type: "boolean" },
+              renewBeforeDays: { type: "integer", minimum: 15, maximum: 60 },
+              checkIntervalHours: { type: "integer", minimum: 1, maximum: 168 },
+              proxyReloadMode: { type: "string", enum: ["AUTOMATIC", "MANUAL"] },
+              lastCheckedAt: { type: ["string", "null"], format: "date-time" },
+              lastAttemptAt: { type: ["string", "null"], format: "date-time" },
+              lastRenewedAt: { type: ["string", "null"], format: "date-time" },
+              lastResult: { type: "string", enum: ["NEVER_RUN", "NOT_CONFIGURED", "NOT_DUE", "RENEWED", "FAILED"] },
+              lastErrorCode: { type: ["string", "null"] },
+            },
+          },
+          renewalAlert: {
+            type: ["object", "null"],
+            properties: {
+              thresholdDays: { type: "integer", enum: [60, 30, 15, 7, 0] },
+              severity: { type: "string", enum: ["INFO", "WARNING", "CRITICAL"] },
+              label: { type: "string" },
+            },
+          },
+        },
+      },
+      DeploymentDiagnostics: {
+        type: "object",
+        additionalProperties: true,
+      },
+      DeploymentPreflight: {
+        type: "object",
+        required: ["checkedAt", "status", "counts", "checks"],
+        properties: {
+          checkedAt: { type: "string", format: "date-time" },
+          status: { type: "string", enum: ["READY", "ATTENTION", "BLOCKED"] },
+          counts: {
+            type: "object", required: ["pass", "warn", "fail"],
+            properties: { pass: { type: "integer", minimum: 0 }, warn: { type: "integer", minimum: 0 }, fail: { type: "integer", minimum: 0 } },
+          },
+          checks: {
+            type: "array",
+            items: {
+              type: "object", required: ["id", "category", "label", "status", "message"],
+              properties: {
+                id: { type: "string" },
+                category: { type: "string", enum: ["RUNTIME", "SECURITY", "NETWORK", "STORAGE", "CERTIFICATE", "DATABASE"] },
+                label: { type: "string" }, status: { type: "string", enum: ["PASS", "WARN", "FAIL"] },
+                message: { type: "string" }, remediation: { type: "string" },
+              },
+            },
+          },
+        },
+      },
+      SetupStatus: {
+        type: "object",
+        required: ["requiresSetup", "setupTokenConfigured"],
+        properties: {
+          requiresSetup: { type: "boolean" },
+          setupTokenConfigured: { type: "boolean" },
+          setupTokenGenerated: { type: "boolean" },
+        },
+      },
+      InitializeSetupRequest: {
+        type: "object",
+        required: ["setupToken", "administrator", "organization", "network"],
+        properties: {
+          setupToken: { type: "string", minLength: 32, writeOnly: true },
+          administrator: {
+            type: "object", required: ["name", "email", "password"],
+            properties: { name: { type: "string" }, email: { type: "string", format: "email" }, password: { type: "string", minLength: 12, writeOnly: true } },
+          },
+          organization: {
+            type: "object", required: ["name", "acronym", "cityName", "stateUf", "uasg", "management", "timeZone", "commandName"],
+            properties: {
+              name: { type: "string" }, acronym: { type: "string" }, cityName: { type: "string" }, stateUf: { type: "string", enum: ["AM", "RO", "RR", "AC"] },
+              uasg: { type: "string", pattern: "^\\d{6}$" }, management: { type: "string", pattern: "^\\d{5}$" }, timeZone: { type: "string" }, commandName: { type: "string" },
+            },
+          },
+          network: { type: "object", additionalProperties: true },
+        },
+      },
+      InitializeSetupResponse: {
+        type: "object",
+        required: ["initialized", "administrator", "organization"],
+        properties: { initialized: { type: "boolean", enum: [true] }, administrator: { type: "object", additionalProperties: true }, organization: { type: "object", additionalProperties: true } },
+      },
+      InitializeInternalCertificateRequest: {
+        type: "object",
+        required: ["hostName"],
+        properties: { hostName: { type: "string", example: "sagep.4cta.eb.mil.br" }, rotate: { type: "boolean", default: false } },
+      },
+      ExportAuthorityBackupRequest: {
+        type: "object",
+        required: ["passphrase", "passphraseConfirmation"],
+        properties: {
+          passphrase: { type: "string", minLength: 20, maxLength: 256, writeOnly: true },
+          passphraseConfirmation: { type: "string", minLength: 20, maxLength: 256, writeOnly: true },
+        },
+      },
+      RestoreAuthorityBackupRequest: {
+        type: "object",
+        required: ["archiveBase64", "passphrase", "confirmation"],
+        properties: {
+          archiveBase64: { type: "string", format: "byte", maxLength: 1500000, writeOnly: true },
+          passphrase: { type: "string", minLength: 20, maxLength: 256, writeOnly: true },
+          confirmation: { type: "string", enum: ["RESTAURAR AUTORIDADE"] },
+        },
+      },
+      RestoreAuthorityBackupResponse: {
+        allOf: [
+          { $ref: "#/components/schemas/CertificateStatus" },
+          {
+            type: "object",
+            required: ["proxyRestartRequired", "trustRedistributionRequired", "recoveryFilename"],
+            properties: {
+              proxyRestartRequired: { type: "boolean" },
+              trustRedistributionRequired: { type: "boolean" },
+              recoveryFilename: { type: ["string", "null"] },
+            },
+          },
+        ],
+      },
+      DatabaseBackup: {
+        type: "object",
+        required: ["id", "kind", "filename", "createdAt", "sizeBytes", "checksumSha256", "format", "verified"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          kind: { type: "string", enum: ["MANUAL", "AUTOMATIC", "IMPORTED", "SAFETY"] },
+          filename: { type: "string" },
+          originalFilename: { type: ["string", "null"] },
+          createdAt: { type: "string", format: "date-time" },
+          createdBy: { type: ["string", "null"] },
+          sizeBytes: { type: "integer", minimum: 1 },
+          checksumSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          databaseName: { type: "string" },
+          format: { type: "string", enum: ["POSTGRES_CUSTOM"] },
+          verified: { type: "boolean" },
+        },
+      },
+      BackupsOverview: {
+        type: "object",
+        properties: {
+          items: { type: "array", items: { $ref: "#/components/schemas/DatabaseBackup" } },
+          summary: { type: "object", additionalProperties: true },
+          policy: { type: "object", additionalProperties: true },
+          operationRunning: { type: "boolean" },
+        },
+      },
+      RestoreDatabaseRequest: {
+        type: "object",
+        required: ["confirmation"],
+        properties: { confirmation: { type: "string", enum: ["RESTAURAR BANCO"] } },
+      },
+      RestoreDatabaseResponse: {
+        type: "object",
+        required: ["message", "restoredAt", "restoredBackup", "safetyBackup"],
+        properties: {
+          message: { type: "string" },
+          restoredAt: { type: "string", format: "date-time" },
+          restoredBackup: { $ref: "#/components/schemas/DatabaseBackup" },
+          safetyBackup: { $ref: "#/components/schemas/DatabaseBackup" },
+        },
+      },
+      SelectiveDatabaseExportRequest: {
+        type: "object",
+        required: ["modules"],
+        properties: {
+          modules: {
+            type: "array",
+            minItems: 1,
+            uniqueItems: true,
+            items: { type: "string", enum: ["PROJECTS", "ATAS", "USERS", "SETTINGS", "AUDIT"] },
+          },
+        },
+      },
+      IntegrationConnectionCheck: {
+        type: "object",
+        properties: { provider: { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV", "PNCP"] }, status: { type: "string", enum: ["OPERATIONAL", "DEGRADED", "UNAVAILABLE", "NOT_CONFIGURED"] }, latencyMs: { type: ["integer", "null"] }, httpStatus: { type: ["integer", "null"] }, message: { type: "string" }, checkedAt: { type: "string", format: "date-time" } },
+      },
+      PncpAtaSyncResponse: {
+        type: "object",
+        description: "Metadados da ATA atualizados no PNCP, sem interferência no saldo operacional do SAGEP.",
+        additionalProperties: true,
       },
       HealthComponent: {
         type: "object",
@@ -2998,6 +3214,21 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
+    "/setup/status": {
+      get: {
+        tags: ["setup"],
+        summary: "Verificar se a instalação inicial é necessária",
+        responses: { "200": okJson("#/components/schemas/SetupStatus") },
+      },
+    },
+    "/setup/initialize": {
+      post: {
+        tags: ["setup"],
+        summary: "Inicializar a OM e o primeiro administrador uma única vez",
+        requestBody: { required: true, content: jsonContent("#/components/schemas/InitializeSetupRequest") },
+        responses: { "201": createdJson("#/components/schemas/InitializeSetupResponse"), ...defaultErrorResponses },
+      },
+    },
     "/health/status": {
       get: {
         tags: ["health"],
@@ -3042,6 +3273,8 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["auth"],
         summary: "Autenticar usuario",
+        description:
+          "Normaliza o e-mail, aplica limites por IP e conta e bloqueia temporariamente a conta após falhas consecutivas.",
         requestBody: {
           required: true,
           content: {
@@ -3051,7 +3284,7 @@ export const openApiDocument: OpenApiDocument = {
                 required: ["email", "password"],
                 properties: {
                   email: { type: "string", format: "email" },
-                  password: { type: "string", minLength: 1 },
+                  password: { type: "string", minLength: 1, maxLength: 128 },
                 },
               },
             },
@@ -3061,6 +3294,7 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/AuthTokensResponse"),
           "400": { $ref: "#/components/responses/BadRequest" },
           "401": { $ref: "#/components/responses/Unauthorized" },
+          "429": { $ref: "#/components/responses/TooManyRequests" },
         },
       },
     },
@@ -3071,6 +3305,24 @@ export const openApiDocument: OpenApiDocument = {
         security: bearerSecurity,
         responses: {
           "200": okJson("#/components/schemas/UserSummary"),
+          "401": { $ref: "#/components/responses/Unauthorized" },
+        },
+      },
+    },
+    "/auth/reauthenticate": {
+      post: {
+        tags: ["auth"],
+        summary: "Confirmar senha para operação crítica",
+        description:
+          "Emite autorização reforçada curta, vinculada ao usuário autenticado. Sucessos e falhas são auditados.",
+        security: bearerSecurity,
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/ReauthenticateRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/StepUpResponse"),
+          "400": { $ref: "#/components/responses/BadRequest" },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
       },
@@ -3113,22 +3365,9 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["auth"],
         summary: "Rotacionar refresh token",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                required: ["refreshToken"],
-                properties: {
-                  refreshToken: { type: "string" },
-                },
-              },
-            },
-          },
-        },
+        description: "Usa e rotaciona o refresh token mantido em cookie HttpOnly.",
         responses: {
-          "200": okJson("#/components/schemas/AuthTokensResponse"),
+          "200": okJson("#/components/schemas/RefreshResponse"),
           "400": { $ref: "#/components/responses/BadRequest" },
           "401": { $ref: "#/components/responses/Unauthorized" },
         },
@@ -3138,20 +3377,7 @@ export const openApiDocument: OpenApiDocument = {
       post: {
         tags: ["auth"],
         summary: "Revogar refresh token atual",
-        requestBody: {
-          required: true,
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                required: ["refreshToken"],
-                properties: {
-                  refreshToken: { type: "string" },
-                },
-              },
-            },
-          },
-        },
+        description: "Revoga a sessão identificada pelo cookie HttpOnly e remove o cookie.",
         responses: {
           "200": okJson("#/components/schemas/MessageResponse", "Logout realizado"),
           "400": { $ref: "#/components/responses/BadRequest" },
@@ -3196,8 +3422,10 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["auth"],
         summary: "Revogar todas as sessoes proprias",
         security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/StepUpToken" }],
         responses: {
           "200": okJson("#/components/schemas/MessageResponse", "Sessoes revogadas"),
+          ...stepUpErrorResponse,
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_own"],
@@ -3232,9 +3460,11 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [
           pathIdParameter("userId", "Identificador do usuario."),
           { $ref: "#/components/parameters/SessionId" },
+          { $ref: "#/components/parameters/StepUpToken" },
         ],
         responses: {
           "200": okJson("#/components/schemas/MessageResponse", "Sessao revogada"),
+          ...stepUpErrorResponse,
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -3245,9 +3475,13 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["auth"],
         summary: "Revogar todas as sessoes de outro usuario",
         security: bearerSecurity,
-        parameters: [pathIdParameter("userId", "Identificador do usuario.")],
+        parameters: [
+          pathIdParameter("userId", "Identificador do usuario."),
+          { $ref: "#/components/parameters/StepUpToken" },
+        ],
         responses: {
           "200": okJson("#/components/schemas/MessageResponse", "Sessoes revogadas"),
+          ...stepUpErrorResponse,
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -3258,12 +3492,14 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["auth"],
         summary: "Executar limpeza administrativa de sessoes e auditoria",
         security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/StepUpToken" }],
         requestBody: {
           required: true,
           content: jsonContent("#/components/schemas/CleanupSessionsRequest"),
         },
         responses: {
           "200": okJson("#/components/schemas/CleanupSessionsResponse"),
+          ...stepUpErrorResponse,
           ...defaultErrorResponses,
         },
         "x-permissions": ["sessions.manage_all"],
@@ -3761,6 +3997,42 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["tasks.edit_all", "tasks.edit_own", "tasks.complete"],
+      },
+    },
+    "/tasks/{id}/activities": {
+      post: {
+        tags: ["tasks"],
+        summary: "Registrar andamento da tarefa",
+        description: "Registra autor, data e hora. Se a tarefa estiver pendente, inicia automaticamente.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        requestBody: {
+          required: true,
+          content: jsonContent("#/components/schemas/TaskActivityCreateRequest"),
+        },
+        responses: {
+          "201": createdJson("#/components/schemas/Task", "Andamento registrado"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["tasks.edit_all", "tasks.edit_own", "tasks.complete"],
+      },
+    },
+    "/tasks/{id}/complete": {
+      post: {
+        tags: ["tasks"],
+        summary: "Concluir tarefa",
+        description: "Encerra a tarefa e registra o responsável, a data, a hora e a observação final.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/TaskId" }],
+        requestBody: {
+          required: false,
+          content: jsonContent("#/components/schemas/TaskCompleteRequest"),
+        },
+        responses: {
+          "200": okJson("#/components/schemas/Task", "Tarefa concluída"),
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["tasks.complete", "tasks.edit_all", "tasks.edit_own"],
       },
     },
     "/tasks/{id}/restore": {
@@ -4460,6 +4732,174 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
       },
+      delete: {
+        tags: ["operational-alerts"],
+        summary: "Limpar todas as notificações visíveis do usuário",
+        security: bearerSecurity,
+        responses: {
+          "200": okJson("#/components/schemas/ArchiveResponse"),
+          ...defaultErrorResponses,
+        },
+      },
+    },
+    "/operational-alerts/{notificationKey}": {
+      delete: {
+        tags: ["operational-alerts"],
+        summary: "Limpar uma notificação do usuário",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("notificationKey", "Chave estável da notificação")],
+        responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses },
+      },
+    },
+    "/system-settings": {
+      get: { tags: ["settings"], summary: "Consultar integrações e parâmetros institucionais", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
+      put: withStepUp({ tags: ["settings"], summary: "Atualizar integrações e parâmetros institucionais", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SystemSettings") }, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
+    },
+    "/system-settings/connections/test": {
+      post: withStepUp({ tags: ["settings"], summary: "Testar todas as conexões configuradas", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
+    },
+    "/system-settings/portal-api-token": {
+      put: withStepUp({ tags: ["settings"], summary: "Cadastrar ou substituir o token protegido do Portal da Transparência", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/PortalApiTokenWriteRequest") }, responses: { "200": okJson("#/components/schemas/PortalApiTokenStatusResponse"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
+      delete: withStepUp({ tags: ["settings"], summary: "Remover o token protegido armazenado", description: "Se houver token no ambiente, ele volta a ser a fonte efetiva.", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/PortalApiTokenStatusResponse"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
+    },
+    "/system-settings/connections/{provider}/test": {
+      post: withStepUp({ tags: ["settings"], summary: "Testar uma conexão configurada", security: bearerSecurity, parameters: [pathIdParameter("provider", "Integração", { type: "string", enum: ["DATABASE", "PORTAL_TRANSPARENCIA", "COMPRAS_GOV"] })], responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
+    },
+    "/deployment": {
+      get: { tags: ["deployment"], summary: "Consultar parâmetros de rede e estado HTTPS", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/DeploymentSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
+      put: withStepUp({ tags: ["deployment"], summary: "Atualizar parâmetros esperados da implantação", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/DeploymentSettings") }, responses: { "200": okJson("#/components/schemas/DeploymentSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/diagnostics": {
+      get: { tags: ["deployment"], summary: "Comparar rede observada com parâmetros esperados", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/DeploymentDiagnostics"), ...defaultErrorResponses }, "x-permissions": ["system_health.view_details"] },
+    },
+    "/deployment/preflight": {
+      get: { tags: ["deployment"], summary: "Verificar prontidão segura da implantação", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/DeploymentPreflight"), ...defaultErrorResponses }, "x-permissions": ["system_health.view_details"] },
+    },
+    "/deployment/certificate/internal": {
+      post: withStepUp({ tags: ["deployment"], summary: "Inicializar ou rotacionar a autoridade interna da OM", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/InitializeInternalCertificateRequest") }, responses: { "201": createdJson("#/components/schemas/CertificateStatus"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/certificate/renew": {
+      post: withStepUp({ tags: ["deployment"], summary: "Renovar o certificado do servidor preservando a autoridade da OM", security: bearerSecurity, responses: { "201": createdJson("#/components/schemas/CertificateStatus"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/certificate/authority/export": {
+      post: withStepUp({ tags: ["deployment"], summary: "Exportar backup criptografado da autoridade interna", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/ExportAuthorityBackupRequest") }, responses: { "200": { description: "Arquivo criptografado da autoridade", content: binaryContent("application/octet-stream") }, ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/certificate/authority/restore": {
+      post: withStepUp({ tags: ["deployment"], summary: "Restaurar autoridade interna e reemitir o certificado do servidor", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/RestoreAuthorityBackupRequest") }, responses: { "200": okJson("#/components/schemas/RestoreAuthorityBackupResponse"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/deployment/trust-kit/{platform}": {
+      get: withStepUp({ tags: ["deployment"], summary: "Baixar kit de confiança para uma plataforma cliente", security: bearerSecurity, parameters: [pathIdParameter("platform", "Plataforma cliente", { type: "string", enum: ["windows", "linux"] })], responses: { "200": { description: "Arquivo ZIP com certificado, scripts e impressão digital", content: binaryContent("application/zip") }, ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/backups": {
+      get: { tags: ["backups"], summary: "Listar backups e política de retenção", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/BackupsOverview"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] },
+      post: withStepUp({ tags: ["backups"], summary: "Criar e verificar backup completo do PostgreSQL", security: bearerSecurity, responses: { "201": createdJson("#/components/schemas/DatabaseBackup"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/backups/import": {
+      post: withStepUp({ tags: ["backups"], summary: "Importar e validar arquivo .dump do SAGEP", security: bearerSecurity, requestBody: { required: true, content: binaryContent("application/octet-stream") }, responses: { "201": createdJson("#/components/schemas/DatabaseBackup"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/backups/export": {
+      post: withStepUp({ tags: ["backups"], summary: "Exportar dados selecionados em SQL", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SelectiveDatabaseExportRequest") }, responses: { "200": { description: "Arquivo SQL", content: binaryContent("application/sql") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/backups/{id}/download": {
+      get: withStepUp({ tags: ["backups"], summary: "Baixar backup com verificação de integridade", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": { description: "Arquivo PostgreSQL custom", content: binaryContent("application/octet-stream") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/backups/{id}/restore": {
+      post: withStepUp({ tags: ["backups"], summary: "Restaurar integralmente o banco com backup de segurança prévio", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], requestBody: { required: true, content: jsonContent("#/components/schemas/RestoreDatabaseRequest") }, responses: { "200": okJson("#/components/schemas/RestoreDatabaseResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+      delete: withStepUp({ tags: ["backups"], summary: "Excluir backup armazenado", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/financial-execution/commitment-notes": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Listar Notas de Empenho rastreadas",
+        security: bearerSecurity,
+        parameters: [
+          { $ref: "#/components/parameters/Page" },
+          { $ref: "#/components/parameters/PageSize" },
+          queryParameter("search", "NE, fornecedor, CNPJ ou projeto", { type: "string" }),
+          queryParameter("financialStatus", "Situação financeira", { type: "string", enum: ["NAO_LIQUIDADA", "PARCIALMENTE_LIQUIDADA", "LIQUIDADA", "PARCIALMENTE_PAGA", "PAGA", "PARCIALMENTE_ANULADA", "ANULADA"] }),
+          queryParameter("syncStatus", "Situação da validação externa", { type: "string", enum: ["VALIDADO", "DIVERGENTE", "NAO_VALIDADO", "ERRO"] }),
+        ],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteListResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+      post: {
+        tags: ["financial-execution"],
+        summary: "Validar no Portal ou registrar manualmente uma Nota de Empenho",
+        description: "No modo MANUAL, exige justificativa e confirmação explícita e registra a NE como não validada, preservando a trilha de auditoria.",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteRegisterRequest") },
+        responses: { "201": createdJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
+      },
+    },
+    "/financial-execution/commitment-notes/preview": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Consultar e comparar uma NE no Portal da Transparência",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteLookupRequest") },
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
+      },
+    },
+    "/financial-execution/commitment-notes/lookup": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Consultar uma NE avulsa sem vinculá-la a projeto",
+        description: "Consulta a fonte oficial e informa quando o documento já está cadastrado no SAGEP. Não persiste nem altera o workflow.",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/CommitmentNoteStandaloneLookupRequest") },
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteStandaloneLookupResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+    },
+    "/financial-execution/commitment-notes/{id}": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Detalhar NE, documentos relacionados e NFe",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("id", "Identificador da Nota de Empenho")],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+    },
+    "/financial-execution/commitment-notes/{id}/sync": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Sincronizar uma NE com o Portal da Transparência",
+        security: bearerSecurity,
+        parameters: [pathIdParameter("id", "Identificador da Nota de Empenho")],
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.sync"],
+      },
+    },
+    "/financial-execution/sync": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Sincronizar todas as NEs ativas",
+        security: bearerSecurity,
+        responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.sync"],
+      },
+    },
+    "/financial-execution/summary": {
+      get: {
+        tags: ["financial-execution"],
+        summary: "Resumo da execução financeira",
+        security: bearerSecurity,
+        responses: { "200": okJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.view"],
+      },
+    },
+    "/financial-execution/invoices": {
+      post: {
+        tags: ["financial-execution"],
+        summary: "Registrar e conferir NFe do projeto",
+        security: bearerSecurity,
+        requestBody: { required: true, content: jsonContent("#/components/schemas/InvoiceCreateRequest") },
+        responses: { "201": createdJson("#/components/schemas/CommitmentNoteResponse"), ...defaultErrorResponses },
+        "x-permissions": ["financial_execution.manage"],
+      },
     },
     "/exports/projects.xlsx": {
       get: {
@@ -4699,7 +5139,7 @@ export const openApiDocument: OpenApiDocument = {
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
-      post: {
+      post: withStepUp({
         tags: ["users"],
         summary: "Criar usuario administrativo",
         description:
@@ -4715,7 +5155,7 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
-      },
+      }),
     },
     "/users/options": {
       get: {
@@ -4754,7 +5194,7 @@ export const openApiDocument: OpenApiDocument = {
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
       },
-      patch: {
+      patch: withStepUp({
         tags: ["users"],
         summary: "Atualizar dados cadastrais de usuario",
         description: "Atualiza name, warName, email, rank e cpf. Somente ADMIN.",
@@ -4770,10 +5210,10 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
-      },
+      }),
     },
     "/users/{id}/status": {
-      patch: {
+      patch: withStepUp({
         tags: ["users"],
         summary: "Atualizar status de usuario",
         description:
@@ -4790,10 +5230,10 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
-      },
+      }),
     },
     "/users/{id}/role": {
-      patch: {
+      patch: withStepUp({
         tags: ["users"],
         summary: "Atualizar role de usuario",
         description:
@@ -4810,7 +5250,7 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-roles": ["ADMIN"],
         "x-permissions": ["users.manage"],
-      },
+      }),
     },
     "/permissions/catalog": {
       get: {
@@ -4840,7 +5280,7 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-permissions": ["permissions.view"],
       },
-      put: {
+      put: withStepUp({
         tags: ["permissions"],
         summary: "Atualizar permissões base de uma role",
         description:
@@ -4856,7 +5296,7 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_role_permissions"],
-      },
+      }),
     },
     "/permissions/users": {
       get: {
@@ -4901,7 +5341,7 @@ export const openApiDocument: OpenApiDocument = {
       },
     },
     "/permissions/users/{id}/overrides/allow": {
-      post: {
+      post: withStepUp({
         tags: ["permissions"],
         summary: "Aplicar override ALLOW para um usuário",
         description:
@@ -4917,10 +5357,10 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_user_overrides"],
-      },
+      }),
     },
     "/permissions/users/{id}/overrides/deny": {
-      post: {
+      post: withStepUp({
         tags: ["permissions"],
         summary: "Aplicar override DENY para um usuário",
         description:
@@ -4936,10 +5376,10 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_user_overrides"],
-      },
+      }),
     },
     "/permissions/users/{id}/overrides/{permissionCode}": {
-      delete: {
+      delete: withStepUp({
         tags: ["permissions"],
         summary: "Remover override de permissão de um usuário",
         description:
@@ -4954,7 +5394,7 @@ export const openApiDocument: OpenApiDocument = {
           ...defaultErrorResponses,
         },
         "x-permissions": ["permissions.manage_user_overrides"],
-      },
+      }),
     },
     "/atas": {
       get: {
@@ -4982,9 +5422,6 @@ export const openApiDocument: OpenApiDocument = {
             enum: ["AM", "RO", "RR", "AC"],
           }),
           queryParameter("active", "Filtrar atas ativas.", { type: "boolean" }),
-          queryParameter("includeArchived", "Incluir atas arquivadas na listagem.", {
-            type: "boolean",
-          }),
           queryParameter("search", "Busca textual.", { type: "string" }),
         ],
         responses: {
@@ -5096,20 +5533,25 @@ export const openApiDocument: OpenApiDocument = {
       },
       delete: {
         tags: ["atas"],
-        summary: "Excluir ou arquivar ATA com segurança",
+        summary: "Excluir ata inativa sem histórico",
         description:
-          "Exclui fisicamente a ATA apenas quando nao houver vinculos importantes. Quando houver itens, estimativas, movimentacoes, snapshots externos ou documentos vinculados, marca a ATA como arquivada/inativa e preserva o historico.",
+          "Exige inativação prévia e bloqueia a exclusão quando houver estimativas ou movimentações de saldo vinculadas, preservando a rastreabilidade operacional.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
-        requestBody: {
-          required: false,
-          content: jsonContent("#/components/schemas/AtaDeleteRequest"),
-        },
         responses: {
-          "200": okJson("#/components/schemas/AtaDeleteResponse"),
+          "200": okJson("#/components/schemas/MessageResponse", "Ata removida"),
           ...defaultErrorResponses,
         },
-        "x-roles": ["ADMIN", "GESTOR"],
+        "x-permissions": ["atas.manage"],
+      },
+    },
+    "/atas/{id}/sync-pncp": {
+      post: {
+        tags: ["atas"],
+        summary: "Atualizar metadados da ATA no PNCP",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: { "200": okJson("#/components/schemas/PncpAtaSyncResponse"), ...defaultErrorResponses },
         "x-permissions": ["atas.manage"],
       },
     },
@@ -5281,25 +5723,6 @@ export const openApiDocument: OpenApiDocument = {
         },
       },
     },
-    "/ata-items/{id}/register-external-consumption": {
-      post: {
-        tags: ["ata-items"],
-        summary: "Registrar consumo externo de saldo",
-        description:
-          "Registra consumo confirmado fora do fluxo local, preservando justificativa, origem, referência externa e trilha de auditoria.",
-        security: bearerSecurity,
-        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
-        requestBody: {
-          required: true,
-          content: jsonContent("#/components/schemas/AtaItemRegisterExternalConsumptionRequest"),
-        },
-        responses: {
-          "200": okJson("#/components/schemas/AtaItemRegisterExternalConsumptionResponse"),
-          ...defaultErrorResponses,
-        },
-        "x-permissions": ["atas.manage"],
-      },
-    },
     "/ata-items/{id}": {
       get: {
         tags: ["ata-items"],
@@ -5420,6 +5843,15 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-permissions": ["military_organizations.manage"],
       },
+    },
+    "/military-organizations/import/template": {
+      get: { tags: ["military-organizations"], summary: "Baixar modelo CSV para importação de OMs", security: bearerSecurity, responses: { "200": { description: "Modelo CSV UTF-8", content: binaryContent("text/csv") }, ...defaultErrorResponses }, "x-permissions": ["military_organizations.manage"] },
+    },
+    "/military-organizations/import/preview": {
+      post: { tags: ["military-organizations"], summary: "Validar CSV e prever criação, atualização ou descarte", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/MilitaryOrganizationsCsvRequest") }, responses: { "200": okJson("#/components/schemas/MilitaryOrganizationsCsvPreview"), ...defaultErrorResponses }, "x-permissions": ["military_organizations.manage"] },
+    },
+    "/military-organizations/import": {
+      post: { tags: ["military-organizations"], summary: "Importar OMs válidas após nova validação do CSV", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/MilitaryOrganizationsCsvRequest") }, responses: { "200": okJson("#/components/schemas/MilitaryOrganizationsCsvImportResponse"), ...defaultErrorResponses }, "x-permissions": ["military_organizations.manage"] },
     },
     "/military-organizations/{id}": {
       get: {

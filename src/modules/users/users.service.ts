@@ -54,6 +54,7 @@ const adminUserSelect = {
   id: true,
   userCode: true,
   name: true,
+  avatarDataUrl: true,
   warName: true,
   email: true,
   role: true,
@@ -113,6 +114,7 @@ export class UsersService {
         id: true,
         userCode: true,
         name: true,
+        avatarDataUrl: true,
         warName: true,
         email: true,
         role: true,
@@ -264,6 +266,10 @@ export class UsersService {
       where: { id: userId },
       data: {
         active: data.active,
+        ...(data.active === true && {
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        }),
       },
       select: adminUserSelect,
     });

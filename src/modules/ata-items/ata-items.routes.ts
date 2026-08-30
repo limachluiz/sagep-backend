@@ -11,14 +11,12 @@ ataItemsRoutes.use(authMiddleware);
 ataItemsRoutes.get("/", (req, res) => controller.list(req, res));
 ataItemsRoutes.get("/code/:code", (req, res) => controller.findByCode(req, res));
 ataItemsRoutes.get("/:id/movements", (req, res) => controller.listMovements(req, res));
-ataItemsRoutes.post(
-  "/:id/register-external-consumption",
-  requirePermission("atas.manage"),
-  (req, res) => controller.registerExternalConsumption(req, res)
-);
 ataItemsRoutes.get("/:id", (req, res) => controller.findById(req, res));
 ataItemsRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.update(req, res)
+);
+ataItemsRoutes.post("/:id/correct-description", requirePermission("atas.manage"), (req, res) =>
+  controller.correctDescription(req, res)
 );
 ataItemsRoutes.delete("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.remove(req, res)

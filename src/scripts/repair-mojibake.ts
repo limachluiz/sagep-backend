@@ -1,24 +1,5 @@
 import { prisma } from "../config/prisma.js";
-import { Prisma } from "../generated/prisma/client.js";
 import { normalizeMojibakeText } from "../shared/text-normalization.js";
-
-type JsonLike =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonLike[]
-  | { [key: string]: JsonLike };
-
-function normalizeJsonStrings(value: JsonLike): JsonLike {
-  if (typeof value === "string") return normalizeMojibakeText(value);
-  if (!value || typeof value !== "object") return value;
-  if (Array.isArray(value)) return value.map((item) => normalizeJsonStrings(item));
-
-  return Object.fromEntries(
-    Object.entries(value).map(([key, item]) => [key, normalizeJsonStrings(item)]),
-  );
-}
 
 function textChanged(current: string | null | undefined, normalized: string | null | undefined) {
   return current !== normalized;
@@ -152,55 +133,12 @@ async function repairCoverageGroups() {
   return corrected;
 }
 
-async function repairSnapshots() {
-  const snapshots = await prisma.ataItemExternalBalanceSnapshot.findMany({
-    select: {
-      id: true,
-      externalBalance: true,
-      warnings: true,
-    },
-  });
-  let corrected = 0;
-
-  for (const snapshot of snapshots) {
-    const externalBalance = snapshot.externalBalance
-      ? normalizeJsonStrings(snapshot.externalBalance as JsonLike)
-      : snapshot.externalBalance;
-    const warnings = snapshot.warnings
-      ? normalizeJsonStrings(snapshot.warnings as JsonLike)
-      : snapshot.warnings;
-
-    if (
-      JSON.stringify(snapshot.externalBalance) !== JSON.stringify(externalBalance) ||
-      JSON.stringify(snapshot.warnings) !== JSON.stringify(warnings)
-    ) {
-      await prisma.ataItemExternalBalanceSnapshot.update({
-        where: { id: snapshot.id },
-        data: {
-          externalBalance:
-            externalBalance === null
-              ? Prisma.JsonNull
-              : (externalBalance as Prisma.InputJsonValue),
-          warnings:
-            warnings === null
-              ? Prisma.JsonNull
-              : (warnings as Prisma.InputJsonValue),
-        },
-      });
-      corrected += 1;
-    }
-  }
-
-  return corrected;
-}
-
 async function main() {
-  const [atas, ataItems, copiedItems, coverageGroups, snapshots] = await Promise.all([
+  const [atas, ataItems, copiedItems, coverageGroups] = await Promise.all([
     repairAtas(),
     repairAtaItems(),
     repairCopiedItemDescriptions(),
     repairCoverageGroups(),
-    repairSnapshots(),
   ]);
 
   console.info("repair:mojibake completed", {
@@ -208,8 +146,7 @@ async function main() {
     ataItems,
     copiedItems,
     coverageGroups,
-    snapshots,
-    total: atas + ataItems + copiedItems + coverageGroups + snapshots,
+    total: atas + ataItems + copiedItems + coverageGroups,
   });
 }
 

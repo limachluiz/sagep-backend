@@ -1,0 +1,5 @@
+# Respostas não sigilosas para configuração assistida sem interação.
+SAGEP_HOSTNAME=sagep.4cta.eb.mil.br
+SAGEP_BIND_IP=10.78.10.20
+SAGEP_ALLOWED_NETWORKS=10.78.0.0/16
+PGADMIN_DEFAULT_EMAIL=admin@sagep.4cta.eb.mil.br

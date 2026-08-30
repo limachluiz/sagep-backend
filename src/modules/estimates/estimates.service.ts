@@ -156,8 +156,8 @@ export class EstimatesService {
     return role === "ADMIN";
   }
 
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "estimates.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "estimates.view_all");
   }
 
   private resolveArchivedAccess(
@@ -1079,7 +1079,7 @@ export class EstimatesService {
       });
     }
 
-    if (!this.isPrivileged(user.role)) {
+    if (!this.isPrivileged(user)) {
       andConditions.push({
         OR: [
           { project: { ownerId: user.id } },

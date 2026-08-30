@@ -3,9 +3,11 @@ import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
+import { env } from "../../config/env.js";
 import {
   generateAccessToken,
   generateRefreshToken,
+  generateStepUpToken,
   getRefreshTokenExpirationDate,
   hashToken,
   verifyRefreshToken,
@@ -19,6 +21,12 @@ type RegisterInput = {
 
 type LoginInput = {
   email: string;
+  password: string;
+};
+
+const INVALID_PASSWORD_HASH = "$2b$10$Lx3lp4kt24mZhtVil15pC.6vCRniynaavrqTXszcQK.AB44fqNlNy";
+
+type ReauthenticateInput = {
   password: string;
 };
 
@@ -415,9 +423,10 @@ export class AuthService {
 
   private async logFailedLogin(
     email: string,
-    reason: "USER_NOT_FOUND" | "INVALID_PASSWORD" | "USER_INACTIVE",
+    reason: "USER_NOT_FOUND" | "INVALID_PASSWORD" | "USER_INACTIVE" | "ACCOUNT_LOCKED",
     context?: AuthRequestContext,
     user?: { id: string; name: string | null },
+    security?: { failedLoginAttempts?: number; lockedUntil?: Date | null },
   ) {
     await auditService.log({
       entityType: "AUTH",
@@ -435,6 +444,8 @@ export class AuthService {
         reason,
         ipAddress: context?.ipAddress ?? null,
         userAgent: context?.userAgent ?? null,
+        failedLoginAttempts: security?.failedLoginAttempts ?? null,
+        lockedUntil: security?.lockedUntil?.toISOString() ?? null,
       },
     });
   }
@@ -475,28 +486,53 @@ export class AuthService {
     const user = await prisma.user.findUnique({
       where: { email: data.email },
     });
+    const passwordMatches = await bcrypt.compare(
+      data.password,
+      user?.passwordHash ?? INVALID_PASSWORD_HASH,
+    );
 
     if (!user) {
       await this.logFailedLogin(data.email, "USER_NOT_FOUND", context);
       throw new AppError("E-mail ou senha inv\u00e1lidos", 401);
     }
 
-    const passwordMatches = await bcrypt.compare(data.password, user.passwordHash);
+    const now = new Date();
+    if (user.lockedUntil && user.lockedUntil > now) {
+      await this.logFailedLogin(data.email, "ACCOUNT_LOCKED", context, user, {
+        failedLoginAttempts: user.failedLoginAttempts,
+        lockedUntil: user.lockedUntil,
+      });
+      throw new AppError("E-mail ou senha inválidos", 401);
+    }
 
     if (!passwordMatches) {
-      await this.logFailedLogin(data.email, "INVALID_PASSWORD", context, user);
+      const previousAttempts = user.lockedUntil ? 0 : user.failedLoginAttempts;
+      const failedLoginAttempts = previousAttempts + 1;
+      const lockedUntil = failedLoginAttempts >= env.LOGIN_MAX_FAILED_ATTEMPTS
+        ? new Date(now.getTime() + env.LOGIN_LOCKOUT_MINUTES * 60_000)
+        : null;
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { failedLoginAttempts, lockedUntil },
+      });
+      await this.logFailedLogin(data.email, "INVALID_PASSWORD", context, user, {
+        failedLoginAttempts,
+        lockedUntil,
+      });
       throw new AppError("E-mail ou senha inv\u00e1lidos", 401);
     }
 
     if (!user.active) {
       await this.logFailedLogin(data.email, "USER_INACTIVE", context, user);
-      throw new AppError("Usu\u00e1rio inativo", 403);
+      throw new AppError("E-mail ou senha inv\u00e1lidos", 401);
     }
 
     const accessToken = generateAccessToken(
       {
         email: user.email,
         role: user.role,
+        authenticationMethod: "PASSWORD",
       },
       user.id,
     );
@@ -513,7 +549,7 @@ export class AuthService {
     const storedRefreshToken = await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: user.id },
-        data: { lastLoginAt: loginAt },
+        data: { lastLoginAt: loginAt, failedLoginAttempts: 0, lockedUntil: null },
       });
 
       return tx.refreshToken.create({
@@ -580,6 +616,54 @@ export class AuthService {
     };
   }
 
+  async reauthenticate(
+    data: ReauthenticateInput,
+    currentUser: CurrentUser,
+    context?: AuthRequestContext,
+  ) {
+    const user = await prisma.user.findUnique({
+      where: { id: currentUser.id },
+      select: { id: true, name: true, email: true, active: true, passwordHash: true },
+    });
+    const passwordMatches = user
+      ? await bcrypt.compare(data.password, user.passwordHash)
+      : false;
+
+    if (!user?.active || !passwordMatches) {
+      await auditService.log({
+        entityType: "AUTH",
+        entityId: currentUser.id,
+        action: "REAUTHENTICATION_FAILED",
+        actor: { id: currentUser.id, name: currentUser.name ?? currentUser.email },
+        summary: `Falha na confirmação de senha para ${currentUser.email}`,
+        metadata: {
+          ipAddress: context?.ipAddress ?? null,
+          userAgent: context?.userAgent ?? null,
+        },
+      });
+      throw new AppError("Senha inválida", 401, "AUTH_REAUTHENTICATION_FAILED");
+    }
+
+    const token = generateStepUpToken(user.id);
+    await auditService.log({
+      entityType: "AUTH",
+      entityId: user.id,
+      action: "REAUTHENTICATION_SUCCESS",
+      actor: { id: user.id, name: user.name ?? user.email },
+      summary: `Autorização reforçada concedida para ${user.email}`,
+      metadata: {
+        expiresInSeconds: env.STEP_UP_EXPIRES_IN_SECONDS,
+        ipAddress: context?.ipAddress ?? null,
+        userAgent: context?.userAgent ?? null,
+      },
+    });
+
+    return {
+      stepUpToken: token,
+      expiresInSeconds: env.STEP_UP_EXPIRES_IN_SECONDS,
+    };
+  }
+
   async refresh(refreshToken: string, context?: AuthRequestContext) {
     try {
       verifyRefreshToken(refreshToken);
@@ -621,6 +705,7 @@ export class AuthService {
       {
         email: storedToken.user.email,
         role: storedToken.user.role,
+        authenticationMethod: "REFRESH",
       },
       storedToken.user.id,
     );

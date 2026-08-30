@@ -1,11 +1,15 @@
 import { Prisma } from "../../generated/prisma/client.js";
+import { createHash } from "node:crypto";
+import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
+import { correctImportedDescription } from "../../shared/description-correction.js";
+import { inferCoverageFromDescription, type InferredCoverage } from "./coverage-inference.js";
 
-const COMPRAS_GOV_BASE_URL = "https://dadosabertos.compras.gov.br";
+import { systemSettingsService } from "../system-settings/system-settings.service.js";
+import { applyTextCorrectionRules, textCorrectionsService } from "../text-corrections/text-corrections.service.js";
 const COMPRAS_GOV_SOURCE = "COMPRAS_GOV";
-const REQUEST_TIMEOUT_MS = 10000;
 const DEFAULT_PAGE_SIZE = 100;
 const MAX_PAGES = 20;
 
@@ -30,6 +34,7 @@ type ImportInput = PreviewInput & {
     stateUf: "AM" | "RO" | "RR" | "AC";
   }>;
   dryRun?: boolean;
+  autoDetectCoverage?: boolean;
 };
 
 type ComprasGovListResponse<T> = {
@@ -41,6 +46,9 @@ type ComprasGovRequestDebug = {
   url: string;
   status?: number;
   errorBody?: string;
+  contentType?: string;
+  decoder?: "utf-8" | "windows-1252";
+  replacementCharactersBeforeParse?: number;
 };
 
 type ComprasGovRequestFailure = {
@@ -53,6 +61,12 @@ type ComprasGovPreviewDebug = {
   externalUrls: string[];
   externalStatus: number[];
   externalErrorBody: string[];
+  textIntegrity: Array<{
+    url: string;
+    contentType: string | null;
+    decoder: "utf-8" | "windows-1252" | null;
+    replacementCharactersBeforeParse: number;
+  }>;
   filters: Record<string, string | null>;
 };
 
@@ -90,6 +104,9 @@ type ComprasGovAtaItem = Record<string, unknown> & {
   codigoItem?: number;
   descricaoItem?: string;
   tipoItem?: string;
+  unidadeFornecimento?: string;
+  unidadeMedida?: string;
+  nomeUnidadeMedida?: string;
   quantidadeHomologadaItem?: number;
   quantidadeHomologadaVencedor?: number;
   valorUnitario?: number;
@@ -101,12 +118,19 @@ type ComprasGovAtaItem = Record<string, unknown> & {
 
 type NormalizedPreviewItem = {
   referenceCode: string;
+  rawDescription: string;
   description: string;
   unit: string;
   unitPrice: number;
   initialQuantity: number;
   externalItemId: string;
   externalItemNumber: string;
+  coverage: InferredCoverage | null;
+  textIntegrity: {
+    status: "OK" | "NEEDS_REVIEW";
+    replacementCharactersBefore: number;
+    replacementCharactersAfter: number;
+  };
 };
 
 type FoundAtaPreview = {
@@ -117,6 +141,13 @@ type FoundAtaPreview = {
   validFrom: string | null;
   validUntil: string | null;
   sampleItems: NormalizedPreviewItem[];
+  importedAtaId?: string;
+  importedAt?: string;
+  importStatus?: "NOT_IMPORTED" | "IMPORTED" | "UPDATE_AVAILABLE" | "INACTIVE";
+  coverageGroups: InferredCoverage[];
+  coverageDetected: boolean;
+  textIssuesCount: number;
+  externalFingerprint: string;
 };
 
 type AtaIdentifier = {
@@ -150,8 +181,33 @@ type NormalizedPreview = {
 export class ComprasGovService {
   private requestDebug: ComprasGovRequestDebug[] = [];
 
+  private countReplacementCharacters(value: unknown) {
+    return (String(value ?? "").match(/\uFFFD/g) ?? []).length;
+  }
+
   private normalizeText(value: unknown) {
-    return normalizeMojibakeText(value).trim();
+    return normalizeMojibakeText(value)
+      .replace(/\s+/g, " ")
+      .replace(/\s+([,.;:])/g, "$1")
+      .trim();
+  }
+
+  private normalizeItemUnit(item: ComprasGovAtaItem, description: string) {
+    const sourceUnit = this.normalizeText(
+      item.unidadeFornecimento ?? item.unidadeMedida ?? item.nomeUnidadeMedida,
+    ).toUpperCase();
+    if (sourceUnit && !["SERVIÇO", "SERVICO", "MATERIAL"].includes(sourceUnit)) {
+      return sourceUnit;
+    }
+
+    const normalizedDescription = description.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (
+      normalizedDescription.includes("LANCAMENTO") &&
+      (normalizedDescription.includes("CABO") || normalizedDescription.includes("FIBRA OPTICA"))
+    ) {
+      return "M";
+    }
+    return "UND";
   }
 
   private uniqueBy<T>(items: T[], getKey: (item: T, index: number) => string) {
@@ -166,6 +222,25 @@ export class ComprasGovService {
     });
 
     return uniqueItems;
+  }
+
+  private mergeCoverageGroups(items: InferredCoverage[]) {
+    const groups = new Map<string, InferredCoverage>();
+    for (const coverage of items) {
+      const current = groups.get(coverage.code);
+      if (!current) {
+        groups.set(coverage.code, { ...coverage, localities: [...coverage.localities] });
+        continue;
+      }
+      for (const locality of coverage.localities) {
+        const exists = current.localities.some((item) =>
+          item.stateUf === locality.stateUf &&
+          item.cityName.localeCompare(locality.cityName, "pt-BR", { sensitivity: "base" }) === 0
+        );
+        if (!exists) current.localities.push(locality);
+      }
+    }
+    return [...groups.values()];
   }
 
   private isDevelopment() {
@@ -192,6 +267,12 @@ export class ComprasGovService {
       externalErrorBody: this.requestDebug
         .map((entry) => entry.errorBody)
         .filter((body): body is string => Boolean(body)),
+      textIntegrity: this.requestDebug.map((entry) => ({
+        url: entry.url,
+        contentType: entry.contentType ?? null,
+        decoder: entry.decoder ?? null,
+        replacementCharactersBeforeParse: entry.replacementCharactersBeforeParse ?? 0,
+      })),
       filters: {
         uasg: input.uasg.trim(),
         numeroPregao: input.numeroPregao.trim(),
@@ -352,7 +433,8 @@ export class ComprasGovService {
   }
 
   private async requestComprasGov<T>(path: string, params: Record<string, string | number>) {
-    const url = new URL(path, COMPRAS_GOV_BASE_URL);
+    const settings = await systemSettingsService.getEffective();
+    const url = new URL(path, settings.comprasGovBaseUrl);
     for (const [key, value] of Object.entries(params)) {
       if (value === "") continue;
       url.searchParams.set(key, String(value));
@@ -367,7 +449,8 @@ export class ComprasGovService {
     try {
       response = await fetch(url, {
         headers: { accept: "application/json" },
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        redirect: "manual",
+        signal: AbortSignal.timeout(env.COMPRAS_GOV_REQUEST_TIMEOUT_MS),
       });
     } catch {
       debugEntry.errorBody = "Falha de rede ou timeout ao consultar API do Compras.gov.br";
@@ -377,7 +460,12 @@ export class ComprasGovService {
     }
 
     debugEntry.status = response.status;
-    this.debug("Status HTTP externo", { url: url.toString(), status: response.status });
+    debugEntry.contentType = response.headers.get("content-type") ?? undefined;
+    this.debug("Status HTTP externo", {
+      url: url.toString(),
+      status: response.status,
+      contentType: debugEntry.contentType ?? null,
+    });
 
     if (!response.ok) {
       const body = this.summarizeExternalBody(await response.text());
@@ -389,7 +477,25 @@ export class ComprasGovService {
     }
 
     try {
-      return (await response.json()) as T;
+      const bytes = new Uint8Array(await response.arrayBuffer());
+      let body: string;
+      try {
+        body = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+        debugEntry.decoder = "utf-8";
+      } catch {
+        body = new TextDecoder("windows-1252").decode(bytes);
+        debugEntry.decoder = "windows-1252";
+      }
+      debugEntry.replacementCharactersBeforeParse = this.countReplacementCharacters(body);
+      if (debugEntry.replacementCharactersBeforeParse > 0) {
+        this.debug("Resposta externa contém caracteres de substituição", {
+          url: url.toString(),
+          contentType: debugEntry.contentType ?? null,
+          decoder: debugEntry.decoder,
+          replacementCharacters: debugEntry.replacementCharactersBeforeParse,
+        });
+      }
+      return JSON.parse(body.replace(/^\uFEFF/, "")) as T;
     } catch {
       throw new AppError("Resposta invalida da API do Compras.gov.br", 502);
     }
@@ -639,12 +745,20 @@ export class ComprasGovService {
     return { ata: selectedAta, items };
   }
 
-  private normalizePreviewItems(externalItems: ComprasGovAtaItem[], ataNumber: string, warnings?: string[]) {
+  private normalizePreviewItems(
+    externalItems: ComprasGovAtaItem[],
+    ataNumber: string,
+    warnings?: string[],
+  ): NormalizedPreviewItem[] {
     return externalItems.map((item, index) => {
       const externalItemNumber = this.normalizeText(item.numeroItem || index + 1);
       const referenceCode = externalItemNumber || this.normalizeText(item.codigoItem || index + 1);
-      const description = this.normalizeText(item.descricaoItem) || "Item sem descricao";
-      const unit = this.normalizeText(item.tipoItem) || "UN";
+    const rawDescription = String(item.descricaoItem ?? "");
+    const replacementCharactersBefore = this.countReplacementCharacters(rawDescription);
+      const correction = correctImportedDescription(rawDescription);
+      const description = correction.automaticText || "Item sem descricao";
+      const replacementCharactersAfter = this.countReplacementCharacters(description);
+      const unit = this.normalizeItemUnit(item, description);
       const unitPrice = this.normalizeNumber(item.valorUnitario);
       const initialQuantity = this.normalizeNumber(
         item.quantidadeHomologadaVencedor ?? item.quantidadeHomologadaItem,
@@ -662,14 +776,27 @@ export class ComprasGovService {
         warnings.push(`Item ${referenceCode} sem valor unitario na origem; importado como 0.`);
       }
 
+      if (warnings && replacementCharactersAfter > 0) {
+        warnings.push(
+          `Item ${referenceCode} contém ${replacementCharactersAfter} caractere(s) de codificação não recuperado(s); revise a descrição.`,
+        );
+      }
+
       return {
         referenceCode,
+        rawDescription,
         description,
         unit,
         unitPrice,
         initialQuantity,
         externalItemId: `${externalItemId}:${externalItemNumber}`,
         externalItemNumber,
+        coverage: inferCoverageFromDescription(description),
+        textIntegrity: {
+          status: correction.status === "NEEDS_REVIEW" ? "NEEDS_REVIEW" : "OK",
+          replacementCharactersBefore,
+          replacementCharactersAfter,
+        },
       };
     });
   }
@@ -685,15 +812,66 @@ export class ComprasGovService {
       this.normalizeText(items.find((item) => item.nomeRazaoSocialFornecedor)?.nomeRazaoSocialFornecedor) ||
       null;
 
+    const validFrom = this.normalizeDateString(ata.dataVigenciaInicial);
+    const validUntil = this.normalizeDateString(ata.dataVigenciaFinal);
+    const externalFingerprint = createHash("sha256").update(JSON.stringify({
+      ataNumber, vendorName, validFrom, validUntil,
+      items: normalizedItems.map((item) => ({
+        referenceCode: item.referenceCode, description: item.description, unit: item.unit,
+        unitPrice: item.unitPrice, initialQuantity: item.initialQuantity,
+      })),
+    })).digest("hex");
+
     return {
       ataNumber,
       vendorName,
       itemCount: items.length,
       totalAmount: items.length > 0 ? totalAmount : null,
-      validFrom: this.normalizeDateString(ata.dataVigenciaInicial),
-      validUntil: this.normalizeDateString(ata.dataVigenciaFinal),
+      validFrom,
+      validUntil,
       sampleItems: normalizedItems.slice(0, 3),
+      coverageGroups: this.mergeCoverageGroups(
+        normalizedItems.flatMap((item) => item.coverage ? [item.coverage] : []),
+      ),
+      coverageDetected: normalizedItems.length > 0 && normalizedItems.every((item) => item.coverage !== null),
+      textIssuesCount: normalizedItems.filter((item) => item.textIntegrity.status === "NEEDS_REVIEW").length,
+      externalFingerprint,
     };
+  }
+
+  private async markImportedAtas(input: PreviewInput, foundAtas: FoundAtaPreview[]) {
+    const imported = await prisma.ata.findMany({
+      where: {
+        externalSource: COMPRAS_GOV_SOURCE,
+        externalUasg: input.uasg.trim(),
+        externalPregaoNumber: input.numeroPregao.trim(),
+        externalPregaoYear: input.anoPregao.trim(),
+      },
+      select: {
+        id: true,
+        externalAtaNumber: true,
+        externalLastSyncAt: true,
+        externalFingerprint: true,
+        items: { where: { deletedAt: null }, select: { initialQuantity: true, unitPrice: true } },
+      },
+    });
+
+    return foundAtas.map((found) => {
+      const match = imported.find((ata) => this.matchesAtaNumber(ata.externalAtaNumber, found.ataNumber));
+      const expired = Boolean(found.validUntil && new Date(found.validUntil).getTime() < Date.now());
+      if (!match) return { ...found, importStatus: expired ? "INACTIVE" as const : "NOT_IMPORTED" as const };
+      const localTotal = match.items.reduce((sum, item) => sum + Number(item.initialQuantity) * Number(item.unitPrice), 0);
+      const changed = match.externalFingerprint
+        ? match.externalFingerprint !== found.externalFingerprint
+        : match.items.length !== found.itemCount ||
+        (found.totalAmount !== null && Math.abs(localTotal - found.totalAmount) > 0.01);
+      return {
+        ...found,
+        importedAtaId: match.id,
+        importedAt: match.externalLastSyncAt?.toISOString(),
+        importStatus: expired ? "INACTIVE" as const : changed ? "UPDATE_AVAILABLE" as const : "IMPORTED" as const,
+      };
+    });
   }
 
   private groupItemsByAta(items: ComprasGovAtaItem[]) {
@@ -730,6 +908,12 @@ export class ComprasGovService {
     }
 
     const items = this.normalizePreviewItems(externalItems, ataNumber, warnings);
+    const undetectedCoverageItems = items.filter((item) => !item.coverage);
+    if (undetectedCoverageItems.length > 0) {
+      warnings.push(
+        `${undetectedCoverageItems.length} item(ns) sem região/localidade identificável na descrição; revise a cobertura antes de importar.`,
+      );
+    }
 
     const vendorName =
       this.normalizeText(externalItems.find((item) => item.nomeRazaoSocialFornecedor)?.nomeRazaoSocialFornecedor) ||
@@ -784,9 +968,9 @@ export class ComprasGovService {
       }
 
       const itemsByAta = this.groupItemsByAta(items);
-      const atasFound = atas.map((ata) =>
+      const atasFound = await this.markImportedAtas(input, atas.map((ata) =>
         this.buildFoundAta(ata, itemsByAta.get(this.getAtaNumber(ata.numeroAtaRegistroPreco)) ?? [])
-      );
+      ));
 
       if (!hasAtaFilter && atasFound.length > 1) {
         return this.withPreviewDebug(input, {
@@ -941,10 +1125,41 @@ export class ComprasGovService {
     }
 
     const externalAtaNumber = this.normalizeText(externalData.ata.numeroAtaRegistroPreco);
+    const externalPncpControlNumber = this.normalizeText(
+      externalData.items.find((item) => item.numeroControlePncpAta)?.numeroControlePncpAta
+    );
     const now = new Date();
+
+    const pregao = await prisma.pregao.upsert({
+      where: {
+        uasg_number_year: {
+          uasg: data.uasg.trim(),
+          number: data.numeroPregao.trim(),
+          year: data.anoPregao.trim(),
+        },
+      },
+      update: {
+        type: data.ataType,
+        managingAgency: preview.ata.managingAgency,
+        isActive: true,
+        externalSource: COMPRAS_GOV_SOURCE,
+        externalLastSyncAt: now,
+      },
+      create: {
+        uasg: data.uasg.trim(),
+        number: data.numeroPregao.trim(),
+        year: data.anoPregao.trim(),
+        type: data.ataType,
+        managingAgency: preview.ata.managingAgency,
+        externalSource: COMPRAS_GOV_SOURCE,
+        externalLastSyncAt: now,
+      },
+      select: { id: true },
+    });
 
     const existingAta = await prisma.ata.findFirst({
       where: {
+        pregaoId: pregao.id,
         externalSource: COMPRAS_GOV_SOURCE,
         externalUasg: data.uasg.trim(),
         externalPregaoNumber: data.numeroPregao.trim(),
@@ -955,6 +1170,7 @@ export class ComprasGovService {
     });
 
     const ataData = {
+      pregao: { connect: { id: pregao.id } },
       number: preview.ata.number,
       type: data.ataType,
       vendorName: preview.ata.vendorName ?? "Fornecedor nao informado",
@@ -966,7 +1182,9 @@ export class ComprasGovService {
       externalPregaoNumber: data.numeroPregao.trim(),
       externalPregaoYear: data.anoPregao.trim(),
       externalAtaNumber: externalAtaNumber || null,
+      externalPncpControlNumber: externalPncpControlNumber || null,
       externalLastSyncAt: now,
+      externalFingerprint: preview.selectedAta?.externalFingerprint,
     } satisfies Prisma.AtaUpdateInput;
 
     const ata = existingAta
@@ -998,75 +1216,114 @@ export class ComprasGovService {
           },
         });
 
-    const coverageGroup = await this.resolveCoverageGroup(ata.id, data);
-
     let createdItems = 0;
     let updatedItems = 0;
+    const coverageGroups = new Map<
+      string,
+      Awaited<ReturnType<typeof this.resolveCoverageGroup>>
+    >();
 
+    const resolveItemCoverage = async (item: NormalizedPreviewItem) => {
+      const inferred = data.autoDetectCoverage !== false ? item.coverage : null;
+      const groupInput: ImportInput = inferred
+        ? {
+            ...data,
+            coverageGroupId: undefined,
+            coverageGroupCode: inferred.code,
+            coverageGroupName: inferred.name,
+            coverageGroupLocalities: inferred.localities,
+          }
+        : data;
+      const cacheKey = inferred?.code ?? data.coverageGroupId ?? data.coverageGroupCode ?? "COMPRAS";
+      const cached = coverageGroups.get(cacheKey);
+      if (cached) return cached;
+      const resolved = await this.resolveCoverageGroup(ata.id, groupInput);
+      coverageGroups.set(cacheKey, resolved);
+      return resolved;
+    };
+
+    const activeTextCorrectionRules = await textCorrectionsService.activeRules();
     for (const item of preview.items) {
-      const existingItem = await prisma.ataItem.findUnique({
+      const coverageGroup = await resolveItemCoverage(item);
+      const sourceDescription = item.rawDescription || item.description;
+      const ruleCorrectedDescription = applyTextCorrectionRules(sourceDescription, activeTextCorrectionRules);
+      const correction = correctImportedDescription(sourceDescription, ruleCorrectedDescription);
+      const correctedDescription = correction.automaticText;
+      const existingItem = await prisma.ataItem.findFirst({
         where: {
-          ataId_coverageGroupId_referenceCode: {
-            ataId: ata.id,
-            coverageGroupId: coverageGroup.id,
-            referenceCode: item.referenceCode,
-          },
-        },
-        select: { id: true },
-      });
-
-      await prisma.ataItem.upsert({
-        where: {
-          ataId_coverageGroupId_referenceCode: {
-            ataId: ata.id,
-            coverageGroupId: coverageGroup.id,
-            referenceCode: item.referenceCode,
-          },
-        },
-        update: {
-          description: item.description,
-          unit: item.unit.trim().toUpperCase(),
-          unitPrice: item.unitPrice.toFixed(2),
-          initialQuantity: item.initialQuantity.toFixed(2),
-          externalSource: COMPRAS_GOV_SOURCE,
-          externalItemId: item.externalItemId,
-          externalItemNumber: item.externalItemNumber,
-          externalLastSyncAt: now,
-        },
-        create: {
           ataId: ata.id,
-          coverageGroupId: coverageGroup.id,
-          referenceCode: item.referenceCode,
-          description: item.description,
-          unit: item.unit.trim().toUpperCase(),
-          unitPrice: item.unitPrice.toFixed(2),
-          initialQuantity: item.initialQuantity.toFixed(2),
-          externalSource: COMPRAS_GOV_SOURCE,
-          externalItemId: item.externalItemId,
-          externalItemNumber: item.externalItemNumber,
-          externalLastSyncAt: now,
+          OR: [
+            { externalItemId: item.externalItemId },
+            { externalItemNumber: item.externalItemNumber },
+            { referenceCode: item.referenceCode },
+          ],
         },
+        select: { id: true, descriptionEditedAt: true } as any,
       });
 
       if (existingItem) {
+        const importedItem = existingItem as unknown as { id: string; descriptionEditedAt: Date | null };
+        await prisma.ataItem.update({
+          where: { id: importedItem.id },
+          data: {
+            coverageGroupId: coverageGroup.id,
+            referenceCode: item.referenceCode,
+            externalDescription: sourceDescription,
+            automaticDescription: correctedDescription,
+            descriptionCorrectionStatus: importedItem.descriptionEditedAt ? "MANUALLY_REVIEWED" : correction.status,
+            descriptionCorrectionConfidence: correction.confidence,
+            descriptionCorrectionSuggestions: correction.decisions as any,
+            ...(importedItem.descriptionEditedAt ? {} : { description: correctedDescription }),
+            unit: item.unit.trim().toUpperCase(),
+            unitPrice: item.unitPrice.toFixed(2),
+            initialQuantity: item.initialQuantity.toFixed(2),
+            externalSource: COMPRAS_GOV_SOURCE,
+            externalItemId: item.externalItemId,
+            externalItemNumber: item.externalItemNumber,
+            externalLastSyncAt: now,
+          } as any,
+        });
         updatedItems += 1;
       } else {
+        await prisma.ataItem.create({
+          data: {
+            ataId: ata.id,
+            coverageGroupId: coverageGroup.id,
+            referenceCode: item.referenceCode,
+            description: correctedDescription,
+            externalDescription: sourceDescription,
+            automaticDescription: correctedDescription,
+            descriptionCorrectionStatus: correction.status,
+            descriptionCorrectionConfidence: correction.confidence,
+            descriptionCorrectionSuggestions: correction.decisions as any,
+            unit: item.unit.trim().toUpperCase(),
+            unitPrice: item.unitPrice.toFixed(2),
+            initialQuantity: item.initialQuantity.toFixed(2),
+            externalSource: COMPRAS_GOV_SOURCE,
+            externalItemId: item.externalItemId,
+            externalItemNumber: item.externalItemNumber,
+            externalLastSyncAt: now,
+          } as any,
+        });
         createdItems += 1;
       }
     }
 
+    const importedCoverageGroups = [...coverageGroups.values()];
+    const primaryCoverageGroup = importedCoverageGroups[0] ?? null;
     return {
       dryRun: false,
       preview,
       ata,
-      coverageGroup,
+      coverageGroup: primaryCoverageGroup,
+      coverageGroups: importedCoverageGroups,
       itemsCreated: createdItems,
       itemsUpdated: updatedItems,
       warnings: preview.warnings,
       imported: {
         ataId: ata.id,
-        coverageGroupId: coverageGroup.id,
-        coverageGroupCode: coverageGroup.code,
+        coverageGroupId: primaryCoverageGroup?.id ?? null,
+        coverageGroupCode: primaryCoverageGroup?.code ?? null,
         createdItems,
         updatedItems,
       },

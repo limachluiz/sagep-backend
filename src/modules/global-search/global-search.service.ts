@@ -1,9 +1,11 @@
 import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
+import { permissionsService } from "../permissions/permissions.service.js";
 
 type CurrentUser = {
   id: string;
   role: string;
+  permissions?: string[];
 };
 
 type GlobalSearchFilters = {
@@ -14,12 +16,12 @@ type GlobalSearchFilters = {
 const federativeUnits = ["AM", "RO", "RR", "AC"] as const;
 
 export class GlobalSearchService {
-  private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private getProjectAccessWhere(user: CurrentUser): Prisma.ProjectWhereInput {
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return {};
     }
 

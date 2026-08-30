@@ -16,6 +16,17 @@ atasRoutes.post("/", requirePermission("atas.manage"), (req, res) =>
 );
 atasRoutes.get("/", (req, res) => controller.list(req, res));
 atasRoutes.get("/code/:code", (req, res) => controller.findByCode(req, res));
+atasRoutes.post(
+  "/:id/sync-pncp",
+  requirePermission("atas.manage"),
+  (req, res) => controller.syncPncp(req, res)
+);
+
+atasRoutes.put(
+  "/:id/coverage",
+  requirePermission("atas.manage"),
+  (req, res) => controller.replaceCoverage(req, res)
+);
 
 atasRoutes.post(
   "/:id/coverage-groups",
@@ -40,8 +51,13 @@ atasRoutes.post("/:id/items", requirePermission("atas.manage"), (req, res) =>
   ataItemsController.create(req, res)
 );
 atasRoutes.get("/:id/items", (req, res) => ataItemsController.listByAta(req, res));
+atasRoutes.post("/:id/items/correct-descriptions", requirePermission("atas.manage"), (req, res) =>
+  ataItemsController.correctDescriptionsByAta(req, res)
+);
 atasRoutes.get("/:id", (req, res) => controller.findById(req, res));
 atasRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.update(req, res)
 );
-atasRoutes.delete("/:id", (req, res) => controller.remove(req, res));
+atasRoutes.delete("/:id", requirePermission("atas.manage"), (req, res) =>
+  controller.remove(req, res)
+);

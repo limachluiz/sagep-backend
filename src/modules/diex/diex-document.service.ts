@@ -5,6 +5,7 @@ import { renderDiexDocumentHtml } from "./diex-document.template.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { permissionsService } from "../permissions/permissions.service.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -14,11 +15,12 @@ type CurrentUser = {
   id: string;
   email: string;
   role: string;
+  permissions?: string[];
 };
 
 export class DiexDocumentService {
-  private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private async ensureCanViewDiex(diexId: string, user: CurrentUser) {
@@ -45,7 +47,7 @@ export class DiexDocumentService {
       throw new AppError("DIEx não encontrado", 404);
     }
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return;
     }
 

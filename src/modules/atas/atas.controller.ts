@@ -5,17 +5,23 @@ import {
   ataIdParamSchema,
   createAtaCoverageGroupSchema,
   createAtaSchema,
-  deleteAtaSchema,
   listAtasQuerySchema,
+  replaceAtaCoverageSchema,
   updateAtaCoverageGroupSchema,
   updateAtaSchema,
 } from "./atas.schemas.js";
 import { AtasService } from "./atas.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
+import { pncpService } from "../compras-gov/pncp.service.js";
 
 const atasService = new AtasService();
 
 export class AtasController {
+  async syncPncp(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    return res.status(200).json(await pncpService.syncAta(id));
+  }
+
   async create(req: Request, res: Response) {
     const data = createAtaSchema.parse(req.body);
     const ata = await atasService.create(data);
@@ -58,6 +64,12 @@ export class AtasController {
     return res.status(200).json(ata);
   }
 
+  async replaceCoverage(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    const data = replaceAtaCoverageSchema.parse(req.body);
+    return res.status(200).json(await atasService.replaceCoverage(id, data));
+  }
+
   async createCoverageGroup(req: Request, res: Response) {
     const { id } = ataIdParamSchema.parse(req.params);
     const data = createAtaCoverageGroupSchema.parse(req.body);
@@ -80,8 +92,7 @@ export class AtasController {
 
   async remove(req: Request, res: Response) {
     const { id } = ataIdParamSchema.parse(req.params);
-    const data = deleteAtaSchema.parse(req.body ?? {});
-    const result = await atasService.remove(id, req.user!, data);
+    const result = await atasService.remove(id);
     return res.status(200).json(result);
   }
 }

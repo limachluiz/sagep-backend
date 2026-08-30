@@ -21,6 +21,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/setup/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verificar se a instalação inicial é necessária */
+        get: operations["setup_get_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/setup/initialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inicializar a OM e o primeiro administrador uma única vez */
+        post: operations["setup_post_initialize"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/health/status": {
         parameters: {
             query?: never;
@@ -87,7 +121,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Autenticar usuario */
+        /**
+         * Autenticar usuario
+         * @description Normaliza o e-mail, aplica limites por IP e conta e bloqueia temporariamente a conta após falhas consecutivas.
+         */
         post: operations["auth_post_login"];
         delete?: never;
         options?: never;
@@ -106,6 +143,26 @@ export interface paths {
         get: operations["auth_get_me"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/reauthenticate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Confirmar senha para operação crítica
+         * @description Emite autorização reforçada curta, vinculada ao usuário autenticado. Sucessos e falhas são auditados.
+         */
+        post: operations["auth_post_reauthenticate"];
         delete?: never;
         options?: never;
         head?: never;
@@ -161,7 +218,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Rotacionar refresh token */
+        /**
+         * Rotacionar refresh token
+         * @description Usa e rotaciona o refresh token mantido em cookie HttpOnly.
+         */
         post: operations["auth_post_refresh"];
         delete?: never;
         options?: never;
@@ -178,7 +238,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Revogar refresh token atual */
+        /**
+         * Revogar refresh token atual
+         * @description Revoga a sessão identificada pelo cookie HttpOnly e remove o cookie.
+         */
         post: operations["auth_post_logout"];
         delete?: never;
         options?: never;
@@ -676,6 +739,46 @@ export interface paths {
         head?: never;
         /** Atualizar status da tarefa */
         patch: operations["tasks_patch_byId_status"];
+        trace?: never;
+    };
+    "/tasks/{id}/activities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Registrar andamento da tarefa
+         * @description Registra autor, data e hora. Se a tarefa estiver pendente, inicia automaticamente.
+         */
+        post: operations["tasks_post_byId_activities"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tasks/{id}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Concluir tarefa
+         * @description Encerra a tarefa e registra o responsável, a data, a hora e a observação final.
+         */
+        post: operations["tasks_post_byId_complete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/tasks/{id}/restore": {
@@ -1234,6 +1337,464 @@ export interface paths {
         get: operations["operationalAlerts_get_collection"];
         put?: never;
         post?: never;
+        /** Limpar todas as notificações visíveis do usuário */
+        delete: operations["operationalAlerts_delete_collection"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/operational-alerts/{notificationKey}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Limpar uma notificação do usuário */
+        delete: operations["operationalAlerts_delete_byNotificationKey"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar integrações e parâmetros institucionais */
+        get: operations["settings_get_systemSettings"];
+        /** Atualizar integrações e parâmetros institucionais */
+        put: operations["settings_put_systemSettings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings/connections/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Testar todas as conexões configuradas */
+        post: operations["settings_post_systemSettings_connections_test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings/portal-api-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Cadastrar ou substituir o token protegido do Portal da Transparência */
+        put: operations["settings_put_systemSettings_portalApiToken"];
+        post?: never;
+        /**
+         * Remover o token protegido armazenado
+         * @description Se houver token no ambiente, ele volta a ser a fonte efetiva.
+         */
+        delete: operations["settings_delete_systemSettings_portalApiToken"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/system-settings/connections/{provider}/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Testar uma conexão configurada */
+        post: operations["settings_post_systemSettings_connections_byProvider_test"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar parâmetros de rede e estado HTTPS */
+        get: operations["deployment_get_collection"];
+        /** Atualizar parâmetros esperados da implantação */
+        put: operations["deployment_put_collection"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Comparar rede observada com parâmetros esperados */
+        get: operations["deployment_get_diagnostics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/preflight": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Verificar prontidão segura da implantação */
+        get: operations["deployment_get_preflight"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/certificate/internal": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inicializar ou rotacionar a autoridade interna da OM */
+        post: operations["deployment_post_certificate_internal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/certificate/renew": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Renovar o certificado do servidor preservando a autoridade da OM */
+        post: operations["deployment_post_certificate_renew"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/certificate/authority/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exportar backup criptografado da autoridade interna */
+        post: operations["deployment_post_certificate_authority_export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/certificate/authority/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restaurar autoridade interna e reemitir o certificado do servidor */
+        post: operations["deployment_post_certificate_authority_restore"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/deployment/trust-kit/{platform}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Baixar kit de confiança para uma plataforma cliente */
+        get: operations["deployment_get_trustKit_byPlatform"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar backups e política de retenção */
+        get: operations["backups_get_collection"];
+        put?: never;
+        /** Criar e verificar backup completo do PostgreSQL */
+        post: operations["backups_post_collection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Importar e validar arquivo .dump do SAGEP */
+        post: operations["backups_post_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exportar dados selecionados em SQL */
+        post: operations["backups_post_export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{id}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Baixar backup com verificação de integridade */
+        get: operations["backups_get_byId_download"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restaurar integralmente o banco com backup de segurança prévio */
+        post: operations["backups_post_byId_restore"];
+        /** Excluir backup armazenado */
+        delete: operations["backups_delete_byId_restore"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar Notas de Empenho rastreadas */
+        get: operations["financialExecution_get_commitmentNotes"];
+        put?: never;
+        /**
+         * Validar no Portal ou registrar manualmente uma Nota de Empenho
+         * @description No modo MANUAL, exige justificativa e confirmação explícita e registra a NE como não validada, preservando a trilha de auditoria.
+         */
+        post: operations["financialExecution_post_commitmentNotes"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Consultar e comparar uma NE no Portal da Transparência */
+        post: operations["financialExecution_post_commitmentNotes_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes/lookup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Consultar uma NE avulsa sem vinculá-la a projeto
+         * @description Consulta a fonte oficial e informa quando o documento já está cadastrado no SAGEP. Não persiste nem altera o workflow.
+         */
+        post: operations["financialExecution_post_commitmentNotes_lookup"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Detalhar NE, documentos relacionados e NFe */
+        get: operations["financialExecution_get_commitmentNotes_byId"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/commitment-notes/{id}/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sincronizar uma NE com o Portal da Transparência */
+        post: operations["financialExecution_post_commitmentNotes_byId_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Sincronizar todas as NEs ativas */
+        post: operations["financialExecution_post_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Resumo da execução financeira */
+        get: operations["financialExecution_get_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/financial-execution/invoices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Registrar e conferir NFe do projeto */
+        post: operations["financialExecution_post_invoices"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1710,8 +2271,8 @@ export interface paths {
         put?: never;
         post?: never;
         /**
-         * Excluir ou arquivar ATA com segurança
-         * @description Exclui fisicamente a ATA apenas quando nao houver vinculos importantes. Quando houver itens, estimativas, movimentacoes, snapshots externos ou documentos vinculados, marca a ATA como arquivada/inativa e preserva o historico.
+         * Excluir ata inativa sem histórico
+         * @description Exige inativação prévia e bloqueia a exclusão quando houver estimativas ou movimentações de saldo vinculadas, preservando a rastreabilidade operacional.
          */
         delete: operations["atas_delete_byId"];
         options?: never;
@@ -1721,6 +2282,23 @@ export interface paths {
          * @description Update parcial. Se `coverageGroups` for enviado, o backend atual substitui todos os grupos/localidades anteriores da ata.
          */
         patch: operations["atas_patch_byId"];
+        trace?: never;
+    };
+    "/atas/{id}/sync-pncp": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Atualizar metadados da ATA no PNCP */
+        post: operations["atas_post_byId_syncPncp"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/atas/{id}/coverage-groups": {
@@ -1848,26 +2426,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/ata-items/{id}/register-external-consumption": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Registrar consumo externo de saldo
-         * @description Registra consumo confirmado fora do fluxo local, preservando justificativa, origem, referência externa e trilha de auditoria.
-         */
-        post: operations["ataItems_post_byId_registerExternalConsumption"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ata-items/{id}": {
         parameters: {
             query?: never;
@@ -1931,6 +2489,57 @@ export interface paths {
         head?: never;
         /** Atualizar OM por codigo */
         patch: operations["militaryOrganizations_patch_code_byCode"];
+        trace?: never;
+    };
+    "/military-organizations/import/template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Baixar modelo CSV para importação de OMs */
+        get: operations["militaryOrganizations_get_import_template"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/military-organizations/import/preview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Validar CSV e prever criação, atualização ou descarte */
+        post: operations["militaryOrganizations_post_import_preview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/military-organizations/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Importar OMs válidas após nova validação do CSV */
+        post: operations["militaryOrganizations_post_import"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/military-organizations/{id}": {
@@ -2142,6 +2751,13 @@ export interface components {
             /** @enum {boolean} */
             logoutRequired: true;
         };
+        ReauthenticateRequest: {
+            password: string;
+        };
+        StepUpResponse: {
+            stepUpToken: string;
+            expiresInSeconds: number;
+        };
         UserOptionsResponse: {
             items: components["schemas"]["UserOption"][];
         };
@@ -2254,8 +2870,10 @@ export interface components {
         };
         AuthTokensResponse: {
             accessToken: string;
-            refreshToken: string;
             user: components["schemas"]["UserSummary"];
+        };
+        RefreshResponse: {
+            accessToken: string;
         };
         SessionStatusDetail: {
             /** @enum {string} */
@@ -2554,8 +3172,13 @@ export interface components {
             priority?: number | null;
             assigneeId?: string | null;
             assigneeName?: string | null;
+            completedById?: string | null;
             /** Format: date-time */
             dueDate?: string | null;
+            /** Format: date-time */
+            completedAt?: string | null;
+            completedBy?: components["schemas"]["UserSummary"] | null;
+            activities?: components["schemas"]["TaskActivity"][];
             /** Format: date-time */
             archivedAt?: string | null;
             /** Format: date-time */
@@ -2591,6 +3214,25 @@ export interface components {
         TaskStatusUpdateRequest: {
             /** @enum {string} */
             status: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA";
+        };
+        TaskActivity: {
+            id: string;
+            /** @enum {string} */
+            type: "NOTE" | "STATUS_CHANGE" | "COMPLETION" | "REOPENED";
+            content: string;
+            /** @enum {string|null} */
+            fromStatus?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA" | null;
+            /** @enum {string|null} */
+            toStatus?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA" | null;
+            author?: components["schemas"]["UserSummary"] | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TaskActivityCreateRequest: {
+            content: string;
+        };
+        TaskCompleteRequest: {
+            content?: string;
         };
         TaskListEnvelope: {
             items?: components["schemas"]["Task"][];
@@ -2986,6 +3628,72 @@ export interface components {
                 }[];
             };
         };
+        CommitmentNoteLookupRequest: {
+            projectId: string;
+            /** @example 2026NE000534 */
+            number: string;
+            /** @default 160016 */
+            managementUnit: string;
+            /** @default 00001 */
+            management: string;
+        };
+        CommitmentNoteStandaloneLookupRequest: {
+            /** @example 2026NE000534 */
+            number: string;
+            /** @default 160016 */
+            managementUnit: string;
+            /** @default 00001 */
+            management: string;
+        };
+        CommitmentNoteStandaloneLookupResponse: {
+            snapshot: components["schemas"]["CommitmentNoteResponse"];
+            registered?: components["schemas"]["CommitmentNoteResponse"] | null;
+        };
+        CommitmentNoteRegisterRequest: components["schemas"]["CommitmentNoteLookupRequest"] & {
+            /** Format: date-time */
+            receivedAt: string;
+            /**
+             * @default PORTAL
+             * @enum {string}
+             */
+            registrationMode: "PORTAL" | "MANUAL";
+            manualReason?: string;
+            /** @default false */
+            confirmManualRegistration: boolean;
+            /** @default false */
+            acceptDivergence: boolean;
+        };
+        CommitmentNoteResponse: {
+            [key: string]: unknown;
+        };
+        CommitmentNoteListResponse: {
+            items?: components["schemas"]["CommitmentNoteResponse"][];
+            summary?: {
+                [key: string]: unknown;
+            };
+            meta?: {
+                [key: string]: unknown;
+            };
+        };
+        InvoiceCreateRequest: {
+            projectId: string;
+            commitmentNoteId?: string;
+            number: string;
+            series?: string;
+            accessKey?: string;
+            supplierCnpj: string;
+            /** Format: date-time */
+            issuedAt: string;
+            /** Format: double */
+            grossAmount: number;
+            /** Format: double */
+            attestedAmount?: number;
+            /** Format: date-time */
+            attestedAt?: string;
+            /** Format: uri */
+            documentLink?: string;
+            notes?: string;
+        };
         PublicRegisterRequest: {
             name: string;
             warName?: string | null;
@@ -2998,7 +3706,7 @@ export interface components {
          * @example {
          *       "name": "1 Ten Maria Souza",
          *       "warName": "Souza",
-         *       "email": "maria.souza@sagep.mil.br",
+         *       "email": "usuario.exemplo@example.invalid",
          *       "password": "<senha-forte-do-usuario>",
          *       "role": "GESTOR",
          *       "rank": "1º Ten",
@@ -3111,8 +3819,6 @@ export interface components {
             externalAtaNumber?: string | null;
             /** Format: date-time */
             externalLastSyncAt?: string | null;
-            /** Format: date-time */
-            archivedAt?: string | null;
             coverageGroups?: components["schemas"]["AtaCoverageGroup"][];
         };
         /**
@@ -3171,25 +3877,6 @@ export interface components {
             notes?: string | null;
             isActive?: boolean | null;
             coverageGroups?: components["schemas"]["AtaCoverageGroup"][];
-        };
-        AtaDeleteRequest: {
-            /** @description Motivo opcional registrado na auditoria. */
-            reason?: string;
-        };
-        /**
-         * @example {
-         *       "action": "DELETED",
-         *       "message": "ATA excluída com sucesso."
-         *     }
-         * @example {
-         *       "action": "ARCHIVED",
-         *       "message": "ATA possui vínculos e foi arquivada com segurança."
-         *     }
-         */
-        AtaDeleteResponse: {
-            /** @enum {string} */
-            action: "DELETED" | "ARCHIVED";
-            message: string;
         };
         AtaListEnvelope: {
             items?: components["schemas"]["Ata"][];
@@ -3378,17 +4065,6 @@ export interface components {
                 /** Format: date-time */
                 lastMovementAt?: string | null;
             };
-            latestExternalBalanceSnapshot?: {
-                source?: string;
-                status?: string;
-                externalBalance?: {
-                    [key: string]: unknown;
-                } | null;
-                difference?: string | null;
-                /** Format: date-time */
-                lastSyncAt?: string;
-                warnings?: string[] | null;
-            } | null;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -3448,29 +4124,6 @@ export interface components {
             notes?: string | null;
             isActive?: boolean | null;
         };
-        /**
-         * @example {
-         *       "quantity": 2,
-         *       "reason": "Consumo externo confirmado manualmente apos conferencia do snapshot",
-         *       "source": "COMPRAS_GOV",
-         *       "externalStatus": "CONSUMO_OFICIAL_DETECTADO",
-         *       "externalReference": "SNAPSHOT-2026-05-15T10:30:00.000Z",
-         *       "commitmentNumber": "2026NE000567",
-         *       "unit": "160016",
-         *       "notes": "Conferencia manual aprovada pelo gestor"
-         *     }
-         */
-        AtaItemRegisterExternalConsumptionRequest: {
-            quantity: number;
-            reason: string;
-            source: string;
-            /** @description Status oficial da UASG principal; origens de adesao/carona nao sao aceitas. */
-            externalStatus: string;
-            externalReference: string;
-            commitmentNumber?: string | null;
-            unit?: string | null;
-            notes?: string | null;
-        };
         AtaItemsEnvelope: {
             items?: components["schemas"]["AtaItem"][];
             meta?: components["schemas"]["PaginationMeta"];
@@ -3503,7 +4156,7 @@ export interface components {
         AtaItemBalanceMovement: {
             id?: string;
             /** @enum {string} */
-            movementType?: "RESERVE" | "RELEASE" | "CONSUME" | "EXTERNAL_CONSUMPTION" | "REVERSE_CONSUME" | "ADJUSTMENT";
+            movementType?: "RESERVE" | "RELEASE" | "CONSUME" | "REVERSE_CONSUME" | "ADJUSTMENT";
             /** @description Decimal serializado pelo Prisma. */
             quantity?: string;
             /** @description Decimal serializado pelo Prisma. */
@@ -3524,107 +4177,6 @@ export interface components {
             createdAt?: string;
         };
         AtaItemBalanceMovementsResponse: components["schemas"]["AtaItemBalanceMovement"][];
-        AtaItemRegisterExternalConsumptionResponse: {
-            item?: components["schemas"]["AtaItem"];
-            movement?: components["schemas"]["AtaItemBalanceMovement"];
-            localBalance?: {
-                [key: string]: unknown;
-            };
-            message?: string;
-        };
-        ComprasGovExternalBalanceComparisonItem: {
-            item?: {
-                id?: string;
-                ataItemCode?: number;
-                referenceCode?: string;
-                description?: string;
-                externalItemId?: string | null;
-                externalItemNumber?: string | null;
-            };
-            localBalance?: {
-                [key: string]: unknown;
-            };
-            externalBalance?: {
-                externalItemNumber?: string;
-                /** @enum {string} */
-                source?: "COMPRAS_GOV" | "COMPRAS_GOV_IMPORT_FALLBACK";
-                registeredQuantity?: string;
-                committedQuantity?: string;
-                availableQuantity?: string;
-                commitments?: {
-                    numeroEmpenho?: string | null;
-                    unidade?: string | null;
-                    tipoUnidade?: string | null;
-                    fornecedor?: string | null;
-                    /** Format: date-time */
-                    dataEmpenho?: string | null;
-                    quantidadeIncluida?: string | null;
-                    quantidadeEmpenhada?: string | null;
-                    estimatedAmount?: string | null;
-                    affectsManagedBalance?: boolean;
-                    rawKeyDebug?: {
-                        availableKeys?: string[];
-                        sourceEndpoint?: string;
-                        item?: string | null;
-                        unidade?: string | null;
-                    } | null;
-                }[];
-                /** Format: date-time */
-                lastUpdatedAt?: string | null;
-                rawRecords?: number;
-            } | null;
-            difference?: string | null;
-            /** Format: date-time */
-            lastSyncAt?: string | null;
-            /** @enum {string} */
-            status?: "OK" | "DIVERGENTE" | "CONSUMO_OFICIAL_DETECTADO" | "NAO_SINCRONIZADO" | "NAO_ENCONTRADO" | "ERRO_CONSULTA_EXTERNA" | "RATE_LIMIT_COMPRAS_GOV";
-            externalError?: {
-                status?: number | null;
-                url?: string | null;
-                body?: string | null;
-                retryAfterSeconds?: number | null;
-            } | null;
-        };
-        ComprasGovExternalBalanceComparison: {
-            /** @enum {string} */
-            source?: "COMPRAS_GOV";
-            ata?: {
-                id?: string;
-                ataCode?: number;
-                number?: string;
-                externalUasg?: string | null;
-                externalPregaoNumber?: string | null;
-                externalPregaoYear?: string | null;
-                externalAtaNumber?: string | null;
-                /** Format: date-time */
-                externalLastSyncAt?: string | null;
-            };
-            /** Format: date-time */
-            comparedAt?: string;
-            summary?: {
-                totalItems?: number;
-                ok?: number;
-                divergent?: number;
-                externalConsumptionDetected?: number;
-                naoSincronizado?: number;
-                notFound?: number;
-                externalQueryErrors?: number;
-                rateLimitErrors?: number;
-                semEmpenhoRegistrado?: number;
-            };
-            items?: components["schemas"]["ComprasGovExternalBalanceComparisonItem"][];
-            warnings?: string[];
-            retryAfterSeconds?: number | null;
-            debug?: {
-                [key: string]: unknown;
-            }[] | null;
-        };
-        ComprasGovExternalBalanceSyncResponse: components["schemas"]["ComprasGovExternalBalanceComparison"] & {
-            /** Format: date-time */
-            syncedAt?: string | null;
-            updatedItems?: number;
-            warnings?: string[];
-        };
         /** @description Catalogo de OMs usadas como destino operacional em estimativas. A localidade da OM e usada para validar compatibilidade com o grupo de cobertura da ATA. */
         MilitaryOrganization: {
             id?: string;
@@ -3669,6 +4221,32 @@ export interface components {
             stateUf?: "AM" | "RO" | "RR" | "AC";
             isActive?: boolean | null;
         };
+        MilitaryOrganizationsCsvRequest: {
+            /** @description CSV UTF-8 com cabeçalhos sigla, nome, cidade, uf e ativo opcional. */
+            content: string;
+            /** @enum {string} */
+            mode: "CREATE_ONLY" | "UPSERT";
+        };
+        MilitaryOrganizationsCsvPreview: {
+            /** @enum {string} */
+            mode?: "CREATE_ONLY" | "UPSERT";
+            rows?: {
+                [key: string]: unknown;
+            }[];
+            summary?: {
+                [key: string]: unknown;
+            };
+        };
+        MilitaryOrganizationsCsvImportResponse: {
+            message?: string;
+            imported?: number;
+            total?: number;
+            create?: number;
+            update?: number;
+            unchanged?: number;
+            skipped?: number;
+            invalid?: number;
+        };
         MilitaryOrganizationListEnvelope: {
             items?: components["schemas"]["MilitaryOrganization"][];
             meta?: components["schemas"]["PaginationMeta"];
@@ -3683,6 +4261,238 @@ export interface components {
             status: "ok";
             /** Format: date-time */
             timestamp: string;
+        };
+        SystemSettings: {
+            organizationName: string;
+            organizationAcronym: string;
+            uasg: string;
+            management: string;
+            commandName: string;
+            timeZone: string;
+            /** Format: uri */
+            portalTransparenciaBaseUrl: string;
+            portalSyncIntervalMinutes: number;
+            portalSyncOnStartup: boolean;
+            /** Format: uri */
+            comprasGovBaseUrl: string;
+            /** Format: uri */
+            pncpBaseUrl: string;
+            defaultBiddingNumber?: string | null;
+            defaultBiddingYear?: number | null;
+            defaultImmediateCommitment?: boolean;
+            defaultEstimateGroup?: string;
+            portalApiToken?: components["schemas"]["PortalApiTokenStatus"];
+            connections?: {
+                [key: string]: unknown;
+            };
+        };
+        PortalApiTokenStatus: {
+            configured: boolean;
+            /** @enum {string|null} */
+            source: "DATABASE" | "ENVIRONMENT" | null;
+            /** Format: date-time */
+            updatedAt?: string | null;
+            /** @enum {string|null} */
+            encryption?: "DEDICATED" | "DERIVED" | null;
+        };
+        PortalApiTokenWriteRequest: {
+            token: string;
+        };
+        PortalApiTokenStatusResponse: {
+            portalApiToken: components["schemas"]["PortalApiTokenStatus"];
+        };
+        DeploymentSettings: {
+            id?: string;
+            hostName?: string | null;
+            expectedIp?: string | null;
+            gateway?: string | null;
+            dnsServers?: string[];
+            ntpServers?: string[];
+            allowedNetworks?: string[];
+            proxyUrl?: string | null;
+            /** @enum {string} */
+            certificateMode?: "INTERNAL_CA";
+            certificate?: components["schemas"]["CertificateStatus"];
+            /** Format: date-time */
+            updatedAt?: string;
+        };
+        CertificateStatus: {
+            configured: boolean;
+            toolAvailable: boolean;
+            /** @enum {string} */
+            status: "NOT_CONFIGURED" | "VALID" | "EXPIRING" | "EXPIRED" | "INVALID";
+            subject?: string;
+            issuer?: string;
+            /** Format: date-time */
+            validFrom?: string;
+            /** Format: date-time */
+            expiresAt?: string;
+            daysRemaining?: number;
+            fingerprintSha256?: string;
+            rootFingerprintSha256?: string;
+            proxyRestartRequired?: boolean;
+            renewalAutomation: {
+                enabled: boolean;
+                renewBeforeDays: number;
+                checkIntervalHours: number;
+                /** @enum {string} */
+                proxyReloadMode: "AUTOMATIC" | "MANUAL";
+                /** Format: date-time */
+                lastCheckedAt: string | null;
+                /** Format: date-time */
+                lastAttemptAt: string | null;
+                /** Format: date-time */
+                lastRenewedAt: string | null;
+                /** @enum {string} */
+                lastResult: "NEVER_RUN" | "NOT_CONFIGURED" | "NOT_DUE" | "RENEWED" | "FAILED";
+                lastErrorCode: string | null;
+            };
+            renewalAlert?: {
+                /** @enum {integer} */
+                thresholdDays?: 60 | 30 | 15 | 7 | 0;
+                /** @enum {string} */
+                severity?: "INFO" | "WARNING" | "CRITICAL";
+                label?: string;
+            } | null;
+        };
+        DeploymentDiagnostics: {
+            [key: string]: unknown;
+        };
+        DeploymentPreflight: {
+            /** Format: date-time */
+            checkedAt: string;
+            /** @enum {string} */
+            status: "READY" | "ATTENTION" | "BLOCKED";
+            counts: {
+                pass: number;
+                warn: number;
+                fail: number;
+            };
+            checks: {
+                id: string;
+                /** @enum {string} */
+                category: "RUNTIME" | "SECURITY" | "NETWORK" | "STORAGE" | "CERTIFICATE" | "DATABASE";
+                label: string;
+                /** @enum {string} */
+                status: "PASS" | "WARN" | "FAIL";
+                message: string;
+                remediation?: string;
+            }[];
+        };
+        SetupStatus: {
+            requiresSetup: boolean;
+            setupTokenConfigured: boolean;
+        };
+        InitializeSetupRequest: {
+            setupToken: string;
+            administrator: {
+                name: string;
+                /** Format: email */
+                email: string;
+                password: string;
+            };
+            organization: {
+                name: string;
+                acronym: string;
+                cityName: string;
+                /** @enum {string} */
+                stateUf: "AM" | "RO" | "RR" | "AC";
+                uasg: string;
+                management: string;
+                timeZone: string;
+                commandName: string;
+            };
+            network: {
+                [key: string]: unknown;
+            };
+        };
+        InitializeSetupResponse: {
+            /** @enum {boolean} */
+            initialized: true;
+            administrator: {
+                [key: string]: unknown;
+            };
+            organization: {
+                [key: string]: unknown;
+            };
+        };
+        InitializeInternalCertificateRequest: {
+            /** @example sagep.4cta.eb.mil.br */
+            hostName: string;
+            /** @default false */
+            rotate: boolean;
+        };
+        ExportAuthorityBackupRequest: {
+            passphrase: string;
+            passphraseConfirmation: string;
+        };
+        RestoreAuthorityBackupRequest: {
+            /** Format: byte */
+            archiveBase64: string;
+            passphrase: string;
+            /** @enum {string} */
+            confirmation: "RESTAURAR AUTORIDADE";
+        };
+        RestoreAuthorityBackupResponse: components["schemas"]["CertificateStatus"] & {
+            proxyRestartRequired: boolean;
+            trustRedistributionRequired: boolean;
+            recoveryFilename: string | null;
+        };
+        DatabaseBackup: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            kind: "MANUAL" | "AUTOMATIC" | "IMPORTED" | "SAFETY";
+            filename: string;
+            originalFilename?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            createdBy?: string | null;
+            sizeBytes: number;
+            checksumSha256: string;
+            databaseName?: string;
+            /** @enum {string} */
+            format: "POSTGRES_CUSTOM";
+            verified: boolean;
+        };
+        BackupsOverview: {
+            items?: components["schemas"]["DatabaseBackup"][];
+            summary?: {
+                [key: string]: unknown;
+            };
+            policy?: {
+                [key: string]: unknown;
+            };
+            operationRunning?: boolean;
+        };
+        RestoreDatabaseRequest: {
+            /** @enum {string} */
+            confirmation: "RESTAURAR BANCO";
+        };
+        RestoreDatabaseResponse: {
+            message: string;
+            /** Format: date-time */
+            restoredAt: string;
+            restoredBackup: components["schemas"]["DatabaseBackup"];
+            safetyBackup: components["schemas"]["DatabaseBackup"];
+        };
+        SelectiveDatabaseExportRequest: {
+            modules: ("PROJECTS" | "ATAS" | "USERS" | "SETTINGS" | "AUDIT")[];
+        };
+        IntegrationConnectionCheck: {
+            /** @enum {string} */
+            provider?: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV" | "PNCP";
+            /** @enum {string} */
+            status?: "OPERATIONAL" | "DEGRADED" | "UNAVAILABLE" | "NOT_CONFIGURED";
+            latencyMs?: number | null;
+            httpStatus?: number | null;
+            message?: string;
+            /** Format: date-time */
+            checkedAt?: string;
+        };
+        /** @description Metadados da ATA atualizados no PNCP, sem interferência no saldo operacional do SAGEP. */
+        PncpAtaSyncResponse: {
+            [key: string]: unknown;
         };
         HealthComponent: {
             /** @enum {string} */
@@ -3777,6 +4587,38 @@ export interface components {
                  *       "requiredPermissions": [
                  *         "projects.edit_all"
                  *       ],
+                 *       "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description A operação crítica exige confirmação recente da senha. */
+        StepUpRequired: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "AUTH_STEP_UP_REQUIRED",
+                 *       "message": "Confirme sua senha para realizar esta operação",
+                 *       "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
+                 *     }
+                 */
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Limite de tentativas por IP ou conta excedido. */
+        TooManyRequests: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                /**
+                 * @example {
+                 *       "code": "TOO_MANY_REQUESTS",
+                 *       "message": "Muitas tentativas. Aguarde antes de tentar novamente.",
                  *       "requestId": "2c4a3610-9e9f-40d7-97d0-886bf983302e"
                  *     }
                  */
@@ -3881,6 +4723,8 @@ export interface components {
         PermissionCode: string;
         /** @description Identificador da sessao. */
         SessionId: string;
+        /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+        StepUpToken: string;
         /** @description Identificador UUID da ata. */
         AtaId: string;
         /** @description Identificador UUID do grupo de cobertura da ata. */
@@ -3922,6 +4766,56 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
+        };
+    };
+    setup_get_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SetupStatus"];
+                };
+            };
+        };
+    };
+    setup_post_initialize: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializeSetupRequest"];
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InitializeSetupResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
         };
     };
     health_get_status: {
@@ -4026,6 +4920,7 @@ export interface operations {
             };
             400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
+            429: components["responses"]["TooManyRequests"];
         };
     };
     auth_get_me: {
@@ -4046,6 +4941,32 @@ export interface operations {
                     "application/json": components["schemas"]["UserSummary"];
                 };
             };
+            401: components["responses"]["Unauthorized"];
+        };
+    };
+    auth_post_reauthenticate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReauthenticateRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StepUpResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
             401: components["responses"]["Unauthorized"];
         };
     };
@@ -4116,13 +5037,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    refreshToken: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description OK */
             200: {
@@ -4130,7 +5045,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AuthTokensResponse"];
+                    "application/json": components["schemas"]["RefreshResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -4144,13 +5059,7 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": {
-                    refreshToken: string;
-                };
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Logout realizado */
             200: {
@@ -4231,7 +5140,10 @@ export interface operations {
     auth_post_sessions_revokeAll: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4251,6 +5163,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -4295,7 +5208,10 @@ export interface operations {
     auth_post_users_byUserId_sessions_bySessionId_revoke: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador do usuario. */
                 userId: string;
@@ -4320,13 +5236,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     auth_post_users_byUserId_sessions_revokeAll: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador do usuario. */
                 userId: string;
@@ -4349,13 +5269,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     auth_post_sessions_cleanup: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -4379,6 +5303,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -5353,6 +6278,72 @@ export interface operations {
         };
         responses: {
             /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    tasks_post_byId_activities: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da tarefa. */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TaskActivityCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Andamento registrado */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Task"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    tasks_post_byId_complete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da tarefa. */
+                id: components["parameters"]["TaskId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["TaskCompleteRequest"];
+            };
+        };
+        responses: {
+            /** @description Tarefa concluída */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -6737,6 +7728,1019 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    operationalAlerts_delete_collection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    operationalAlerts_delete_byNotificationKey: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Chave estável da notificação */
+                notificationKey: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_get_systemSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_put_systemSettings: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemSettings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_post_systemSettings_connections_test: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationConnectionCheck"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_put_systemSettings_portalApiToken: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PortalApiTokenWriteRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalApiTokenStatusResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_delete_systemSettings_portalApiToken: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortalApiTokenStatusResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    settings_post_systemSettings_connections_byProvider_test: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path: {
+                /** @description Integração */
+                provider: "DATABASE" | "PORTAL_TRANSPARENCIA" | "COMPRAS_GOV";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IntegrationConnectionCheck"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_get_collection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_put_collection: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DeploymentSettings"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_get_diagnostics: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentDiagnostics"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_get_preflight: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DeploymentPreflight"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_post_certificate_internal: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InitializeInternalCertificateRequest"];
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CertificateStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_post_certificate_renew: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CertificateStatus"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_post_certificate_authority_export: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ExportAuthorityBackupRequest"];
+            };
+        };
+        responses: {
+            /** @description Arquivo criptografado da autoridade */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_post_certificate_authority_restore: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreAuthorityBackupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreAuthorityBackupResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    deployment_get_trustKit_byPlatform: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path: {
+                /** @description Plataforma cliente */
+                platform: "windows" | "linux";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Arquivo ZIP com certificado, scripts e impressão digital */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/zip": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_get_collection: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackupsOverview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_collection: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackup"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_import: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DatabaseBackup"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_export: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SelectiveDatabaseExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Arquivo SQL */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/sql": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_get_byId_download: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path: {
+                /** @description UUID do backup */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Arquivo PostgreSQL custom */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_byId_restore: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path: {
+                /** @description UUID do backup */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreDatabaseRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreDatabaseResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_delete_byId_restore: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path: {
+                /** @description UUID do backup */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_get_commitmentNotes: {
+        parameters: {
+            query?: {
+                /** @description Pagina atual. */
+                page?: components["parameters"]["Page"];
+                /** @description Quantidade por pagina. */
+                pageSize?: components["parameters"]["PageSize"];
+                /** @description NE, fornecedor, CNPJ ou projeto */
+                search?: string;
+                /** @description Situação financeira */
+                financialStatus?: "NAO_LIQUIDADA" | "PARCIALMENTE_LIQUIDADA" | "LIQUIDADA" | "PARCIALMENTE_PAGA" | "PAGA" | "PARCIALMENTE_ANULADA" | "ANULADA";
+                /** @description Situação da validação externa */
+                syncStatus?: "VALIDADO" | "DIVERGENTE" | "NAO_VALIDADO" | "ERRO";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteListResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitmentNoteRegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitmentNoteLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes_lookup: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CommitmentNoteStandaloneLookupRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteStandaloneLookupResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_get_commitmentNotes_byId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador da Nota de Empenho */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_commitmentNotes_byId_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador da Nota de Empenho */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ArchiveResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_get_summary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    financialExecution_post_invoices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["InvoiceCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CommitmentNoteResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     exports_get_projectsXlsx: {
         parameters: {
             query?: {
@@ -6995,7 +8999,10 @@ export interface operations {
     users_post_collection: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path?: never;
             cookie?: never;
         };
@@ -7019,6 +9026,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -7085,7 +9093,10 @@ export interface operations {
     users_patch_byId: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -7112,13 +9123,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     users_patch_byId_status: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -7145,13 +9160,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     users_patch_byId_role: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -7178,6 +9197,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -7239,7 +9259,10 @@ export interface operations {
     permissions_put_roles_byRole: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Role do RBAC persistido. */
                 role: components["parameters"]["RoleName"];
@@ -7266,6 +9289,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -7356,7 +9380,10 @@ export interface operations {
     permissions_post_users_byId_overrides_allow: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -7383,13 +9410,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     permissions_post_users_byId_overrides_deny: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -7416,13 +9447,17 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
     permissions_delete_users_byId_overrides_byPermissionCode: {
         parameters: {
             query?: never;
-            header?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
             path: {
                 /** @description Identificador UUID do usuario. */
                 id: components["parameters"]["UserId"];
@@ -7447,6 +9482,7 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };
@@ -7471,8 +9507,6 @@ export interface operations {
                 stateUf?: "AM" | "RO" | "RR" | "AC";
                 /** @description Filtrar atas ativas. */
                 active?: boolean;
-                /** @description Incluir atas arquivadas na listagem. */
-                includeArchived?: boolean;
                 /** @description Busca textual. */
                 search?: string;
             };
@@ -7671,19 +9705,15 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: {
-            content: {
-                "application/json": components["schemas"]["AtaDeleteRequest"];
-            };
-        };
+        requestBody?: never;
         responses: {
-            /** @description OK */
+            /** @description Ata removida */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AtaDeleteResponse"];
+                    "application/json": components["schemas"]["MessageResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -7717,6 +9747,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Ata"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    atas_post_byId_syncPncp: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da ata. */
+                id: components["parameters"]["AtaId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PncpAtaSyncResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];
@@ -8012,39 +10071,6 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
-    ataItems_post_byId_registerExternalConsumption: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                /** @description Identificador UUID do item da ata. */
-                id: components["parameters"]["AtaItemId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AtaItemRegisterExternalConsumptionRequest"];
-            };
-        };
-        responses: {
-            /** @description OK */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AtaItemRegisterExternalConsumptionResponse"];
-                };
-            };
-            400: components["responses"]["BadRequest"];
-            401: components["responses"]["Unauthorized"];
-            403: components["responses"]["Forbidden"];
-            404: components["responses"]["NotFound"];
-            409: components["responses"]["Conflict"];
-            500: components["responses"]["InternalServerError"];
-        };
-    };
     ataItems_get_byId: {
         parameters: {
             query?: never;
@@ -8292,6 +10318,92 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["MilitaryOrganization"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    militaryOrganizations_get_import_template: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Modelo CSV UTF-8 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    militaryOrganizations_post_import_preview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MilitaryOrganizationsCsvRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MilitaryOrganizationsCsvPreview"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    militaryOrganizations_post_import: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MilitaryOrganizationsCsvRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MilitaryOrganizationsCsvImportResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

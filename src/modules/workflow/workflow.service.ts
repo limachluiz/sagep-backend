@@ -16,12 +16,22 @@ const stageTransitions: Record<ProjectStageValue, ProjectStageValue[]> = {
   AGUARDANDO_INICIO_EXECUCAO: ["SERVICO_EM_EXECUCAO", "CANCELADO"],
   SERVICO_EM_EXECUCAO: ["ANALISANDO_AS_BUILT", "CANCELADO"],
   ANALISANDO_AS_BUILT: ["ATESTAR_NF", "SERVICO_EM_EXECUCAO", "CANCELADO"],
-  ATESTAR_NF: ["SERVICO_CONCLUIDO", "CANCELADO"],
+  ATESTAR_NF: ["ENTREGA_TECNICA", "CANCELADO"],
+  ENTREGA_TECNICA: ["SERVICO_CONCLUIDO", "CANCELADO"],
   SERVICO_CONCLUIDO: [],
   CANCELADO: [],
 };
 
 export class WorkflowService {
+  isDeliveryReportSignatureValid(snapshot: Pick<WorkflowProjectSnapshot, "deliveryReportGeneratedAt" | "deliveryReportSignedAt">) {
+    if (!snapshot.deliveryReportGeneratedAt || !snapshot.deliveryReportSignedAt) return false;
+    const generatedDay = new Date(snapshot.deliveryReportGeneratedAt);
+    const signedDay = new Date(snapshot.deliveryReportSignedAt);
+    generatedDay.setUTCHours(0, 0, 0, 0);
+    signedDay.setUTCHours(0, 0, 0, 0);
+    return signedDay >= generatedDay;
+  }
+
   private stageOrder: ProjectStageValue[] = [
     "ESTIMATIVA_PRECO",
     "AGUARDANDO_NOTA_CREDITO",
@@ -33,6 +43,7 @@ export class WorkflowService {
     "SERVICO_EM_EXECUCAO",
     "ANALISANDO_AS_BUILT",
     "ATESTAR_NF",
+    "ENTREGA_TECNICA",
     "SERVICO_CONCLUIDO",
     "CANCELADO",
   ];
@@ -254,20 +265,19 @@ export class WorkflowService {
       }
     }
 
-    if (stage === "SERVICO_CONCLUIDO") {
+    if (this.isStageAtOrBeyond(stage, "ENTREGA_TECNICA")) {
       if (!snapshot.invoiceAttestedAt) {
-        throw new AppError(
-          "Para concluir o serviço, informe a data de atesto da NF",
-          409,
-        );
+        throw new AppError("Para iniciar a entrega técnica, informe a data de atesto da NF", 409);
       }
-
       if (!snapshot.serviceCompletedAt) {
-        throw new AppError(
-          "Para concluir o serviço, informe a data de conclusão do serviço",
-          409,
-        );
+        throw new AppError("Para iniciar a entrega técnica, informe a data de conclusão da execução", 409);
       }
+    }
+
+    if (stage === "SERVICO_CONCLUIDO") {
+      if (!snapshot.deliveryReportGeneratedAt) throw new AppError("Gere o Relatório Técnico de Conclusão e Entrega antes de concluir o projeto", 409);
+      if (!snapshot.deliveryReportSignedAt) throw new AppError("Confirme a revisão e assinatura do relatório de entrega antes de concluir o projeto", 409);
+      if (!this.isDeliveryReportSignatureValid(snapshot)) throw new AppError("A assinatura registrada é anterior à versão atual do relatório; confirme novamente a revisão e assinatura", 409);
     }
   }
 
@@ -447,12 +457,11 @@ export class WorkflowService {
           };
         }
 
-        return {
-          code: "CONCLUIR_SERVICO",
-          label: "Concluir serviço",
-          description: "Registre a conclusão final do serviço.",
-          targetStage: "SERVICO_CONCLUIDO",
-        };
+        return { code: "PREPARAR_ENTREGA_TECNICA", label: "Iniciar entrega técnica", description: "Registre o encerramento da execução e prepare as evidências do relatório.", targetStage: "ENTREGA_TECNICA" };
+      case "ENTREGA_TECNICA":
+        if (!project.deliveryReportGeneratedAt) return { code: "GERAR_RELATORIO_ENTREGA", label: "Gerar relatório de entrega", description: "Revise as evidências selecionadas e gere o PDF.", targetStage: "ENTREGA_TECNICA" };
+        if (!this.isDeliveryReportSignatureValid(project)) return { code: "GERAR_RELATORIO_ENTREGA", label: "Registrar relatório assinado", description: "Após a revisão e assinatura da versão atual, registre a confirmação para concluir o projeto.", targetStage: "ENTREGA_TECNICA" };
+        return { code: "CONCLUIR_SERVICO", label: "Concluir projeto", description: "O relatório foi gerado e assinado. Conclua o workflow.", targetStage: "SERVICO_CONCLUIDO" };
       default:
         return {
           code: "SEM_ACAO",

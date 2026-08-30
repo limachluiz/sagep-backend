@@ -7,6 +7,7 @@ import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
+import { systemSettingsService } from "../system-settings/system-settings.service.js";
 
 type CurrentUser = {
   id: string;
@@ -28,6 +29,7 @@ type ProjectStageValue =
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
+  | "ENTREGA_TECNICA"
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
@@ -219,8 +221,8 @@ export class DiexService {
     };
   }
 
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "projects.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private async resolveProject(projectId?: string, projectCode?: number) {
@@ -405,7 +407,7 @@ export class DiexService {
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return true;
     }
 
@@ -668,7 +670,10 @@ export class DiexService {
       throw new AppError("Você não tem permissão para emitir DIEx", 403);
     }
 
-    const project = await this.resolveProject(data.projectId, data.projectCode);
+    const [project, settings] = await Promise.all([
+      this.resolveProject(data.projectId, data.projectCode),
+      systemSettingsService.getEffective(),
+    ]);
 
     workflowService.assertCanCreateDiex(this.buildWorkflowSnapshot(project));
 
@@ -718,10 +723,10 @@ export class DiexService {
           estimateId: estimate.id,
           diexNumber: data.diexNumber?.trim(),
           issuedAt: data.issuedAt,
-          issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
-          commandName: data.commandName?.trim() || "COMANDO MILITAR DA AMAZÔNIA",
-          pregaoNumber: data.pregaoNumber?.trim() || "04/2025",
-          uasg: data.uasg?.trim() || "160016",
+          issuingOrganization: data.issuingOrganization?.trim() || settings.organizationAcronym,
+          commandName: data.commandName?.trim() || settings.commandName,
+          pregaoNumber: data.pregaoNumber?.trim() || (settings.defaultBiddingNumber && settings.defaultBiddingYear ? `${settings.defaultBiddingNumber}/${settings.defaultBiddingYear}` : "Não configurado"),
+          uasg: data.uasg?.trim() || settings.uasg,
           supplierName: estimate.ata.vendorName,
           supplierCnpj: data.supplierCnpj.trim(),
           requesterName: requester.requesterName,
@@ -883,7 +888,7 @@ export class DiexService {
       );
     }
 
-    if (!this.isPrivileged(user.role)) {
+    if (!this.isPrivileged(user)) {
       andConditions.push({
         OR: [
           { project: { ownerId: user.id } },

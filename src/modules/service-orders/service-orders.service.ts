@@ -29,6 +29,7 @@ type ProjectStageValue =
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
+  | "ENTREGA_TECNICA"
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
@@ -390,8 +391,8 @@ export class ServiceOrdersService {
     };
   }
 
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "projects.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private canManageProject(
@@ -414,7 +415,7 @@ export class ServiceOrdersService {
     project: { ownerId: string; members: { userId: string }[] },
     user: CurrentUser
   ) {
-    if (this.isPrivileged(user.role)) return true;
+    if (this.isPrivileged(user)) return true;
     if (project.ownerId === user.id) return true;
     return project.members.some((member) => member.userId === user.id);
   }
@@ -1292,7 +1293,7 @@ private buildWorkflowSnapshot(project: {
       );
     }
 
-    if (!this.isPrivileged(user.role)) {
+    if (!this.isPrivileged(user)) {
       andConditions.push({
         OR: [
           { project: { ownerId: user.id } },

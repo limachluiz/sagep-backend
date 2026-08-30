@@ -13,6 +13,7 @@ import type {
 type CurrentUser = {
   id: string;
   role: string;
+  permissions?: string[];
 };
 
 type DashboardPeriodType = "month" | "quarter" | "semester" | "year";
@@ -28,6 +29,7 @@ type ProjectStage =
   | "SERVICO_EM_EXECUCAO"
   | "ANALISANDO_AS_BUILT"
   | "ATESTAR_NF"
+  | "ENTREGA_TECNICA"
   | "SERVICO_CONCLUIDO"
   | "CANCELADO";
 
@@ -511,12 +513,12 @@ function getProjectSnapshotAsOf(
 const operationalAlertsService = new OperationalAlertsService();
 
 export class DashboardService {
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "projects.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private getProjectAccessWhere(user: CurrentUser) {
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return {};
     }
 

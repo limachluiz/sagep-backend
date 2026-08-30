@@ -11,6 +11,7 @@ type CurrentUser = {
   id: string;
   email: string;
   role: string;
+  permissions?: string[];
 };
 
 const __filename = fileURLToPath(import.meta.url);
@@ -18,8 +19,8 @@ const __dirname = path.dirname(__filename);
 const projectRoot = path.resolve(__dirname, "../../..");
 
 export class EstimateDocumentService {
-  private isPrivileged(role: string) {
-    return permissionsService.hasPermission({ role }, "estimates.view_all");
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "estimates.view_all");
   }
 
   private async fileToDataUrl(relativePath: string) {
@@ -60,7 +61,7 @@ export class EstimateDocumentService {
       throw new AppError("Estimativa não encontrada", 404);
     }
 
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return;
     }
 

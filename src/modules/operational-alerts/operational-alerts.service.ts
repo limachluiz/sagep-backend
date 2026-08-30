@@ -3,10 +3,17 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { type ProjectStageValue } from "../workflow/workflow.types.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
+import { permissionsService } from "../permissions/permissions.service.js";
+import { auditService } from "../audit/audit.service.js";
+import { AppError } from "../../shared/app-error.js";
+import { getDeploymentCertificateStatus } from "../deployment/deployment.service.js";
 
 type CurrentUser = {
   id: string;
   role: string;
+  name?: string;
+  email?: string;
+  permissions?: string[];
 };
 
 type OperationalAlertsFilters = {
@@ -25,7 +32,16 @@ type AlertCategory =
   | "SEM_AVANCO"
   | "AGUARDANDO_INICIO_EXECUCAO"
   | "AGUARDANDO_AS_BUILT"
-  | "AGUARDANDO_ATESTO_NF";
+  | "AGUARDANDO_ATESTO_NF"
+  | "NE_DIVERGENTE"
+  | "NE_SYNC_ERRO"
+  | "NE_AGUARDANDO_LIQUIDACAO"
+  | "NE_AGUARDANDO_PAGAMENTO"
+  | "PROJETO_CONCLUIDO_NAO_PAGO"
+  | "NE_PAGA_PROJETO_ABERTO"
+  | "CERTIFICADO_HTTPS_VENCENDO"
+  | "CERTIFICADO_HTTPS_VENCIDO"
+  | "CERTIFICADO_RENOVACAO_FALHOU";
 
 type AlertItem = {
   id: string;
@@ -33,7 +49,7 @@ type AlertItem = {
   severity: AlertSeverity;
   title: string;
   description: string;
-  project: {
+  project?: {
     id: string;
     projectCode: number;
     title: string;
@@ -45,7 +61,7 @@ type AlertItem = {
       email: string;
     };
   };
-  nextAction: ReturnType<typeof workflowService.getNextAction>;
+  nextAction?: ReturnType<typeof workflowService.getNextAction>;
   detailsPath: string;
   daysSinceUpdate?: number;
   document?: {
@@ -57,6 +73,7 @@ type AlertItem = {
     issuedAt: Date | null;
   };
   metadata?: Record<string, unknown>;
+  sourceUpdatedAt?: Date;
 };
 
 const emptyGroups = {
@@ -75,15 +92,24 @@ const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
   AGUARDANDO_INICIO_EXECUCAO: [],
   AGUARDANDO_AS_BUILT: [],
   AGUARDANDO_ATESTO_NF: [],
+  NE_DIVERGENTE: [],
+  NE_SYNC_ERRO: [],
+  NE_AGUARDANDO_LIQUIDACAO: [],
+  NE_AGUARDANDO_PAGAMENTO: [],
+  PROJETO_CONCLUIDO_NAO_PAGO: [],
+  NE_PAGA_PROJETO_ABERTO: [],
+  CERTIFICADO_HTTPS_VENCENDO: [],
+  CERTIFICADO_HTTPS_VENCIDO: [],
+  CERTIFICADO_RENOVACAO_FALHOU: [],
 };
 
 export class OperationalAlertsService {
-  private isPrivileged(role: string) {
-    return role === "ADMIN" || role === "GESTOR";
+  private isPrivileged(user: CurrentUser) {
+    return permissionsService.hasPermission(user, "projects.view_all");
   }
 
   private getProjectAccessWhere(user: CurrentUser): Prisma.ProjectWhereInput {
-    if (this.isPrivileged(user.role)) {
+    if (this.isPrivileged(user)) {
       return {};
     }
 
@@ -261,7 +287,7 @@ export class OperationalAlertsService {
       take: limit,
     });
 
-    const alerts: AlertItem[] = [];
+    let alerts: AlertItem[] = [];
 
     for (const project of projects) {
       const workflowSnapshot = this.buildWorkflowSnapshot(project);
@@ -451,6 +477,144 @@ export class OperationalAlertsService {
       }
     }
 
+    if (permissionsService.hasPermission(user, "financial_execution.view")) {
+      const commitmentNotes = await prisma.commitmentNote.findMany({
+        where: {
+          active: true,
+          project: this.getProjectAccessWhere(user),
+        },
+        include: {
+          project: {
+            include: {
+              owner: { select: { id: true, name: true, email: true } },
+            },
+          },
+        },
+        orderBy: { updatedAt: "desc" },
+        take: limit,
+      });
+
+      for (const note of commitmentNotes) {
+        const projectSummary = this.buildProjectSummary(note.project);
+        const nextAction = workflowService.getNextAction(this.buildWorkflowSnapshot(note.project));
+        const common = {
+          project: projectSummary,
+          nextAction,
+          detailsPath: `/financial-execution?note=${note.id}`,
+          sourceUpdatedAt: note.updatedAt,
+          metadata: {
+            commitmentNoteId: note.id,
+            commitmentNoteNumber: note.number,
+            financialStatus: note.financialStatus,
+            syncStatus: note.syncStatus,
+            currentAmount: Number(note.currentAmount),
+            liquidatedAmount: Number(note.liquidatedAmount),
+            paidAmount: Number(note.paidAmount),
+          },
+        };
+
+        if (note.syncStatus === "DIVERGENTE") {
+          alerts.push({
+            id: `${note.id}:NE_DIVERGENTE`, category: "NE_DIVERGENTE", severity: "CRITICAL",
+            title: `NE ${note.number} com divergência`,
+            description: note.divergenceReason ?? "Os dados oficiais diferem do fornecedor ou valor registrado no projeto.",
+            ...common,
+          });
+        }
+        if (note.syncStatus === "ERRO") {
+          alerts.push({
+            id: `${note.id}:NE_SYNC_ERRO`, category: "NE_SYNC_ERRO", severity: "WARNING",
+            title: `Falha ao atualizar a NE ${note.number}`,
+            description: note.lastSyncError ?? "Não foi possível consultar a situação atual no Portal da Transparência.",
+            ...common,
+          });
+        }
+
+        const requiresSettlement = Boolean(note.project.invoiceAttestedAt) || ["ATESTAR_NF", "SERVICO_CONCLUIDO"].includes(note.project.stage);
+        if (requiresSettlement && note.financialStatus === "NAO_LIQUIDADA") {
+          alerts.push({
+            id: `${note.id}:NE_AGUARDANDO_LIQUIDACAO`, category: "NE_AGUARDANDO_LIQUIDACAO", severity: note.project.stage === "SERVICO_CONCLUIDO" ? "CRITICAL" : "WARNING",
+            title: `NE ${note.number} ainda não liquidada`,
+            description: `O projeto PRJ-${note.project.projectCode} já chegou à etapa de atesto/conclusão, mas não há liquidação localizada.`,
+            ...common,
+          });
+        }
+        if (["LIQUIDADA", "PARCIALMENTE_LIQUIDADA", "PARCIALMENTE_PAGA"].includes(note.financialStatus)) {
+          alerts.push({
+            id: `${note.id}:NE_AGUARDANDO_PAGAMENTO`, category: "NE_AGUARDANDO_PAGAMENTO", severity: "WARNING",
+            title: `NE ${note.number} possui saldo a pagar`,
+            description: `Liquidado: R$ ${Number(note.liquidatedAmount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })} · pago: R$ ${Number(note.paidAmount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}.`,
+            ...common,
+          });
+        }
+        if (note.project.stage === "SERVICO_CONCLUIDO" && note.financialStatus !== "PAGA") {
+          alerts.push({
+            id: `${note.id}:PROJETO_CONCLUIDO_NAO_PAGO`, category: "PROJETO_CONCLUIDO_NAO_PAGO", severity: "CRITICAL",
+            title: `Projeto PRJ-${note.project.projectCode} concluído e não pago`,
+            description: `A NE ${note.number} permanece em ${note.financialStatus.toLowerCase().replaceAll("_", " ")}.`,
+            ...common,
+          });
+        }
+        if (note.financialStatus === "PAGA" && note.project.stage !== "SERVICO_CONCLUIDO") {
+          alerts.push({
+            id: `${note.id}:NE_PAGA_PROJETO_ABERTO`, category: "NE_PAGA_PROJETO_ABERTO", severity: "INFO",
+            title: `NE ${note.number} paga com projeto ainda aberto`,
+            description: `O pagamento foi localizado, mas o projeto PRJ-${note.project.projectCode} está em ${note.project.stage.toLowerCase().replaceAll("_", " ")}.`,
+            ...common,
+          });
+        }
+      }
+    }
+
+    if (permissionsService.hasPermission(user, "settings.view")) {
+      const certificate = await getDeploymentCertificateStatus();
+      if (certificate.configured && certificate.renewalAlert) {
+        const expired = certificate.status === "EXPIRED";
+        alerts.push({
+          id: `deployment:certificate:${certificate.renewalAlert.thresholdDays}`,
+          category: expired ? "CERTIFICADO_HTTPS_VENCIDO" : "CERTIFICADO_HTTPS_VENCENDO",
+          severity: certificate.renewalAlert.severity,
+          title: expired ? "Certificado HTTPS vencido" : `Certificado HTTPS vence em ${certificate.daysRemaining} dia(s)`,
+          description: expired
+            ? "O proxy HTTPS precisa receber um novo certificado assinado pela autoridade interna da OM."
+            : "Renove somente o certificado do servidor para preservar a confiança já instalada nas estações.",
+          detailsPath: "/settings/network",
+          sourceUpdatedAt: certificate.validFrom ? new Date(certificate.validFrom) : now,
+          metadata: {
+            daysRemaining: certificate.daysRemaining,
+            expiresAt: certificate.expiresAt,
+            renewalThresholdDays: certificate.renewalAlert.thresholdDays,
+            rootRotationRequired: false,
+          },
+        });
+      }
+      if (certificate.renewalAutomation.lastResult === "FAILED") {
+        alerts.push({
+          id: "deployment:certificate:auto-renewal-failed",
+          category: "CERTIFICADO_RENOVACAO_FALHOU",
+          severity: "CRITICAL",
+          title: "Falha na renovação automática do HTTPS",
+          description: "A última tentativa automática não foi concluída. Verifique a autoridade da OM e execute a renovação manual.",
+          detailsPath: "/settings/network",
+          sourceUpdatedAt: certificate.renewalAutomation.lastAttemptAt ? new Date(certificate.renewalAutomation.lastAttemptAt) : now,
+          metadata: {
+            errorCode: certificate.renewalAutomation.lastErrorCode,
+            lastAttemptAt: certificate.renewalAutomation.lastAttemptAt,
+          },
+        });
+      }
+    }
+
+    const projectUpdatedAt = new Map(projects.map((project) => [project.id, project.updatedAt]));
+    const dismissals = await prisma.notificationDismissal.findMany({ where: { userId: user.id } });
+    const dismissalByKey = new Map(dismissals.map((item) => [item.notificationKey, item]));
+    alerts = alerts.filter((alert) => {
+      const sourceUpdatedAt = alert.sourceUpdatedAt ?? (alert.project ? projectUpdatedAt.get(alert.project.id) : undefined) ?? now;
+      alert.sourceUpdatedAt = sourceUpdatedAt;
+      const dismissal = dismissalByKey.get(alert.id);
+      return !dismissal || dismissal.sourceUpdatedAt < sourceUpdatedAt;
+    });
+
     const bySeverity = {
       CRITICAL: [...emptyGroups.CRITICAL],
       WARNING: [...emptyGroups.WARNING],
@@ -466,6 +630,15 @@ export class OperationalAlertsService {
       AGUARDANDO_INICIO_EXECUCAO: [...emptyCategoryGroups.AGUARDANDO_INICIO_EXECUCAO],
       AGUARDANDO_AS_BUILT: [...emptyCategoryGroups.AGUARDANDO_AS_BUILT],
       AGUARDANDO_ATESTO_NF: [...emptyCategoryGroups.AGUARDANDO_ATESTO_NF],
+      NE_DIVERGENTE: [...emptyCategoryGroups.NE_DIVERGENTE],
+      NE_SYNC_ERRO: [...emptyCategoryGroups.NE_SYNC_ERRO],
+      NE_AGUARDANDO_LIQUIDACAO: [...emptyCategoryGroups.NE_AGUARDANDO_LIQUIDACAO],
+      NE_AGUARDANDO_PAGAMENTO: [...emptyCategoryGroups.NE_AGUARDANDO_PAGAMENTO],
+      PROJETO_CONCLUIDO_NAO_PAGO: [...emptyCategoryGroups.PROJETO_CONCLUIDO_NAO_PAGO],
+      NE_PAGA_PROJETO_ABERTO: [...emptyCategoryGroups.NE_PAGA_PROJETO_ABERTO],
+      CERTIFICADO_HTTPS_VENCENDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCENDO],
+      CERTIFICADO_HTTPS_VENCIDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCIDO],
+      CERTIFICADO_RENOVACAO_FALHOU: [...emptyCategoryGroups.CERTIFICADO_RENOVACAO_FALHOU],
     };
 
     for (const alert of alerts) {
@@ -536,5 +709,37 @@ export class OperationalAlertsService {
       },
       alerts,
     };
+  }
+
+  async dismissAll(filters: OperationalAlertsFilters, user: CurrentUser) {
+    const current = await this.list(filters, user);
+    if (current.alerts.length) {
+      await prisma.$transaction(current.alerts.map((alert) => prisma.notificationDismissal.upsert({
+        where: { userId_notificationKey: { userId: user.id, notificationKey: alert.id } },
+        create: { userId: user.id, notificationKey: alert.id, sourceUpdatedAt: alert.sourceUpdatedAt ?? current.generatedAt },
+        update: { sourceUpdatedAt: alert.sourceUpdatedAt ?? current.generatedAt, dismissedAt: new Date() },
+      })));
+    }
+    await auditService.log({
+      entityType: "NOTIFICATION",
+      entityId: user.id,
+      action: "DISMISS",
+      actor: { id: user.id, name: user.name ?? user.email },
+      summary: `${current.alerts.length} notificação(ões) limpa(s) pelo usuário`,
+      metadata: { notificationKeys: current.alerts.map((alert) => alert.id) },
+    });
+    return { message: "Notificações limpas", dismissed: current.alerts.length };
+  }
+
+  async dismissOne(notificationKey: string, user: CurrentUser) {
+    const current = await this.list({ limit: 200 }, user);
+    const alert = current.alerts.find((item) => item.id === notificationKey);
+    if (!alert) throw new AppError("Notificação não encontrada ou já limpa", 404);
+    await prisma.notificationDismissal.upsert({
+      where: { userId_notificationKey: { userId: user.id, notificationKey } },
+      create: { userId: user.id, notificationKey, sourceUpdatedAt: alert.sourceUpdatedAt ?? current.generatedAt },
+      update: { sourceUpdatedAt: alert.sourceUpdatedAt ?? current.generatedAt, dismissedAt: new Date() },
+    });
+    return { message: "Notificação limpa", dismissed: 1 };
   }
 }
