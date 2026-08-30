@@ -652,6 +652,10 @@ model AtaItem {
   referenceCode           String
   description             String
   externalDescription     String?
+  automaticDescription    String?
+  descriptionCorrectionStatus String                        @default("OK")
+  descriptionCorrectionConfidence Int?
+  descriptionCorrectionSuggestions Json?
   descriptionEditedAt     DateTime?
   unit                    String
   estimateItems           EstimateItem[]

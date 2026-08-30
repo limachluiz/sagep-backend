@@ -7,6 +7,7 @@ import {
   normalizeMojibakeText,
   REPLACEMENT_CHARACTER_DICTIONARY,
 } from "../../shared/text-normalization.js";
+import { correctImportedDescription } from "../../shared/description-correction.js";
 
 type RuleInput = { damagedText: string; correctedText: string; isActive?: boolean };
 type PreviewRule = { damagedText: string; correctedText: string };
@@ -59,19 +60,37 @@ export class TextCorrectionsService {
   }
 
   async correctText(value: string, previewRule?: PreviewRule) {
-    return applyTextCorrectionRules(value, await this.activeRules(), previewRule);
+    return (await this.analyzeText(value, previewRule)).automaticText;
+  }
+
+  async analyzeText(value: string, previewRule?: PreviewRule) {
+    const ruleCorrectedText = applyTextCorrectionRules(value, await this.activeRules(), previewRule);
+    return correctImportedDescription(value, ruleCorrectedText);
   }
 
   async list() {
     const [rules, descriptions] = await Promise.all([
       textCorrectionRule.findMany({ orderBy: [{ damagedText: "asc" }] }),
-      prisma.ataItem.findMany({ where: { deletedAt: null }, select: { description: true } }),
+      prisma.ataItem.findMany({
+        where: { deletedAt: null },
+        select: {
+          id: true, referenceCode: true, description: true, externalDescription: true,
+          automaticDescription: true, descriptionEditedAt: true,
+          ata: { select: { id: true, number: true, vendorName: true } },
+        },
+      }),
     ]);
     const occurrenceMap = new Map<string, number>();
     const activeRules = rules.filter((rule: { isActive: boolean }) => rule.isActive);
-    for (const item of descriptions) {
-      const corrected = applyTextCorrectionRules(item.description, activeRules);
-      for (const token of findUnresolvedMojibakeTokens(corrected)) {
+    const analyses = descriptions.map((item) => ({
+      item,
+      analysis: correctImportedDescription(
+        item.externalDescription ?? item.description,
+        applyTextCorrectionRules(item.externalDescription ?? item.description, activeRules),
+      ),
+    }));
+    for (const { analysis } of analyses) {
+      for (const token of analysis.unresolvedTokens) {
         occurrenceMap.set(token, (occurrenceMap.get(token) ?? 0) + 1);
       }
     }
@@ -85,6 +104,19 @@ export class TextCorrectionsService {
         source: "BUILT_IN" as const,
       })),
       builtInRuleCount: REPLACEMENT_CHARACTER_DICTIONARY.length,
+      reviewItems: analyses
+        .filter(({ analysis, item }) => analysis.status === "NEEDS_REVIEW" && !item.descriptionEditedAt)
+        .map(({ item, analysis }) => ({
+          itemId: item.id,
+          referenceCode: item.referenceCode,
+          ata: item.ata,
+          originalText: item.externalDescription ?? item.description,
+          automaticText: analysis.automaticText,
+          currentText: item.description,
+          confidence: analysis.confidence,
+          decisions: analysis.decisions,
+          unresolvedTokens: analysis.unresolvedTokens,
+        })),
       unresolvedTokens: [...occurrenceMap.entries()]
         .map(([token, occurrences]) => ({ token, occurrences }))
         .sort((left, right) => right.occurrences - left.occurrences || left.token.localeCompare(right.token, "pt-BR")),
@@ -167,26 +199,63 @@ export class TextCorrectionsService {
     }
     const items = await prisma.ataItem.findMany({
       where: { deletedAt: null, ...(scope.scope === "ATA" && { ataId: scope.ataId }) },
-      select: { id: true, description: true },
+      select: { id: true, description: true, externalDescription: true, descriptionEditedAt: true },
     });
     const activeRules = await this.activeRules();
     const correctedItems = items.map((item) => ({
       ...item,
-      correctedDescription: applyTextCorrectionRules(item.description, activeRules),
+      analysis: correctImportedDescription(
+        item.externalDescription ?? item.description,
+        applyTextCorrectionRules(item.externalDescription ?? item.description, activeRules),
+      ),
     }));
-    const changed = correctedItems.filter((item) => item.correctedDescription !== item.description);
-    if (changed.length) {
-      const editedAt = new Date();
-      await prisma.$transaction(changed.map((item) => prisma.ataItem.update({
+    const changed = correctedItems.filter((item) => !item.descriptionEditedAt && item.analysis.automaticText !== item.description);
+    if (correctedItems.length) {
+      await prisma.$transaction(correctedItems.map((item) => prisma.ataItem.update({
         where: { id: item.id },
-        data: { description: item.correctedDescription, descriptionEditedAt: editedAt } as any,
+        data: {
+          automaticDescription: item.analysis.automaticText,
+          descriptionCorrectionStatus: item.descriptionEditedAt ? "MANUALLY_REVIEWED" : item.analysis.status,
+          descriptionCorrectionConfidence: item.analysis.confidence,
+          descriptionCorrectionSuggestions: item.analysis.decisions as any,
+          ...(!item.descriptionEditedAt && { description: item.analysis.automaticText }),
+        } as any,
       })));
     }
-    const unresolvedTokens = [...new Set(correctedItems.flatMap((item) =>
-      findUnresolvedMojibakeTokens(item.correctedDescription),
-    ))];
+    const unresolvedTokens = [...new Set(correctedItems.flatMap((item) => item.analysis.unresolvedTokens))];
     if (actor) await auditService.log({ entityType: "SYSTEM_SETTINGS", entityId: scope.scope === "ATA" ? scope.ataId : "text-corrections-catalog", action: "UPDATE", actor: { id: actor.id, name: actor.name ?? actor.email }, summary: `Dicionário aplicado em ${scope.scope === "ATA" ? "uma ATA" : "todo o catálogo"}`, metadata: { scope: scope.scope, total: items.length, corrected: changed.length, unresolvedTokens } });
     return { scope: scope.scope, total: items.length, corrected: changed.length, unresolvedTokens };
+  }
+
+  async reviewItem(itemId: string, description: string, learnRule?: PreviewRule, actor?: Actor) {
+    const existing = await prisma.ataItem.findUnique({
+      where: { id: itemId },
+      select: { id: true, description: true, deletedAt: true },
+    });
+    if (!existing || existing.deletedAt) throw new AppError("Item da ATA não encontrado", 404);
+    const reviewed = await prisma.ataItem.update({
+      where: { id: itemId },
+      data: {
+        description: description.trim(),
+        descriptionEditedAt: new Date(),
+        descriptionCorrectionStatus: "MANUALLY_REVIEWED",
+        descriptionCorrectionConfidence: 100,
+        descriptionCorrectionSuggestions: Prisma.JsonNull,
+      } as any,
+    });
+    if (learnRule && learnRule.damagedText.trim() !== learnRule.correctedText.trim()) {
+      const knownRule = await textCorrectionRule.findFirst({
+        where: { damagedText: { equals: learnRule.damagedText.trim(), mode: "insensitive" } },
+        select: { id: true },
+      });
+      if (knownRule) {
+        await this.update(knownRule.id, { ...learnRule, isActive: true }, actor);
+      } else {
+        await this.create({ ...learnRule, isActive: true }, actor);
+      }
+    }
+    if (actor) await auditService.log({ entityType: "ATA_ITEM", entityId: itemId, action: "UPDATE", actor: { id: actor.id, name: actor.name ?? actor.email }, summary: "Descrição do item revisada manualmente", before: { description: existing.description }, after: { description: reviewed.description } });
+    return reviewed;
   }
 }
 

@@ -1,4 +1,7 @@
-const REVERSIBLE_MOJIBAKE_MARKERS = /Ã|Â|â|ð/;
+// Detecta sequências típicas de bytes UTF-8 exibidos como Windows-1252.
+// Uma letra portuguesa válida, como o "â" de "distância", não pode por si só
+// disparar a recodificação da frase inteira.
+const REVERSIBLE_MOJIBAKE_MARKERS = /(?:Ã(?:[¡-¿À-ÿ]|[\u2010-\u203a])|Â[ -¿]|â(?:€|‚|ƒ|„|…|†|‡|ˆ|‰|Š|‹|Œ|Ž|‘|’|“|”|•|–|—|˜|™|š|›|œ|ž|Ÿ)|ð[\u0080-\u00bf])/u;
 const WINDOWS_1252_REVERSE: Record<string, number> = {
   "€": 0x80,
   "‚": 0x82,

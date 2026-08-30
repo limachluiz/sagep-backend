@@ -24,3 +24,12 @@ export const applyTextCorrectionsSchema = z.discriminatedUnion("scope", [
   z.object({ scope: z.literal("ATA"), ataId: z.string().cuid() }),
   z.object({ scope: z.literal("CATALOG") }),
 ]);
+
+export const reviewTextCorrectionSchema = z.object({
+  itemId: z.string().cuid(),
+  description: z.string().trim().min(3).max(10_000),
+  learnRule: z.object({
+    damagedText: z.string().trim().min(1).max(120),
+    correctedText: z.string().trim().min(1).max(120),
+  }).optional(),
+});

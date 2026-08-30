@@ -4,6 +4,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
+import { correctImportedDescription } from "../../shared/description-correction.js";
 import { inferCoverageFromDescription, type InferredCoverage } from "./coverage-inference.js";
 
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
@@ -117,6 +118,7 @@ type ComprasGovAtaItem = Record<string, unknown> & {
 
 type NormalizedPreviewItem = {
   referenceCode: string;
+  rawDescription: string;
   description: string;
   unit: string;
   unitPrice: number;
@@ -751,9 +753,10 @@ export class ComprasGovService {
     return externalItems.map((item, index) => {
       const externalItemNumber = this.normalizeText(item.numeroItem || index + 1);
       const referenceCode = externalItemNumber || this.normalizeText(item.codigoItem || index + 1);
-      const rawDescription = String(item.descricaoItem ?? "");
-      const replacementCharactersBefore = this.countReplacementCharacters(rawDescription);
-      const description = this.normalizeText(rawDescription) || "Item sem descricao";
+    const rawDescription = String(item.descricaoItem ?? "");
+    const replacementCharactersBefore = this.countReplacementCharacters(rawDescription);
+      const correction = correctImportedDescription(rawDescription);
+      const description = correction.automaticText || "Item sem descricao";
       const replacementCharactersAfter = this.countReplacementCharacters(description);
       const unit = this.normalizeItemUnit(item, description);
       const unitPrice = this.normalizeNumber(item.valorUnitario);
@@ -781,6 +784,7 @@ export class ComprasGovService {
 
       return {
         referenceCode,
+        rawDescription,
         description,
         unit,
         unitPrice,
@@ -789,7 +793,7 @@ export class ComprasGovService {
         externalItemNumber,
         coverage: inferCoverageFromDescription(description),
         textIntegrity: {
-          status: replacementCharactersAfter > 0 ? "NEEDS_REVIEW" : "OK",
+          status: correction.status === "NEEDS_REVIEW" ? "NEEDS_REVIEW" : "OK",
           replacementCharactersBefore,
           replacementCharactersAfter,
         },
@@ -1241,7 +1245,10 @@ export class ComprasGovService {
     const activeTextCorrectionRules = await textCorrectionsService.activeRules();
     for (const item of preview.items) {
       const coverageGroup = await resolveItemCoverage(item);
-      const correctedDescription = applyTextCorrectionRules(item.description, activeTextCorrectionRules);
+      const sourceDescription = item.rawDescription || item.description;
+      const ruleCorrectedDescription = applyTextCorrectionRules(sourceDescription, activeTextCorrectionRules);
+      const correction = correctImportedDescription(sourceDescription, ruleCorrectedDescription);
+      const correctedDescription = correction.automaticText;
       const existingItem = await prisma.ataItem.findFirst({
         where: {
           ataId: ata.id,
@@ -1261,7 +1268,11 @@ export class ComprasGovService {
           data: {
             coverageGroupId: coverageGroup.id,
             referenceCode: item.referenceCode,
-            externalDescription: item.description,
+            externalDescription: sourceDescription,
+            automaticDescription: correctedDescription,
+            descriptionCorrectionStatus: importedItem.descriptionEditedAt ? "MANUALLY_REVIEWED" : correction.status,
+            descriptionCorrectionConfidence: correction.confidence,
+            descriptionCorrectionSuggestions: correction.decisions as any,
             ...(importedItem.descriptionEditedAt ? {} : { description: correctedDescription }),
             unit: item.unit.trim().toUpperCase(),
             unitPrice: item.unitPrice.toFixed(2),
@@ -1280,7 +1291,11 @@ export class ComprasGovService {
             coverageGroupId: coverageGroup.id,
             referenceCode: item.referenceCode,
             description: correctedDescription,
-            externalDescription: item.description,
+            externalDescription: sourceDescription,
+            automaticDescription: correctedDescription,
+            descriptionCorrectionStatus: correction.status,
+            descriptionCorrectionConfidence: correction.confidence,
+            descriptionCorrectionSuggestions: correction.decisions as any,
             unit: item.unit.trim().toUpperCase(),
             unitPrice: item.unitPrice.toFixed(2),
             initialQuantity: item.initialQuantity.toFixed(2),

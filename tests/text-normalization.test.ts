@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import { findUnresolvedMojibakeTokens, normalizeMojibakeText } from "../src/shared/text-normalization.js";
 
 describe("normalizeMojibakeText", () => {
+  it.each(["distância máxima", "cabeamento subterrâneo", "câmera eletrônica"])(
+    "preserva texto português válido sem tentar recodificá-lo: %s",
+    (text) => expect(normalizeMojibakeText(text)).toBe(text),
+  );
   it("fixes common Compras.gov mojibake without changing valid UTF-8 text", () => {
     expect(normalizeMojibakeText("SERVI\u00c3\u2021O")).toBe("SERVI\u00c7O");
     expect(normalizeMojibakeText("Elabora\u00c3\u00a7\u00c3\u00a3o")).toBe("Elabora\u00e7\u00e3o");

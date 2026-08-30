@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import {
   applyTextCorrectionsSchema,
+  reviewTextCorrectionSchema,
   saveTextCorrectionSchema,
   testTextCorrectionSchema,
   textCorrectionIdSchema,
@@ -14,4 +15,5 @@ export class TextCorrectionsController {
   async remove(req: Request, res: Response) { const { id } = textCorrectionIdSchema.parse(req.params); return res.status(200).json(await textCorrectionsService.remove(id, req.user!)); }
   async test(req: Request, res: Response) { const data = testTextCorrectionSchema.parse(req.body); const preview = data.damagedText && data.correctedText ? { damagedText: data.damagedText, correctedText: data.correctedText } : undefined; return res.status(200).json(await textCorrectionsService.test(data.text, preview)); }
   async apply(req: Request, res: Response) { return res.status(200).json(await textCorrectionsService.apply(applyTextCorrectionsSchema.parse(req.body), req.user!)); }
+  async review(req: Request, res: Response) { const data = reviewTextCorrectionSchema.parse({ ...req.body, ...req.params }); return res.status(200).json(await textCorrectionsService.reviewItem(data.itemId, data.description, data.learnRule, req.user!)); }
 }

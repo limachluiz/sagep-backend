@@ -212,6 +212,11 @@ export class AtaItemsService {
         coverageGroupId: coverageGroup.id,
         referenceCode: data.referenceCode.trim(),
         description: data.description.trim(),
+        externalDescription: data.description.trim(),
+        automaticDescription: data.description.trim(),
+        descriptionCorrectionStatus: "MANUALLY_REVIEWED",
+        descriptionCorrectionConfidence: 100,
+        descriptionEditedAt: new Date(),
         unit: data.unit.trim().toUpperCase(),
         unitPrice: this.normalizeMoney(data.unitPrice),
         initialQuantity: this.normalizeQuantity(data.initialQuantity),
@@ -541,6 +546,9 @@ export class AtaItemsService {
         ...(data.description !== undefined && {
           description: data.description.trim(),
           descriptionEditedAt: new Date(),
+          descriptionCorrectionStatus: "MANUALLY_REVIEWED",
+          descriptionCorrectionConfidence: 100,
+          descriptionCorrectionSuggestions: Prisma.JsonNull,
         }),
         ...(data.unit !== undefined && { unit: data.unit.trim().toUpperCase() }),
         ...(data.unitPrice !== undefined && {
@@ -564,20 +572,25 @@ export class AtaItemsService {
   async correctDescription(itemId: string) {
     const existingItem = await prisma.ataItem.findUnique({
       where: { id: itemId },
-      select: { id: true, description: true, deletedAt: true },
+      select: { id: true, description: true, externalDescription: true, deletedAt: true, descriptionEditedAt: true },
     });
 
     if (!existingItem || existingItem.deletedAt) {
       throw new AppError("Item da ata não encontrado", 404);
     }
 
-    const correctedDescription = await textCorrectionsService.correctText(existingItem.description);
-    if (correctedDescription !== existingItem.description) {
-      await prisma.ataItem.update({
-        where: { id: itemId },
-        data: { description: correctedDescription, descriptionEditedAt: new Date() } as any,
-      });
-    }
+    const analysis = await textCorrectionsService.analyzeText(existingItem.externalDescription ?? existingItem.description);
+    const correctedDescription = analysis.automaticText;
+    await prisma.ataItem.update({
+      where: { id: itemId },
+      data: {
+        automaticDescription: correctedDescription,
+        descriptionCorrectionStatus: existingItem.descriptionEditedAt ? "MANUALLY_REVIEWED" : analysis.status,
+        descriptionCorrectionConfidence: analysis.confidence,
+        descriptionCorrectionSuggestions: analysis.decisions as any,
+        ...(!existingItem.descriptionEditedAt && { description: correctedDescription }),
+      } as any,
+    });
 
     return {
       itemId,
@@ -592,26 +605,31 @@ export class AtaItemsService {
     await this.ensureAtaExists(ataId);
     const items = await prisma.ataItem.findMany({
       where: { ataId, deletedAt: null },
-      select: { id: true, description: true },
+      select: { id: true, description: true, externalDescription: true, descriptionEditedAt: true },
     });
     const corrections = await Promise.all(items.map(async (item) => ({
       ...item,
-      correctedDescription: await textCorrectionsService.correctText(item.description),
+      analysis: await textCorrectionsService.analyzeText(item.externalDescription ?? item.description),
     })));
-    const changed = corrections.filter((item) => item.correctedDescription !== item.description);
+    const changed = corrections.filter((item) => !item.descriptionEditedAt && item.analysis.automaticText !== item.description);
 
-    if (changed.length) {
-      const editedAt = new Date();
+    if (corrections.length) {
       await prisma.$transaction(
-        changed.map((item) => prisma.ataItem.update({
+        corrections.map((item) => prisma.ataItem.update({
           where: { id: item.id },
-          data: { description: item.correctedDescription, descriptionEditedAt: editedAt } as any,
+          data: {
+            automaticDescription: item.analysis.automaticText,
+            descriptionCorrectionStatus: item.descriptionEditedAt ? "MANUALLY_REVIEWED" : item.analysis.status,
+            descriptionCorrectionConfidence: item.analysis.confidence,
+            descriptionCorrectionSuggestions: item.analysis.decisions as any,
+            ...(!item.descriptionEditedAt && { description: item.analysis.automaticText }),
+          } as any,
         })),
       );
     }
 
     const unresolvedTokens = [...new Set(corrections.flatMap((item) =>
-      findUnresolvedMojibakeTokens(item.correctedDescription),
+      item.analysis.unresolvedTokens,
     ))];
 
     return {
@@ -620,7 +638,7 @@ export class AtaItemsService {
       corrected: changed.length,
       unchanged: items.length - changed.length,
       unresolvedCharacters: corrections.reduce(
-        (total, item) => total + (item.correctedDescription.match(/�/g) ?? []).length,
+        (total, item) => total + (item.analysis.automaticText.match(/�/g) ?? []).length,
         0,
       ),
       unresolvedTokens,

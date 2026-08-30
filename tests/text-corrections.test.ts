@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyTextCorrectionsSchema,
+  reviewTextCorrectionSchema,
   saveTextCorrectionSchema,
   testTextCorrectionSchema,
 } from "../src/modules/text-corrections/text-corrections.schemas.js";
@@ -36,6 +37,11 @@ describe("dicionário configurável de correções", () => {
     expect(saveTextCorrectionSchema.parse({ damagedText: "ALVAR�ES", correctedText: "ALVARÃES" })).toEqual({ damagedText: "ALVAR�ES", correctedText: "ALVARÃES" });
     expect(testTextCorrectionSchema.parse({ text: "ALVAR�ES", damagedText: "ALVAR�ES", correctedText: "ALVARÃES" })).toBeTruthy();
     expect(applyTextCorrectionsSchema.parse({ scope: "CATALOG" })).toEqual({ scope: "CATALOG" });
+    expect(reviewTextCorrectionSchema.parse({
+      itemId: "cm12345678901234567890123",
+      description: "Descrição final revisada",
+      learnRule: { damagedText: "met�lica", correctedText: "metálica" },
+    })).toBeTruthy();
   });
 
   it("rejeita correção idêntica e prévia incompleta", () => {
