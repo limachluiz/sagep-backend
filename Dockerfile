@@ -16,6 +16,10 @@ COPY src ./src
 
 RUN npm run prisma:generate
 RUN npm run build
+# O mesmo conjunto validado no estágio de compilação é reaproveitado na imagem
+# final. Isso evita uma segunda instalação de rede e mantém apenas dependências
+# necessárias em produção.
+RUN npm prune --omit=dev
 
 FROM node:22-bookworm-slim AS runtime
 
@@ -74,7 +78,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci --omit=dev
+COPY --from=build /app/node_modules ./node_modules
 
 COPY prisma ./prisma
 COPY prisma.config.ts ./
