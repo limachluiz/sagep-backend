@@ -3,7 +3,7 @@ import { evaluateEnvironment, isPrivateIpv4, resolveIpv4Addresses } from "../scr
 
 describe("pré-validação local da implantação", () => {
   it("aceita somente endereços IPv4 privados", () => {
-    expect(isPrivateIpv4("10.78.10.20")).toBe(true);
+    expect(isPrivateIpv4("192.168.50.20")).toBe(true);
     expect(isPrivateIpv4("172.20.1.5")).toBe(true);
     expect(isPrivateIpv4("192.168.1.5")).toBe(true);
     expect(isPrivateIpv4("0.0.0.0")).toBe(false);
@@ -29,11 +29,11 @@ describe("pré-validação local da implantação", () => {
       JWT_REFRESH_SECRET: "b".repeat(64),
       AUTH_COOKIE_SECURE: "true",
       TRUST_PROXY_HOPS: "1",
-      SAGEP_HOSTNAME: "sagep.4cta.eb.mil.br",
+      SAGEP_HOSTNAME: "sagep.example.test",
       SAGEP_HTTPS_PORT: "443",
-      SAGEP_BIND_IP: "10.78.10.20",
-      SAGEP_ALLOWED_NETWORKS: "10.78.0.0/16",
-      CORS_ALLOWED_ORIGINS: "https://sagep.4cta.eb.mil.br",
+      SAGEP_BIND_IP: "192.168.50.20",
+      SAGEP_ALLOWED_NETWORKS: "192.168.0.0/16",
+      CORS_ALLOWED_ORIGINS: "https://sagep.example.test",
       ALLOW_PUBLIC_REGISTRATION: "false",
     });
     expect(checks.every((check) => check.status === "PASS")).toBe(true);

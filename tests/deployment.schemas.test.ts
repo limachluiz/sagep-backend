@@ -3,8 +3,8 @@ import { exportAuthorityBackupSchema, initializeInternalCertificateSchema, resto
 
 describe("configuração de implantação", () => {
   it("aceita o nome DNS interno completo da OM", () => {
-    expect(initializeInternalCertificateSchema.parse({ hostName: "SAGEP.4CTA.EB.MIL.BR" })).toEqual({
-      hostName: "sagep.4cta.eb.mil.br",
+    expect(initializeInternalCertificateSchema.parse({ hostName: "SAGEP.EXAMPLE.TEST" })).toEqual({
+      hostName: "sagep.example.test",
       rotate: false,
     });
   });
@@ -16,32 +16,32 @@ describe("configuração de implantação", () => {
 
   it("limita listas administrativas e normaliza o modo de certificado", () => {
     const parsed = updateDeploymentSchema.parse({
-      hostName: "sagep.4cta.eb.mil.br",
-      expectedIp: "10.78.10.20",
-      gateway: "10.78.10.1",
-      dnsServers: ["10.78.0.10"],
-      ntpServers: ["10.78.0.20"],
-      allowedNetworks: ["10.78.0.0/16"],
+      hostName: "sagep.example.test",
+      expectedIp: "192.168.50.20",
+      gateway: "192.168.50.1",
+      dnsServers: ["192.168.50.10"],
+      ntpServers: ["192.168.50.30"],
+      allowedNetworks: ["192.168.0.0/16"],
       proxyUrl: "",
       certificateMode: "INTERNAL_CA",
     });
     expect(parsed.certificateMode).toBe("INTERNAL_CA");
-    expect(parsed.allowedNetworks).toEqual(["10.78.0.0/16"]);
+    expect(parsed.allowedNetworks).toEqual(["192.168.0.0/16"]);
   });
 
   it("rejeita CIDR público ou não canônico e normaliza duplicações", () => {
     const base = {
-      hostName: "sagep.4cta.eb.mil.br",
-      expectedIp: "10.78.10.20",
-      gateway: "10.78.10.1",
-      dnsServers: ["10.78.0.10"],
-      ntpServers: ["10.78.0.20"],
+      hostName: "sagep.example.test",
+      expectedIp: "192.168.50.20",
+      gateway: "192.168.50.1",
+      dnsServers: ["192.168.50.10"],
+      ntpServers: ["192.168.50.30"],
       proxyUrl: null,
       certificateMode: "INTERNAL_CA" as const,
     };
-    expect(updateDeploymentSchema.parse({ ...base, allowedNetworks: ["10.78.0.0/16", "10.78.0.0/16"] }).allowedNetworks).toEqual(["10.78.0.0/16"]);
+    expect(updateDeploymentSchema.parse({ ...base, allowedNetworks: ["192.168.0.0/16", "192.168.0.0/16"] }).allowedNetworks).toEqual(["192.168.0.0/16"]);
     expect(() => updateDeploymentSchema.parse({ ...base, allowedNetworks: ["0.0.0.0/0"] })).toThrow();
-    expect(() => updateDeploymentSchema.parse({ ...base, allowedNetworks: ["10.78.1.1/16"] })).toThrow();
+    expect(() => updateDeploymentSchema.parse({ ...base, allowedNetworks: ["192.168.1.1/16"] })).toThrow();
   });
 });
 

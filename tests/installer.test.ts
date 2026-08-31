@@ -14,10 +14,10 @@ import {
 } from "../scripts/install-sagep.mjs";
 
 const answers = {
-  hostName: "sagep.4cta.eb.mil.br",
-  bindIp: "10.78.10.20",
-  allowedNetworks: "10.78.0.0/16",
-  pgAdminEmail: "admin@sagep.4cta.eb.mil.br",
+  hostName: "sagep.example.test",
+  bindIp: "192.168.50.20",
+  allowedNetworks: "192.168.0.0/16",
+  pgAdminEmail: "admin@example.invalid",
 };
 
 describe("instalador assistido", () => {
@@ -36,8 +36,8 @@ describe("instalador assistido", () => {
     expect(values.NODE_ENV).toBe("production");
     expect(values.AUTH_COOKIE_SECURE).toBe("true");
     expect(values.TRUST_PROXY_HOPS).toBe("1");
-    expect(values.CORS_ALLOWED_ORIGINS).toBe("https://sagep.4cta.eb.mil.br");
-    expect(values.SAGEP_ALLOWED_NETWORKS).toBe("10.78.0.0/16");
+    expect(values.CORS_ALLOWED_ORIGINS).toBe("https://sagep.example.test");
+    expect(values.SAGEP_ALLOWED_NETWORKS).toBe("192.168.0.0/16");
     expect(values.JWT_SECRET).not.toBe(values.JWT_REFRESH_SECRET);
     expect(values.SAGEP_SECRETS_ENCRYPTION_KEY).toHaveLength(64);
     expect(values.SAGEP_SECRETS_ENCRYPTION_KEY).not.toBe(values.JWT_REFRESH_SECRET);

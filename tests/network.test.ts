@@ -3,7 +3,7 @@ import { isCanonicalPrivateIpv4Cidr, isPrivateIpv4, normalizePrivateIpv4Cidrs } 
 
 describe("validação de redes privadas", () => {
   it("aceita IPv4 privados e rejeita endereços públicos ou amplos", () => {
-    expect(isPrivateIpv4("10.78.10.20")).toBe(true);
+    expect(isPrivateIpv4("192.168.50.20")).toBe(true);
     expect(isPrivateIpv4("172.31.255.254")).toBe(true);
     expect(isPrivateIpv4("192.168.1.5")).toBe(true);
     expect(isPrivateIpv4("127.0.0.1")).toBe(false);
@@ -12,10 +12,10 @@ describe("validação de redes privadas", () => {
   });
 
   it("exige rede CIDR privada e canônica", () => {
-    expect(isCanonicalPrivateIpv4Cidr("10.78.0.0/16")).toBe(true);
+    expect(isCanonicalPrivateIpv4Cidr("192.168.0.0/16")).toBe(true);
     expect(isCanonicalPrivateIpv4Cidr("172.20.4.0/24")).toBe(true);
     expect(isCanonicalPrivateIpv4Cidr("192.168.10.32/27")).toBe(true);
-    expect(isCanonicalPrivateIpv4Cidr("10.78.1.4/16")).toBe(false);
+    expect(isCanonicalPrivateIpv4Cidr("192.168.1.4/16")).toBe(false);
     expect(isCanonicalPrivateIpv4Cidr("0.0.0.0/0")).toBe(false);
     expect(isCanonicalPrivateIpv4Cidr("8.8.8.0/24")).toBe(false);
   });

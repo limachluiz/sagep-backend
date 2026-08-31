@@ -15,8 +15,8 @@ const mocks = vi.hoisted(() => {
     deploymentAllowedNetworks: [] as string[],
     deploymentProxyUrl: null as string | null,
     deploymentCertificateMode: "INTERNAL_CA",
-    organizationName: "4º Centro de Telemática de Área",
-    organizationAcronym: "4º CTA",
+    organizationName: "Organização de Teste",
+    organizationAcronym: "OM TESTE",
     updatedAt: new Date(),
   };
   return {
@@ -54,7 +54,7 @@ describe("PKI interna da OM", () => {
 
   it("emite certificado DNS e exporta somente material público nos kits", async () => {
     const service = new DeploymentService();
-    const status = await service.initializeInternalCertificate({ hostName: "sagep.4cta.eb.mil.br", rotate: false }, actor);
+    const status = await service.initializeInternalCertificate({ hostName: "sagep.example.test", rotate: false }, actor);
 
     expect(status).toMatchObject({ configured: true, toolAvailable: true, status: "VALID" });
     expect(status.rootFingerprintSha256).toMatch(/^(?:[A-F0-9]{2}:){31}[A-F0-9]{2}$/);
@@ -73,7 +73,7 @@ describe("PKI interna da OM", () => {
 
   it("renova somente o certificado do servidor e preserva a autoridade da OM", async () => {
     const service = new DeploymentService();
-    const before = await service.initializeInternalCertificate({ hostName: "sagep.4cta.eb.mil.br", rotate: true }, actor);
+    const before = await service.initializeInternalCertificate({ hostName: "sagep.example.test", rotate: true }, actor);
     const renewed = await service.renewServerCertificate(actor);
 
     expect(renewed).toMatchObject({ configured: true, status: "VALID", proxyRestartRequired: true });
@@ -89,13 +89,13 @@ describe("PKI interna da OM", () => {
 
   it("exporta, restaura e reemite o certificado usando a autoridade recuperada", async () => {
     const service = new DeploymentService();
-    const original = await service.initializeInternalCertificate({ hostName: "sagep.4cta.eb.mil.br", rotate: true }, actor);
+    const original = await service.initializeInternalCertificate({ hostName: "sagep.example.test", rotate: true }, actor);
     const backup = await service.exportAuthorityBackup({
       passphrase: "senha de custodia exclusiva com vinte caracteres",
       passphraseConfirmation: "senha de custodia exclusiva com vinte caracteres",
     }, actor);
 
-    const rotated = await service.initializeInternalCertificate({ hostName: "sagep.4cta.eb.mil.br", rotate: true }, actor);
+    const rotated = await service.initializeInternalCertificate({ hostName: "sagep.example.test", rotate: true }, actor);
     expect(rotated.rootFingerprintSha256).not.toBe(original.rootFingerprintSha256);
 
     const restored = await service.restoreAuthorityBackup({

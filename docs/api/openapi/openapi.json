@@ -6233,7 +6233,7 @@
         "properties": {
           "hostName": {
             "type": "string",
-            "example": "sagep.4cta.eb.mil.br"
+            "example": "sagep.example.test"
           },
           "rotate": {
             "type": "boolean",

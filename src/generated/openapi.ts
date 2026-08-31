@@ -4418,7 +4418,7 @@ export interface components {
             };
         };
         InitializeInternalCertificateRequest: {
-            /** @example sagep.4cta.eb.mil.br */
+            /** @example sagep.example.test */
             hostName: string;
             /** @default false */
             rotate: boolean;

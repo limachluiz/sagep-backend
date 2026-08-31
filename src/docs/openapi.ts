@@ -3052,7 +3052,7 @@ export const openApiDocument: OpenApiDocument = {
       InitializeInternalCertificateRequest: {
         type: "object",
         required: ["hostName"],
-        properties: { hostName: { type: "string", example: "sagep.4cta.eb.mil.br" }, rotate: { type: "boolean", default: false } },
+        properties: { hostName: { type: "string", example: "sagep.example.test" }, rotate: { type: "boolean", default: false } },
       },
       ExportAuthorityBackupRequest: {
         type: "object",

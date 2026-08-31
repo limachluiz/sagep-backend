@@ -19,8 +19,8 @@ afterEach(async () => {
 describe("provisionamento HTTPS inicial", () => {
   it("cria uma autoridade exclusiva e reutiliza o mesmo material", async () => {
     const target = await directories();
-    const created = await provisionInitialInternalCertificate("sagep.4cta.eb.mil.br", target.pki, target.tls);
-    const existing = await provisionInitialInternalCertificate("sagep.4cta.eb.mil.br", target.pki, target.tls);
+    const created = await provisionInitialInternalCertificate("sagep.example.test", target.pki, target.tls);
+    const existing = await provisionInitialInternalCertificate("sagep.example.test", target.pki, target.tls);
 
     expect(created.created).toBe(true);
     expect(existing.created).toBe(false);
@@ -33,15 +33,15 @@ describe("provisionamento HTTPS inicial", () => {
     await fs.mkdir(target.pki, { recursive: true });
     await fs.writeFile(path.join(target.pki, ROOT_CERT), "incompleto");
 
-    await expect(provisionInitialInternalCertificate("sagep.4cta.eb.mil.br", target.pki, target.tls))
+    await expect(provisionInitialInternalCertificate("sagep.example.test", target.pki, target.tls))
       .rejects.toMatchObject({ code: "CERTIFICATE_MATERIAL_PARTIAL", statusCode: 409 });
   });
 
   it("bloqueia reutilização do certificado para outro nome DNS", async () => {
     const target = await directories();
-    await provisionInitialInternalCertificate("sagep.4cta.eb.mil.br", target.pki, target.tls);
+    await provisionInitialInternalCertificate("sagep.example.test", target.pki, target.tls);
 
-    await expect(provisionInitialInternalCertificate("sagep.outraom.eb.mil.br", target.pki, target.tls))
+    await expect(provisionInitialInternalCertificate("sagep.other.example.test", target.pki, target.tls))
       .rejects.toMatchObject({ code: "CERTIFICATE_MATERIAL_MISMATCH", statusCode: 409 });
   }, 30_000);
 });

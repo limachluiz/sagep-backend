@@ -4,34 +4,34 @@ import { initializeSetupSchema } from "../src/modules/setup/setup.schemas.js";
 const valid = {
   setupToken: "a".repeat(32),
   administrator: {
-    name: "Administrador da OM",
-    email: "admin@4cta.eb.mil.br",
+    name: "Administrador de Teste",
+    email: "admin@example.com",
     password: "Senha-Segura-2026!",
   },
   organization: {
-    name: "4º Centro de Telemática de Área",
-    acronym: "4º CTA",
-    cityName: "Manaus",
+    name: "Organização de Teste",
+    acronym: "OM TESTE",
+    cityName: "Cidade Exemplo",
     stateUf: "AM",
-    uasg: "160016",
+    uasg: "000000",
     management: "00001",
-    timeZone: "America/Manaus",
-    commandName: "Comando Militar da Amazônia",
+    timeZone: "America/Sao_Paulo",
+    commandName: "Comando de Teste",
   },
   network: {
-    hostName: "sagep.4cta.eb.mil.br",
-    expectedIp: "10.72.10.20",
-    gateway: "10.72.10.1",
-    dnsServers: ["10.72.0.10"],
+    hostName: "sagep.example.test",
+    expectedIp: "192.168.50.20",
+    gateway: "192.168.50.1",
+    dnsServers: ["192.168.50.10"],
     ntpServers: [],
-    allowedNetworks: ["10.72.0.0/16"],
+    allowedNetworks: ["192.168.0.0/16"],
     proxyUrl: null,
   },
 };
 
 describe("initializeSetupSchema", () => {
   it("aceita a configuração inicial segura da OM", () => {
-    expect(initializeSetupSchema.parse(valid).administrator.email).toBe("admin@4cta.eb.mil.br");
+    expect(initializeSetupSchema.parse(valid).administrator.email).toBe("admin@example.com");
   });
 
   it("rejeita senha inicial fraca", () => {

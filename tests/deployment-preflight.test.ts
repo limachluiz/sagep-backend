@@ -7,19 +7,19 @@ function readyInput(overrides: Partial<DeploymentPreflightInput> = {}): Deployme
     nodeEnvironment: "production",
     cookieSecure: true,
     trustProxyHops: 1,
-    corsOrigins: ["https://sagep.4cta.eb.mil.br"],
+    corsOrigins: ["https://sagep.example.test"],
     publicRegistrationAllowed: false,
     setupTokenConfigured: false,
     userCount: 1,
-    hostName: "sagep.4cta.eb.mil.br",
-    environmentHostName: "sagep.4cta.eb.mil.br",
-    bindIp: "10.78.10.20",
-    expectedIp: "10.78.10.20",
+    hostName: "sagep.example.test",
+    environmentHostName: "sagep.example.test",
+    bindIp: "192.168.50.20",
+    expectedIp: "192.168.50.20",
     expectedIpMatches: true,
     dnsMatchesExpectedIp: true,
     dnsError: null,
-    allowedNetworks: ["10.78.0.0/16"],
-    hostAllowedNetworks: ["10.78.0.0/16"],
+    allowedNetworks: ["192.168.0.0/16"],
+    hostAllowedNetworks: ["192.168.0.0/16"],
     opensslAvailable: true,
     certificateStatus: "VALID",
     directories: [
@@ -61,7 +61,7 @@ describe("pré-validação da implantação", () => {
   });
 
   it("bloqueia produção quando o firewall do host diverge do painel", () => {
-    const result = evaluateDeploymentPreflight(readyInput({ hostAllowedNetworks: ["192.168.0.0/16"] }));
+    const result = evaluateDeploymentPreflight(readyInput({ hostAllowedNetworks: ["172.16.0.0/16"] }));
     expect(result.status).toBe("BLOCKED");
     expect(result.checks).toContainEqual(expect.objectContaining({ id: "network.firewall", status: "FAIL" }));
   });

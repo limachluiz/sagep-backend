@@ -192,15 +192,15 @@ function parseArguments(argv) {
 async function askAnswers() {
   const terminal = readline.createInterface({ input, output });
   try {
-    const hostName = await terminal.question("Nome DNS interno completo [sagep.4cta.eb.mil.br]: ");
+    const hostName = await terminal.question("Nome DNS interno completo [sagep.example.test]: ");
     const bindIp = await terminal.question("IPv4 privado reservado do servidor: ");
-    const allowedNetworks = await terminal.question("Redes CIDR autorizadas, separadas por vírgula [10.78.0.0/16]: ");
-    const pgAdminEmail = await terminal.question("E-mail administrativo do pgAdmin [admin@sagep.4cta.eb.mil.br]: ");
+    const allowedNetworks = await terminal.question("Redes CIDR autorizadas, separadas por vírgula [192.168.0.0/16]: ");
+    const pgAdminEmail = await terminal.question("E-mail administrativo do pgAdmin [admin@example.invalid]: ");
     return validateInstallerAnswers({
-      hostName: hostName || "sagep.4cta.eb.mil.br",
+      hostName: hostName || "sagep.example.test",
       bindIp,
-      allowedNetworks: allowedNetworks || "10.78.0.0/16",
-      pgAdminEmail: pgAdminEmail || "admin@sagep.4cta.eb.mil.br",
+      allowedNetworks: allowedNetworks || "192.168.0.0/16",
+      pgAdminEmail: pgAdminEmail || "admin@example.invalid",
     });
   } finally {
     terminal.close();

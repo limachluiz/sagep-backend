@@ -170,7 +170,7 @@ Variáveis usadas atualmente:
 | `CERTIFICATE_RENEWAL_CHECK_HOURS` | nao | Intervalo das verificações automáticas. Padrão `24` horas |
 | `CERTIFICATE_PROXY_AUTO_RELOAD` | nao | Informa se o ambiente recarrega o proxy automaticamente. O Compose define `true` |
 | `CERTIFICATE_RELOAD_CHECK_SECONDS` | nao | Intervalo do observador TLS do Caddy. Padrão `15` segundos |
-| `SAGEP_HOSTNAME` | no perfil HTTPS | Nome DNS interno completo, por exemplo `sagep.4cta.eb.mil.br` |
+| `SAGEP_HOSTNAME` | no perfil HTTPS | Nome DNS completo definido exclusivamente no `.env` local da instalação |
 | `SAGEP_BIND_IP` | no perfil HTTPS | IP privado do host no qual Caddy publicará 80/443. O padrão seguro é `127.0.0.1` |
 | `SAGEP_HTTP_PORT` | nao | Porta HTTP publicada no host. Padrão `80` |
 | `SAGEP_HTTPS_PORT` | nao | Porta HTTPS publicada no host. Padrão `443` |
@@ -226,8 +226,9 @@ CERTIFICATE_AUTO_RENEW_ENABLED=true
 CERTIFICATE_AUTO_RENEW_DAYS=30
 CERTIFICATE_RENEWAL_CHECK_HOURS=24
 CERTIFICATE_PROXY_AUTO_RELOAD=false
-SAGEP_HOSTNAME=sagep.4cta.eb.mil.br
-SAGEP_BIND_IP=10.78.xxx.xxx
+SAGEP_HOSTNAME=<defina-o-fqdn-da-instalacao>
+SAGEP_BIND_IP=<defina-o-ip-privado-do-servidor>
+SAGEP_ALLOWED_NETWORKS=<defina-os-cidrs-privados-autorizados>
 SAGEP_HTTP_PORT=80
 SAGEP_HTTPS_PORT=443
 SAGEP_FIREWALL_NAMESPACE=SAGEP-INGRESS
@@ -341,7 +342,7 @@ lista registrada no painel. Endereços públicos, `0.0.0.0/0` e valores que não
 representam o início da rede são rejeitados:
 
 ```dotenv
-SAGEP_ALLOWED_NETWORKS=10.78.0.0/16,192.168.40.0/24
+SAGEP_ALLOWED_NETWORKS=<cidr-privado-1>,<cidr-privado-2>
 ```
 
 Confira a prévia sem alterar o host e, em seguida, aplique e valide como `root`:
