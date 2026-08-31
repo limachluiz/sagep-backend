@@ -1757,6 +1757,7 @@ export const openApiDocument: OpenApiDocument = {
           diexCode: { type: "integer", nullable: true },
           serviceOrderNumber: { type: "string" },
           issuedAt: { type: "string", format: "date-time" },
+          contractorName: { type: "string" },
           contractorCnpj: { type: "string" },
           requesterName: { type: "string", nullable: true },
           requesterRank: { type: "string", nullable: true },
@@ -1782,7 +1783,7 @@ export const openApiDocument: OpenApiDocument = {
       },
       ServiceOrderCreateRequest: {
         type: "object",
-        required: ["issuedAt", "contractorCnpj"],
+        required: ["issuedAt"],
         properties: {
           projectId: { type: "string" },
           projectCode: { type: "integer", minimum: 1 },
@@ -1795,6 +1796,7 @@ export const openApiDocument: OpenApiDocument = {
             description: "Opcional. Se informado, sera sobrescrito pelo numero gerado automaticamente.",
           },
           issuedAt: { type: "string", format: "date-time" },
+          contractorName: { type: "string", nullable: true },
           contractorCnpj: { type: "string", minLength: 14 },
           requesterName: { type: "string", nullable: true },
           requesterRank: { type: "string", nullable: true },
@@ -1833,6 +1835,7 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           serviceOrderNumber: { type: "string", minLength: 3 },
           issuedAt: { type: "string", format: "date-time", nullable: true },
+          contractorName: { type: "string", minLength: 2 },
           contractorCnpj: { type: "string", minLength: 14 },
           requesterName: { type: "string", minLength: 3 },
           requesterRank: { type: "string", minLength: 2 },

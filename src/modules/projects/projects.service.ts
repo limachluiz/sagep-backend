@@ -1529,12 +1529,30 @@ export class ProjectsService {
             documentStatus: true,
             totalAmount: true,
             supplierName: true,
+            supplierCnpj: true,
+            requesterName: true,
+            requesterRank: true,
+            requesterCpf: true,
+            issuingOrganization: true,
+            pregaoNumber: true,
+            uasg: true,
             archivedAt: true,
             createdAt: true,
             estimate: {
               select: {
                 id: true,
                 estimateCode: true,
+                destinationCityName: true,
+                destinationStateUf: true,
+                ata: {
+                  select: {
+                    number: true,
+                    vendorName: true,
+                    pregao: {
+                      select: { number: true, year: true, managingAgency: true },
+                    },
+                  },
+                },
               },
             },
           },

@@ -26,7 +26,8 @@ export const createServiceOrderSchema = z.object({
   diexCode: z.coerce.number().int().positive().optional(),
   serviceOrderNumber: z.string().trim().optional(),
   issuedAt: z.coerce.date(),
-  contractorCnpj: z.string().trim().min(14, "CNPJ da empresa é obrigatório"),
+  contractorName: optionalString,
+  contractorCnpj: z.string().trim().min(14, "CNPJ da empresa inválido").optional(),
   requesterName: optionalString,
   requesterRank: optionalString,
   requesterRole: optionalString,
@@ -85,6 +86,7 @@ export const createServiceOrderSchema = z.object({
 export const updateServiceOrderSchema = z.object({
   serviceOrderNumber: z.string().trim().min(3).optional(),
   issuedAt: optionalDate,
+  contractorName: z.string().trim().min(2).optional(),
   contractorCnpj: z.string().trim().min(14).optional(),
   requesterName: z.string().trim().min(3).optional(),
   requesterRank: z.string().trim().min(2).optional(),

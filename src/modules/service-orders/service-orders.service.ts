@@ -53,7 +53,8 @@ type CreateServiceOrderInput = {
   diexCode?: number;
   serviceOrderNumber?: string;
   issuedAt: Date;
-  contractorCnpj: string;
+  contractorName?: string;
+  contractorCnpj?: string;
   requesterName?: string;
   requesterRank?: string;
   requesterRole?: string;
@@ -83,6 +84,7 @@ type CreateServiceOrderInput = {
 type UpdateServiceOrderInput = {
   serviceOrderNumber?: string;
   issuedAt?: Date;
+  contractorName?: string;
   contractorCnpj?: string;
   requesterName?: string;
   requesterRank?: string;
@@ -479,6 +481,7 @@ export class ServiceOrdersService {
           status: true,
           commitmentNoteNumber: true,
           commitmentNoteReceivedAt: true,
+          om: { select: { sigla: true } },
           archivedAt: true,
           deletedAt: true,
           members: { select: { userId: true } },
@@ -511,6 +514,7 @@ export class ServiceOrdersService {
           status: true,
           commitmentNoteNumber: true,
           commitmentNoteReceivedAt: true,
+          om: { select: { sigla: true } },
           archivedAt: true,
           deletedAt: true,
           members: { select: { userId: true } },
@@ -558,6 +562,10 @@ export class ServiceOrdersService {
           ata: {
             select: {
               vendorName: true,
+              number: true,
+              externalPregaoNumber: true,
+              externalPregaoYear: true,
+              pregao: { select: { number: true, year: true, modality: true, managingAgency: true } },
             },
           },
         },
@@ -608,6 +616,10 @@ export class ServiceOrdersService {
           ata: {
             select: {
               vendorName: true,
+              number: true,
+              externalPregaoNumber: true,
+              externalPregaoYear: true,
+              pregao: { select: { number: true, year: true, modality: true, managingAgency: true } },
             },
           },
         },
@@ -636,6 +648,14 @@ export class ServiceOrdersService {
           diexCode: true,
           projectId: true,
           estimateId: true,
+          supplierName: true,
+          supplierCnpj: true,
+          requesterName: true,
+          requesterRank: true,
+          requesterCpf: true,
+          issuingOrganization: true,
+          pregaoNumber: true,
+          uasg: true,
           archivedAt: true,
           deletedAt: true,
         },
@@ -667,6 +687,14 @@ export class ServiceOrdersService {
           diexCode: true,
           projectId: true,
           estimateId: true,
+          supplierName: true,
+          supplierCnpj: true,
+          requesterName: true,
+          requesterRank: true,
+          requesterCpf: true,
+          issuingOrganization: true,
+          pregaoNumber: true,
+          uasg: true,
           archivedAt: true,
           deletedAt: true,
         },
@@ -693,6 +721,14 @@ export class ServiceOrdersService {
         diexCode: true,
         projectId: true,
         estimateId: true,
+        supplierName: true,
+        supplierCnpj: true,
+        requesterName: true,
+        requesterRank: true,
+        requesterCpf: true,
+        issuingOrganization: true,
+        pregaoNumber: true,
+        uasg: true,
         archivedAt: true,
         deletedAt: true,
       },
@@ -1050,12 +1086,29 @@ private buildWorkflowSnapshot(project: {
 
     const requester = this.resolveRequesterData(
       {
-        requesterName: data.requesterName,
-        requesterRank: data.requesterRank,
-        requesterCpf: data.requesterCpf,
+        requesterName: data.requesterName || diex.requesterName,
+        requesterRank: data.requesterRank || diex.requesterRank,
+        requesterCpf: data.requesterCpf || diex.requesterCpf || undefined,
       },
       user,
     );
+
+    const configuration = await prisma.systemConfiguration.findUnique({
+      where: { id: "default" },
+      select: { organizationAcronym: true },
+    });
+    const organizationAcronym = configuration?.organizationAcronym?.trim() || "4º CTA";
+    const contractorName = data.contractorName?.trim() || diex.supplierName?.trim() || estimate.ata.vendorName.trim();
+    const contractorCnpj = data.contractorCnpj?.trim() || diex.supplierCnpj?.trim();
+    if (!contractorCnpj || contractorCnpj.replace(/\D/g, "").length !== 14) {
+      throw new AppError("CNPJ da contratada não informado no DIEx nem na Ordem de Serviço", 409);
+    }
+    const biddingNumber = estimate.ata.pregao
+      ? `${estimate.ata.pregao.number}/${estimate.ata.pregao.year}`
+      : diex.pregaoNumber?.trim() || [estimate.ata.externalPregaoNumber, estimate.ata.externalPregaoYear].filter(Boolean).join("/");
+    const originProcess = biddingNumber
+      ? `Pregão nº ${biddingNumber}${estimate.ata.pregao?.managingAgency ? ` - ${estimate.ata.pregao.managingAgency}` : ""}`
+      : `ATA ${estimate.ata.number}`;
 
     const { serviceOrder, updatedProject } = await prisma.$transaction(async (tx) => {
       const generatedServiceOrderNumber = await this.generateServiceOrderNumber(data.issuedAt, tx);
@@ -1067,21 +1120,21 @@ private buildWorkflowSnapshot(project: {
           diexRequestId: diex.id,
           serviceOrderNumber: generatedServiceOrderNumber,
           issuedAt: data.issuedAt,
-          contractorName: estimate.ata.vendorName,
-          contractorCnpj: data.contractorCnpj.trim(),
+          contractorName,
+          contractorCnpj,
           commitmentNoteNumber: project.commitmentNoteNumber || "",
           requesterName: requester.requesterName,
           requesterRank: requester.requesterRank,
           requesterCpf: requester.requesterCpf,
           requesterRole: data.requesterRole?.trim() || "Fiscal do Contrato",
-          issuingOrganization: data.issuingOrganization?.trim() || "4º CTA",
+          issuingOrganization: data.issuingOrganization?.trim() || diex.issuingOrganization?.trim() || organizationAcronym,
           isEmergency: data.isEmergency ?? false,
           plannedStartDate: data.plannedStartDate,
           plannedEndDate: data.plannedEndDate,
           requestingArea:
-            data.requestingArea?.trim() || "Seção de Projetos - Divisão Técnica 4º CTA",
+            data.requestingArea?.trim() || `Seção de Projetos - Divisão Técnica ${organizationAcronym}`,
           projectDisplayName: data.projectDisplayName?.trim() || project.title,
-          projectAcronym: data.projectAcronym?.trim(),
+          projectAcronym: data.projectAcronym?.trim() || project.om?.sigla,
           contractNumber: data.contractNumber?.trim(),
           executionLocation:
             data.executionLocation?.trim() ||
@@ -1093,7 +1146,7 @@ private buildWorkflowSnapshot(project: {
           contactPhone: data.contactPhone?.trim(),
           contactExtension: data.contactExtension?.trim(),
           contractTotalTerm: data.contractTotalTerm?.trim(),
-          originProcess: data.originProcess?.trim() || "Pregão nº 90004/2025-CMA",
+          originProcess: data.originProcess?.trim() || originProcess,
           contractorRepresentativeName: data.contractorRepresentativeName?.trim(),
           contractorRepresentativeRole:
             data.contractorRepresentativeRole?.trim() || "Responsável pela Contratada",
@@ -1498,6 +1551,9 @@ private buildWorkflowSnapshot(project: {
           serviceOrderNumber: data.serviceOrderNumber.trim(),
         }),
         ...(data.issuedAt !== undefined && { issuedAt: data.issuedAt }),
+        ...(data.contractorName !== undefined && {
+          contractorName: data.contractorName.trim(),
+        }),
         ...(data.contractorCnpj !== undefined && {
           contractorCnpj: data.contractorCnpj.trim(),
         }),

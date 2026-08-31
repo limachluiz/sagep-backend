@@ -3387,6 +3387,7 @@ export interface components {
             serviceOrderNumber?: string;
             /** Format: date-time */
             issuedAt?: string;
+            contractorName?: string;
             contractorCnpj?: string;
             requesterName?: string | null;
             requesterRank?: string | null;
@@ -3418,7 +3419,8 @@ export interface components {
             serviceOrderNumber?: string;
             /** Format: date-time */
             issuedAt: string;
-            contractorCnpj: string;
+            contractorName?: string | null;
+            contractorCnpj?: string;
             requesterName?: string | null;
             requesterRank?: string | null;
             requesterRole?: string | null;
@@ -3450,6 +3452,7 @@ export interface components {
             serviceOrderNumber?: string;
             /** Format: date-time */
             issuedAt?: string | null;
+            contractorName?: string;
             contractorCnpj?: string;
             requesterName?: string;
             requesterRank?: string;

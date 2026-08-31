@@ -3367,6 +3367,9 @@
             "type": "string",
             "format": "date-time"
           },
+          "contractorName": {
+            "type": "string"
+          },
           "contractorCnpj": {
             "type": "string"
           },
@@ -3438,8 +3441,7 @@
       "ServiceOrderCreateRequest": {
         "type": "object",
         "required": [
-          "issuedAt",
-          "contractorCnpj"
+          "issuedAt"
         ],
         "properties": {
           "projectId": {
@@ -3470,6 +3472,10 @@
           "issuedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "contractorName": {
+            "type": "string",
+            "nullable": true
           },
           "contractorCnpj": {
             "type": "string",
@@ -3590,6 +3596,10 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "contractorName": {
+            "type": "string",
+            "minLength": 2
           },
           "contractorCnpj": {
             "type": "string",
