@@ -105,8 +105,8 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
         <td class="qty">${formatQuantity(item.quantity)}</td>
         <td class="money">R$ ${formatMoney(item.unitPrice)}</td>
         <td class="money">R$ ${formatMoney(item.subtotal)}</td>
-        <td class="item-code">${escapeHtml(item.referenceCode)}</td>
       `;
+      const itemCodeCell = `<td class="item-code">${escapeHtml(item.referenceCode)}</td>`;
 
       if (index === 0) {
         return `
@@ -130,11 +130,12 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
             <td class="pregao" rowspan="${data.items.length}">
               ${escapeHtml(DOCUMENT_DEFAULTS.pregao)}
             </td>
+            ${itemCodeCell}
           </tr>
         `;
       }
 
-      return `<tr>${itemCells}</tr>`;
+      return `<tr>${itemCells}${itemCodeCell}</tr>`;
     })
     .join("");
 
@@ -346,7 +347,7 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
 
     <table class="project-footer">
       <tr>
-        <td><strong>Projeto:</strong> ${escapeHtml(headerTitle)}</td>
+        <td><strong>${escapeHtml(headerTitle)}</strong></td>
       </tr>
       <tr>
         <td class="muted">${escapeHtml(data.project.description || data.project.title)}</td>
