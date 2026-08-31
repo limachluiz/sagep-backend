@@ -1,4 +1,4 @@
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 # URL sintaticamente valida usada apenas pelo Prisma durante a geracao.
@@ -17,7 +17,7 @@ COPY src ./src
 RUN npm run prisma:generate
 RUN npm run build
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:26-bookworm-slim AS runtime
 
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_DOWNLOAD=true
