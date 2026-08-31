@@ -22,6 +22,7 @@ type RegisterInput = {
 type LoginInput = {
   email: string;
   password: string;
+  rememberSession: boolean;
 };
 
 const INVALID_PASSWORD_HASH = "$2b$10$Lx3lp4kt24mZhtVil15pC.6vCRniynaavrqTXszcQK.AB44fqNlNy";
@@ -541,6 +542,7 @@ export class AuthService {
       {
         email: user.email,
         role: user.role,
+        persistentSession: data.rememberSession,
       },
       user.id,
     );
@@ -583,6 +585,7 @@ export class AuthService {
         refreshTokenId: storedRefreshToken.id,
         ipAddress: context?.ipAddress ?? null,
         userAgent: context?.userAgent ?? null,
+        persistentSession: data.rememberSession,
       },
     });
 
@@ -665,8 +668,9 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string, context?: AuthRequestContext) {
+    let verifiedRefreshToken;
     try {
-      verifyRefreshToken(refreshToken);
+      verifiedRefreshToken = verifyRefreshToken(refreshToken);
     } catch {
       throw new AppError(
         "Refresh token inválido ou expirado",
@@ -714,6 +718,7 @@ export class AuthService {
       {
         email: storedToken.user.email,
         role: storedToken.user.role,
+        persistentSession: verifiedRefreshToken.persistentSession ?? env.AUTH_REFRESH_COOKIE_PERSISTENT,
       },
       storedToken.user.id,
     );
@@ -764,12 +769,14 @@ export class AuthService {
         newRefreshTokenId: newStoredRefreshToken.id,
         ipAddress: context?.ipAddress ?? null,
         userAgent: context?.userAgent ?? null,
+        persistentSession: verifiedRefreshToken.persistentSession ?? env.AUTH_REFRESH_COOKIE_PERSISTENT,
       },
     });
 
     return {
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
+      persistentSession: verifiedRefreshToken.persistentSession ?? env.AUTH_REFRESH_COOKIE_PERSISTENT,
     };
   }
 

@@ -4382,6 +4382,7 @@ export interface components {
         SetupStatus: {
             requiresSetup: boolean;
             setupTokenConfigured: boolean;
+            setupTokenGenerated?: boolean;
         };
         InitializeSetupRequest: {
             setupToken: string;
@@ -4905,6 +4906,8 @@ export interface operations {
                     /** Format: email */
                     email: string;
                     password: string;
+                    /** @default false */
+                    rememberSession?: boolean;
                 };
             };
         };

@@ -143,6 +143,7 @@ Variáveis usadas atualmente:
 | `JWT_REFRESH_EXPIRES_IN` | sim | Expiração do refresh token |
 | `AUTH_REFRESH_COOKIE_NAME` | nao | Nome do cookie HttpOnly de renovação. Padrão `sagep_refresh` |
 | `AUTH_COOKIE_SECURE` | nao | Envia o cookie somente por HTTPS. Use `true` em produção com TLS |
+| `AUTH_REFRESH_COOKIE_PERSISTENT` | nao | `false` encerra a sessão local ao fechar o navegador; `true` mantém o login até a validade do refresh token |
 | `TRUST_PROXY_HOPS` | nao | Quantidade de proxies reversos confiáveis. Padrão `0` |
 | `RATE_LIMIT_WINDOW_MS` | nao | Janela dos limites de requisição. Padrão `900000` ms |
 | `RATE_LIMIT_MAX` | nao | Limite geral por IP e janela. Padrão `600` |
@@ -193,6 +194,7 @@ JWT_ACCESS_EXPIRES_IN="15m"
 JWT_REFRESH_EXPIRES_IN="7d"
 AUTH_REFRESH_COOKIE_NAME=sagep_refresh
 AUTH_COOKIE_SECURE=false
+AUTH_REFRESH_COOKIE_PERSISTENT=false
 TRUST_PROXY_HOPS=0
 RATE_LIMIT_WINDOW_MS=900000
 RATE_LIMIT_MAX=600

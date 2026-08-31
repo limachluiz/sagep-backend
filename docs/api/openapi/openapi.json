@@ -6106,6 +6106,9 @@
           },
           "setupTokenConfigured": {
             "type": "boolean"
+          },
+          "setupTokenGenerated": {
+            "type": "boolean"
           }
         }
       },
@@ -6905,6 +6908,10 @@
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 128
+                  },
+                  "rememberSession": {
+                    "type": "boolean",
+                    "default": false
                   }
                 }
               }

@@ -11,6 +11,7 @@ export const registerSchema = z.object({
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Email inválido"),
   password: z.string().min(1, "Senha é obrigatória").max(128),
+  rememberSession: z.boolean().default(false),
 });
 
 export const reauthenticateSchema = z.object({

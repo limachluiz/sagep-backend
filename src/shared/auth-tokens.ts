@@ -6,6 +6,7 @@ type JwtBasePayload = {
   email: string;
   role: string;
   authenticationMethod?: "PASSWORD" | "REFRESH";
+  persistentSession?: boolean;
 };
 
 const accessSecret: Secret = env.JWT_ACCESS_SECRET;

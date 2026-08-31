@@ -17,6 +17,10 @@ const envSchema = z
     .enum(["true", "false"])
     .default("false")
     .transform((value) => value === "true"),
+  AUTH_REFRESH_COOKIE_PERSISTENT: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((value) => value === "true"),
   TRUST_PROXY_HOPS: z.coerce.number().int().min(0).max(10).default(0),
   RATE_LIMIT_WINDOW_MS: z.coerce.number().int().min(1000).default(900000),
   RATE_LIMIT_MAX: z.coerce.number().int().min(10).default(600),

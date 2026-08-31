@@ -77,6 +77,7 @@ export function buildProductionEnvironment(inputAnswers, secrets = generateInsta
     JWT_REFRESH_EXPIRES_IN: "7d",
     AUTH_REFRESH_COOKIE_NAME: "sagep_refresh",
     AUTH_COOKIE_SECURE: "true",
+    AUTH_REFRESH_COOKIE_PERSISTENT: "false",
     TRUST_PROXY_HOPS: "1",
     RATE_LIMIT_WINDOW_MS: "900000",
     RATE_LIMIT_MAX: "600",

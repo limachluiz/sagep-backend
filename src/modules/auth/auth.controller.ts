@@ -39,7 +39,7 @@ export class AuthController {
   async login(req: Request, res: Response) {
     const data = loginSchema.parse(req.body);
     const { refreshToken, ...result } = await authService.login(data, getRequestContext(req));
-    setRefreshTokenCookie(res, refreshToken);
+    setRefreshTokenCookie(res, refreshToken, data.rememberSession);
 
     return res.status(200).json(result);
   }
@@ -84,11 +84,11 @@ export class AuthController {
     if (!refreshToken) {
       throw new AppError("Sessão de renovação ausente", 401, "AUTH_REFRESH_COOKIE_MISSING");
     }
-    const { refreshToken: rotatedRefreshToken, ...tokens } = await authService.refresh(
+    const { refreshToken: rotatedRefreshToken, persistentSession, ...tokens } = await authService.refresh(
       refreshToken,
       getRequestContext(req),
     );
-    setRefreshTokenCookie(res, rotatedRefreshToken);
+    setRefreshTokenCookie(res, rotatedRefreshToken, persistentSession);
 
     return res.status(200).json(tokens);
   }

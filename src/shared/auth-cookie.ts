@@ -29,10 +29,16 @@ export function getRefreshTokenCookie(req: Request) {
   return undefined;
 }
 
-export function setRefreshTokenCookie(res: Response, refreshToken: string) {
+export function setRefreshTokenCookie(
+  res: Response,
+  refreshToken: string,
+  persistent = env.AUTH_REFRESH_COOKIE_PERSISTENT,
+) {
   res.cookie(env.AUTH_REFRESH_COOKIE_NAME, refreshToken, {
     ...cookieOptions(),
-    expires: getRefreshTokenExpirationDate(),
+    ...(persistent
+      ? { expires: getRefreshTokenExpirationDate() }
+      : {}),
   });
 }
 
