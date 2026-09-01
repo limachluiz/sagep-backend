@@ -596,6 +596,7 @@ model Ata {
   type                 AtaType
   estimates            Estimate[]
   vendorName           String
+  vendorCnpj           String?
   managingAgency       String?
   validFrom            DateTime?
   validUntil           DateTime?

@@ -1,0 +1,1 @@
+ALTER TABLE "Ata" ADD COLUMN "vendorCnpj" TEXT;

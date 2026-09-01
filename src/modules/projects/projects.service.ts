@@ -1318,6 +1318,13 @@ export class ProjectsService {
             totalAmount: true,
             archivedAt: true,
             createdAt: true,
+            ata: {
+              select: {
+                number: true,
+                vendorName: true,
+                vendorCnpj: true,
+              },
+            },
           },
           orderBy: {
             createdAt: "desc",
@@ -1507,6 +1514,13 @@ export class ProjectsService {
             totalAmount: true,
             archivedAt: true,
             createdAt: true,
+            ata: {
+              select: {
+                number: true,
+                vendorName: true,
+                vendorCnpj: true,
+              },
+            },
           },
           orderBy: {
             createdAt: "desc",

@@ -40,7 +40,7 @@ type CreateDiexInput = {
   estimateCode?: number;
   diexNumber?: string;
   issuedAt?: Date;
-  supplierCnpj: string;
+  supplierCnpj?: string;
   requesterName?: string;
   requesterRank?: string;
   requesterCpf?: string;
@@ -116,6 +116,7 @@ const diexInclude = {
           number: true,
           type: true,
           vendorName: true,
+          vendorCnpj: true,
         },
       },
     },
@@ -322,6 +323,7 @@ export class DiexService {
           ata: {
             select: {
               vendorName: true,
+              vendorCnpj: true,
             },
           },
         },
@@ -368,6 +370,7 @@ export class DiexService {
           ata: {
             select: {
               vendorName: true,
+              vendorCnpj: true,
             },
           },
         },
@@ -691,6 +694,15 @@ export class DiexService {
       throw new AppError("Só é possível gerar DIEx a partir de uma estimativa finalizada", 409);
     }
 
+    const supplierCnpj = (data.supplierCnpj?.trim() || estimate.ata.vendorCnpj?.trim() || "")
+      .replace(/\D/g, "");
+    if (supplierCnpj.length !== 14) {
+      throw new AppError(
+        "A ATA vinculada não possui CNPJ válido. Informe o CNPJ do fornecedor para emitir o DIEx",
+        400,
+      );
+    }
+
     if (!project.creditNoteNumber && !project.creditNoteReceivedAt) {
       throw new AppError(
         "Para gerar o DIEx, o projeto precisa ter Nota de Crédito informada",
@@ -728,7 +740,7 @@ export class DiexService {
           pregaoNumber: data.pregaoNumber?.trim() || (settings.defaultBiddingNumber && settings.defaultBiddingYear ? `${settings.defaultBiddingNumber}/${settings.defaultBiddingYear}` : "Não configurado"),
           uasg: data.uasg?.trim() || settings.uasg,
           supplierName: estimate.ata.vendorName,
-          supplierCnpj: data.supplierCnpj.trim(),
+          supplierCnpj,
           requesterName: requester.requesterName,
           requesterRank: requester.requesterRank,
           requesterCpf: requester.requesterCpf,

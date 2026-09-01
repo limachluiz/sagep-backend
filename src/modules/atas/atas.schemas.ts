@@ -4,6 +4,10 @@ import { optionalBoolean, optionalDate, optionalString } from "../../shared/zod-
 
 const ataTypeEnum = z.enum(["CFTV", "FIBRA_OPTICA"]);
 const ufEnum = z.enum(["AM", "RO", "RR", "AC"]);
+const optionalCnpjSchema = z.string().trim()
+  .transform((value) => value.replace(/\D/g, ""))
+  .pipe(z.string().regex(/^\d{14}$/, "CNPJ deve possuir 14 dígitos"))
+  .optional();
 
 const localitySchema = z.object({
   cityName: z.string().trim().min(2, "Cidade inválida"),
@@ -36,6 +40,7 @@ export const createAtaSchema = z
     number: z.string().trim().min(3, "Número da ata deve ter pelo menos 3 caracteres"),
     type: ataTypeEnum,
     vendorName: z.string().trim().min(3, "Fornecedor deve ter pelo menos 3 caracteres"),
+    vendorCnpj: optionalCnpjSchema,
     managingAgency: optionalString,
     validFrom: optionalDate,
     validUntil: optionalDate,
@@ -60,6 +65,7 @@ export const updateAtaSchema = z
     number: z.string().trim().min(3, "Número da ata deve ter pelo menos 3 caracteres").optional(),
     type: ataTypeEnum.optional(),
     vendorName: z.string().trim().min(3, "Fornecedor deve ter pelo menos 3 caracteres").optional(),
+    vendorCnpj: optionalCnpjSchema,
     managingAgency: optionalString,
     validFrom: optionalDate,
     validUntil: optionalDate,

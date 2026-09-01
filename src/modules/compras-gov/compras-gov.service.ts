@@ -110,6 +110,7 @@ type ComprasGovAtaItem = Record<string, unknown> & {
   quantidadeHomologadaItem?: number;
   quantidadeHomologadaVencedor?: number;
   valorUnitario?: number;
+  niFornecedor?: string;
   nomeRazaoSocialFornecedor?: string;
   nomeUnidadeGerenciadora?: string;
   numeroControlePncpAta?: string;
@@ -136,6 +137,7 @@ type NormalizedPreviewItem = {
 type FoundAtaPreview = {
   ataNumber: string;
   vendorName: string | null;
+  vendorCnpj: string | null;
   itemCount: number;
   totalAmount: number | null;
   validFrom: string | null;
@@ -166,6 +168,7 @@ type NormalizedPreview = {
     number: string;
     type: AtaTypeValue | null;
     vendorName: string | null;
+    vendorCnpj: string | null;
     managingAgency: string | null;
     validFrom: string | null;
     validUntil: string | null;
@@ -190,6 +193,11 @@ export class ComprasGovService {
       .replace(/\s+/g, " ")
       .replace(/\s+([,.;:])/g, "$1")
       .trim();
+  }
+
+  private normalizeVendorCnpj(value: unknown) {
+    const digits = String(value ?? "").replace(/\D/g, "");
+    return digits.length === 14 ? digits : null;
   }
 
   private normalizeItemUnit(item: ComprasGovAtaItem, description: string) {
@@ -811,11 +819,14 @@ export class ComprasGovService {
     const vendorName =
       this.normalizeText(items.find((item) => item.nomeRazaoSocialFornecedor)?.nomeRazaoSocialFornecedor) ||
       null;
+    const vendorCnpj = this.normalizeVendorCnpj(
+      items.find((item) => item.niFornecedor)?.niFornecedor,
+    );
 
     const validFrom = this.normalizeDateString(ata.dataVigenciaInicial);
     const validUntil = this.normalizeDateString(ata.dataVigenciaFinal);
     const externalFingerprint = createHash("sha256").update(JSON.stringify({
-      ataNumber, vendorName, validFrom, validUntil,
+      ataNumber, vendorName, vendorCnpj, validFrom, validUntil,
       items: normalizedItems.map((item) => ({
         referenceCode: item.referenceCode, description: item.description, unit: item.unit,
         unitPrice: item.unitPrice, initialQuantity: item.initialQuantity,
@@ -825,6 +836,7 @@ export class ComprasGovService {
     return {
       ataNumber,
       vendorName,
+      vendorCnpj,
       itemCount: items.length,
       totalAmount: items.length > 0 ? totalAmount : null,
       validFrom,
@@ -918,6 +930,9 @@ export class ComprasGovService {
     const vendorName =
       this.normalizeText(externalItems.find((item) => item.nomeRazaoSocialFornecedor)?.nomeRazaoSocialFornecedor) ||
       null;
+    const vendorCnpj = this.normalizeVendorCnpj(
+      externalItems.find((item) => item.niFornecedor)?.niFornecedor,
+    );
     const foundAta = this.buildFoundAta(externalAta, externalItems);
 
     return {
@@ -929,6 +944,7 @@ export class ComprasGovService {
         number: this.formatAtaNumber(ataNumber, input),
         type: ataType,
         vendorName,
+        vendorCnpj,
         managingAgency: managingAgency || input.uasg.trim(),
         validFrom: this.normalizeDateString(externalAta.dataVigenciaInicial),
         validUntil: this.normalizeDateString(externalAta.dataVigenciaFinal),
@@ -1174,6 +1190,7 @@ export class ComprasGovService {
       number: preview.ata.number,
       type: data.ataType,
       vendorName: preview.ata.vendorName ?? "Fornecedor nao informado",
+      vendorCnpj: preview.ata.vendorCnpj,
       managingAgency: preview.ata.managingAgency,
       validFrom: this.toDate(preview.ata.validFrom),
       validUntil: this.toDate(preview.ata.validUntil),
@@ -1197,6 +1214,7 @@ export class ComprasGovService {
             number: true,
             type: true,
             vendorName: true,
+            vendorCnpj: true,
             managingAgency: true,
             validFrom: true,
             validUntil: true,
@@ -1210,6 +1228,7 @@ export class ComprasGovService {
             number: true,
             type: true,
             vendorName: true,
+            vendorCnpj: true,
             managingAgency: true,
             validFrom: true,
             validUntil: true,

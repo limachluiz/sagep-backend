@@ -9,7 +9,7 @@ export const createDiexSchema = z.object({
   estimateCode: z.coerce.number().int().positive().optional(),
   diexNumber: optionalString,
   issuedAt: optionalDate,
-  supplierCnpj: z.string().trim().min(14, "CNPJ do fornecedor é obrigatório"),
+  supplierCnpj: z.string().trim().min(14, "CNPJ do fornecedor é inválido").optional(),
   requesterName: optionalString,
   requesterRank: optionalString,
   requesterCpf: optionalString,

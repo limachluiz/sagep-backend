@@ -20,6 +20,7 @@ type CreateAtaInput = {
   number: string;
   type: "CFTV" | "FIBRA_OPTICA";
   vendorName: string;
+  vendorCnpj?: string;
   managingAgency?: string;
   validFrom?: Date;
   validUntil?: Date;
@@ -31,6 +32,7 @@ type UpdateAtaInput = {
   number?: string;
   type?: "CFTV" | "FIBRA_OPTICA";
   vendorName?: string;
+  vendorCnpj?: string;
   managingAgency?: string;
   validFrom?: Date;
   validUntil?: Date;
@@ -181,6 +183,7 @@ export class AtasService {
         number: data.number,
         type: data.type,
         vendorName: data.vendorName,
+        vendorCnpj: data.vendorCnpj,
         managingAgency: data.managingAgency,
         validFrom: data.validFrom,
         validUntil: data.validUntil,
@@ -388,6 +391,7 @@ export class AtasService {
         ...(data.number !== undefined && { number: data.number }),
         ...(data.type !== undefined && { type: data.type }),
         ...(data.vendorName !== undefined && { vendorName: data.vendorName }),
+        ...(data.vendorCnpj !== undefined && { vendorCnpj: data.vendorCnpj }),
         ...(data.managingAgency !== undefined && { managingAgency: data.managingAgency }),
         ...(data.validFrom !== undefined && { validFrom: data.validFrom }),
         ...(data.validUntil !== undefined && { validUntil: data.validUntil }),
