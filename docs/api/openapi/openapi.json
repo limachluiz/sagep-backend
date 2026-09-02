@@ -3149,9 +3149,6 @@
       },
       "DiexCreateRequest": {
         "type": "object",
-        "required": [
-          "supplierCnpj"
-        ],
         "properties": {
           "projectId": {
             "type": "string"
@@ -4461,6 +4458,10 @@
           "vendorName": {
             "type": "string"
           },
+          "vendorCnpj": {
+            "type": "string",
+            "nullable": true
+          },
           "managingAgency": {
             "type": "string",
             "nullable": true
@@ -4540,6 +4541,11 @@
             "type": "string",
             "minLength": 3
           },
+          "vendorCnpj": {
+            "type": "string",
+            "pattern": "^\\d{14}$",
+            "nullable": true
+          },
           "managingAgency": {
             "type": "string",
             "nullable": true
@@ -4611,6 +4617,11 @@
           "vendorName": {
             "type": "string",
             "minLength": 3
+          },
+          "vendorCnpj": {
+            "type": "string",
+            "pattern": "^\\d{14}$",
+            "nullable": true
           },
           "managingAgency": {
             "type": "string",
@@ -4700,6 +4711,10 @@
             "type": "string",
             "nullable": true
           },
+          "vendorCnpj": {
+            "type": "string",
+            "nullable": true
+          },
           "itemCount": {
             "type": "number"
           },
@@ -4761,6 +4776,10 @@
                     "nullable": true
                   },
                   "vendorName": {
+                    "type": "string",
+                    "nullable": true
+                  },
+                  "vendorCnpj": {
                     "type": "string",
                     "nullable": true
                   },
@@ -4915,6 +4934,10 @@
               },
               "vendorName": {
                 "type": "string"
+              },
+              "vendorCnpj": {
+                "type": "string",
+                "nullable": true
               },
               "managingAgency": {
                 "type": "string",
@@ -17593,6 +17616,7 @@
           "military-organizations"
         ],
         "summary": "Remover OM por codigo",
+        "description": "Exige inativação prévia e bloqueia a exclusão quando houver projetos ou estimativas vinculados, preservando o histórico operacional.",
         "security": [
           {
             "bearerAuth": []
@@ -17914,6 +17938,7 @@
           "military-organizations"
         ],
         "summary": "Remover OM por id",
+        "description": "Exige inativação prévia e bloqueia a exclusão quando houver projetos ou estimativas vinculados, preservando o histórico operacional.",
         "security": [
           {
             "bearerAuth": []

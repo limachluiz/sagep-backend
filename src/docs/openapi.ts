@@ -5844,6 +5844,7 @@ export const openApiDocument: OpenApiDocument = {
       delete: {
         tags: ["military-organizations"],
         summary: "Remover OM por codigo",
+        description: "Exige inativação prévia e bloqueia a exclusão quando houver projetos ou estimativas vinculados, preservando o histórico operacional.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/MilitaryOrganizationCode" }],
         responses: {
@@ -5891,6 +5892,7 @@ export const openApiDocument: OpenApiDocument = {
       delete: {
         tags: ["military-organizations"],
         summary: "Remover OM por id",
+        description: "Exige inativação prévia e bloqueia a exclusão quando houver projetos ou estimativas vinculados, preservando o histórico operacional.",
         security: bearerSecurity,
         parameters: [{ $ref: "#/components/parameters/MilitaryOrganizationId" }],
         responses: {

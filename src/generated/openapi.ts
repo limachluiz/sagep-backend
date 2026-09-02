@@ -2483,7 +2483,10 @@ export interface paths {
         get: operations["militaryOrganizations_get_code_byCode"];
         put?: never;
         post?: never;
-        /** Remover OM por codigo */
+        /**
+         * Remover OM por codigo
+         * @description Exige inativação prévia e bloqueia a exclusão quando houver projetos ou estimativas vinculados, preservando o histórico operacional.
+         */
         delete: operations["militaryOrganizations_delete_code_byCode"];
         options?: never;
         head?: never;
@@ -2553,7 +2556,10 @@ export interface paths {
         get: operations["militaryOrganizations_get_byId"];
         put?: never;
         post?: never;
-        /** Remover OM por id */
+        /**
+         * Remover OM por id
+         * @description Exige inativação prévia e bloqueia a exclusão quando houver projetos ou estimativas vinculados, preservando o histórico operacional.
+         */
         delete: operations["militaryOrganizations_delete_byId"];
         options?: never;
         head?: never;
@@ -3332,7 +3338,7 @@ export interface components {
             diexNumber?: string | null;
             /** Format: date-time */
             issuedAt?: string | null;
-            supplierCnpj: string;
+            supplierCnpj?: string;
             requesterName?: string | null;
             requesterRank?: string | null;
             requesterCpf?: string | null;
@@ -3808,6 +3814,7 @@ export interface components {
             /** @enum {string} */
             type?: "CFTV" | "FIBRA_OPTICA";
             vendorName?: string;
+            vendorCnpj?: string | null;
             managingAgency?: string | null;
             /** Format: date-time */
             validFrom?: string | null;
@@ -3858,6 +3865,7 @@ export interface components {
             /** @enum {string} */
             type: "CFTV" | "FIBRA_OPTICA";
             vendorName: string;
+            vendorCnpj?: string | null;
             managingAgency?: string | null;
             /** Format: date-time */
             validFrom?: string | null;
@@ -3872,6 +3880,7 @@ export interface components {
             /** @enum {string} */
             type?: "CFTV" | "FIBRA_OPTICA";
             vendorName?: string;
+            vendorCnpj?: string | null;
             managingAgency?: string | null;
             /** Format: date-time */
             validFrom?: string | null;
@@ -3901,6 +3910,7 @@ export interface components {
         ComprasGovAtaFound: {
             ataNumber?: string;
             vendorName?: string | null;
+            vendorCnpj?: string | null;
             itemCount?: number;
             totalAmount?: number | null;
             /** Format: date-time */
@@ -3920,6 +3930,7 @@ export interface components {
                 /** @enum {string|null} */
                 type?: "CFTV" | "FIBRA_OPTICA" | null;
                 vendorName?: string | null;
+                vendorCnpj?: string | null;
                 managingAgency?: string | null;
                 /** Format: date-time */
                 validFrom?: string | null;
@@ -3958,6 +3969,7 @@ export interface components {
                 /** @enum {string} */
                 type?: "CFTV" | "FIBRA_OPTICA";
                 vendorName?: string;
+                vendorCnpj?: string | null;
                 managingAgency?: string | null;
                 /** Format: date-time */
                 validFrom?: string | null;
