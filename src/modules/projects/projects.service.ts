@@ -14,7 +14,7 @@ import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 import type { CommitmentNoteSnapshot } from "../financial-execution/portal-transparencia.client.js";
 import {
-  buildContextualTechnicalSection,
+  buildContextualDeliverySections,
   inferDeliveryUnit,
   parseDeliveryReportDraft,
   suggestDeliveryItemText,
@@ -2490,6 +2490,7 @@ export class ProjectsService {
         description: true,
         projectType: true,
         deliveryReportDraft: true,
+        om: { select: { name: true, sigla: true } },
         estimates: {
           where: { status: "FINALIZADA", archivedAt: null, deletedAt: null },
           orderBy: { updatedAt: "desc" },
@@ -2531,16 +2532,26 @@ export class ProjectsService {
       }));
     const draft = parseDeliveryReportDraft(project.deliveryReportDraft, project.projectType);
     if (!project.deliveryReportDraft) {
-      const contextual = buildContextualTechnicalSection(sourceItems);
-      const solution = draft.sections.find((section) => section.key === "executive-project");
-      if (contextual && solution) solution.content = `${solution.content}\n\n${contextual}`;
+      const contextual = buildContextualDeliverySections(sourceItems, {
+        projectCode: project.projectCode,
+        title: project.title,
+        description: project.description,
+        projectType: project.projectType,
+        omName: project.om?.name,
+        omAcronym: project.om?.sigla,
+        estimateCode: project.estimates[0]?.estimateCode,
+        ataNumber: project.estimates[0]?.ata.number,
+        diexNumber: project.diexRequests[0]?.diexNumber || (project.diexRequests[0] ? `DIEX-${project.diexRequests[0].diexCode}` : null),
+        serviceOrderNumber: project.serviceOrders[0]?.serviceOrderNumber || (project.serviceOrders[0] ? `OS-${project.serviceOrders[0].serviceOrderCode}` : null),
+      });
+      draft.sections = draft.sections.map((section) => ({ ...section, content: contextual[section.key] || section.content }));
     }
     const details = new Map(draft.itemDetails.map((item) => [item.itemId, item]));
     const itemDetails = sourceItems.map((item) => details.get(item.itemId) ?? {
       itemId: item.itemId,
       unit: inferDeliveryUnit(item.description, item.sourceUnit),
       quantity: item.sourceQuantity,
-      technicalDescription: "",
+      technicalDescription: project.deliveryReportDraft ? "" : suggestDeliveryItemText(item),
     });
     if (!project.deliveryReportDraft && project.description) {
       const purpose = draft.sections.find((section) => section.key === "purpose-scope");

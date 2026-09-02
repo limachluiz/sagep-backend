@@ -3,6 +3,7 @@ export type DeliveryReportItemDetail = { itemId: string; unit: string; quantity:
 export type DeliveryReportFormalization = { requiresOmAcknowledgement: boolean; recipientName: string; recipientRank: string; recipientRole: string; recipientOrganization: string; acknowledgementNotes: string };
 export type DeliveryReportDraft = { version: 2; sections: DeliveryReportSection[]; itemDetails: DeliveryReportItemDetail[]; formalization: DeliveryReportFormalization };
 export type DeliverySourceItem = { itemId: string; itemCode: string; description: string; sourceUnit: string; sourceQuantity: string; totalPrice: string };
+export type DeliveryReportContext = { projectCode: number | string; title: string; description?: string | null; projectType?: string | null; omName?: string | null; omAcronym?: string | null; estimateCode?: number | string | null; ataNumber?: string | null; diexNumber?: string | null; serviceOrderNumber?: string | null };
 
 export const defaultDeliveryReportFormalization = (): DeliveryReportFormalization => ({ requiresOmAcknowledgement: false, recipientName: "", recipientRank: "", recipientRole: "", recipientOrganization: "", acknowledgementNotes: "" });
 
@@ -25,15 +26,22 @@ const quantityLabel = (item: DeliverySourceItem) => `${item.sourceQuantity} ${it
 
 export function classifyDeliveryItem(description: string) {
   const normalized = description.toLocaleLowerCase("pt-BR");
-  if (/nvr|gravador.*(canal|vídeo|video)/.test(normalized)) return "NVR";
+  if (/\bnvr\b|\bdvr\b|gravador.*(canal|vídeo|video)/.test(normalized)) return "NVR";
   if (/câmera|camera/.test(normalized)) return "CAMERA";
   if (/switch/.test(normalized) && /poe/.test(normalized)) return "SWITCH_POE";
-  if (/ponto lógico|ponto logico|cabeamento estruturado|cat\s?[568]/.test(normalized)) return "LOGICAL_POINT";
-  if (/\bdio\b|distribuidor interno óptico|distribuidor interno optico/.test(normalized)) return "DIO";
+  if (/ponto lógico|ponto logico|cabeamento estruturado|cat\s?[568]|cabo (de rede|utp|ftp)|\brj-?45\b/.test(normalized)) return "LOGICAL_POINT";
+  if (/\bdio\b|distribuidor interno óptico|distribuidor interno optico|caixa de emenda [oó]ptica|\bceo\b/.test(normalized)) return "DIO";
   if (/fibra óptica|fibra optica|cabo óptico|cabo optico|\bfo\b|cabo drop/.test(normalized)) return "FIBER";
   if (/rack/.test(normalized)) return "RACK";
-  if (/conversor de mídia|conversor de midia|transceiver|sfp/.test(normalized)) return "MEDIA_CONVERTER";
+  if (/conversor de mídia|conversor de midia|transceiver|sfp|gbic/.test(normalized)) return "MEDIA_CONVERTER";
   if (/nobreak|ups/.test(normalized)) return "POWER";
+  if (/patch\s?panel|painel de conex/.test(normalized)) return "PATCH_PANEL";
+  if (/eletroduto|canaleta|perfilado|tubula|condu[ií]te|caixa de passagem/.test(normalized)) return "PATHWAY";
+  if (/conector|pigtail|cord[aã]o [oó]ptico|patch cord|acoplador|adaptador/.test(normalized)) return "CONNECTOR";
+  if (/fus[aã]o|emenda [oó]ptica|certifica|otdr/.test(normalized)) return "OPTICAL_SERVICE";
+  if (/hd\b|disco r[ií]gido|armazenamento/.test(normalized)) return "STORAGE";
+  if (/monitor|televisor|display/.test(normalized)) return "DISPLAY";
+  if (/poste|mastro|suporte.*c[aâ]mera|caixa herm[eé]tica/.test(normalized)) return "SUPPORT";
   return "GENERAL";
 }
 
@@ -50,8 +58,61 @@ export function suggestDeliveryItemText(item: DeliverySourceItem) {
     case "RACK": return `Foi instalado ${description}, destinado ao acondicionamento, à organização e à proteção dos equipamentos e terminações da solução. Quantidade registrada: ${amount}.`;
     case "MEDIA_CONVERTER": return `Foi instalado ${description}, realizando a conversão e a integração entre os meios de transmissão empregados na solução. Quantidade registrada: ${amount}.`;
     case "POWER": return `Foi instalado ${description}, destinado à proteção elétrica e à continuidade operacional dos equipamentos vinculados. Quantidade registrada: ${amount}.`;
+    case "PATCH_PANEL": return `Foi instalado ${description}, na quantidade de ${amount}, para concentração, organização, identificação e distribuição das terminações do cabeamento estruturado.`;
+    case "PATHWAY": return `Foi implantado o item de infraestrutura ${description}, na quantidade de ${amount}, para encaminhamento e proteção física do cabeamento da solução.`;
+    case "CONNECTOR": return `Foram aplicados ${amount} referentes a ${description}, compondo as terminações e interconexões necessárias à continuidade do enlace e à organização da solução.`;
+    case "OPTICAL_SERVICE": return `Foi executado o serviço ${description}, na quantidade de ${amount}, como parte da preparação, terminação e validação dos enlaces ópticos previstos no projeto.`;
+    case "STORAGE": return `Foi instalado ${description}, na quantidade de ${amount}, como recurso de armazenamento vinculado à solução e dimensionado conforme a capacidade registrada no item.`;
+    case "DISPLAY": return `Foi instalado ${description}, na quantidade de ${amount}, para visualização e acompanhamento operacional da solução.`;
+    case "SUPPORT": return `Foi implantado ${description}, na quantidade de ${amount}, como elemento de fixação, proteção ou suporte físico dos equipamentos instalados.`;
     default: return `Foi executado o item ${description}, na quantidade de ${amount}, conforme a Ordem de Serviço e as evidências vinculadas ao projeto.`;
   }
+}
+
+const itemReference = (item: DeliverySourceItem) => `${quantityLabel(item)} de ${cleanDescription(item.description)}`;
+const joinReferences = (items: DeliverySourceItem[]) => items.map(itemReference).join("; ");
+const categoryItems = (items: DeliverySourceItem[], categories: string[]) => items.filter((item) => categories.includes(classifyDeliveryItem(item.description)));
+
+export function buildContextualDeliverySections(items: DeliverySourceItem[], context: DeliveryReportContext) {
+  const categories = new Set(items.map((item) => classifyDeliveryItem(item.description)));
+  const isCftv = context.projectType === "CFTV" || categories.has("CAMERA") || categories.has("NVR");
+  const isOptical = categories.has("FIBER") || categories.has("DIO") || categories.has("OPTICAL_SERVICE") || categories.has("MEDIA_CONVERTER");
+  const isLogical = categories.has("LOGICAL_POINT") || categories.has("PATCH_PANEL");
+  const solutionNames = [isCftv && "videomonitoramento", isOptical && "infraestrutura óptica", isLogical && "cabeamento estruturado"].filter(Boolean);
+  const solution = solutionNames.length ? solutionNames.join(", ").replace(/, ([^,]*)$/, " e $1") : "infraestrutura de tecnologia da informação";
+  const om = context.omAcronym || context.omName || "Organização Militar atendida";
+  const references = [context.estimateCode && `Estimativa EST-${context.estimateCode}`, context.ataNumber && `Ata nº ${context.ataNumber}`, context.diexNumber && `DIEx ${context.diexNumber}`, context.serviceOrderNumber && `Ordem de Serviço ${context.serviceOrderNumber}`].filter(Boolean).join(", ");
+  const infrastructure = categoryItems(items, ["FIBER", "LOGICAL_POINT", "DIO", "PATCH_PANEL", "PATHWAY", "CONNECTOR", "OPTICAL_SERVICE", "RACK", "SUPPORT"]);
+  const equipment = categoryItems(items, ["CAMERA", "NVR", "SWITCH_POE", "MEDIA_CONVERTER", "POWER", "STORAGE", "DISPLAY"]);
+  const topology: string[] = [];
+  if (isCftv && categories.has("CAMERA") && categories.has("NVR")) topology.push("As câmeras integram-se ao subsistema de gravação e gerenciamento representado pelo NVR descrito nos itens executados.");
+  if (categories.has("SWITCH_POE") && categories.has("CAMERA")) topology.push("Os switches PoE realizam a conectividade de rede e a alimentação dos dispositivos compatíveis, reduzindo a necessidade de alimentação elétrica individual nos pontos atendidos.");
+  if (isOptical && categories.has("MEDIA_CONVERTER")) topology.push("Os enlaces ópticos são integrados aos segmentos metálicos pelos conversores de mídia ou transceptores relacionados no projeto.");
+  if (categories.has("FIBER") && categories.has("DIO")) topology.push("Os cabos ópticos são terminados e organizados nos DIO, preservando identificação, proteção e disponibilidade das fibras.");
+  if (isLogical && categories.has("RACK")) topology.push("O cabeamento estruturado converge para os elementos de organização e acondicionamento instalados nos racks da solução.");
+  if (!topology.length) topology.push("A topologia utiliza os componentes relacionados nos itens executados, cuja interligação final deve corresponder ao projeto e ao As-Built anexado.");
+  const tests: string[] = [];
+  if (isOptical) tests.push("Para os enlaces ópticos, devem ser confirmados e registrados continuidade, identificação das fibras, integridade das terminações e resultados de medição ou certificação disponíveis.");
+  if (isLogical) tests.push("Para os pontos lógicos, devem ser confirmados identificação, conectividade e correspondência entre as terminações instaladas.");
+  if (isCftv) tests.push("Para o CFTV, devem ser confirmados visualização das câmeras, comunicação com o gravador, gravação, reprodução, data e hora e disponibilidade do armazenamento configurado.");
+  if (categories.has("POWER")) tests.push("Os equipamentos de proteção elétrica devem ter alimentação, autonomia e sinalizações operacionais verificadas conforme suas características.");
+  const maintenance: string[] = ["Recomenda-se manter atualizados o As-Built, a identificação dos componentes e o registro de intervenções que alterem a topologia entregue."];
+  if (isCftv) maintenance.push("Devem ser acompanhados periodicamente disponibilidade das câmeras, capacidade de armazenamento, retenção das imagens, sincronismo de horário e condições de limpeza e fixação.");
+  if (isOptical) maintenance.push("Intervenções nos enlaces ópticos devem preservar o raio mínimo de curvatura, a limpeza dos conectores, a identificação das fibras e os resultados de referência das medições.");
+  if (categories.has("RACK") || categories.has("POWER")) maintenance.push("Os racks e equipamentos ativos devem permanecer ventilados, organizados, protegidos e alimentados em condições compatíveis com o fabricante.");
+  return {
+    "executive-summary": `O presente relatório registra a entrega da solução de ${solution} do projeto PRJ-${context.projectCode} — ${context.title}, destinada à ${om}. A memória foi estruturada a partir de ${items.length} item(ns) efetivamente vinculado(s) ao projeto, dos documentos de referência e das evidências selecionadas.`,
+    "legal-contractual-basis": `A entrega foi documentada com base nos registros mantidos no SAGEP${references ? ` e nos seguintes documentos vinculados: ${references}` : " e na documentação vinculada ao projeto"}. Foram consideradas as exigências técnicas e contratuais aplicáveis e os procedimentos de acompanhamento e fiscalização previstos na Lei nº 14.133/2021.`,
+    "purpose-scope": context.description?.trim() || `O escopo executado teve por finalidade disponibilizar solução de ${solution} para atendimento da necessidade registrada pela ${om}, conforme os itens autorizados e as condições documentadas durante a execução.`,
+    "executive-project": `A solução adotada foi organizada como sistema de ${solution}, combinando somente os subsistemas identificados nos itens do projeto. ${topology.join(" ")}`,
+    "infrastructure": infrastructure.length ? `A infraestrutura implantada compreende: ${joinReferences(infrastructure)}. Esses elementos realizam o encaminhamento, a terminação, a organização, a proteção e/ou o suporte físico necessários à solução, conforme a função técnica de cada item.` : "Não foram identificados itens específicos de infraestrutura física no escopo vinculado. Confirmar se a infraestrutura foi preexistente ou executada por outro instrumento.",
+    "equipment-solution": equipment.length ? `Os equipamentos ativos e componentes funcionais identificados no projeto compreendem: ${joinReferences(equipment)}. As capacidades, tecnologias e características citadas correspondem às descrições efetivamente cadastradas nos itens.` : `Não foram identificados equipamentos ativos específicos entre os ${items.length} item(ns) vinculados.`,
+    "topology-operation": topology.join(" "),
+    "tests-results": tests.length ? `${tests.join(" ")} O projetista deve substituir esta orientação pelos resultados efetivamente obtidos e indicar as evidências ou certificados correspondentes antes de marcar o bloco como revisado.` : "Devem ser registradas as verificações funcionais compatíveis com os itens executados e as respectivas evidências antes da emissão do relatório.",
+    "pendencies": "Não foram registradas ressalvas técnicas adicionais. Este texto deve ser alterado caso existam pendências, serviços a complementar, limitações de infraestrutura ou responsabilidades atribuídas à OM ou à contratada.",
+    "operation-maintenance": maintenance.join(" "),
+    "technical-conclusion": `Com base nos itens vinculados, nos documentos de referência e nas evidências selecionadas, a entrega abrange solução de ${solution} destinada à ${om}. A conclusão definitiva deste bloco depende da revisão do projetista quanto à correspondência entre o planejamento, o executado, os testes registrados e o As-Built.`,
+  } as Record<string, string>;
 }
 
 export function buildContextualTechnicalSection(items: DeliverySourceItem[]) {

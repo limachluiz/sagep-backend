@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classifyDeliveryItem, defaultDeliveryReportSections, inferDeliveryUnit, parseDeliveryReportDraft, suggestDeliveryItemText } from "../src/modules/projects/delivery-report-draft.js";
+import { buildContextualDeliverySections, classifyDeliveryItem, defaultDeliveryReportSections, inferDeliveryUnit, parseDeliveryReportDraft, suggestDeliveryItemText } from "../src/modules/projects/delivery-report-draft.js";
 
 describe("memória técnica do relatório de entrega", () => {
   it("sugere metro para cabo linear e unidade para equipamentos e pontos", () => {
@@ -30,5 +30,33 @@ describe("memória técnica do relatório de entrega", () => {
     expect(suggestDeliveryItemText(fiber)).toContain("12 fibras");
     expect(classifyDeliveryItem(nvr.description)).toBe("NVR");
     expect(suggestDeliveryItemText(nvr)).toContain("10TB");
+  });
+
+  it("distribui o escopo misto nos blocos técnicos corretos", () => {
+    const base = { itemCode: "1", sourceUnit: "Und.", sourceQuantity: "1", totalPrice: "1000" };
+    const items = [
+      { ...base, itemId: "camera", description: "Câmera IP Bullet PoE 4 MP" },
+      { ...base, itemId: "nvr", description: "NVR de 32 canais com armazenamento de 10TB" },
+      { ...base, itemId: "switch", description: "Switch gerenciável 24 portas PoE" },
+      { ...base, itemId: "fiber", description: "Lançamento de fibra óptica DROP 12 fibras", sourceUnit: "m", sourceQuantity: "850" },
+      { ...base, itemId: "dio", description: "DIO 12 fibras com conectores" },
+      { ...base, itemId: "rack", description: "Rack 12U para equipamentos" },
+    ];
+    const sections = buildContextualDeliverySections(items, { projectCode: 21, title: "CFTV integrado", projectType: "CFTV", omAcronym: "CRO/12", diexNumber: "10/2026", serviceOrderNumber: "09/2026" });
+    expect(sections["executive-summary"]).toContain("PRJ-21");
+    expect(sections["executive-summary"]).toContain("CRO/12");
+    expect(sections["legal-contractual-basis"]).toContain("DIEx 10/2026");
+    expect(sections["infrastructure"]).toContain("850 m de Lançamento de fibra óptica DROP 12 fibras");
+    expect(sections["equipment-solution"]).toContain("NVR de 32 canais com armazenamento de 10TB");
+    expect(sections["topology-operation"]).toContain("switches PoE");
+    expect(sections["tests-results"]).toContain("gravação, reprodução");
+    expect(sections["operation-maintenance"]).toContain("retenção das imagens");
+  });
+
+  it("não declara resultados de ensaio que não estejam cadastrados", () => {
+    const items = [{ itemId: "fiber", itemCode: "1", description: "Lançamento de cabo óptico 12 fibras", sourceUnit: "m", sourceQuantity: "500", totalPrice: "1000" }];
+    const sections = buildContextualDeliverySections(items, { projectCode: 22, title: "Enlace óptico" });
+    expect(sections["tests-results"]).toContain("devem ser confirmados e registrados");
+    expect(sections["tests-results"]).toContain("substituir esta orientação pelos resultados efetivamente obtidos");
   });
 });
