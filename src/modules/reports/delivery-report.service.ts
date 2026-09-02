@@ -16,7 +16,7 @@ const paragraphs = (value: string) => value.split(/\n{2,}/).map((paragraph) => `
 const taskStatus: Record<string, string> = { PENDENTE: "Pendente", EM_ANDAMENTO: "Em andamento", REVISAO: "Em revisão", CONCLUIDA: "Concluída", CANCELADA: "Cancelada" };
 
 export class DeliveryReportService {
-  async generate(projectId: string, user: CurrentUser) {
+  async generate(projectId: string, user: CurrentUser, persistGeneration = true) {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       include: {
@@ -32,7 +32,8 @@ export class DeliveryReportService {
     if (!project || project.deletedAt) throw new AppError("Projeto não encontrado", 404);
     const related = project.ownerId === user.id || project.members.some((member) => member.userId === user.id);
     if (!permissionsService.hasPermission(user, "projects.view_all") && !related) throw new AppError("Você não possui acesso ao projeto", 403);
-    if (project.stage !== "ENTREGA_TECNICA") throw new AppError("Uma nova versão do relatório só pode ser gerada na etapa de Entrega Técnica", 409);
+    if (persistGeneration && project.stage !== "ENTREGA_TECNICA") throw new AppError("Uma nova versão do relatório só pode ser gerada na etapa de Entrega Técnica", 409);
+    if (!persistGeneration && !project.deliveryReportGeneratedAt) throw new AppError("O relatório técnico ainda não foi emitido", 404);
     if (!project.evidences.length) throw new AppError("Selecione ao menos uma evidência para o relatório", 409);
 
     const imageData = async (asset: string) => readFile(path.resolve(asset)).then((buffer) => `data:image/png;base64,${buffer.toString("base64")}`).catch(() => "");
@@ -95,7 +96,11 @@ export class DeliveryReportService {
       headerTemplate: `<div></div>`,
       footerTemplate: `<div style="width:100%;padding:0 15mm;font-family:Arial,sans-serif;font-size:8px;color:#677161;display:flex;justify-content:space-between"><span>SAGEP · Gerado em ${generatedAt}</span><span>Página <span class="pageNumber"></span> de <span class="totalPages"></span></span></div>`,
     } });
-    await prisma.project.update({ where: { id: projectId }, data: { deliveryReportGeneratedAt: new Date(), deliveryReportSignedAt: null, deliveryReportSignedLink: null } });
+    if (persistGeneration) await prisma.project.update({ where: { id: projectId }, data: { deliveryReportGeneratedAt: new Date(), deliveryReportSignedAt: null, deliveryReportSignedLink: null } });
     return { pdf, projectCode: project.projectCode };
+  }
+
+  view(projectId: string, user: CurrentUser) {
+    return this.generate(projectId, user, false);
   }
 }

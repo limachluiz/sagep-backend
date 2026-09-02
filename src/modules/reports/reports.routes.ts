@@ -15,6 +15,7 @@ reportsRoutes.get(
   (req, res) => controller.executiveProjectsReport(req, res),
 );
 reportsRoutes.post("/projects/:id/delivery.pdf", requirePermission("reports.export"), (req, res) => controller.deliveryReportPdf(req, res));
+reportsRoutes.get("/projects/:id/delivery.pdf", requirePermission("reports.export"), (req, res) => controller.viewDeliveryReportPdf(req, res));
 reportsRoutes.get(
   "/projects/executive-summary.pdf",
   requirePermission("reports.export"),

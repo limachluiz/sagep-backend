@@ -16,6 +16,13 @@ export class ReportsController {
     res.setHeader("Content-Disposition", `inline; filename="relatorio-entrega-PRJ-${result.projectCode}.pdf"`);
     return res.status(200).send(result.pdf);
   }
+  async viewDeliveryReportPdf(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const result = await deliveryReportService.view(id, req.user!);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="relatorio-entrega-PRJ-${result.projectCode}.pdf"`);
+    return res.status(200).send(result.pdf);
+  }
   private executiveFilters(req: Request) {
     const filters = dashboardExecutiveQuerySchema.parse(req.query);
     const staleDays = z.coerce
