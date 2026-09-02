@@ -186,7 +186,7 @@ export const registerDeliveryReportSignatureSchema = z.object({
 });
 
 export const deliveryReportDraftSchema = z.object({
-  version: z.literal(1),
+  version: z.literal(2),
   sections: z.array(z.object({
     key: z.string().trim().min(2).max(60).regex(/^[a-z0-9-]+$/),
     title: z.string().trim().min(3).max(160),
@@ -200,4 +200,12 @@ export const deliveryReportDraftSchema = z.object({
     quantity: z.string().trim().min(1).max(40),
     technicalDescription: z.string().trim().max(12_000),
   })).max(250),
+  formalization: z.object({
+    requiresOmAcknowledgement: z.boolean(),
+    recipientName: z.string().trim().max(160),
+    recipientRank: z.string().trim().max(80),
+    recipientRole: z.string().trim().max(160),
+    recipientOrganization: z.string().trim().max(200),
+    acknowledgementNotes: z.string().trim().max(4_000),
+  }),
 });
