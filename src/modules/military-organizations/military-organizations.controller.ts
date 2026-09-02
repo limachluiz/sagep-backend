@@ -80,13 +80,13 @@ export class MilitaryOrganizationsController {
 
   async remove(req: Request, res: Response) {
     const { id } = militaryOrganizationIdParamSchema.parse(req.params);
-    const result = await service.remove(id);
+    const result = await service.remove(id, req.user!);
     return res.status(200).json(result);
   }
 
   async removeByCode(req: Request, res: Response) {
     const { code } = militaryOrganizationCodeParamSchema.parse(req.params);
-    const result = await service.removeByCode(code);
+    const result = await service.removeByCode(code, req.user!);
     return res.status(200).json(result);
   }
 }

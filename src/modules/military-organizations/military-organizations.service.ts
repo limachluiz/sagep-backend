@@ -28,6 +28,12 @@ type ListMilitaryOrganizationsFilters = {
   search?: string;
 };
 
+type MilitaryOrganizationActor = {
+  id: string;
+  name?: string | null;
+  email?: string | null;
+};
+
 export class MilitaryOrganizationsService {
   async create(data: CreateMilitaryOrganizationInput) {
     const exists = await prisma.militaryOrganization.findFirst({
@@ -169,24 +175,79 @@ export class MilitaryOrganizationsService {
     return this.update(existing.id, data);
   }
 
-  async remove(id: string) {
+  async remove(id: string, actor: MilitaryOrganizationActor) {
     const existing = await prisma.militaryOrganization.findUnique({
       where: { id },
-      select: { id: true },
+      select: {
+        id: true,
+        omCode: true,
+        sigla: true,
+        name: true,
+        cityName: true,
+        stateUf: true,
+        isActive: true,
+      },
     });
 
     if (!existing) {
       throw new AppError("OM não encontrada", 404);
     }
 
-    await prisma.militaryOrganization.delete({
-      where: { id },
+    if (existing.isActive) {
+      throw new AppError(
+        "Inative a OM antes de excluí-la",
+        409,
+        "MILITARY_ORGANIZATION_MUST_BE_INACTIVE",
+        { reason: "ACTIVE" },
+      );
+    }
+
+    const linkedRecords = await prisma.$transaction(async (tx) => {
+      const [projects, estimates] = await Promise.all([
+        tx.project.count({ where: { omId: id } }),
+        tx.estimate.count({ where: { omId: id } }),
+      ]);
+
+      if (projects > 0 || estimates > 0) {
+        return { projects, estimates, deleted: false as const };
+      }
+
+      await tx.militaryOrganization.delete({ where: { id } });
+      await tx.auditLog.create({
+        data: {
+          entityType: "SYSTEM_SETTINGS",
+          entityId: id,
+          action: "DELETE",
+          actorUserId: actor.id,
+          actorName: actor.name ?? actor.email,
+          summary: `Organização Militar ${existing.sigla} excluída`,
+          beforeJson: existing,
+          metadata: { omCode: existing.omCode },
+        },
+      });
+
+      return { projects, estimates, deleted: true as const };
     });
+
+    if (!linkedRecords.deleted) {
+      const projectLabel = `${linkedRecords.projects} projeto(s)`;
+      const estimateLabel = `${linkedRecords.estimates} estimativa(s)`;
+      throw new AppError(
+        `Não é possível excluir ${existing.sigla}: existem ${projectLabel} e ${estimateLabel} vinculados. Inative a OM para impedir novos usos e preservar o histórico.`,
+        409,
+        "MILITARY_ORGANIZATION_HAS_LINKED_RECORDS",
+        {
+          reason: "LINKED_RECORDS",
+          projects: linkedRecords.projects,
+          estimates: linkedRecords.estimates,
+        },
+      );
+    }
 
     return { message: "OM excluída com sucesso" };
   }
 
-  async removeByCode(code: number) {
+  async removeByCode(code: number, actor: MilitaryOrganizationActor) {
     const existing = await prisma.militaryOrganization.findUnique({
       where: { omCode: code },
       select: { id: true },
@@ -196,7 +257,7 @@ export class MilitaryOrganizationsService {
       throw new AppError("OM não encontrada", 404);
     }
 
-    return this.remove(existing.id);
+    return this.remove(existing.id, actor);
   }
 
   csvTemplate() {
