@@ -2,6 +2,7 @@ import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { pdfService } from "../../shared/pdf.service.js";
 import { renderDiexDocumentHtml } from "./diex-document.template.js";
+import { resolveDiexPregaoNumber } from "./diex-document-data.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -110,6 +111,14 @@ export class DiexDocumentService {
                 number: true,
                 type: true,
                 vendorName: true,
+                externalPregaoNumber: true,
+                externalPregaoYear: true,
+                pregao: {
+                  select: {
+                    number: true,
+                    year: true,
+                  },
+                },
               },
             },
           },
@@ -159,6 +168,7 @@ export class DiexDocumentService {
     return renderDiexDocumentHtml({
       ...data,
       images,
+      pregaoNumber: resolveDiexPregaoNumber(data),
       issuedAt: data.issuedAt?.toISOString() ?? null,
       totalAmount: data.totalAmount.toString(),
       items: data.items.map((item) => ({
