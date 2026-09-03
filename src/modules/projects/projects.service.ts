@@ -14,8 +14,10 @@ import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 import type { CommitmentNoteSnapshot } from "../financial-execution/portal-transparencia.client.js";
 import {
+  buildContextualDeliverySections,
   inferDeliveryUnit,
   parseDeliveryReportDraft,
+  suggestDeliveryItemText,
   type DeliveryReportDraft,
 } from "./delivery-report-draft.js";
 
@@ -2589,10 +2591,8 @@ export class ProjectsService {
     if (!current) throw new AppError("Projeto não encontrado", 404);
     if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A assinatura do relatório só pode ser registrada na etapa de Entrega Técnica", 409);
     if (!current.deliveryReportGeneratedAt) throw new AppError("Gere o relatório antes de registrar sua assinatura", 409);
-    if (data.signedAt > new Date()) throw new AppError("A data da assinatura não pode estar no futuro", 400);
-    const generatedDay = new Date(current.deliveryReportGeneratedAt); generatedDay.setUTCHours(0, 0, 0, 0);
-    const signedDay = new Date(data.signedAt); signedDay.setUTCHours(0, 0, 0, 0);
-    if (signedDay < generatedDay) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
+    if (workflowService.isDeliveryReportSignatureInFuture(data.signedAt)) throw new AppError("A data da assinatura não pode estar no futuro", 400);
+    if (!workflowService.isDeliveryReportSignatureValid({ deliveryReportGeneratedAt: current.deliveryReportGeneratedAt, deliveryReportSignedAt: data.signedAt })) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
     const project = await prisma.project.update({ where: { id: projectId }, data: { deliveryReportSignedAt: data.signedAt, deliveryReportSignedLink: data.signedLink?.trim() || null }, include: projectInclude });
     await auditService.log({ entityType: "PROJECT", entityId: projectId, action: "UPDATE", actor: this.getAuditActor(user), summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`, before: this.buildProjectAuditSnapshot(current), after: this.buildProjectAuditSnapshot(project), metadata: { source: "project.delivery-report.signature", signedAt: data.signedAt, signedLink: data.signedLink ?? null } });
     return project;
@@ -2609,17 +2609,24 @@ export class ProjectsService {
         description: true,
         projectType: true,
         deliveryReportDraft: true,
+        om: { select: { name: true, sigla: true } },
         estimates: {
           where: { status: "FINALIZADA", archivedAt: null, deletedAt: null },
           orderBy: { updatedAt: "desc" },
           take: 1,
-          select: { items: { orderBy: { referenceCode: "asc" }, select: { id: true, referenceCode: true, description: true, unit: true, quantity: true, subtotal: true } } },
+          select: { id: true, estimateCode: true, totalAmount: true, ata: { select: { number: true, vendorName: true } }, items: { orderBy: { referenceCode: "asc" }, select: { id: true, referenceCode: true, description: true, unit: true, quantity: true, subtotal: true } } },
+        },
+        diexRequests: {
+          where: { archivedAt: null, deletedAt: null },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { id: true, diexCode: true, diexNumber: true, issuedAt: true, totalAmount: true },
         },
         serviceOrders: {
           where: { archivedAt: null, deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { items: { orderBy: { itemCode: "asc" }, select: { estimateItemId: true, itemCode: true, description: true, supplyUnit: true, quantityOrdered: true, totalPrice: true } } },
+          select: { id: true, serviceOrderCode: true, serviceOrderNumber: true, issuedAt: true, totalAmount: true, items: { orderBy: { itemCode: "asc" }, select: { estimateItemId: true, itemCode: true, description: true, supplyUnit: true, quantityOrdered: true, totalPrice: true } } },
         },
       },
     });
@@ -2643,12 +2650,27 @@ export class ProjectsService {
         totalPrice: item.subtotal.toString(),
       }));
     const draft = parseDeliveryReportDraft(project.deliveryReportDraft, project.projectType);
+    if (!project.deliveryReportDraft) {
+      const contextual = buildContextualDeliverySections(sourceItems, {
+        projectCode: project.projectCode,
+        title: project.title,
+        description: project.description,
+        projectType: project.projectType,
+        omName: project.om?.name,
+        omAcronym: project.om?.sigla,
+        estimateCode: project.estimates[0]?.estimateCode,
+        ataNumber: project.estimates[0]?.ata.number,
+        diexNumber: project.diexRequests[0]?.diexNumber || (project.diexRequests[0] ? `DIEX-${project.diexRequests[0].diexCode}` : null),
+        serviceOrderNumber: project.serviceOrders[0]?.serviceOrderNumber || (project.serviceOrders[0] ? `OS-${project.serviceOrders[0].serviceOrderCode}` : null),
+      });
+      draft.sections = draft.sections.map((section) => ({ ...section, content: contextual[section.key] || section.content }));
+    }
     const details = new Map(draft.itemDetails.map((item) => [item.itemId, item]));
     const itemDetails = sourceItems.map((item) => details.get(item.itemId) ?? {
       itemId: item.itemId,
       unit: inferDeliveryUnit(item.description, item.sourceUnit),
       quantity: item.sourceQuantity,
-      technicalDescription: "",
+      technicalDescription: project.deliveryReportDraft ? "" : suggestDeliveryItemText(item),
     });
     if (!project.deliveryReportDraft && project.description) {
       const purpose = draft.sections.find((section) => section.key === "purpose-scope");
@@ -2657,7 +2679,12 @@ export class ProjectsService {
     return {
       project: { id: project.id, projectCode: project.projectCode, title: project.title, projectType: project.projectType },
       draft: { ...draft, itemDetails },
-      items: sourceItems,
+      items: sourceItems.map((item) => ({ ...item, suggestedTechnicalDescription: suggestDeliveryItemText(item) })),
+      documents: {
+        estimate: project.estimates[0] ? { id: project.estimates[0].id, code: `EST-${project.estimates[0].estimateCode}`, ataNumber: project.estimates[0].ata.number, supplierName: project.estimates[0].ata.vendorName, totalAmount: project.estimates[0].totalAmount.toString() } : null,
+        diex: project.diexRequests[0] ? { id: project.diexRequests[0].id, code: project.diexRequests[0].diexNumber || `DIEX-${project.diexRequests[0].diexCode}`, issuedAt: project.diexRequests[0].issuedAt, totalAmount: project.diexRequests[0].totalAmount.toString() } : null,
+        serviceOrder: project.serviceOrders[0] ? { id: project.serviceOrders[0].id, code: project.serviceOrders[0].serviceOrderNumber || `OS-${project.serviceOrders[0].serviceOrderCode}`, issuedAt: project.serviceOrders[0].issuedAt, totalAmount: project.serviceOrders[0].totalAmount.toString() } : null,
+      },
       readiness: {
         sectionsIncluded: draft.sections.filter((section) => section.included).length,
         sectionsReviewed: draft.sections.filter((section) => section.included && section.reviewed && section.content.trim()).length,
