@@ -3386,6 +3386,25 @@
             "type": "string",
             "nullable": true
           },
+          "hasProjectInspector": {
+            "type": "boolean"
+          },
+          "projectInspectorName": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorRank": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorCpf": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorRole": {
+            "type": "string",
+            "nullable": true
+          },
           "issuingOrganization": {
             "type": "string",
             "nullable": true
@@ -3487,6 +3506,26 @@
             "nullable": true
           },
           "requesterRole": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasProjectInspector": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "projectInspectorName": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorRank": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorCpf": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorRole": {
             "type": "string",
             "nullable": true
           },
@@ -3615,6 +3654,26 @@
             "nullable": true
           },
           "requesterRole": {
+            "type": "string",
+            "nullable": true
+          },
+          "hasProjectInspector": {
+            "type": "boolean",
+            "nullable": true
+          },
+          "projectInspectorName": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorRank": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorCpf": {
+            "type": "string",
+            "nullable": true
+          },
+          "projectInspectorRole": {
             "type": "string",
             "nullable": true
           },

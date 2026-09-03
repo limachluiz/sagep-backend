@@ -3399,6 +3399,11 @@ export interface components {
             requesterRank?: string | null;
             requesterCpf?: string | null;
             requesterRole?: string | null;
+            hasProjectInspector?: boolean;
+            projectInspectorName?: string | null;
+            projectInspectorRank?: string | null;
+            projectInspectorCpf?: string | null;
+            projectInspectorRole?: string | null;
             issuingOrganization?: string | null;
             isEmergency?: boolean | null;
             /** Format: date-time */
@@ -3430,6 +3435,11 @@ export interface components {
             requesterName?: string | null;
             requesterRank?: string | null;
             requesterRole?: string | null;
+            hasProjectInspector?: boolean | null;
+            projectInspectorName?: string | null;
+            projectInspectorRank?: string | null;
+            projectInspectorCpf?: string | null;
+            projectInspectorRole?: string | null;
             issuingOrganization?: string | null;
             isEmergency?: boolean | null;
             /** Format: date-time */
@@ -3464,6 +3474,11 @@ export interface components {
             requesterRank?: string;
             requesterCpf?: string | null;
             requesterRole?: string | null;
+            hasProjectInspector?: boolean | null;
+            projectInspectorName?: string | null;
+            projectInspectorRank?: string | null;
+            projectInspectorCpf?: string | null;
+            projectInspectorRole?: string | null;
             issuingOrganization?: string | null;
             isEmergency?: boolean | null;
             /** Format: date-time */

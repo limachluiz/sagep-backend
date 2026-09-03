@@ -47,12 +47,32 @@ export const createServiceOrderSchema = z.object({
   contractTotalTerm: optionalString,
   originProcess: optionalString,
   requesterCpf: optionalString,
+  hasProjectInspector: optionalBoolean,
+  projectInspectorName: optionalString,
+  projectInspectorRank: optionalString,
+  projectInspectorCpf: optionalString,
+  projectInspectorRole: optionalString,
   contractorRepresentativeName: optionalString,
   contractorRepresentativeRole: optionalString,
   scheduleItems: z.array(scheduleItemSchema).optional(),
   deliveredDocuments: z.array(deliveredDocumentSchema).optional(),
   notes: optionalString,
 })
+  .superRefine((data, ctx) => {
+    if (!data.hasProjectInspector) return;
+    const required = [
+      ["projectInspectorName", data.projectInspectorName, "Informe o nome do fiscal do projeto"],
+      ["projectInspectorRank", data.projectInspectorRank, "Informe o posto ou graduação do fiscal"],
+      ["projectInspectorCpf", data.projectInspectorCpf, "Informe o CPF do fiscal"],
+      ["projectInspectorRole", data.projectInspectorRole, "Informe a função do fiscal"],
+    ] as const;
+    for (const [path, value, message] of required) {
+      if (!value?.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+    }
+    if (data.projectInspectorCpf && data.projectInspectorCpf.replace(/\D/g, "").length !== 11) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["projectInspectorCpf"], message: "CPF do fiscal deve conter 11 dígitos" });
+    }
+  })
   .refine((data) => data.projectId || data.projectCode, {
     message: "Informe projectId ou projectCode",
     path: ["projectId"],
@@ -91,6 +111,11 @@ export const updateServiceOrderSchema = z.object({
   requesterName: z.string().trim().min(3).optional(),
   requesterRank: z.string().trim().min(2).optional(),
   requesterCpf: optionalString,
+  hasProjectInspector: optionalBoolean,
+  projectInspectorName: optionalString,
+  projectInspectorRank: optionalString,
+  projectInspectorCpf: optionalString,
+  projectInspectorRole: optionalString,
   requesterRole: optionalString,
   issuingOrganization: optionalString,
   isEmergency: optionalBoolean,
@@ -112,6 +137,20 @@ export const updateServiceOrderSchema = z.object({
   scheduleItems: z.array(scheduleItemSchema).optional(),
   deliveredDocuments: z.array(deliveredDocumentSchema).optional(),
   notes: optionalString,
+}).superRefine((data, ctx) => {
+  if (data.hasProjectInspector !== true) return;
+  const required = [
+    ["projectInspectorName", data.projectInspectorName, "Informe o nome do fiscal do projeto"],
+    ["projectInspectorRank", data.projectInspectorRank, "Informe o posto ou graduação do fiscal"],
+    ["projectInspectorCpf", data.projectInspectorCpf, "Informe o CPF do fiscal"],
+    ["projectInspectorRole", data.projectInspectorRole, "Informe a função do fiscal"],
+  ] as const;
+  for (const [path, value, message] of required) {
+    if (!value?.trim()) ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+  }
+  if (data.projectInspectorCpf && data.projectInspectorCpf.replace(/\D/g, "").length !== 11) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["projectInspectorCpf"], message: "CPF do fiscal deve conter 11 dígitos" });
+  }
 }).refine((data) => Object.keys(data).length > 0, {
   message: "Informe pelo menos um campo para atualizar",
 }).refine((data) => {

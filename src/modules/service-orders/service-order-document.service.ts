@@ -95,6 +95,11 @@ export class ServiceOrderDocumentService {
         contractTotalTerm: true,
         originProcess: true,
         requesterCpf: true,
+        hasProjectInspector: true,
+        projectInspectorName: true,
+        projectInspectorRank: true,
+        projectInspectorCpf: true,
+        projectInspectorRole: true,
         contractorRepresentativeName: true,
         contractorRepresentativeRole: true,
         items: {

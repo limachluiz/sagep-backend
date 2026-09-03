@@ -874,6 +874,11 @@ model ServiceOrder {
   contractTotalTerm            String?
   originProcess                String?                         @default("Pregão nº 90004/2025-CMA")
   requesterCpf                 String?
+  hasProjectInspector          Boolean                         @default(false)
+  projectInspectorName         String?
+  projectInspectorRank         String?
+  projectInspectorCpf          String?
+  projectInspectorRole         String?                         @default("Fiscal do Projeto")
   contractorRepresentativeName String?
   contractorRepresentativeRole String?                         @default("Responsável pela Contratada")
   documentStatus               DocumentStatus                  @default(EMITIDO)

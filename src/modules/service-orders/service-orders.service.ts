@@ -74,6 +74,11 @@ type CreateServiceOrderInput = {
   contractTotalTerm?: string;
   originProcess?: string;
   requesterCpf?: string;
+  hasProjectInspector?: boolean;
+  projectInspectorName?: string;
+  projectInspectorRank?: string;
+  projectInspectorCpf?: string;
+  projectInspectorRole?: string;
   contractorRepresentativeName?: string;
   contractorRepresentativeRole?: string;
   scheduleItems?: ScheduleItemInput[];
@@ -105,6 +110,11 @@ type UpdateServiceOrderInput = {
   contractTotalTerm?: string;
   originProcess?: string;
   requesterCpf?: string;
+  hasProjectInspector?: boolean;
+  projectInspectorName?: string;
+  projectInspectorRank?: string;
+  projectInspectorCpf?: string;
+  projectInspectorRole?: string;
   contractorRepresentativeName?: string;
   contractorRepresentativeRole?: string;
   scheduleItems?: ScheduleItemInput[];
@@ -927,6 +937,11 @@ private buildServiceOrderAuditSnapshot(serviceOrder: {
   requesterRank?: string | null;
   requesterCpf?: string | null;
   requesterRole?: string | null;
+  hasProjectInspector?: boolean | null;
+  projectInspectorName?: string | null;
+  projectInspectorRank?: string | null;
+  projectInspectorCpf?: string | null;
+  projectInspectorRole?: string | null;
   issuingOrganization?: string | null;
   isEmergency?: boolean | null;
   plannedStartDate?: Date | null;
@@ -962,6 +977,11 @@ private buildServiceOrderAuditSnapshot(serviceOrder: {
     requesterRank: serviceOrder.requesterRank ?? null,
     requesterCpf: serviceOrder.requesterCpf ?? null,
     requesterRole: serviceOrder.requesterRole ?? null,
+    hasProjectInspector: serviceOrder.hasProjectInspector ?? false,
+    projectInspectorName: serviceOrder.projectInspectorName ?? null,
+    projectInspectorRank: serviceOrder.projectInspectorRank ?? null,
+    projectInspectorCpf: serviceOrder.projectInspectorCpf ?? null,
+    projectInspectorRole: serviceOrder.projectInspectorRole ?? null,
     issuingOrganization: serviceOrder.issuingOrganization ?? null,
     isEmergency: serviceOrder.isEmergency ?? false,
     plannedStartDate: serviceOrder.plannedStartDate ?? null,
@@ -1127,6 +1147,13 @@ private buildWorkflowSnapshot(project: {
           requesterRank: requester.requesterRank,
           requesterCpf: requester.requesterCpf,
           requesterRole: data.requesterRole?.trim() || "Fiscal do Contrato",
+          hasProjectInspector: data.hasProjectInspector ?? false,
+          projectInspectorName: data.hasProjectInspector ? data.projectInspectorName?.trim() : null,
+          projectInspectorRank: data.hasProjectInspector ? data.projectInspectorRank?.trim() : null,
+          projectInspectorCpf: data.hasProjectInspector ? data.projectInspectorCpf?.trim() : null,
+          projectInspectorRole: data.hasProjectInspector
+            ? data.projectInspectorRole?.trim() || "Fiscal do Projeto"
+            : null,
           issuingOrganization: data.issuingOrganization?.trim() || diex.issuingOrganization?.trim() || organizationAcronym,
           isEmergency: data.isEmergency ?? false,
           plannedStartDate: data.plannedStartDate,
@@ -1491,6 +1518,11 @@ private buildWorkflowSnapshot(project: {
         requesterRank: true,
         requesterCpf: true,
         requesterRole: true,
+        hasProjectInspector: true,
+        projectInspectorName: true,
+        projectInspectorRank: true,
+        projectInspectorCpf: true,
+        projectInspectorRole: true,
         issuingOrganization: true,
         isEmergency: true,
         plannedStartDate: true,
@@ -1565,6 +1597,27 @@ private buildWorkflowSnapshot(project: {
         }),
         ...(data.requesterRole !== undefined && {
           requesterRole: data.requesterRole?.trim(),
+        }),
+        ...(data.hasProjectInspector !== undefined && {
+          hasProjectInspector: data.hasProjectInspector,
+          ...(!data.hasProjectInspector && {
+            projectInspectorName: null,
+            projectInspectorRank: null,
+            projectInspectorCpf: null,
+            projectInspectorRole: null,
+          }),
+        }),
+        ...(data.projectInspectorName !== undefined && {
+          projectInspectorName: data.projectInspectorName?.trim(),
+        }),
+        ...(data.projectInspectorRank !== undefined && {
+          projectInspectorRank: data.projectInspectorRank?.trim(),
+        }),
+        ...(data.projectInspectorCpf !== undefined && {
+          projectInspectorCpf: data.projectInspectorCpf?.trim(),
+        }),
+        ...(data.projectInspectorRole !== undefined && {
+          projectInspectorRole: data.projectInspectorRole?.trim(),
         }),
         ...(data.issuingOrganization !== undefined && {
           issuingOrganization: data.issuingOrganization?.trim(),

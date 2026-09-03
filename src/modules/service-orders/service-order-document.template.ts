@@ -26,6 +26,11 @@ type ServiceOrderDocumentInput = {
   contractTotalTerm?: string | null;
   originProcess?: string | null;
   requesterCpf?: string | null;
+  hasProjectInspector: boolean;
+  projectInspectorName?: string | null;
+  projectInspectorRank?: string | null;
+  projectInspectorCpf?: string | null;
+  projectInspectorRole?: string | null;
   contractorRepresentativeName?: string | null;
   contractorRepresentativeRole?: string | null;
   items: Array<{
@@ -248,6 +253,11 @@ export function renderServiceOrderDocumentHtml(data: ServiceOrderDocumentInput) 
       font-size: 11px;
     }
 
+    .section-title.numbered-section {
+      margin-top: 8px;
+      margin-bottom: 3px;
+    }
+
     .info-grid td {
       min-height: 24px;
     }
@@ -376,7 +386,7 @@ export function renderServiceOrderDocumentHtml(data: ServiceOrderDocumentInput) 
     </tr>
   </table>
 
-  <div class="section-title">1 - Especificação dos Serviços e Volumes</div>
+  <div class="section-title numbered-section">1 - Especificação dos Serviços e Volumes</div>
   <table class="items">
     <thead>
       <tr>
@@ -407,7 +417,7 @@ export function renderServiceOrderDocumentHtml(data: ServiceOrderDocumentInput) 
     <div>- Contato: ${escapeHtml(data.contactName || "")}${data.contactPhone ? ` - Telefone: ${escapeHtml(data.contactPhone)}` : ""}${data.contactExtension ? ` - ${escapeHtml(data.contactExtension)}` : ""}</div>
   </div>
 
-  <div class="section-title">2 - Cronograma</div>
+  <div class="section-title numbered-section">2 - Cronograma</div>
   <table>
     <thead>
       <tr>
@@ -421,12 +431,12 @@ export function renderServiceOrderDocumentHtml(data: ServiceOrderDocumentInput) 
     </tbody>
   </table>
 
-  <div class="section-title">3 - Documentos Entregues</div>
+  <div class="section-title numbered-section">3 - Documentos Entregues</div>
   <div style="border: 1px solid #777; padding: 6px 8px;">
     ${deliveredDocs}
   </div>
 
-  <div class="section-title">4 - Datas e Prazos</div>
+  <div class="section-title numbered-section">4 - Datas e Prazos</div>
   <table>
     <thead>
       <tr>
@@ -444,7 +454,7 @@ export function renderServiceOrderDocumentHtml(data: ServiceOrderDocumentInput) 
     </tbody>
   </table>
 
-  <div class="section-title">5 - Observações</div>
+  <div class="section-title numbered-section">5 - Observações</div>
   <div style="border: 1px solid #777; padding: 6px 8px;">
     <div>- Processo de Origem: ${escapeHtml(data.originProcess || "")}</div>
     ${data.notes ? `<div>- ${escapeHtml(data.notes)}</div>` : ""}
@@ -455,17 +465,17 @@ export function renderServiceOrderDocumentHtml(data: ServiceOrderDocumentInput) 
 
   <table class="signature-grid signature-block">
     <colgroup>
-      <col style="width: 50%" />
-      <col style="width: 50%" />
+      ${data.hasProjectInspector ? '<col style="width: 33.33%" /><col style="width: 33.33%" /><col style="width: 33.34%" />' : '<col style="width: 50%" /><col style="width: 50%" />'}
     </colgroup>
 
     <tr class="group-header">
-      <th>CONTRATANTE</th>
+      <th${data.hasProjectInspector ? ' colspan="2"' : ""}>CONTRATANTE</th>
       <th>CONTRATADA</th>
     </tr>
 
     <tr class="role-header">
-      <td>Área/Fiscal Requisitante da Solução</td>
+      <td>${escapeHtml(data.requesterRole || "Área Requisitante da Solução")}</td>
+      ${data.hasProjectInspector ? `<td>${escapeHtml(data.projectInspectorRole || "Fiscal do Projeto")}</td>` : ""}
       <td>Preposto</td>
     </tr>
 
@@ -476,6 +486,13 @@ export function renderServiceOrderDocumentHtml(data: ServiceOrderDocumentInput) 
         </div>
         ${data.requesterCpf ? `<div class="signature-meta">CPF: ${escapeHtml(data.requesterCpf)}</div>` : ""}
       </td>
+
+      ${data.hasProjectInspector ? `<td class="signature-cell">
+        <div class="signature-name">
+          ${escapeHtml(data.projectInspectorName || "")} - ${escapeHtml(data.projectInspectorRank || "")}
+        </div>
+        ${data.projectInspectorCpf ? `<div class="signature-meta">CPF: ${escapeHtml(data.projectInspectorCpf)}</div>` : ""}
+      </td>` : ""}
 
       <td class="signature-cell">
         <div class="signature-name">
