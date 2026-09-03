@@ -2999,6 +2999,27 @@ export interface components {
         ProjectFlowUpdateRequest: {
             /** @enum {string} */
             stage: "ESTIMATIVA_PRECO" | "AGUARDANDO_NOTA_CREDITO" | "DIEX_REQUISITORIO" | "AGUARDANDO_NOTA_EMPENHO" | "OS_LIBERADA" | "AGUARDANDO_OS_ASSINADA" | "AGUARDANDO_INICIO_EXECUCAO" | "SERVICO_EM_EXECUCAO" | "ANALISANDO_AS_BUILT" | "ATESTAR_NF" | "SERVICO_CONCLUIDO" | "CANCELADO";
+            /**
+             * @description Forma de composição do crédito do projeto.
+             * @enum {string}
+             */
+            creditNoteMode?: "SINGLE" | "MULTIPLE";
+            creditNotes?: {
+                number: string;
+                /** Format: date-time */
+                receivedAt: string;
+                amount: number;
+                issuingManagementUnit?: string | null;
+                fundingSource?: string | null;
+                ptres?: string | null;
+                expenseNature?: string | null;
+                internalPlan?: string | null;
+                /** Format: uri */
+                documentLink?: string | null;
+                notes?: string | null;
+            }[];
+            /** @description Obrigatória quando a soma das NCs supera o valor necessário. */
+            creditNoteOverflowJustification?: string | null;
             creditNoteNumber?: string | null;
             /** Format: date-time */
             creditNoteReceivedAt?: string | null;

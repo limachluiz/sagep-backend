@@ -82,6 +82,17 @@ enum ProjectStage {
   CANCELADO
 }
 
+enum CreditNoteMode {
+  SINGLE
+  MULTIPLE
+}
+
+enum CreditNoteStatus {
+  ACTIVE
+  PARTIALLY_CANCELLED
+  CANCELLED
+}
+
 enum EvidenceCategory {
   IMAGE
   VIDEO
@@ -248,38 +259,38 @@ model User {
 }
 
 model SystemConfiguration {
-  id                         String   @id @default("default")
-  organizationName           String   @default("4º Centro de Telemática de Área")
-  organizationAcronym        String   @default("4º CTA")
-  uasg                       String   @default("160016")
-  management                 String   @default("00001")
-  timeZone                   String   @default("America/Manaus")
-  commandName                String   @default("COMANDO MILITAR DA AMAZÔNIA")
-  portalTransparenciaBaseUrl String   @default("https://api.portaldatransparencia.gov.br/api-de-dados")
-  portalSyncIntervalMinutes  Int      @default(1440)
-  portalSyncOnStartup        Boolean  @default(true)
-  comprasGovBaseUrl          String   @default("https://dadosabertos.compras.gov.br")
-  pncpBaseUrl                String   @default("https://pncp.gov.br/api/pncp")
+  id                         String    @id @default("default")
+  organizationName           String    @default("4º Centro de Telemática de Área")
+  organizationAcronym        String    @default("4º CTA")
+  uasg                       String    @default("160016")
+  management                 String    @default("00001")
+  timeZone                   String    @default("America/Manaus")
+  commandName                String    @default("COMANDO MILITAR DA AMAZÔNIA")
+  portalTransparenciaBaseUrl String    @default("https://api.portaldatransparencia.gov.br/api-de-dados")
+  portalSyncIntervalMinutes  Int       @default(1440)
+  portalSyncOnStartup        Boolean   @default(true)
+  comprasGovBaseUrl          String    @default("https://dadosabertos.compras.gov.br")
+  pncpBaseUrl                String    @default("https://pncp.gov.br/api/pncp")
   defaultBiddingNumber       String?
   defaultBiddingYear         Int?
-  defaultImmediateCommitment Boolean  @default(true)
-  defaultEstimateGroup       String   @default("3")
+  defaultImmediateCommitment Boolean   @default(true)
+  defaultEstimateGroup       String    @default("3")
   deploymentHostName         String?
   deploymentExpectedIp       String?
   deploymentGateway          String?
-  deploymentDnsServers       String[] @default([])
-  deploymentNtpServers       String[] @default([])
-  deploymentAllowedNetworks  String[] @default([])
+  deploymentDnsServers       String[]  @default([])
+  deploymentNtpServers       String[]  @default([])
+  deploymentAllowedNetworks  String[]  @default([])
   deploymentProxyUrl         String?
-  deploymentCertificateMode  String   @default("INTERNAL_CA")
+  deploymentCertificateMode  String    @default("INTERNAL_CA")
   portalApiTokenEncrypted    String?
   portalApiTokenUpdatedAt    DateTime?
   portalApiTokenUpdatedById  String?
   updatedById                String?
-  updatedBy                  User?    @relation("SystemConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
-  portalApiTokenUpdatedBy    User?    @relation("PortalApiTokenUpdater", fields: [portalApiTokenUpdatedById], references: [id], onDelete: SetNull)
-  createdAt                  DateTime @default(now())
-  updatedAt                  DateTime @updatedAt
+  updatedBy                  User?     @relation("SystemConfigurationUpdater", fields: [updatedById], references: [id], onDelete: SetNull)
+  portalApiTokenUpdatedBy    User?     @relation("PortalApiTokenUpdater", fields: [portalApiTokenUpdatedById], references: [id], onDelete: SetNull)
+  createdAt                  DateTime  @default(now())
+  updatedAt                  DateTime  @updatedAt
 }
 
 model IntegrationConnectionCheck {
@@ -352,10 +363,13 @@ model Project {
   commitmentNotes                  CommitmentNote[]
   invoices                         Invoice[]
   evidences                        ProjectEvidence[]
+  creditNotes                      ProjectCreditNote[]
   startDate                        DateTime?
   endDate                          DateTime?
   creditNoteNumber                 String?
   creditNoteReceivedAt             DateTime?
+  creditNoteMode                   CreditNoteMode           @default(SINGLE)
+  creditNoteOverflowJustification  String?
   diexNumber                       String?
   diexIssuedAt                     DateTime?
   commitmentNoteNumber             String?
@@ -389,6 +403,31 @@ model Project {
   @@index([projectType])
   @@index([omId])
   @@index([signedServiceOrderRegisteredById])
+}
+
+model ProjectCreditNote {
+  id                    String           @id @default(cuid())
+  projectId             String
+  number                String
+  receivedAt            DateTime
+  amount                Decimal          @db.Decimal(14, 2)
+  cancelledAmount       Decimal          @default(0) @db.Decimal(14, 2)
+  status                CreditNoteStatus @default(ACTIVE)
+  issuingManagementUnit String?
+  fundingSource         String?
+  ptres                 String?
+  expenseNature         String?
+  internalPlan          String?
+  documentLink          String?
+  notes                 String?
+  cancellationReason    String?
+  cancelledAt           DateTime?
+  project               Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  @@unique([projectId, number])
+  @@index([projectId, status, receivedAt])
 }
 
 model CommitmentNote {
@@ -498,26 +537,26 @@ model ProjectMember {
 }
 
 model Task {
-  id            String         @id @default(cuid())
-  taskCode      Int            @unique @default(autoincrement())
+  id            String            @id @default(cuid())
+  taskCode      Int               @unique @default(autoincrement())
   title         String
   description   String?
-  status        TaskStatus     @default(PENDENTE)
-  priority      Int            @default(3)
+  status        TaskStatus        @default(PENDENTE)
+  priority      Int               @default(3)
   projectId     String
   assigneeId    String?
   completedById String?
   dueDate       DateTime?
-  project       Project        @relation(fields: [projectId], references: [id])
-  assignee      User?          @relation("TaskAssignee", fields: [assigneeId], references: [id])
-  completedBy   User?          @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
+  project       Project           @relation(fields: [projectId], references: [id])
+  assignee      User?             @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  completedBy   User?             @relation("TaskCompleter", fields: [completedById], references: [id], onDelete: SetNull)
   activities    TaskActivity[]
   evidences     ProjectEvidence[]
   completedAt   DateTime?
   archivedAt    DateTime?
   deletedAt     DateTime?
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
 }
 
 model ProjectEvidence {
@@ -587,34 +626,34 @@ model Pregao {
 }
 
 model Ata {
-  id                   String             @id @default(cuid())
-  ataCode              Int                @unique @default(autoincrement())
-  pregaoId             String?
-  pregao               Pregao?            @relation(fields: [pregaoId], references: [id], onDelete: SetNull)
-  items                AtaItem[]
-  number               String
-  type                 AtaType
-  estimates            Estimate[]
-  vendorName           String
-  vendorCnpj           String?
-  managingAgency       String?
-  validFrom            DateTime?
-  validUntil           DateTime?
-  notes                String?
-  isActive             Boolean            @default(true)
-  externalSource       String?
-  externalUasg         String?
-  externalPregaoNumber String?
-  externalPregaoYear   String?
-  externalAtaNumber    String?
+  id                        String             @id @default(cuid())
+  ataCode                   Int                @unique @default(autoincrement())
+  pregaoId                  String?
+  pregao                    Pregao?            @relation(fields: [pregaoId], references: [id], onDelete: SetNull)
+  items                     AtaItem[]
+  number                    String
+  type                      AtaType
+  estimates                 Estimate[]
+  vendorName                String
+  vendorCnpj                String?
+  managingAgency            String?
+  validFrom                 DateTime?
+  validUntil                DateTime?
+  notes                     String?
+  isActive                  Boolean            @default(true)
+  externalSource            String?
+  externalUasg              String?
+  externalPregaoNumber      String?
+  externalPregaoYear        String?
+  externalAtaNumber         String?
   externalPncpControlNumber String?
-  externalLastSyncAt   DateTime?
-  externalFingerprint  String?
-  pncpLastSyncAt       DateTime?
-  pncpSnapshot         Json?
-  coverageGroups       AtaCoverageGroup[]
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
+  externalLastSyncAt        DateTime?
+  externalFingerprint       String?
+  pncpLastSyncAt            DateTime?
+  pncpSnapshot              Json?
+  coverageGroups            AtaCoverageGroup[]
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
 
   @@index([pregaoId, isActive])
 }
@@ -646,34 +685,34 @@ model AtaCoverageLocality {
 }
 
 model AtaItem {
-  id                      String                          @id @default(cuid())
-  ataItemCode             Int                             @unique @default(autoincrement())
-  ataId                   String
-  coverageGroupId         String
-  referenceCode           String
-  description             String
-  externalDescription     String?
-  automaticDescription    String?
-  descriptionCorrectionStatus String                        @default("OK")
-  descriptionCorrectionConfidence Int?
+  id                               String                   @id @default(cuid())
+  ataItemCode                      Int                      @unique @default(autoincrement())
+  ataId                            String
+  coverageGroupId                  String
+  referenceCode                    String
+  description                      String
+  externalDescription              String?
+  automaticDescription             String?
+  descriptionCorrectionStatus      String                   @default("OK")
+  descriptionCorrectionConfidence  Int?
   descriptionCorrectionSuggestions Json?
-  descriptionEditedAt     DateTime?
-  unit                    String
-  estimateItems           EstimateItem[]
-  balanceMovements        AtaItemBalanceMovement[]
-  unitPrice               Decimal                         @db.Decimal(14, 2)
-  initialQuantity         Decimal                         @default(1000) @db.Decimal(14, 2)
-  notes                   String?
-  isActive                Boolean                         @default(true)
-  deletedAt               DateTime?
-  externalSource          String?
-  externalItemId          String?
-  externalItemNumber      String?
-  externalLastSyncAt      DateTime?
-  ata                     Ata                             @relation(fields: [ataId], references: [id], onDelete: Cascade)
-  coverageGroup           AtaCoverageGroup                @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
-  createdAt               DateTime                        @default(now())
-  updatedAt               DateTime                        @updatedAt
+  descriptionEditedAt              DateTime?
+  unit                             String
+  estimateItems                    EstimateItem[]
+  balanceMovements                 AtaItemBalanceMovement[]
+  unitPrice                        Decimal                  @db.Decimal(14, 2)
+  initialQuantity                  Decimal                  @default(1000) @db.Decimal(14, 2)
+  notes                            String?
+  isActive                         Boolean                  @default(true)
+  deletedAt                        DateTime?
+  externalSource                   String?
+  externalItemId                   String?
+  externalItemNumber               String?
+  externalLastSyncAt               DateTime?
+  ata                              Ata                      @relation(fields: [ataId], references: [id], onDelete: Cascade)
+  coverageGroup                    AtaCoverageGroup         @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
+  createdAt                        DateTime                 @default(now())
+  updatedAt                        DateTime                 @updatedAt
 
   @@unique([ataId, coverageGroupId, referenceCode])
 }

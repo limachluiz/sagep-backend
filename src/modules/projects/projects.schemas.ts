@@ -88,6 +88,20 @@ export const updateProjectSchema = z
 
 export const updateProjectFlowSchema = z.object({
   stage: projectStageEnum,
+  creditNoteMode: z.enum(["SINGLE", "MULTIPLE"]).optional(),
+  creditNotes: z.array(z.object({
+    number: z.string().trim().min(3, "Número da NC inválido"),
+    receivedAt: z.coerce.date(),
+    amount: z.coerce.number().positive("O valor da NC deve ser maior que zero"),
+    issuingManagementUnit: optionalString,
+    fundingSource: optionalString,
+    ptres: optionalString,
+    expenseNature: optionalString,
+    internalPlan: optionalString,
+    documentLink: z.string().trim().url("Link do documento inválido").optional().or(z.literal("")),
+    notes: optionalString,
+  })).min(1, "Informe ao menos uma Nota de Crédito").optional(),
+  creditNoteOverflowJustification: optionalString,
   creditNoteNumber: optionalString,
   creditNoteReceivedAt: optionalDate,
   diexNumber: optionalString,
@@ -186,7 +200,7 @@ export const registerDeliveryReportSignatureSchema = z.object({
 });
 
 export const deliveryReportDraftSchema = z.object({
-  version: z.literal(2),
+  version: z.literal(1),
   sections: z.array(z.object({
     key: z.string().trim().min(2).max(60).regex(/^[a-z0-9-]+$/),
     title: z.string().trim().min(3).max(160),
@@ -200,12 +214,4 @@ export const deliveryReportDraftSchema = z.object({
     quantity: z.string().trim().min(1).max(40),
     technicalDescription: z.string().trim().max(12_000),
   })).max(250),
-  formalization: z.object({
-    requiresOmAcknowledgement: z.boolean(),
-    recipientName: z.string().trim().max(160),
-    recipientRank: z.string().trim().max(80),
-    recipientRole: z.string().trim().max(160),
-    recipientOrganization: z.string().trim().max(200),
-    acknowledgementNotes: z.string().trim().max(4_000),
-  }),
 });

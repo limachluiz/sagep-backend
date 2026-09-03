@@ -42,6 +42,19 @@ describe("status macro do workflow", () => {
     expect(service.getMacroStatusFromStage("CANCELADO")).toBe("CANCELADO");
   });
 
+  it("orienta o registro da NC antes de liberar o DIEx", () => {
+    expect(service.getNextAction({
+      id: "project-1",
+      stage: "AGUARDANDO_NOTA_CREDITO",
+    }).code).toBe("INFORMAR_NOTA_CREDITO");
+
+    expect(service.getNextAction({
+      id: "project-1",
+      stage: "AGUARDANDO_NOTA_CREDITO",
+      creditNoteNumber: "2026NC000001",
+    }).code).toBe("EMITIR_DIEX");
+  });
+
   it("permite arquivar o projeto somente antes do início da execução", () => {
     const stagesBeforeExecution: ProjectStageValue[] = [
       "ESTIMATIVA_PRECO",

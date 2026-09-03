@@ -2113,6 +2113,74 @@
               "CANCELADO"
             ]
           },
+          "creditNoteMode": {
+            "type": "string",
+            "enum": [
+              "SINGLE",
+              "MULTIPLE"
+            ],
+            "description": "Forma de composição do crédito do projeto."
+          },
+          "creditNotes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "object",
+              "required": [
+                "number",
+                "receivedAt",
+                "amount"
+              ],
+              "properties": {
+                "number": {
+                  "type": "string",
+                  "minLength": 3
+                },
+                "receivedAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "amount": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "issuingManagementUnit": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "fundingSource": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "ptres": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "expenseNature": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "internalPlan": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "documentLink": {
+                  "type": "string",
+                  "format": "uri",
+                  "nullable": true
+                },
+                "notes": {
+                  "type": "string",
+                  "nullable": true
+                }
+              }
+            }
+          },
+          "creditNoteOverflowJustification": {
+            "type": "string",
+            "nullable": true,
+            "description": "Obrigatória quando a soma das NCs supera o valor necessário."
+          },
           "creditNoteNumber": {
             "type": "string",
             "nullable": true

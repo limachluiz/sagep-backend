@@ -139,6 +139,29 @@ export function renderProjectDossierHtml(dossier: any) {
     </tbody>
   </table>
 
+  ${workflow.creditFunding?.notes?.length ? `
+  <h2>Composição do crédito</h2>
+  <div class="grid">
+    <div><strong>Forma:</strong> ${workflow.creditFunding.mode === "MULTIPLE" ? "Múltiplas Notas de Crédito" : "Nota de Crédito única"}</div>
+    <div><strong>Cobertura:</strong> ${formatAmount(workflow.creditFunding.receivedAmount)} de ${formatAmount(workflow.creditFunding.requiredAmount)}</div>
+  </div>
+  <table>
+    <thead><tr><th>Número</th><th>Recebimento</th><th>UG emitente</th><th>Valor</th><th>Situação</th></tr></thead>
+    <tbody>
+      ${renderRows(workflow.creditFunding.notes, (item) => `
+        <tr>
+          <td>${escapeHtml(item.number)}</td>
+          <td>${formatDate(item.receivedAt)}</td>
+          <td>${escapeHtml(item.issuingManagementUnit || "-")}</td>
+          <td>${formatAmount(Number(item.amount) - Number(item.cancelledAmount || 0))}</td>
+          <td>${escapeHtml(item.status)}</td>
+        </tr>
+      `)}
+    </tbody>
+  </table>
+  ${workflow.creditFunding.overflowJustification ? `<div class="box"><strong>Justificativa de crédito excedente:</strong> ${escapeHtml(workflow.creditFunding.overflowJustification)}</div>` : ""}
+  ` : ""}
+
   <h2>Pendências</h2>
   <table>
     <thead><tr><th>Código</th><th>Descrição</th><th>Severidade</th></tr></thead>

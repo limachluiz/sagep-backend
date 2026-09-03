@@ -14,10 +14,8 @@ import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
 import type { CommitmentNoteSnapshot } from "../financial-execution/portal-transparencia.client.js";
 import {
-  buildContextualDeliverySections,
   inferDeliveryUnit,
   parseDeliveryReportDraft,
-  suggestDeliveryItemText,
   type DeliveryReportDraft,
 } from "./delivery-report-draft.js";
 
@@ -68,6 +66,20 @@ type UpdateProjectInput = {
 
 type UpdateProjectFlowInput = {
   stage: ProjectStageValue;
+  creditNoteMode?: "SINGLE" | "MULTIPLE";
+  creditNotes?: Array<{
+    number: string;
+    receivedAt: Date;
+    amount: number;
+    issuingManagementUnit?: string;
+    fundingSource?: string;
+    ptres?: string;
+    expenseNature?: string;
+    internalPlan?: string;
+    documentLink?: string;
+    notes?: string;
+  }>;
+  creditNoteOverflowJustification?: string;
   creditNoteNumber?: string;
   creditNoteReceivedAt?: Date;
   diexNumber?: string;
@@ -1401,6 +1413,11 @@ export class ProjectsService {
         endDate: true,
         creditNoteNumber: true,
         creditNoteReceivedAt: true,
+        creditNoteMode: true,
+        creditNoteOverflowJustification: true,
+        creditNotes: {
+          orderBy: [{ receivedAt: "asc" }, { createdAt: "asc" }],
+        },
         diexNumber: true,
         diexIssuedAt: true,
         commitmentNoteNumber: true,
@@ -1707,6 +1724,16 @@ export class ProjectsService {
           deliveryReportSignedAt: validDeliveryReportSignedAt,
           deliveryReportSignedLink: project.deliveryReportSignedLink,
         },
+        creditFunding: {
+          mode: project.creditNoteMode,
+          notes: project.creditNotes,
+          requiredAmount: this.sumAmounts(finalizedEstimates),
+          receivedAmount: project.creditNotes.reduce(
+            (total, note) => total + Number(note.amount) - Number(note.cancelledAmount),
+            0,
+          ).toFixed(2),
+          overflowJustification: project.creditNoteOverflowJustification,
+        },
         serviceOrderSignature: {
           required: project.serviceOrderSignatureRequired,
           link: project.signedServiceOrderLink,
@@ -1865,6 +1892,8 @@ export class ProjectsService {
         endDate: true,
         creditNoteNumber: true,
         creditNoteReceivedAt: true,
+        creditNoteMode: true,
+        creditNoteOverflowJustification: true,
         diexNumber: true,
         diexIssuedAt: true,
         commitmentNoteNumber: true,
@@ -1982,6 +2011,8 @@ export class ProjectsService {
         endDate: true,
         creditNoteNumber: true,
         creditNoteReceivedAt: true,
+        creditNoteMode: true,
+        creditNoteOverflowJustification: true,
         diexNumber: true,
         diexIssuedAt: true,
         commitmentNoteNumber: true,
@@ -2037,18 +2068,59 @@ export class ProjectsService {
       );
     }
 
-    const finalizedEstimateCount = await prisma.estimate.count({
+    const finalizedEstimateSummary = await prisma.estimate.aggregate({
       where: {
         projectId,
         status: "FINALIZADA",
         archivedAt: null,
         deletedAt: null,
       },
+      _count: { _all: true },
+      _sum: { totalAmount: true },
     });
+    const finalizedEstimateCount = finalizedEstimateSummary._count._all;
+    const requiredCreditAmount = Number(finalizedEstimateSummary._sum.totalAmount ?? 0);
+    const requiredCreditCents = Math.round(requiredCreditAmount * 100);
+    let effectiveCreditNotes = data.creditNotes;
+    if (effectiveCreditNotes) {
+      if (currentProject.stage !== "AGUARDANDO_NOTA_CREDITO") {
+        throw new AppError(
+          "As Notas de Crédito só podem ser alteradas enquanto o projeto aguarda crédito",
+          409,
+        );
+      }
+      const normalizedNumbers = effectiveCreditNotes.map((note) => note.number.trim().toUpperCase());
+      if (new Set(normalizedNumbers).size !== normalizedNumbers.length) {
+        throw new AppError("Não é possível registrar a mesma Nota de Crédito duas vezes", 409);
+      }
+      if (data.creditNoteMode === "SINGLE" && effectiveCreditNotes.length > 1) {
+        throw new AppError("Selecione múltiplas Notas de Crédito para cadastrar mais de uma NC", 409);
+      }
+      effectiveCreditNotes = effectiveCreditNotes.map((note, index) => ({
+        ...note,
+        number: normalizedNumbers[index],
+      }));
+    }
+    const receivedCreditCents = effectiveCreditNotes?.reduce(
+      (sum, note) => sum + Math.round(note.amount * 100),
+      0,
+    );
+    if (
+      receivedCreditCents !== undefined &&
+      receivedCreditCents > requiredCreditCents &&
+      !data.creditNoteOverflowJustification?.trim()
+    ) {
+      throw new AppError("Justifique o valor de crédito superior ao total das estimativas finalizadas", 409);
+    }
+    const creditCoverageComplete =
+      receivedCreditCents === undefined || receivedCreditCents >= requiredCreditCents;
 
     const nextSnapshot = {
-      creditNoteNumber: data.creditNoteNumber ?? currentProject.creditNoteNumber,
-      creditNoteReceivedAt: data.creditNoteReceivedAt ?? currentProject.creditNoteReceivedAt,
+      creditNoteNumber: effectiveCreditNotes?.map((note) => note.number).join(" + ") ?? data.creditNoteNumber ?? currentProject.creditNoteNumber,
+      creditNoteReceivedAt: effectiveCreditNotes?.reduce(
+        (latest, note) => note.receivedAt > latest ? note.receivedAt : latest,
+        effectiveCreditNotes[0]?.receivedAt ?? currentProject.creditNoteReceivedAt ?? new Date(0),
+      ) ?? data.creditNoteReceivedAt ?? currentProject.creditNoteReceivedAt,
       diexNumber: data.diexNumber ?? currentProject.diexNumber,
       diexIssuedAt: data.diexIssuedAt ?? currentProject.diexIssuedAt,
       commitmentNoteNumber:
@@ -2080,18 +2152,27 @@ export class ProjectsService {
         : currentProject.stage;
     const hasCommitmentNote =
       !!nextSnapshot.commitmentNoteNumber || !!nextSnapshot.commitmentNoteReceivedAt;
-    const targetStage =
+    let targetStage =
       effectiveCurrentStage === "AGUARDANDO_NOTA_EMPENHO" &&
       data.stage === "AGUARDANDO_NOTA_EMPENHO" &&
       hasCommitmentNote
         ? "OS_LIBERADA"
         : data.stage;
+    if (
+      currentProject.stage === "AGUARDANDO_NOTA_CREDITO" &&
+      effectiveCreditNotes &&
+      !creditCoverageComplete
+    ) {
+      targetStage = "AGUARDANDO_NOTA_CREDITO";
+    }
     const isFirstCommitmentNoteRegistration =
       !currentProject.commitmentNoteNumber &&
       !currentProject.commitmentNoteReceivedAt &&
       (!!nextSnapshot.commitmentNoteNumber || !!nextSnapshot.commitmentNoteReceivedAt);
 
-    workflowService.assertStageTransition(effectiveCurrentStage, targetStage);
+    if (effectiveCurrentStage !== targetStage) {
+      workflowService.assertStageTransition(effectiveCurrentStage, targetStage);
+    }
     workflowService.validateStageRequirements(
       targetStage,
       this.buildWorkflowSnapshot({
@@ -2114,6 +2195,36 @@ export class ProjectsService {
           }),
           ...(data.creditNoteReceivedAt !== undefined && {
             creditNoteReceivedAt: data.creditNoteReceivedAt,
+          }),
+          ...(effectiveCreditNotes !== undefined && {
+            creditNoteMode: data.creditNoteMode ?? (effectiveCreditNotes.length > 1 ? "MULTIPLE" : "SINGLE"),
+            creditNoteOverflowJustification: data.creditNoteOverflowJustification?.trim() || null,
+            // Os campos legados continuam sendo a trava usada pelo fluxo do DIEx.
+            // Só são preenchidos quando a soma das NCs cobre integralmente o projeto.
+            creditNoteNumber: creditCoverageComplete
+              ? effectiveCreditNotes.map((note) => note.number).join(" + ")
+              : null,
+            creditNoteReceivedAt: creditCoverageComplete
+              ? effectiveCreditNotes.reduce(
+                  (latest, note) => note.receivedAt > latest ? note.receivedAt : latest,
+                  effectiveCreditNotes[0].receivedAt,
+                )
+              : null,
+            creditNotes: {
+              deleteMany: {},
+              create: effectiveCreditNotes.map((note) => ({
+                number: note.number,
+                receivedAt: note.receivedAt,
+                amount: note.amount,
+                issuingManagementUnit: note.issuingManagementUnit?.trim(),
+                fundingSource: note.fundingSource?.trim(),
+                ptres: note.ptres?.trim(),
+                expenseNature: note.expenseNature?.trim(),
+                internalPlan: note.internalPlan?.trim(),
+                documentLink: note.documentLink?.trim() || null,
+                notes: note.notes?.trim(),
+              })),
+            },
           }),
           ...(data.diexNumber !== undefined && {
             diexNumber: data.diexNumber,
@@ -2280,6 +2391,14 @@ export class ProjectsService {
       metadata: {
         previousStage: currentProject.stage,
         newStage: project.stage,
+        ...(effectiveCreditNotes && {
+          creditNoteMode:
+            data.creditNoteMode ?? (effectiveCreditNotes.length > 1 ? "MULTIPLE" : "SINGLE"),
+          creditNoteNumbers: effectiveCreditNotes.map((note) => note.number),
+          requiredCreditAmount: requiredCreditAmount.toFixed(2),
+          receivedCreditAmount: ((receivedCreditCents ?? 0) / 100).toFixed(2),
+          creditCoverageComplete,
+        }),
         nextActionCode: workflowService.getNextAction(
           this.buildWorkflowSnapshot({
             id: project.id,
@@ -2470,8 +2589,10 @@ export class ProjectsService {
     if (!current) throw new AppError("Projeto não encontrado", 404);
     if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A assinatura do relatório só pode ser registrada na etapa de Entrega Técnica", 409);
     if (!current.deliveryReportGeneratedAt) throw new AppError("Gere o relatório antes de registrar sua assinatura", 409);
-    if (workflowService.isDeliveryReportSignatureInFuture(data.signedAt)) throw new AppError("A data da assinatura não pode estar no futuro", 400);
-    if (!workflowService.isDeliveryReportSignatureValid({ deliveryReportGeneratedAt: current.deliveryReportGeneratedAt, deliveryReportSignedAt: data.signedAt })) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
+    if (data.signedAt > new Date()) throw new AppError("A data da assinatura não pode estar no futuro", 400);
+    const generatedDay = new Date(current.deliveryReportGeneratedAt); generatedDay.setUTCHours(0, 0, 0, 0);
+    const signedDay = new Date(data.signedAt); signedDay.setUTCHours(0, 0, 0, 0);
+    if (signedDay < generatedDay) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
     const project = await prisma.project.update({ where: { id: projectId }, data: { deliveryReportSignedAt: data.signedAt, deliveryReportSignedLink: data.signedLink?.trim() || null }, include: projectInclude });
     await auditService.log({ entityType: "PROJECT", entityId: projectId, action: "UPDATE", actor: this.getAuditActor(user), summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`, before: this.buildProjectAuditSnapshot(current), after: this.buildProjectAuditSnapshot(project), metadata: { source: "project.delivery-report.signature", signedAt: data.signedAt, signedLink: data.signedLink ?? null } });
     return project;
@@ -2488,24 +2609,17 @@ export class ProjectsService {
         description: true,
         projectType: true,
         deliveryReportDraft: true,
-        om: { select: { name: true, sigla: true } },
         estimates: {
           where: { status: "FINALIZADA", archivedAt: null, deletedAt: null },
           orderBy: { updatedAt: "desc" },
           take: 1,
-          select: { id: true, estimateCode: true, totalAmount: true, ata: { select: { number: true, vendorName: true } }, items: { orderBy: { referenceCode: "asc" }, select: { id: true, referenceCode: true, description: true, unit: true, quantity: true, subtotal: true } } },
-        },
-        diexRequests: {
-          where: { archivedAt: null, deletedAt: null },
-          orderBy: { createdAt: "desc" },
-          take: 1,
-          select: { id: true, diexCode: true, diexNumber: true, issuedAt: true, totalAmount: true },
+          select: { items: { orderBy: { referenceCode: "asc" }, select: { id: true, referenceCode: true, description: true, unit: true, quantity: true, subtotal: true } } },
         },
         serviceOrders: {
           where: { archivedAt: null, deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { id: true, serviceOrderCode: true, serviceOrderNumber: true, issuedAt: true, totalAmount: true, items: { orderBy: { itemCode: "asc" }, select: { estimateItemId: true, itemCode: true, description: true, supplyUnit: true, quantityOrdered: true, totalPrice: true } } },
+          select: { items: { orderBy: { itemCode: "asc" }, select: { estimateItemId: true, itemCode: true, description: true, supplyUnit: true, quantityOrdered: true, totalPrice: true } } },
         },
       },
     });
@@ -2529,27 +2643,12 @@ export class ProjectsService {
         totalPrice: item.subtotal.toString(),
       }));
     const draft = parseDeliveryReportDraft(project.deliveryReportDraft, project.projectType);
-    if (!project.deliveryReportDraft) {
-      const contextual = buildContextualDeliverySections(sourceItems, {
-        projectCode: project.projectCode,
-        title: project.title,
-        description: project.description,
-        projectType: project.projectType,
-        omName: project.om?.name,
-        omAcronym: project.om?.sigla,
-        estimateCode: project.estimates[0]?.estimateCode,
-        ataNumber: project.estimates[0]?.ata.number,
-        diexNumber: project.diexRequests[0]?.diexNumber || (project.diexRequests[0] ? `DIEX-${project.diexRequests[0].diexCode}` : null),
-        serviceOrderNumber: project.serviceOrders[0]?.serviceOrderNumber || (project.serviceOrders[0] ? `OS-${project.serviceOrders[0].serviceOrderCode}` : null),
-      });
-      draft.sections = draft.sections.map((section) => ({ ...section, content: contextual[section.key] || section.content }));
-    }
     const details = new Map(draft.itemDetails.map((item) => [item.itemId, item]));
     const itemDetails = sourceItems.map((item) => details.get(item.itemId) ?? {
       itemId: item.itemId,
       unit: inferDeliveryUnit(item.description, item.sourceUnit),
       quantity: item.sourceQuantity,
-      technicalDescription: project.deliveryReportDraft ? "" : suggestDeliveryItemText(item),
+      technicalDescription: "",
     });
     if (!project.deliveryReportDraft && project.description) {
       const purpose = draft.sections.find((section) => section.key === "purpose-scope");
@@ -2558,12 +2657,7 @@ export class ProjectsService {
     return {
       project: { id: project.id, projectCode: project.projectCode, title: project.title, projectType: project.projectType },
       draft: { ...draft, itemDetails },
-      items: sourceItems.map((item) => ({ ...item, suggestedTechnicalDescription: suggestDeliveryItemText(item) })),
-      documents: {
-        estimate: project.estimates[0] ? { id: project.estimates[0].id, code: `EST-${project.estimates[0].estimateCode}`, ataNumber: project.estimates[0].ata.number, supplierName: project.estimates[0].ata.vendorName, totalAmount: project.estimates[0].totalAmount.toString() } : null,
-        diex: project.diexRequests[0] ? { id: project.diexRequests[0].id, code: project.diexRequests[0].diexNumber || `DIEX-${project.diexRequests[0].diexCode}`, issuedAt: project.diexRequests[0].issuedAt, totalAmount: project.diexRequests[0].totalAmount.toString() } : null,
-        serviceOrder: project.serviceOrders[0] ? { id: project.serviceOrders[0].id, code: project.serviceOrders[0].serviceOrderNumber || `OS-${project.serviceOrders[0].serviceOrderCode}`, issuedAt: project.serviceOrders[0].issuedAt, totalAmount: project.serviceOrders[0].totalAmount.toString() } : null,
-      },
+      items: sourceItems,
       readiness: {
         sectionsIncluded: draft.sections.filter((section) => section.included).length,
         sectionsReviewed: draft.sections.filter((section) => section.included && section.reviewed && section.content.trim()).length,

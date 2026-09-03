@@ -1466,7 +1466,7 @@ describe("critical flows", () => {
       .expect(200);
 
     expect(details.body.project.id).toBe(project.id);
-    expect(details.body.workflow.nextAction.code).toBe("EMITIR_DIEX");
+    expect(details.body.workflow.nextAction.code).toBe("INFORMAR_NOTA_CREDITO");
     expect(Array.isArray(details.body.pendingActions)).toBe(true);
   });
 
@@ -2098,14 +2098,14 @@ describe("critical flows", () => {
 
     expect(details.body.workflow.stage).toBe("AGUARDANDO_NOTA_CREDITO");
     expect(details.body.workflow.status).toBe("EM_ANDAMENTO");
-    expect(details.body.workflow.nextAction.code).toBe("EMITIR_DIEX");
+    expect(details.body.workflow.nextAction.code).toBe("INFORMAR_NOTA_CREDITO");
 
     const nextAction = await request(app)
       .get(`/api/projects/${project.id}/next-action`)
       .set("Authorization", `Bearer ${adminAuth.accessToken}`)
       .expect(200);
 
-    expect(nextAction.body.code).toBe("EMITIR_DIEX");
+    expect(nextAction.body.code).toBe("INFORMAR_NOTA_CREDITO");
 
     const stageAudit = await prisma.auditLog.findFirst({
       where: {
@@ -4951,6 +4951,67 @@ describe("critical flows", () => {
           item.id === ataItem.id && item.balance.availableQuantity === "1",
       ),
     ).toBe(true);
+  });
+
+  it("mantém crédito parcial bloqueado e libera o DIEx quando múltiplas NCs cobrem a estimativa", async () => {
+    const { project } = await createProjectWithFinalizedEstimate(adminAuth.accessToken);
+
+    await moveToCreditNote(project.id, adminAuth.accessToken);
+
+    const partial = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteMode: "MULTIPLE",
+        creditNotes: [
+          { number: "2026NC000101", receivedAt: "2026-09-01", amount: 80 },
+        ],
+      })
+      .expect(200);
+
+    expect(partial.body.stage).toBe("AGUARDANDO_NOTA_CREDITO");
+    expect(partial.body.creditNoteNumber).toBeNull();
+
+    const partialDetails = await request(app)
+      .get(`/api/projects/${project.id}/details`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .expect(200);
+
+    expect(partialDetails.body.workflow.creditFunding).toMatchObject({
+      mode: "MULTIPLE",
+      requiredAmount: "200.00",
+      receivedAmount: "80.00",
+    });
+    expect(partialDetails.body.workflow.creditFunding.notes).toHaveLength(1);
+
+    const complete = await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteMode: "MULTIPLE",
+        creditNotes: [
+          { number: "2026NC000101", receivedAt: "2026-09-01", amount: 80 },
+          { number: "2026NC000102", receivedAt: "2026-09-02", amount: 120 },
+        ],
+      })
+      .expect(200);
+
+    expect(complete.body.stage).toBe("DIEX_REQUISITORIO");
+    expect(complete.body.creditNoteNumber).toBe("2026NC000101 + 2026NC000102");
+
+    await request(app)
+      .patch(`/api/projects/${project.id}/flow`)
+      .set("Authorization", `Bearer ${adminAuth.accessToken}`)
+      .send({
+        stage: "DIEX_REQUISITORIO",
+        creditNoteMode: "SINGLE",
+        creditNotes: [
+          { number: "2026NC000103", receivedAt: "2026-09-03", amount: 200 },
+        ],
+      })
+      .expect(409);
   });
 
   it("exports and reports expose authorized project outputs", async () => {
