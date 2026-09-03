@@ -232,6 +232,7 @@ async function ensureAta(params: {
   number: string;
   type: "CFTV" | "FIBRA_OPTICA";
   vendorName: string;
+  vendorCnpj?: string;
   managingAgency?: string;
   notes?: string;
   validFrom?: Date;
@@ -249,6 +250,7 @@ async function ensureAta(params: {
       where: { id: existing.id },
       data: {
         vendorName: params.vendorName,
+        vendorCnpj: params.vendorCnpj,
         managingAgency: params.managingAgency,
         notes: params.notes,
         validFrom: params.validFrom,
@@ -263,6 +265,7 @@ async function ensureAta(params: {
       number: params.number,
       type: params.type,
       vendorName: params.vendorName,
+      vendorCnpj: params.vendorCnpj,
       managingAgency: params.managingAgency,
       notes: params.notes,
       validFrom: params.validFrom,
@@ -368,6 +371,7 @@ async function seedCatalog() {
     number: "094/2025",
     type: "FIBRA_OPTICA",
     vendorName: "SIDI SERVIÇOS DE COMUNICAÇÃO LTDA",
+    vendorCnpj: "12345678000199",
     managingAgency: "CMA",
     notes: "ATA demo de fibra óptica",
     validFrom: new Date("2026-01-01T00:00:00.000Z"),
@@ -378,6 +382,7 @@ async function seedCatalog() {
     number: "095/2025",
     type: "CFTV",
     vendorName: "FORNECEDOR DA ATA DE MANAUS",
+    vendorCnpj: "99887766000155",
     managingAgency: "CMA",
     notes: "ATA demo de CFTV",
     validFrom: new Date("2026-01-01T00:00:00.000Z"),

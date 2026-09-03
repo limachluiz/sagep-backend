@@ -322,6 +322,7 @@ export class DiexService {
           },
           ata: {
             select: {
+              id: true,
               vendorName: true,
               vendorCnpj: true,
             },
@@ -369,6 +370,7 @@ export class DiexService {
           },
           ata: {
             select: {
+              id: true,
               vendorName: true,
               vendorCnpj: true,
             },
@@ -694,7 +696,8 @@ export class DiexService {
       throw new AppError("Só é possível gerar DIEx a partir de uma estimativa finalizada", 409);
     }
 
-    const supplierCnpj = (data.supplierCnpj?.trim() || estimate.ata.vendorCnpj?.trim() || "")
+    const registeredAtaCnpj = (estimate.ata.vendorCnpj ?? "").replace(/\D/g, "");
+    const supplierCnpj = (data.supplierCnpj?.trim() || registeredAtaCnpj)
       .replace(/\D/g, "");
     if (supplierCnpj.length !== 14) {
       throw new AppError(
@@ -728,7 +731,18 @@ export class DiexService {
       throw new AppError("Já existe um DIEx vinculado a esta estimativa", 409);
     }
 
-    const { diex, updatedProject } = await prisma.$transaction(async (tx) => {
+    const shouldCompleteAtaCnpj = registeredAtaCnpj.length !== 14;
+    const { diex, updatedProject, ataCnpjCompleted } = await prisma.$transaction(async (tx) => {
+      const ataCnpjUpdate = shouldCompleteAtaCnpj
+        ? await tx.ata.updateMany({
+            where: {
+              id: estimate.ata.id,
+              vendorCnpj: estimate.ata.vendorCnpj,
+            },
+            data: { vendorCnpj: supplierCnpj },
+          })
+        : { count: 0 };
+
       const createdDiex = await tx.diexRequest.create({
         data: {
           projectId: project.id,
@@ -800,6 +814,7 @@ export class DiexService {
       return {
         diex: createdDiex,
         updatedProject: syncedProject,
+        ataCnpjCompleted: ataCnpjUpdate.count > 0,
       };
     });
 
@@ -829,6 +844,10 @@ export class DiexService {
         notes: diex.notes,
         totalAmount: diex.totalAmount,
       }),
+      metadata: {
+        ataId: estimate.ata.id,
+        ataCnpjCompleted,
+      },
     });
 
     await auditService.log({
