@@ -34,6 +34,16 @@ describe("technical delivery workflow", () => {
     }, 1)).toThrow(/anterior à versão atual/);
   });
 
+  it("accepts the local generation date when UTC has already advanced to the next day", () => {
+    const workflow = new WorkflowService();
+    const snapshot = {
+      deliveryReportGeneratedAt: new Date("2026-09-03T00:14:00.000Z"),
+      deliveryReportSignedAt: new Date("2026-09-02T00:00:00.000Z"),
+    };
+    expect(workflow.isDeliveryReportSignatureValid(snapshot)).toBe(true);
+    expect(workflow.isDeliveryReportSignatureInFuture(snapshot.deliveryReportSignedAt, snapshot.deliveryReportGeneratedAt)).toBe(false);
+  });
+
   it("validates evidence metadata", () => {
     expect(evidenceUploadHeadersSchema.parse({ projectId: "p1", filename: "rota.kmz", title: "Traçado da fibra", category: "KMZ_KML", phase: "AFTER", includeInReport: true })).toMatchObject({ category: "KMZ_KML", includeInReport: true });
   });

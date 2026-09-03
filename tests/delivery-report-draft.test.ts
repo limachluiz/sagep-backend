@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildContextualDeliverySections, classifyDeliveryItem, defaultDeliveryReportSections, inferDeliveryUnit, parseDeliveryReportDraft, suggestDeliveryItemText } from "../src/modules/projects/delivery-report-draft.js";
+import { buildContextualDeliverySections, classifyDeliveryItem, defaultDeliveryReportSections, inferDeliveryUnit, parseDeliveryReportDraft, sanitizeDeliveryNarrative, suggestDeliveryItemText } from "../src/modules/projects/delivery-report-draft.js";
 
 describe("memória técnica do relatório de entrega", () => {
   it("sugere metro para cabo linear e unidade para equipamentos e pontos", () => {
@@ -32,6 +32,15 @@ describe("memória técnica do relatório de entrega", () => {
     expect(suggestDeliveryItemText(nvr)).toContain("10TB");
   });
 
+  it("remove o texto administrativo do Termo de Referência apenas da sugestão técnica", () => {
+    const item = { itemId: "1", itemCode: "0001", description: "Câmera IP PoE Bullet. Demais características conforme Termo de Referência.", sourceUnit: "UND", sourceQuantity: "4", totalPrice: "1000" };
+    expect(suggestDeliveryItemText(item)).toContain("Câmera IP PoE Bullet");
+    expect(suggestDeliveryItemText(item)).not.toContain("Termo de Referência");
+    const sections = buildContextualDeliverySections([item], { projectCode: 1, title: "CFTV" });
+    expect(sections["equipment-solution"]).not.toContain("Termo de Referência");
+    expect(sanitizeDeliveryNarrative("Câmera instalada. O projetista deve substituir esta orientação pelos resultados efetivamente obtidos e indicar as evidências ou certificados correspondentes antes de marcar o bloco como revisado.")).toBe("Câmera instalada.");
+  });
+
   it("distribui o escopo misto nos blocos técnicos corretos", () => {
     const base = { itemCode: "1", sourceUnit: "Und.", sourceQuantity: "1", totalPrice: "1000" };
     const items = [
@@ -57,6 +66,7 @@ describe("memória técnica do relatório de entrega", () => {
     const items = [{ itemId: "fiber", itemCode: "1", description: "Lançamento de cabo óptico 12 fibras", sourceUnit: "m", sourceQuantity: "500", totalPrice: "1000" }];
     const sections = buildContextualDeliverySections(items, { projectCode: 22, title: "Enlace óptico" });
     expect(sections["tests-results"]).toContain("devem ser confirmados e registrados");
-    expect(sections["tests-results"]).toContain("substituir esta orientação pelos resultados efetivamente obtidos");
+    expect(sections["tests-results"]).toContain("resultados efetivamente obtidos");
+    expect(sections["tests-results"]).not.toContain("O projetista deve substituir");
   });
 });

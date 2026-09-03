@@ -5,7 +5,7 @@ import { env } from "../../config/env.js";
 import { AppError } from "../../shared/app-error.js";
 import { pdfService } from "../../shared/pdf.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
-import { inferDeliveryUnit, parseDeliveryReportDraft } from "../projects/delivery-report-draft.js";
+import { inferDeliveryUnit, parseDeliveryReportDraft, sanitizeDeliveryNarrative } from "../projects/delivery-report-draft.js";
 
 type CurrentUser = { id: string; email: string; role: string; permissions?: string[] };
 const escape = (value: unknown) => String(value ?? "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]!);
@@ -66,7 +66,7 @@ export class DeliveryReportService {
     if (draft.formalization.requiresOmAcknowledgement && (!draft.formalization.recipientName.trim() || !draft.formalization.recipientRole.trim() || !draft.formalization.recipientOrganization.trim())) {
       throw new AppError("Preencha os dados de quem dará ciência pela OM antes de gerar o relatório", 409, "DELIVERY_REPORT_RECIPIENT_INCOMPLETE");
     }
-    const sectionBlocks = includedSections.map((section, index) => `<section class="technical-section"><h3>${index + 1}. ${escape(section.title)}</h3>${paragraphs(section.content)}</section>`).join("");
+    const sectionBlocks = includedSections.map((section, index) => `<section class="technical-section"><h3>${index + 1}. ${escape(section.title)}</h3>${paragraphs(sanitizeDeliveryNarrative(section.content))}</section>`).join("");
     const itemRows = items.map((item: any) => {
       const itemId = item.estimateItemId || item.id;
       const detail = itemDetails.get(itemId);
@@ -74,7 +74,7 @@ export class DeliveryReportService {
       const sourceQuantity = item.quantityOrdered ?? item.quantityRequested ?? item.quantity;
       const reportUnit = detail?.unit || inferDeliveryUnit(item.description, sourceUnit);
       const reportQuantity = detail?.quantity || quantity(sourceQuantity);
-      return `<tr><td>${escape(item.itemCode || item.referenceCode || "—")}</td><td><b>${escape(item.description)}</b>${detail?.technicalDescription ? `<div class="item-tech">${paragraphs(detail.technicalDescription)}</div>` : ""}</td><td>${escape(reportUnit)}</td><td>${escape(reportQuantity || "—")}</td><td>${money(item.totalPrice || item.subtotal)}</td></tr>`;
+      return `<tr><td>${escape(item.itemCode || item.referenceCode || "—")}</td><td><b>${escape(item.description)}</b>${detail?.technicalDescription ? `<div class="item-tech">${paragraphs(sanitizeDeliveryNarrative(detail.technicalDescription))}</div>` : ""}</td><td>${escape(reportUnit)}</td><td>${escape(reportQuantity || "—")}</td><td>${money(item.totalPrice || item.subtotal)}</td></tr>`;
     }).join("");
     const diex = project.diexRequests[0];
     const omAcknowledgement = draft.formalization.requiresOmAcknowledgement ? `<div class="signature"><b>${escape([draft.formalization.recipientRank, draft.formalization.recipientName].filter(Boolean).join(" "))}</b><br><span class="muted">${escape(draft.formalization.recipientRole)} · ${escape(draft.formalization.recipientOrganization)}</span><br><small>Ciência da Organização Militar atendida</small>${draft.formalization.acknowledgementNotes ? `<p>${escape(draft.formalization.acknowledgementNotes)}</p>` : ""}</div>` : "";

@@ -22,14 +22,29 @@ const stageTransitions: Record<ProjectStageValue, ProjectStageValue[]> = {
   CANCELADO: [],
 };
 
+const DELIVERY_REPORT_TIME_ZONE = "America/Manaus";
+
+const instantCalendarDay = (value: Date | string) => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: DELIVERY_REPORT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date(value));
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}`;
+};
+
+const signedCalendarDay = (value: Date | string) => new Date(value).toISOString().slice(0, 10);
+
 export class WorkflowService {
   isDeliveryReportSignatureValid(snapshot: Pick<WorkflowProjectSnapshot, "deliveryReportGeneratedAt" | "deliveryReportSignedAt">) {
     if (!snapshot.deliveryReportGeneratedAt || !snapshot.deliveryReportSignedAt) return false;
-    const generatedDay = new Date(snapshot.deliveryReportGeneratedAt);
-    const signedDay = new Date(snapshot.deliveryReportSignedAt);
-    generatedDay.setUTCHours(0, 0, 0, 0);
-    signedDay.setUTCHours(0, 0, 0, 0);
-    return signedDay >= generatedDay;
+    return signedCalendarDay(snapshot.deliveryReportSignedAt) >= instantCalendarDay(snapshot.deliveryReportGeneratedAt);
+  }
+
+  isDeliveryReportSignatureInFuture(signedAt: Date, now = new Date()) {
+    return signedCalendarDay(signedAt) > instantCalendarDay(now);
   }
 
   private stageOrder: ProjectStageValue[] = [

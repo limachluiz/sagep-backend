@@ -21,7 +21,18 @@ export const defaultDeliveryReportSections = (projectType?: string | null): Deli
   { key: "technical-conclusion", title: "Conclusão técnica", content: "Os serviços descritos e as evidências apresentadas correspondem aos registros mantidos no SAGEP e à solução disponibilizada para operação pela OM atendida.", included: true, reviewed: false },
 ];
 
-const cleanDescription = (value: string) => value.trim().replace(/\s+/g, " ").replace(/[.;]+$/, "");
+export const sanitizeDeliveryNarrative = (value: string) => value
+  .trim()
+  .replace(/\s+/g, " ")
+  .replace(/\s*Demais\s+características\s+conforme\s+Term\s*o?\s+de\s+Referência\.?/giu, "")
+  .replace(/\s*Demais\s+caracteristicas\s+conforme\s+Term\s*o?\s+de\s+Referencia\.?/giu, "")
+  .replace(/\s*O projetista deve substituir esta orientação pelos resultados efetivamente obtidos e indicar as evidências ou certificados correspondentes antes de marcar o bloco como revisado\.?/giu, "")
+  .replace(/\s*Este texto deve ser alterado caso existam pendências, serviços a complementar, limitações de infraestrutura ou responsabilidades atribuídas à OM ou à contratada\.?/giu, "")
+  .replace(/\s*A conclusão definitiva deste bloco depende da revisão do projetista quanto à correspondência entre o planejamento, o executado, os testes registrados e o As-Built\.?/giu, "")
+  .replace(/\s+([,.;:])/g, "$1")
+  .replace(/\.\s*\./g, ".");
+
+const cleanDescription = (value: string) => sanitizeDeliveryNarrative(value).replace(/[.;]+$/, "");
 const quantityLabel = (item: DeliverySourceItem) => `${item.sourceQuantity} ${item.sourceUnit}`.trim();
 
 export function classifyDeliveryItem(description: string) {
@@ -101,17 +112,17 @@ export function buildContextualDeliverySections(items: DeliverySourceItem[], con
   if (isOptical) maintenance.push("Intervenções nos enlaces ópticos devem preservar o raio mínimo de curvatura, a limpeza dos conectores, a identificação das fibras e os resultados de referência das medições.");
   if (categories.has("RACK") || categories.has("POWER")) maintenance.push("Os racks e equipamentos ativos devem permanecer ventilados, organizados, protegidos e alimentados em condições compatíveis com o fabricante.");
   return {
-    "executive-summary": `O presente relatório registra a entrega da solução de ${solution} do projeto PRJ-${context.projectCode} — ${context.title}, destinada à ${om}. A memória foi estruturada a partir de ${items.length} item(ns) efetivamente vinculado(s) ao projeto, dos documentos de referência e das evidências selecionadas.`,
+    "executive-summary": `O presente relatório registra a entrega da solução de ${solution} do projeto PRJ-${context.projectCode} — ${context.title}, destinada à ${om}. A memória foi estruturada a partir de ${items.length} ${items.length === 1 ? "item efetivamente vinculado" : "itens efetivamente vinculados"} ao projeto, dos documentos de referência e das evidências selecionadas.`,
     "legal-contractual-basis": `A entrega foi documentada com base nos registros mantidos no SAGEP${references ? ` e nos seguintes documentos vinculados: ${references}` : " e na documentação vinculada ao projeto"}. Foram consideradas as exigências técnicas e contratuais aplicáveis e os procedimentos de acompanhamento e fiscalização previstos na Lei nº 14.133/2021.`,
     "purpose-scope": context.description?.trim() || `O escopo executado teve por finalidade disponibilizar solução de ${solution} para atendimento da necessidade registrada pela ${om}, conforme os itens autorizados e as condições documentadas durante a execução.`,
     "executive-project": `A solução adotada foi organizada como sistema de ${solution}, combinando somente os subsistemas identificados nos itens do projeto. ${topology.join(" ")}`,
     "infrastructure": infrastructure.length ? `A infraestrutura implantada compreende: ${joinReferences(infrastructure)}. Esses elementos realizam o encaminhamento, a terminação, a organização, a proteção e/ou o suporte físico necessários à solução, conforme a função técnica de cada item.` : "Não foram identificados itens específicos de infraestrutura física no escopo vinculado. Confirmar se a infraestrutura foi preexistente ou executada por outro instrumento.",
     "equipment-solution": equipment.length ? `Os equipamentos ativos e componentes funcionais identificados no projeto compreendem: ${joinReferences(equipment)}. As capacidades, tecnologias e características citadas correspondem às descrições efetivamente cadastradas nos itens.` : `Não foram identificados equipamentos ativos específicos entre os ${items.length} item(ns) vinculados.`,
     "topology-operation": topology.join(" "),
-    "tests-results": tests.length ? `${tests.join(" ")} O projetista deve substituir esta orientação pelos resultados efetivamente obtidos e indicar as evidências ou certificados correspondentes antes de marcar o bloco como revisado.` : "Devem ser registradas as verificações funcionais compatíveis com os itens executados e as respectivas evidências antes da emissão do relatório.",
-    "pendencies": "Não foram registradas ressalvas técnicas adicionais. Este texto deve ser alterado caso existam pendências, serviços a complementar, limitações de infraestrutura ou responsabilidades atribuídas à OM ou à contratada.",
+    "tests-results": tests.length ? `${tests.join(" ")} Os resultados efetivamente obtidos e as evidências ou os certificados correspondentes integram a memória técnica revisada deste projeto.` : "As verificações funcionais aplicáveis aos itens executados e as respectivas evidências integram a memória técnica revisada do projeto.",
+    "pendencies": "Não foram registradas ressalvas, pendências ou condicionantes técnicos adicionais na versão revisada deste relatório.",
     "operation-maintenance": maintenance.join(" "),
-    "technical-conclusion": `Com base nos itens vinculados, nos documentos de referência e nas evidências selecionadas, a entrega abrange solução de ${solution} destinada à ${om}. A conclusão definitiva deste bloco depende da revisão do projetista quanto à correspondência entre o planejamento, o executado, os testes registrados e o As-Built.`,
+    "technical-conclusion": `Com base nos itens vinculados, nos documentos de referência e nas evidências selecionadas, a entrega abrange solução de ${solution} destinada à ${om}. A memória técnica consolida a correspondência revisada entre o planejamento, os serviços executados, os testes registrados e o As-Built disponível no projeto.`,
   } as Record<string, string>;
 }
 

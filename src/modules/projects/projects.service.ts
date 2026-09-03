@@ -2470,10 +2470,8 @@ export class ProjectsService {
     if (!current) throw new AppError("Projeto não encontrado", 404);
     if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A assinatura do relatório só pode ser registrada na etapa de Entrega Técnica", 409);
     if (!current.deliveryReportGeneratedAt) throw new AppError("Gere o relatório antes de registrar sua assinatura", 409);
-    if (data.signedAt > new Date()) throw new AppError("A data da assinatura não pode estar no futuro", 400);
-    const generatedDay = new Date(current.deliveryReportGeneratedAt); generatedDay.setUTCHours(0, 0, 0, 0);
-    const signedDay = new Date(data.signedAt); signedDay.setUTCHours(0, 0, 0, 0);
-    if (signedDay < generatedDay) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
+    if (workflowService.isDeliveryReportSignatureInFuture(data.signedAt)) throw new AppError("A data da assinatura não pode estar no futuro", 400);
+    if (!workflowService.isDeliveryReportSignatureValid({ deliveryReportGeneratedAt: current.deliveryReportGeneratedAt, deliveryReportSignedAt: data.signedAt })) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
     const project = await prisma.project.update({ where: { id: projectId }, data: { deliveryReportSignedAt: data.signedAt, deliveryReportSignedLink: data.signedLink?.trim() || null }, include: projectInclude });
     await auditService.log({ entityType: "PROJECT", entityId: projectId, action: "UPDATE", actor: this.getAuditActor(user), summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`, before: this.buildProjectAuditSnapshot(current), after: this.buildProjectAuditSnapshot(project), metadata: { source: "project.delivery-report.signature", signedAt: data.signedAt, signedLink: data.signedLink ?? null } });
     return project;
