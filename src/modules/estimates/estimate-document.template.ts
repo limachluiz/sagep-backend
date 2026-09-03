@@ -87,16 +87,9 @@ function getProjectTypeLabel(ataType: string) {
   return ataType === "CFTV" ? "Projeto CFTV" : "Projeto Fibra Óptica";
 }
 
-function getProjectMacroDescription(ataType: string) {
-  return ataType === "CFTV"
-    ? "Projeto de Circuito Fechado de Televisão"
-    : "Projeto de Fibra Óptica";
-}
-
 export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
   const omDisplay = data.om?.sigla || data.omName || "-";
   const headerTitle = `${getProjectTypeLabel(data.ata.type)}: ${omDisplay}`;
-  const macroDescription = getProjectMacroDescription(data.ata.type);
 
   const rows = data.items
     .map((item, index) => {
@@ -112,7 +105,7 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
         return `
           <tr>
             <td class="project-description" rowspan="${data.items.length}">
-              ${escapeHtml(macroDescription)}
+              ${escapeHtml(data.project.title)}
             </td>
             <td class="om" rowspan="${data.items.length}">
               ${escapeHtml(omDisplay)}

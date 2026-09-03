@@ -58,4 +58,20 @@ describe("renderEstimateDocumentHtml", () => {
     expect(html).toContain("<strong>Projeto CFTV: CRO/12</strong>");
     expect(html).not.toContain("<strong>Projeto:</strong> Projeto");
   });
+
+  it("exibe no campo central o título informado na criação do projeto", () => {
+    const html = renderEstimateDocumentHtml({
+      ...input,
+      project: {
+        ...input.project,
+        title: "Modernização do CFTV da CRO/12",
+        description: "Descrição complementar que não deve substituir o título",
+      },
+    });
+    const projectCell = html.match(/<td class="project-description"[^>]*>([\s\S]*?)<\/td>/)?.[1] ?? "";
+
+    expect(projectCell).toContain("Modernização do CFTV da CRO/12");
+    expect(projectCell).not.toContain("Projeto de Circuito Fechado de Televisão");
+    expect(projectCell).not.toContain("Descrição complementar");
+  });
 });
