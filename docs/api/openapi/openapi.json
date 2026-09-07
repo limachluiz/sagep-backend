@@ -6731,6 +6731,9 @@
           "uptimeSeconds",
           "availabilityPercent",
           "observationWindowStartedAt",
+          "historyWindow",
+          "sampleCount",
+          "performance",
           "components",
           "summary",
           "history"
@@ -6760,6 +6763,53 @@
           "observationWindowStartedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "historyWindow": {
+            "type": "string",
+            "enum": [
+              "3h",
+              "6h",
+              "12h",
+              "24h",
+              "7d"
+            ]
+          },
+          "sampleCount": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "performance": {
+            "type": "object",
+            "properties": {
+              "incidentCount": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "apiAverageMs": {
+                "type": "number",
+                "nullable": true
+              },
+              "apiP95Ms": {
+                "type": "number",
+                "nullable": true
+              },
+              "apiMaximumMs": {
+                "type": "number",
+                "nullable": true
+              },
+              "databaseAverageMs": {
+                "type": "number",
+                "nullable": true
+              },
+              "databaseP95Ms": {
+                "type": "number",
+                "nullable": true
+              },
+              "databaseMaximumMs": {
+                "type": "number",
+                "nullable": true
+              }
+            }
           },
           "components": {
             "type": "array",
@@ -6932,6 +6982,23 @@
         "description": "Endpoint publico para permanecer acessivel durante falhas do banco. Nao expoe credenciais, hosts ou versoes.",
         "parameters": [
           {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Janela do histórico persistido.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "3h",
+                "6h",
+                "12h",
+                "24h",
+                "7d"
+              ],
+              "default": "3h"
+            }
+          },
+          {
             "name": "refresh",
             "in": "query",
             "required": false,
@@ -6972,6 +7039,23 @@
           "system_health.view_details"
         ],
         "parameters": [
+          {
+            "name": "window",
+            "in": "query",
+            "required": false,
+            "description": "Janela do histórico persistido.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "3h",
+                "6h",
+                "12h",
+                "24h",
+                "7d"
+              ],
+              "default": "3h"
+            }
+          },
           {
             "name": "refresh",
             "in": "query",

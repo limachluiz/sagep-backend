@@ -22,9 +22,16 @@ describe("monitoramento de saude do sistema", () => {
   it("valida API e PostgreSQL sem expor infraestrutura administrativa", async () => {
     queryRaw.mockResolvedValue([{ "?column?": 1 }]);
 
-    const snapshot = await systemHealthService.getSnapshot({ force: true });
+    const snapshot = await systemHealthService.getSnapshot({ force: true, window: "7d" });
 
     expect(snapshot.status).toBe("operational");
+    expect(snapshot.historyWindow).toBe("7d");
+    expect(snapshot.sampleCount).toBeGreaterThanOrEqual(1);
+    expect(snapshot.performance).toEqual(expect.objectContaining({
+      incidentCount: 0,
+      apiP95Ms: expect.any(Number),
+      databaseP95Ms: expect.any(Number),
+    }));
     expect(snapshot.components).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: "api", status: "operational", critical: true }),
       expect.objectContaining({ id: "database", status: "operational", critical: true }),

@@ -5,6 +5,7 @@ import { startFinancialExecutionScheduler } from "./modules/financial-execution/
 import { startBackupScheduler } from "./modules/backups/backups.scheduler.js";
 import { startCertificateRenewalScheduler } from "./modules/deployment/certificate-renewal.scheduler.js";
 import { initializeSetupToken } from "./modules/setup/setup-token.js";
+import { startHealthScheduler } from "./modules/health/health.scheduler.js";
 
 await initializeSetupToken();
 const server = app.listen(env.PORT, () => {
@@ -13,6 +14,7 @@ const server = app.listen(env.PORT, () => {
 const financialExecutionScheduler = startFinancialExecutionScheduler();
 const backupScheduler = startBackupScheduler();
 const certificateRenewalScheduler = startCertificateRenewalScheduler();
+const healthScheduler = startHealthScheduler();
 
 async function shutdown(signal: string) {
   console.log(`${signal} recebido, encerrando servidor HTTP e browser de PDF...`);
@@ -20,6 +22,7 @@ async function shutdown(signal: string) {
     financialExecutionScheduler?.stop();
     backupScheduler?.stop();
     certificateRenewalScheduler?.stop();
+    healthScheduler.stop();
     await pdfService.closeBrowser();
     process.exit(0);
   });

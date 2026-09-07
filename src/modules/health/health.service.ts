@@ -5,13 +5,31 @@ import type {
   HealthComponent,
   HealthHistoryPoint,
   HealthStatus,
+  HealthWindow,
   SystemHealthDetails,
   SystemHealthSnapshot,
 } from "./health.types.js";
 
-const MAX_HISTORY_POINTS = 120;
+const MAX_MEMORY_HISTORY_POINTS = 10_080;
+const MAX_RESPONSE_HISTORY_POINTS = 420;
+const SAMPLE_INTERVAL_MS = 60_000;
+const RETENTION_MS = 8 * 24 * 60 * 60 * 1_000;
 const CACHE_TTL_MS = 5_000;
 const startedAt = new Date();
+const windowDurationMs: Record<HealthWindow, number> = {
+  "3h": 3 * 60 * 60 * 1_000,
+  "6h": 6 * 60 * 60 * 1_000,
+  "12h": 12 * 60 * 60 * 1_000,
+  "24h": 24 * 60 * 60 * 1_000,
+  "7d": 7 * 24 * 60 * 60 * 1_000,
+};
+
+type PersistedHealthPoint = HealthHistoryPoint & {
+  pgadminLatencyMs: number | null;
+  heapUsedMb: number;
+  residentSetMb: number;
+  uptimeSeconds: number;
+};
 
 function round(value: number, digits = 1) {
   const factor = 10 ** digits;
@@ -20,6 +38,45 @@ function round(value: number, digits = 1) {
 
 function statusFromLatency(latencyMs: number, warningAtMs: number): HealthStatus {
   return latencyMs >= warningAtMs ? "degraded" : "operational";
+}
+
+function average(values: number[]) {
+  return values.length ? round(values.reduce((total, value) => total + value, 0) / values.length) : null;
+}
+
+function percentile95(values: number[]) {
+  if (!values.length) return null;
+  const ordered = [...values].sort((left, right) => left - right);
+  return round(ordered[Math.min(ordered.length - 1, Math.ceil(ordered.length * 0.95) - 1)]);
+}
+
+function maximum(values: number[]) {
+  return values.length ? round(Math.max(...values)) : null;
+}
+
+function worstStatus(points: HealthHistoryPoint[]) {
+  if (points.some((point) => point.status === "unavailable")) return "unavailable" as const;
+  if (points.some((point) => point.status === "degraded")) return "degraded" as const;
+  return "operational" as const;
+}
+
+function downsampleHistory(points: HealthHistoryPoint[]) {
+  if (points.length <= MAX_RESPONSE_HISTORY_POINTS) return points;
+  const bucketSize = Math.ceil(points.length / MAX_RESPONSE_HISTORY_POINTS);
+  const result: HealthHistoryPoint[] = [];
+
+  for (let index = 0; index < points.length; index += bucketSize) {
+    const bucket = points.slice(index, index + bucketSize);
+    const databaseValues = bucket.flatMap((point) => point.databaseLatencyMs === null ? [] : [point.databaseLatencyMs]);
+    result.push({
+      timestamp: bucket.at(-1)!.timestamp,
+      status: worstStatus(bucket),
+      apiLatencyMs: maximum(bucket.map((point) => point.apiLatencyMs)) ?? 0,
+      databaseLatencyMs: maximum(databaseValues),
+    });
+  }
+
+  return result;
 }
 
 async function probeEventLoop() {
@@ -111,24 +168,29 @@ function overallStatus(components: HealthComponent[]): SystemHealthSnapshot["sta
 }
 
 class SystemHealthService {
-  private history: HealthHistoryPoint[] = [];
-  private pendingSnapshot: Promise<SystemHealthSnapshot> | null = null;
-  private cachedSnapshot: SystemHealthSnapshot | null = null;
-  private cachedAt = 0;
+  private history: PersistedHealthPoint[] = [];
+  private pendingSamples: PersistedHealthPoint[] = [];
+  private pendingSnapshots = new Map<HealthWindow, Promise<SystemHealthSnapshot>>();
+  private cachedSnapshots = new Map<HealthWindow, { snapshot: SystemHealthSnapshot; cachedAt: number }>();
+  private lastCleanupAt = 0;
 
-  async getSnapshot(options: { force?: boolean } = {}) {
-    if (!options.force && this.cachedSnapshot && Date.now() - this.cachedAt < CACHE_TTL_MS) {
-      return this.cachedSnapshot;
+  async getSnapshot(options: { force?: boolean; window?: HealthWindow } = {}) {
+    const window = options.window ?? "3h";
+    const cached = this.cachedSnapshots.get(window);
+    if (!options.force && cached && Date.now() - cached.cachedAt < CACHE_TTL_MS) {
+      return cached.snapshot;
     }
-    if (this.pendingSnapshot) return this.pendingSnapshot;
+    const pending = this.pendingSnapshots.get(window);
+    if (pending) return pending;
 
-    this.pendingSnapshot = this.collectSnapshot().finally(() => {
-      this.pendingSnapshot = null;
+    const request = this.collectSnapshot(window).finally(() => {
+      this.pendingSnapshots.delete(window);
     });
-    return this.pendingSnapshot;
+    this.pendingSnapshots.set(window, request);
+    return request;
   }
 
-  async getDetails(options: { force?: boolean } = {}): Promise<SystemHealthDetails> {
+  async getDetails(options: { force?: boolean; window?: HealthWindow } = {}): Promise<SystemHealthDetails> {
     const snapshot = await this.getSnapshot(options);
     const memory = process.memoryUsage();
 
@@ -161,7 +223,65 @@ class SystemHealthService {
     };
   }
 
-  private async collectSnapshot(): Promise<SystemHealthSnapshot> {
+  private async flushPendingSamples() {
+    if (!this.pendingSamples.length) return;
+    const pending = [...this.pendingSamples];
+    try {
+      await prisma.systemHealthSample.createMany({
+        data: pending.map((point) => ({
+          checkedAt: new Date(point.timestamp),
+          status: point.status,
+          apiLatencyMs: point.apiLatencyMs,
+          databaseLatencyMs: point.databaseLatencyMs,
+          pgadminLatencyMs: point.pgadminLatencyMs,
+          heapUsedMb: point.heapUsedMb,
+          residentSetMb: point.residentSetMb,
+          uptimeSeconds: point.uptimeSeconds,
+        })),
+        skipDuplicates: true,
+      });
+      const persisted = new Set(pending.map((point) => point.timestamp));
+      this.pendingSamples = this.pendingSamples.filter((point) => !persisted.has(point.timestamp));
+
+      if (Date.now() - this.lastCleanupAt >= 60 * 60 * 1_000) {
+        await prisma.systemHealthSample.deleteMany({
+          where: { checkedAt: { lt: new Date(Date.now() - RETENTION_MS) } },
+        });
+        this.lastCleanupAt = Date.now();
+      }
+    } catch {
+      // O histórico em memória preserva as amostras enquanto o banco estiver indisponível.
+    }
+  }
+
+  private async loadHistory(window: HealthWindow) {
+    const from = new Date(Date.now() - windowDurationMs[window]);
+    let persisted: HealthHistoryPoint[] = [];
+    try {
+      const rows = await prisma.systemHealthSample.findMany({
+        where: { checkedAt: { gte: from } },
+        orderBy: { checkedAt: "asc" },
+        select: { checkedAt: true, status: true, apiLatencyMs: true, databaseLatencyMs: true },
+      });
+      persisted = rows.map((row) => ({
+        timestamp: row.checkedAt.toISOString(),
+        status: row.status === "unavailable" ? "unavailable" : row.status === "degraded" ? "degraded" : "operational",
+        apiLatencyMs: row.apiLatencyMs,
+        databaseLatencyMs: row.databaseLatencyMs,
+      }));
+    } catch {
+      // A própria indisponibilidade do banco não pode derrubar o endpoint de saúde.
+    }
+
+    const merged = new Map<string, HealthHistoryPoint>();
+    for (const point of persisted) merged.set(point.timestamp, point);
+    for (const point of this.history) {
+      if (Date.parse(point.timestamp) >= from.getTime()) merged.set(point.timestamp, point);
+    }
+    return [...merged.values()].sort((left, right) => left.timestamp.localeCompare(right.timestamp));
+  }
+
+  private async collectSnapshot(window: HealthWindow): Promise<SystemHealthSnapshot> {
     const [apiLatencyMs, database, pgadmin] = await Promise.all([
       probeEventLoop(),
       probeDatabase(),
@@ -186,18 +306,45 @@ class SystemHealthService {
     };
 
     const previous = this.history.at(-1);
-    if (!previous || Date.parse(point.timestamp) - Date.parse(previous.timestamp) >= CACHE_TTL_MS) {
-      this.history = [...this.history, point].slice(-MAX_HISTORY_POINTS);
+    if (!previous || Date.parse(point.timestamp) - Date.parse(previous.timestamp) >= SAMPLE_INTERVAL_MS) {
+      const memory = process.memoryUsage();
+      const persistedPoint: PersistedHealthPoint = {
+        ...point,
+        pgadminLatencyMs: pgadmin.latencyMs,
+        heapUsedMb: round(memory.heapUsed / 1024 / 1024),
+        residentSetMb: round(memory.rss / 1024 / 1024),
+        uptimeSeconds: Math.floor(process.uptime()),
+      };
+      this.history = [...this.history, persistedPoint].slice(-MAX_MEMORY_HISTORY_POINTS);
+      this.pendingSamples.push(persistedPoint);
     }
+    await this.flushPendingSamples();
 
-    const healthySamples = this.history.filter((item) => item.status === "operational").length;
+    const rawHistory = await this.loadHistory(window);
+    const healthySamples = rawHistory.filter((item) => item.status === "operational").length;
+    const apiLatencies = rawHistory.map((item) => item.apiLatencyMs);
+    const databaseLatencies = rawHistory.flatMap((item) => item.databaseLatencyMs === null ? [] : [item.databaseLatencyMs]);
+    const incidentCount = rawHistory.filter((item, index) =>
+      item.status !== "operational" && (index === 0 || rawHistory[index - 1].status === "operational")
+    ).length;
     const monitored = components.filter((component) => component.status !== "not_monitored");
     const snapshot: SystemHealthSnapshot = {
       status,
       checkedAt: point.timestamp,
       uptimeSeconds: Math.floor(process.uptime()),
-      availabilityPercent: this.history.length ? round((healthySamples / this.history.length) * 100, 2) : 100,
-      observationWindowStartedAt: this.history[0]?.timestamp ?? startedAt.toISOString(),
+      availabilityPercent: rawHistory.length ? round((healthySamples / rawHistory.length) * 100, 2) : 100,
+      observationWindowStartedAt: rawHistory[0]?.timestamp ?? startedAt.toISOString(),
+      historyWindow: window,
+      sampleCount: rawHistory.length,
+      performance: {
+        incidentCount,
+        apiAverageMs: average(apiLatencies),
+        apiP95Ms: percentile95(apiLatencies),
+        apiMaximumMs: maximum(apiLatencies),
+        databaseAverageMs: average(databaseLatencies),
+        databaseP95Ms: percentile95(databaseLatencies),
+        databaseMaximumMs: maximum(databaseLatencies),
+      },
       components,
       summary: {
         operational: monitored.filter((component) => component.status === "operational").length,
@@ -205,11 +352,10 @@ class SystemHealthService {
         unavailable: monitored.filter((component) => component.status === "unavailable").length,
         notMonitored: components.filter((component) => component.status === "not_monitored").length,
       },
-      history: [...this.history],
+      history: downsampleHistory(rawHistory),
     };
 
-    this.cachedSnapshot = snapshot;
-    this.cachedAt = Date.now();
+    this.cachedSnapshots.set(window, { snapshot, cachedAt: Date.now() });
     return snapshot;
   }
 }

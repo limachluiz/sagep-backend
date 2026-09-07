@@ -1,4 +1,5 @@
 export type HealthStatus = "operational" | "degraded" | "unavailable" | "not_monitored";
+export type HealthWindow = "3h" | "6h" | "12h" | "24h" | "7d";
 
 export type HealthComponent = {
   id: "api" | "database" | "pgadmin";
@@ -23,6 +24,17 @@ export type SystemHealthSnapshot = {
   uptimeSeconds: number;
   availabilityPercent: number;
   observationWindowStartedAt: string;
+  historyWindow: HealthWindow;
+  sampleCount: number;
+  performance: {
+    incidentCount: number;
+    apiAverageMs: number | null;
+    apiP95Ms: number | null;
+    apiMaximumMs: number | null;
+    databaseAverageMs: number | null;
+    databaseP95Ms: number | null;
+    databaseMaximumMs: number | null;
+  };
   components: HealthComponent[];
   summary: {
     operational: number;

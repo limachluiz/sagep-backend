@@ -4566,6 +4566,18 @@ export interface components {
             availabilityPercent: number;
             /** Format: date-time */
             observationWindowStartedAt: string;
+            /** @enum {string} */
+            historyWindow: "3h" | "6h" | "12h" | "24h" | "7d";
+            sampleCount: number;
+            performance: {
+                incidentCount?: number;
+                apiAverageMs?: number | null;
+                apiP95Ms?: number | null;
+                apiMaximumMs?: number | null;
+                databaseAverageMs?: number | null;
+                databaseP95Ms?: number | null;
+                databaseMaximumMs?: number | null;
+            };
             components: components["schemas"]["HealthComponent"][];
             summary: {
                 operational?: number;
@@ -4873,6 +4885,8 @@ export interface operations {
     health_get_status: {
         parameters: {
             query?: {
+                /** @description Janela do histórico persistido. */
+                window?: "3h" | "6h" | "12h" | "24h" | "7d";
                 /** @description Ignora o cache curto e executa novas sondas. */
                 refresh?: boolean;
             };
@@ -4896,6 +4910,8 @@ export interface operations {
     health_get_details: {
         parameters: {
             query?: {
+                /** @description Janela do histórico persistido. */
+                window?: "3h" | "6h" | "12h" | "24h" | "7d";
                 /** @description Ignora o cache curto e executa novas sondas. */
                 refresh?: boolean;
             };

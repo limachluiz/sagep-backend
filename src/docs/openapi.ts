@@ -3215,13 +3215,27 @@ export const openApiDocument: OpenApiDocument = {
       },
       SystemHealthSnapshot: {
         type: "object",
-        required: ["status", "checkedAt", "uptimeSeconds", "availabilityPercent", "observationWindowStartedAt", "components", "summary", "history"],
+        required: ["status", "checkedAt", "uptimeSeconds", "availabilityPercent", "observationWindowStartedAt", "historyWindow", "sampleCount", "performance", "components", "summary", "history"],
         properties: {
           status: { type: "string", enum: ["operational", "degraded", "unavailable"] },
           checkedAt: { type: "string", format: "date-time" },
           uptimeSeconds: { type: "integer", minimum: 0 },
           availabilityPercent: { type: "number", minimum: 0, maximum: 100 },
           observationWindowStartedAt: { type: "string", format: "date-time" },
+          historyWindow: { type: "string", enum: ["3h", "6h", "12h", "24h", "7d"] },
+          sampleCount: { type: "integer", minimum: 0 },
+          performance: {
+            type: "object",
+            properties: {
+              incidentCount: { type: "integer", minimum: 0 },
+              apiAverageMs: { type: "number", nullable: true },
+              apiP95Ms: { type: "number", nullable: true },
+              apiMaximumMs: { type: "number", nullable: true },
+              databaseAverageMs: { type: "number", nullable: true },
+              databaseP95Ms: { type: "number", nullable: true },
+              databaseMaximumMs: { type: "number", nullable: true },
+            },
+          },
           components: { type: "array", items: { $ref: "#/components/schemas/HealthComponent" } },
           summary: {
             type: "object",
@@ -3287,7 +3301,10 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["health"],
         summary: "Consultar o estado sanitizado dos servicos essenciais",
         description: "Endpoint publico para permanecer acessivel durante falhas do banco. Nao expoe credenciais, hosts ou versoes.",
-        parameters: [queryParameter("refresh", "Ignora o cache curto e executa novas sondas.", { type: "boolean", default: false })],
+        parameters: [
+          queryParameter("window", "Janela do histórico persistido.", { type: "string", enum: ["3h", "6h", "12h", "24h", "7d"], default: "3h" }),
+          queryParameter("refresh", "Ignora o cache curto e executa novas sondas.", { type: "boolean", default: false }),
+        ],
         responses: { "200": okJson("#/components/schemas/SystemHealthSnapshot") },
       },
     },
@@ -3297,7 +3314,10 @@ export const openApiDocument: OpenApiDocument = {
         summary: "Consultar diagnostico tecnico do ambiente",
         security: bearerSecurity,
         "x-permissions": ["system_health.view_details"],
-        parameters: [queryParameter("refresh", "Ignora o cache curto e executa novas sondas.", { type: "boolean", default: false })],
+        parameters: [
+          queryParameter("window", "Janela do histórico persistido.", { type: "string", enum: ["3h", "6h", "12h", "24h", "7d"], default: "3h" }),
+          queryParameter("refresh", "Ignora o cache curto e executa novas sondas.", { type: "boolean", default: false }),
+        ],
         responses: {
           "200": okJson("#/components/schemas/SystemHealthDetails"),
           "401": { $ref: "#/components/responses/Unauthorized" },

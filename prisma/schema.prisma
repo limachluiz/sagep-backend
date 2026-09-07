@@ -524,6 +524,21 @@ model NotificationDismissal {
   @@index([userId, dismissedAt])
 }
 
+model SystemHealthSample {
+  id                String   @id @default(cuid())
+  checkedAt         DateTime @unique
+  status            String
+  apiLatencyMs      Float
+  databaseLatencyMs Float?
+  pgadminLatencyMs  Float?
+  heapUsedMb        Float
+  residentSetMb     Float
+  uptimeSeconds     Int
+  createdAt         DateTime @default(now())
+
+  @@index([checkedAt])
+}
+
 model ProjectMember {
   id        String   @id @default(cuid())
   userId    String
