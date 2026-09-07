@@ -13,10 +13,16 @@ import {
 import { AtasService } from "./atas.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
 import { pncpService } from "../compras-gov/pncp.service.js";
+import { contratosGovBalanceService } from "../compras-gov/contratos-gov-balance.service.js";
 
 const atasService = new AtasService();
 
 export class AtasController {
+  async externalBalance(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    return res.status(200).json(await contratosGovBalanceService.getAtaBalance(id));
+  }
+
   async syncPncp(req: Request, res: Response) {
     const { id } = ataIdParamSchema.parse(req.params);
     return res.status(200).json(await pncpService.syncAta(id));

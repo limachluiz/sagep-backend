@@ -2301,6 +2301,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/atas/{id}/external-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Consultar saldo público dos itens da ATA
+         * @description Consulta sob demanda a área pública do Contratos.gov.br, valida a identidade da ATA e não altera os saldos internos do SAGEP.
+         */
+        get: operations["atas_get_byId_externalBalance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/atas/{id}/coverage-groups": {
         parameters: {
             query?: never;
@@ -3866,6 +3886,43 @@ export interface components {
             /** Format: date-time */
             externalLastSyncAt?: string | null;
             coverageGroups?: components["schemas"]["AtaCoverageGroup"][];
+        };
+        ExternalAtaBalance: {
+            /** @enum {string} */
+            source: "CONTRATOS_GOV_TRANSPARENCIA";
+            /** @enum {string} */
+            sourceLabel: "Contratos.gov.br";
+            /** Format: uri */
+            sourceUrl: string;
+            /** Format: date-time */
+            checkedAt: string;
+            /** Format: date-time */
+            sourceUpdatedAt?: string | null;
+            identity: {
+                ataNumber?: string;
+                uasg?: string;
+                pregaoNumber?: string;
+                pregaoYear?: string;
+                pncpControlNumber?: string | null;
+                contratosAtaId?: string;
+            };
+            items: {
+                ataItemId?: string;
+                itemNumber?: string;
+                referenceCode?: string;
+                description?: string;
+                unit?: string;
+                managerRegisteredQuantity?: string | null;
+                managerCommittedQuantity?: string | null;
+                managerAvailableQuantity?: string | null;
+                publishedTotalRegisteredAuthorized?: string;
+                publishedTotalAvailableForCommitment?: string;
+                publishedAdhesionLimit?: string;
+                publishedAvailableForAdhesion?: string;
+                /** Format: uri */
+                detailUrl?: string;
+            }[];
+            warnings: string[];
         };
         /**
          * @description Cria a ATA e toda a estrutura inicial de grupos/localidades em uma unica operacao.
@@ -9846,6 +9903,35 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PncpAtaSyncResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    atas_get_byId_externalBalance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da ata. */
+                id: components["parameters"]["AtaId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalAtaBalance"];
                 };
             };
             400: components["responses"]["BadRequest"];

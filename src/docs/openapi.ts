@@ -2413,6 +2413,44 @@ export const openApiDocument: OpenApiDocument = {
           },
         },
       },
+      ExternalAtaBalance: {
+        type: "object",
+        required: ["source", "sourceLabel", "sourceUrl", "checkedAt", "identity", "items", "warnings"],
+        properties: {
+          source: { type: "string", enum: ["CONTRATOS_GOV_TRANSPARENCIA"] },
+          sourceLabel: { type: "string", enum: ["Contratos.gov.br"] },
+          sourceUrl: { type: "string", format: "uri" },
+          checkedAt: { type: "string", format: "date-time" },
+          sourceUpdatedAt: { type: "string", format: "date-time", nullable: true },
+          identity: {
+            type: "object",
+            properties: {
+              ataNumber: { type: "string" }, uasg: { type: "string" },
+              pregaoNumber: { type: "string" }, pregaoYear: { type: "string" },
+              pncpControlNumber: { type: "string", nullable: true }, contratosAtaId: { type: "string" },
+            },
+          },
+          items: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: {
+                ataItemId: { type: "string" }, itemNumber: { type: "string" }, referenceCode: { type: "string" },
+                description: { type: "string" }, unit: { type: "string" },
+                managerRegisteredQuantity: { type: "string", nullable: true },
+                managerCommittedQuantity: { type: "string", nullable: true },
+                managerAvailableQuantity: { type: "string", nullable: true },
+                publishedTotalRegisteredAuthorized: { type: "string" },
+                publishedTotalAvailableForCommitment: { type: "string" },
+                publishedAdhesionLimit: { type: "string" },
+                publishedAvailableForAdhesion: { type: "string" },
+                detailUrl: { type: "string", format: "uri" },
+              },
+            },
+          },
+          warnings: { type: "array", items: { type: "string" } },
+        },
+      },
       AtaCreateRequest: {
         type: "object",
         description:
@@ -5627,6 +5665,16 @@ export const openApiDocument: OpenApiDocument = {
         parameters: [{ $ref: "#/components/parameters/AtaId" }],
         responses: { "200": okJson("#/components/schemas/PncpAtaSyncResponse"), ...defaultErrorResponses },
         "x-permissions": ["atas.manage"],
+      },
+    },
+    "/atas/{id}/external-balance": {
+      get: {
+        tags: ["atas"],
+        summary: "Consultar saldo público dos itens da ATA",
+        description: "Consulta sob demanda a área pública do Contratos.gov.br, valida a identidade da ATA e não altera os saldos internos do SAGEP.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses },
       },
     },
     "/atas/{id}/coverage-groups": {

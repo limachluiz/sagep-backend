@@ -51,6 +51,7 @@ atasRoutes.post("/:id/items", requirePermission("atas.manage"), (req, res) =>
   ataItemsController.create(req, res)
 );
 atasRoutes.get("/:id/items", (req, res) => ataItemsController.listByAta(req, res));
+atasRoutes.get("/:id/external-balance", (req, res) => controller.externalBalance(req, res));
 atasRoutes.post("/:id/items/correct-descriptions", requirePermission("atas.manage"), (req, res) =>
   ataItemsController.correctDescriptionsByAta(req, res)
 );
