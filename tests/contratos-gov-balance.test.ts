@@ -33,6 +33,10 @@ const html = `
         ["Unidade", "Tipo", "Quantidade registrada", "Quantidade empenhada", "Saldo para empenho"],
         [["160016 - CMDO CMA", "Gerenciadora", "120.00000", "3.00000", "117.00000"]],
       )}
+      ${table(
+        ["Número de empenho", "Unidade", "Fornecedor", "Data do empenho", "Quantidade incluída", "Reforço", "Anulação", "Quantidade empenhada", "Valor"],
+        [["2026NE000784", "160016 - CMDO CMA", "00.000.000/0001-00 - FORNECEDOR", "18/06/2026", "3.00000", "0.00000", "0.00000", "3.00000", "2400.00"]],
+      )}
     </section>
     <section id="tab3">
       <p>Qtd. limite para adesão: 240.00000</p>
@@ -53,6 +57,14 @@ describe("consulta pública de saldo da ATA", () => {
     expect(result.managerAvailableQuantity).toBe("117.00000");
     expect(result.publishedTotalAvailableForCommitment).toBe("176.00000");
     expect(result.publishedAvailableForAdhesion).toBe("179.00000");
+    expect(result.commitments).toEqual([
+      expect.objectContaining({
+        number: "2026NE000784",
+        unit: "160016",
+        committedQuantity: "3.00000",
+        transparencyUrl: "https://portaldatransparencia.gov.br/despesas/documento/empenho/160016000012026NE000784",
+      }),
+    ]);
     expect(result.detailUrl).toContain("/00013/327576/show");
   });
 
@@ -64,6 +76,7 @@ describe("consulta pública de saldo da ATA", () => {
     const result = parseExternalBalanceItem(withoutCommitments, context);
 
     expect(result.units).toEqual([]);
+    expect(result.commitments).toEqual([]);
     expect(result.managerRegisteredQuantity).toBe("120.00000");
     expect(result.managerCommittedQuantity).toBeNull();
     expect(result.managerAvailableQuantity).toBe("117.00000");

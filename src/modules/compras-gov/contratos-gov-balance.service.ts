@@ -24,6 +24,19 @@ type PublicAllocation = {
   availableForRedistributionOrCommitment: string;
 };
 
+type PublicCommitment = {
+  number: string;
+  unit: string;
+  supplier: string;
+  commitmentDate: string;
+  includedQuantity: string;
+  reinforcementQuantity: string;
+  annulledQuantity: string;
+  committedQuantity: string;
+  value: string;
+  transparencyUrl: string;
+};
+
 export type ExternalAtaBalanceItem = {
   ataItemId: string;
   itemNumber: string;
@@ -39,6 +52,7 @@ export type ExternalAtaBalanceItem = {
   publishedAvailableForAdhesion: string;
   allocations: PublicAllocation[];
   units: PublicUnitBalance[];
+  commitments: PublicCommitment[];
   detailUrl: string;
 };
 
@@ -144,6 +158,11 @@ function sumPublicDecimals(values: string[]) {
   return values.reduce((total, value) => total.add(value), new Prisma.Decimal(0)).toString();
 }
 
+function transparencyCommitmentUrl(unit: string, number: string) {
+  const managementCode = "00001";
+  return `https://portaldatransparencia.gov.br/despesas/documento/empenho/${unit}${managementCode}${number}`;
+}
+
 type ParseContext = {
   ataItemId: string;
   itemNumber: string;
@@ -173,6 +192,7 @@ export function parseExternalBalanceItem(html: string, context: ParseContext): E
   const tables = readTables($);
   const allocationRows = findTable(tables, ["Código", "Tipo da unidade", "Quantidade disponível para remanejamento/empenho"]);
   const unitRows = findOptionalTable(tables, ["Unidade", "Tipo", "Quantidade registrada", "Quantidade empenhada", "Saldo para empenho"]);
+  const commitmentRows = findOptionalTable(tables, ["Número de empenho", "Unidade", "Fornecedor", "Data do empenho", "Quantidade incluída", "Reforço", "Anulação", "Quantidade empenhada", "Valor"]);
   const allocations = allocationRows.map((row) => ({
     unit: unitCode(row["Código"] ?? ""),
     role: row["Tipo da unidade"] ?? "",
@@ -186,6 +206,25 @@ export function parseExternalBalanceItem(html: string, context: ParseContext): E
     committed: parsePublicDecimal(row["Quantidade empenhada"] ?? ""),
     availableForCommitment: parsePublicDecimal(row["Saldo para empenho"] ?? ""),
   }));
+  const commitments = commitmentRows.map((row) => {
+    const unit = unitCode(row["Unidade"] ?? "");
+    const number = clean(row["Número de empenho"] ?? "");
+    if (!/^\d{4}NE\d{6}$/.test(number) || !/^\d{6}$/.test(unit)) {
+      throw new AppError("O Contratos.gov.br retornou uma Nota de Empenho inválida.", 502, "EXTERNAL_BALANCE_INVALID");
+    }
+    return {
+      number,
+      unit,
+      supplier: row["Fornecedor"] ?? "",
+      commitmentDate: row["Data do empenho"] ?? "",
+      includedQuantity: parsePublicDecimal(row["Quantidade incluída"] ?? ""),
+      reinforcementQuantity: parsePublicDecimal(row.Reforço ?? ""),
+      annulledQuantity: parsePublicDecimal(row.Anulação ?? ""),
+      committedQuantity: parsePublicDecimal(row["Quantidade empenhada"] ?? ""),
+      value: parsePublicDecimal(row.Valor ?? ""),
+      transparencyUrl: transparencyCommitmentUrl(unit, number),
+    };
+  });
   const managerUnit = units.find((unit) => unit.unit === context.uasg);
   const managerAllocation = allocations.find((allocation) => allocation.unit === context.uasg);
   const publishedTotalRegisteredAuthorized = optionalScalar($, "#tab4", "Quantidade Registrada/Autorizada:")
@@ -211,6 +250,7 @@ export function parseExternalBalanceItem(html: string, context: ParseContext): E
     publishedAvailableForAdhesion,
     allocations,
     units,
+    commitments,
     detailUrl: `${SOURCE}/transparencia/arpshow/itens/${context.itemNumber}/${context.contratosAtaId}/show`,
   };
 }
@@ -372,7 +412,7 @@ export class ContratosGovBalanceService {
       publishedAvailableForAdhesion: item.publishedAvailableForAdhesion,
       sourceUrl: item.detailUrl,
       checkedAt,
-      rawSnapshot: { allocations: item.allocations, units: item.units } as Prisma.InputJsonValue,
+      rawSnapshot: { allocations: item.allocations, units: item.units, commitments: item.commitments } as Prisma.InputJsonValue,
     };
   }
 

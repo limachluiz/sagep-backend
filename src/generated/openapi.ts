@@ -3976,6 +3976,19 @@ export interface components {
                 publishedTotalAvailableForCommitment?: string;
                 publishedAdhesionLimit?: string;
                 publishedAvailableForAdhesion?: string;
+                commitments?: {
+                    number?: string;
+                    unit?: string;
+                    supplier?: string;
+                    commitmentDate?: string;
+                    includedQuantity?: string;
+                    reinforcementQuantity?: string;
+                    annulledQuantity?: string;
+                    committedQuantity?: string;
+                    value?: string;
+                    /** Format: uri */
+                    transparencyUrl?: string;
+                }[];
                 /** Format: uri */
                 detailUrl?: string;
             }[];
