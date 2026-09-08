@@ -2449,6 +2449,15 @@ export const openApiDocument: OpenApiDocument = {
             },
           },
           warnings: { type: "array", items: { type: "string" } },
+          import: {
+            type: "object",
+            nullable: true,
+            properties: {
+              importedAt: { type: "string", format: "date-time" },
+              itemsImported: { type: "integer" },
+              operationalBalanceChanged: { type: "boolean", enum: [false] },
+            },
+          },
         },
       },
       AtaCreateRequest: {
@@ -2703,6 +2712,21 @@ export const openApiDocument: OpenApiDocument = {
           externalItemId: { type: "string", nullable: true },
           externalItemNumber: { type: "string", nullable: true },
           externalLastSyncAt: { type: "string", format: "date-time", nullable: true },
+          externalBalanceSnapshot: {
+            type: "object",
+            nullable: true,
+            properties: {
+              source: { type: "string" }, externalItemNumber: { type: "string" },
+              managerRegisteredQuantity: { type: "string", nullable: true },
+              managerCommittedQuantity: { type: "string", nullable: true },
+              managerAvailableQuantity: { type: "string", nullable: true },
+              publishedTotalAvailableForCommitment: { type: "string" },
+              publishedAvailableForAdhesion: { type: "string" },
+              sourceUrl: { type: "string", format: "uri" },
+              checkedAt: { type: "string", format: "date-time" },
+              updatedAt: { type: "string", format: "date-time" },
+            },
+          },
           balance: {
             type: "object",
             properties: {
@@ -5677,6 +5701,17 @@ export const openApiDocument: OpenApiDocument = {
         responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses },
       },
     },
+    "/atas/{id}/external-balance/sync": {
+      post: {
+        tags: ["atas"],
+        summary: "Importar a fotografia pública de saldo de todos os itens",
+        description: "Grava os saldos externos para comparação e auditoria sem alterar reservas, consumos ou saldo operacional do SAGEP.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaId" }],
+        responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses },
+        "x-permissions": ["atas.manage"],
+      },
+    },
     "/atas/{id}/coverage-groups": {
       post: {
         tags: ["atas"],
@@ -5843,6 +5878,26 @@ export const openApiDocument: OpenApiDocument = {
           "200": okJson("#/components/schemas/AtaItemBalanceMovementsResponse"),
           ...defaultErrorResponses,
         },
+      },
+    },
+    "/ata-items/{id}/external-balance": {
+      get: {
+        tags: ["ata-items"],
+        summary: "Consultar o saldo público de um item da ATA",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses },
+      },
+    },
+    "/ata-items/{id}/external-balance/sync": {
+      post: {
+        tags: ["ata-items"],
+        summary: "Importar a fotografia pública de saldo de um item",
+        description: "Atualiza o snapshot externo do item e registra a sincronização na auditoria.",
+        security: bearerSecurity,
+        parameters: [{ $ref: "#/components/parameters/AtaItemId" }],
+        responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses },
+        "x-permissions": ["atas.manage"],
       },
     },
     "/ata-items/{id}": {

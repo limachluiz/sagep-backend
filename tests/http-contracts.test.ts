@@ -50,7 +50,7 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(178);
+    expect(operationIds).toHaveLength(181);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });

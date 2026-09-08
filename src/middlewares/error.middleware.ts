@@ -44,6 +44,11 @@ const safeServerErrorMessages: Record<string, string> = {
   CERTIFICATE_TOOL_UNAVAILABLE: "Ferramenta de certificados indisponível no servidor",
   PORTAL_TRANSPARENCIA_ERROR: "Falha ao consultar o Portal da Transparência",
   PORTAL_TRANSPARENCIA_UNAVAILABLE: "Portal da Transparência indisponível",
+  EXTERNAL_BALANCE_UNAVAILABLE: "O Contratos.gov.br não respondeu dentro do tempo esperado",
+  EXTERNAL_BALANCE_SCHEMA_CHANGED: "O formato da consulta pública do Contratos.gov.br mudou",
+  EXTERNAL_BALANCE_INVALID: "O Contratos.gov.br retornou um saldo inválido",
+  EXTERNAL_BALANCE_TOO_LARGE: "A resposta do Contratos.gov.br excedeu o limite permitido",
+  EXTERNAL_BALANCE_IDENTITY_MISMATCH: "A página pública encontrada não corresponde à ATA solicitada",
 };
 
 export function errorMiddleware(

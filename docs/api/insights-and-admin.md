@@ -694,7 +694,10 @@ Observacoes:
 ### Saldo operacional e metadados oficiais
 
 - O saldo dos itens e calculado exclusivamente pelas movimentacoes internas do SAGEP.
-- Nao existem rotas de consulta, comparacao ou sincronizacao de saldo externo.
+- `GET /api/atas/{id}/external-balance` consulta e compara todos os itens vinculados com o saldo publicado no Contratos.gov.br.
+- `GET /api/ata-items/{id}/external-balance` consulta somente um item, evitando carregar toda a ATA.
+- `POST /api/atas/{id}/external-balance/sync` e `POST /api/ata-items/{id}/external-balance/sync` gravam uma fotografia do saldo oficial no SAGEP e exigem a permissao `atas.manage`.
+- A fotografia oficial registra quantidades da unidade gerenciadora, totais publicados, fonte e horario da consulta. Ela nao cria movimentos nem substitui o saldo operacional.
 - A importacao do Compras.gov.br continua responsavel pelos dados cadastrais da ATA, itens, valores e fornecedores.
 - `POST /api/atas/{id}/sync-pncp` atualiza somente vigencia, cancelamento e contratos vinculados no PNCP.
 - A sincronizacao do PNCP nao cria movimentos, nao bloqueia estimativas e nao altera o saldo disponivel.

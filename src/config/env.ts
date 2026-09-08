@@ -52,6 +52,7 @@ const envSchema = z
   HEALTH_PROBE_TIMEOUT_MS: z.coerce.number().int().min(250).max(10000).default(2000),
   INTEGRATION_PROBE_TIMEOUT_MS: z.coerce.number().int().min(2000).max(60000).default(15000),
   COMPRAS_GOV_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
+  CONTRATOS_GOV_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(30000).max(180000).default(70000),
   PNCP_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
   BACKUP_DIRECTORY: z.string().min(1).default("./backups"),
   BACKUP_RETENTION_DAYS: z.coerce.number().int().min(1).max(3650).default(30),

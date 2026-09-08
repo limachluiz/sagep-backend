@@ -39,6 +39,20 @@ type ListAtaItemsFilters = {
 };
 
 const ataItemInclude = {
+  externalBalanceSnapshot: {
+    select: {
+      source: true,
+      externalItemNumber: true,
+      managerRegisteredQuantity: true,
+      managerCommittedQuantity: true,
+      managerAvailableQuantity: true,
+      publishedTotalAvailableForCommitment: true,
+      publishedAvailableForAdhesion: true,
+      sourceUrl: true,
+      checkedAt: true,
+      updatedAt: true,
+    },
+  },
   ata: {
     select: {
       id: true,

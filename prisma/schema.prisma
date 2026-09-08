@@ -662,6 +662,7 @@ model Ata {
   externalPregaoYear        String?
   externalAtaNumber         String?
   externalPncpControlNumber String?
+  externalContratosAtaId    String?
   externalLastSyncAt        DateTime?
   externalFingerprint       String?
   pncpLastSyncAt            DateTime?
@@ -724,12 +725,35 @@ model AtaItem {
   externalItemId                   String?
   externalItemNumber               String?
   externalLastSyncAt               DateTime?
+  externalBalanceSnapshot          AtaItemExternalBalanceSnapshot?
   ata                              Ata                      @relation(fields: [ataId], references: [id], onDelete: Cascade)
   coverageGroup                    AtaCoverageGroup         @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
   createdAt                        DateTime                 @default(now())
   updatedAt                        DateTime                 @updatedAt
 
   @@unique([ataId, coverageGroupId, referenceCode])
+}
+
+model AtaItemExternalBalanceSnapshot {
+  id                                     String   @id @default(cuid())
+  ataItemId                              String   @unique
+  source                                 String
+  externalItemNumber                     String
+  managerRegisteredQuantity              Decimal? @db.Decimal(18, 5)
+  managerCommittedQuantity               Decimal? @db.Decimal(18, 5)
+  managerAvailableQuantity               Decimal? @db.Decimal(18, 5)
+  publishedTotalRegisteredAuthorized     Decimal  @db.Decimal(18, 5)
+  publishedTotalAvailableForCommitment   Decimal  @db.Decimal(18, 5)
+  publishedAdhesionLimit                  Decimal  @db.Decimal(18, 5)
+  publishedAvailableForAdhesion           Decimal  @db.Decimal(18, 5)
+  sourceUrl                               String
+  checkedAt                              DateTime
+  rawSnapshot                            Json
+  ataItem                                AtaItem  @relation(fields: [ataItemId], references: [id], onDelete: Cascade)
+  createdAt                              DateTime @default(now())
+  updatedAt                              DateTime @updatedAt
+
+  @@index([checkedAt])
 }
 
 model TextCorrectionRule {

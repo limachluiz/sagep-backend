@@ -1,7 +1,9 @@
 import * as cheerio from "cheerio";
 import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
+import { Prisma } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/app-error.js";
+import { auditService } from "../audit/audit.service.js";
 
 const SOURCE = "https://contratos.sistema.gov.br";
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -66,6 +68,8 @@ type DiscoveryRow = {
 };
 
 const cache = new Map<string, { expiresAt: number; value: ExternalAtaBalance }>();
+
+type BalanceActor = { id: string; name?: string | null; email?: string | null };
 
 function clean(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -191,7 +195,7 @@ async function fetchText(url: string, init?: RequestInit) {
   try {
     response = await fetch(url, {
       ...init,
-      signal: AbortSignal.timeout(env.COMPRAS_GOV_REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(env.CONTRATOS_GOV_REQUEST_TIMEOUT_MS),
       headers: { Accept: "text/html,application/json", "User-Agent": "SAGEP/1.0 public-balance", ...init?.headers },
     });
   } catch {
@@ -236,16 +240,14 @@ async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper
 }
 
 export class ContratosGovBalanceService {
-  async getAtaBalance(ataId: string) {
-    const cached = cache.get(ataId);
-    if (cached && cached.expiresAt > Date.now()) return cached.value;
-
+  private async loadAta(ataId: string, itemId?: string) {
     const ata = await prisma.ata.findUnique({
       where: { id: ataId },
       select: {
         number: true, externalSource: true, externalUasg: true, externalPregaoNumber: true,
         externalPregaoYear: true, externalAtaNumber: true, externalPncpControlNumber: true,
-        items: { where: { deletedAt: null }, orderBy: { ataItemCode: "asc" }, select: {
+        externalContratosAtaId: true,
+        items: { where: { deletedAt: null, ...(itemId ? { id: itemId } : {}) }, orderBy: { ataItemCode: "asc" }, select: {
           id: true, referenceCode: true, description: true, unit: true, externalItemNumber: true,
         } },
       },
@@ -254,29 +256,57 @@ export class ContratosGovBalanceService {
     if (ata.externalSource !== "COMPRAS_GOV" || !ata.externalUasg || !ata.externalPregaoNumber || !ata.externalPregaoYear) {
       throw new AppError("Esta ATA não possui os identificadores necessários do Compras.gov.br.", 422, "EXTERNAL_BALANCE_NOT_CONFIGURED");
     }
+    if (itemId && !ata.items.length) throw new AppError("Item da ata não encontrado", 404);
+    return ata;
+  }
+
+  private async resolvePublicAta(
+    ataId: string,
+    ata: Awaited<ReturnType<ContratosGovBalanceService["loadAta"]>>,
+    item: { id: string; itemNumber: string; referenceCode: string; description: string; unit: string },
+  ) {
+    const ataNumber = ata.externalAtaNumber || ata.number;
+    const validateCandidate = async (candidateId: string) => {
+      const html = await fetchText(`${SOURCE}/transparencia/arpshow/itens/${item.itemNumber}/${candidateId}/show`);
+      parseExternalBalanceItem(html, {
+        ...item, ataItemId: item.id, ataNumber, uasg: ata.externalUasg!,
+        pregaoNumber: ata.externalPregaoNumber!, pregaoYear: ata.externalPregaoYear!, contratosAtaId: candidateId,
+      });
+      return html;
+    };
+
+    if (/^\d+$/.test(ata.externalContratosAtaId ?? "")) {
+      try {
+        return { contratosAtaId: ata.externalContratosAtaId!, firstHtml: await validateCandidate(ata.externalContratosAtaId!) };
+      } catch (error) {
+        if (!(error instanceof AppError) || error.code !== "EXTERNAL_BALANCE_IDENTITY_MISMATCH") throw error;
+      }
+    }
+
+    const candidateIds = await discoverAtaId(ata.externalUasg!, ataNumber);
+    for (const candidateId of candidateIds) {
+      try {
+        const firstHtml = await validateCandidate(candidateId);
+        await prisma.ata.update({ where: { id: ataId }, data: { externalContratosAtaId: candidateId } });
+        return { contratosAtaId: candidateId, firstHtml };
+      } catch (error) {
+        if (!(error instanceof AppError) || error.code !== "EXTERNAL_BALANCE_IDENTITY_MISMATCH") throw error;
+      }
+    }
+    throw new AppError("Nenhuma ATA pública corresponde ao pregão cadastrado no SAGEP.", 404, "EXTERNAL_BALANCE_NOT_FOUND");
+  }
+
+  private async queryAtaBalance(ataId: string, itemId?: string) {
+    const cached = !itemId ? cache.get(ataId) : undefined;
+    if (cached && cached.expiresAt > Date.now()) return cached.value;
+    const ata = await this.loadAta(ataId, itemId);
     const ataNumber = ata.externalAtaNumber || ata.number;
     const mappedItems = ata.items
       .filter((item) => /^\d+$/.test(item.externalItemNumber ?? ""))
       .map((item) => ({ ...item, itemNumber: item.externalItemNumber!.padStart(5, "0") }));
     if (!mappedItems.length) throw new AppError("Nenhum item da ATA possui vínculo com o Compras.gov.br.", 422, "EXTERNAL_BALANCE_ITEMS_NOT_CONFIGURED");
 
-    const candidateIds = await discoverAtaId(ata.externalUasg, ataNumber);
-    let contratosAtaId: string | null = null;
-    let firstHtml = "";
-    for (const candidateId of candidateIds) {
-      const item = mappedItems[0]!;
-      const url = `${SOURCE}/transparencia/arpshow/itens/${item.itemNumber}/${candidateId}/show`;
-      try {
-        const html = await fetchText(url);
-        parseExternalBalanceItem(html, { ...item, ataNumber, uasg: ata.externalUasg, pregaoNumber: ata.externalPregaoNumber, pregaoYear: ata.externalPregaoYear, contratosAtaId: candidateId, ataItemId: item.id });
-        contratosAtaId = candidateId;
-        firstHtml = html;
-        break;
-      } catch (error) {
-        if (!(error instanceof AppError) || error.code !== "EXTERNAL_BALANCE_IDENTITY_MISMATCH") throw error;
-      }
-    }
-    if (!contratosAtaId) throw new AppError("Nenhuma ATA pública corresponde ao pregão cadastrado no SAGEP.", 404, "EXTERNAL_BALANCE_NOT_FOUND");
+    const { contratosAtaId, firstHtml } = await this.resolvePublicAta(ataId, ata, mappedItems[0]!);
 
     const firstItemId = mappedItems[0]!.id;
     const items = await mapWithConcurrency(mappedItems, 4, async (item) => {
@@ -287,11 +317,74 @@ export class ContratosGovBalanceService {
     const value: ExternalAtaBalance = {
       source: "CONTRATOS_GOV_TRANSPARENCIA", sourceLabel: "Contratos.gov.br",
       sourceUrl: `${SOURCE}/transparencia/arp-item`, checkedAt: new Date().toISOString(), sourceUpdatedAt: null,
-      identity: { ataNumber, uasg: ata.externalUasg, pregaoNumber: ata.externalPregaoNumber, pregaoYear: ata.externalPregaoYear, pncpControlNumber: ata.externalPncpControlNumber, contratosAtaId },
+      identity: { ataNumber, uasg: ata.externalUasg!, pregaoNumber: ata.externalPregaoNumber!, pregaoYear: ata.externalPregaoYear!, pncpControlNumber: ata.externalPncpControlNumber, contratosAtaId },
       items, warnings,
     };
-    cache.set(ataId, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+    if (!itemId) cache.set(ataId, { expiresAt: Date.now() + CACHE_TTL_MS, value });
     return value;
+  }
+
+  async getAtaBalance(ataId: string) {
+    return this.queryAtaBalance(ataId);
+  }
+
+  async getItemBalance(itemId: string) {
+    const item = await prisma.ataItem.findUnique({ where: { id: itemId }, select: { ataId: true, deletedAt: true } });
+    if (!item || item.deletedAt) throw new AppError("Item da ata não encontrado", 404);
+    return this.queryAtaBalance(item.ataId, itemId);
+  }
+
+  private snapshotData(item: ExternalAtaBalanceItem, checkedAt: Date) {
+    return {
+      source: "CONTRATOS_GOV_TRANSPARENCIA",
+      externalItemNumber: item.itemNumber,
+      managerRegisteredQuantity: item.managerRegisteredQuantity,
+      managerCommittedQuantity: item.managerCommittedQuantity,
+      managerAvailableQuantity: item.managerAvailableQuantity,
+      publishedTotalRegisteredAuthorized: item.publishedTotalRegisteredAuthorized,
+      publishedTotalAvailableForCommitment: item.publishedTotalAvailableForCommitment,
+      publishedAdhesionLimit: item.publishedAdhesionLimit,
+      publishedAvailableForAdhesion: item.publishedAvailableForAdhesion,
+      sourceUrl: item.detailUrl,
+      checkedAt,
+      rawSnapshot: { allocations: item.allocations, units: item.units } as Prisma.InputJsonValue,
+    };
+  }
+
+  private async importBalance(result: ExternalAtaBalance, actor: BalanceActor) {
+    const checkedAt = new Date(result.checkedAt);
+    const importedAt = new Date();
+    await prisma.$transaction(result.items.map((item) => prisma.ataItemExternalBalanceSnapshot.upsert({
+      where: { ataItemId: item.ataItemId },
+      create: { ataItemId: item.ataItemId, ...this.snapshotData(item, checkedAt) },
+      update: this.snapshotData(item, checkedAt),
+    })));
+    await Promise.all(result.items.map((item) => auditService.log({
+      entityType: "ATA_ITEM",
+      entityId: item.ataItemId,
+      action: "SYNC",
+      actor: { id: actor.id, name: actor.name ?? actor.email ?? null },
+      summary: `Saldo oficial do item ${item.referenceCode} importado do Contratos.gov.br`,
+      after: {
+        managerRegisteredQuantity: item.managerRegisteredQuantity,
+        managerCommittedQuantity: item.managerCommittedQuantity,
+        managerAvailableQuantity: item.managerAvailableQuantity,
+        checkedAt: result.checkedAt,
+      },
+      metadata: { sourceUrl: item.detailUrl, operationalBalanceChanged: false },
+    })));
+    return {
+      ...result,
+      import: { importedAt: importedAt.toISOString(), itemsImported: result.items.length, operationalBalanceChanged: false },
+    };
+  }
+
+  async importAtaBalance(ataId: string, actor: BalanceActor) {
+    return this.importBalance(await this.getAtaBalance(ataId), actor);
+  }
+
+  async importItemBalance(itemId: string, actor: BalanceActor) {
+    return this.importBalance(await this.getItemBalance(itemId), actor);
   }
 }
 

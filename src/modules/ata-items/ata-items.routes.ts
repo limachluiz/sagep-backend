@@ -11,6 +11,10 @@ ataItemsRoutes.use(authMiddleware);
 ataItemsRoutes.get("/", (req, res) => controller.list(req, res));
 ataItemsRoutes.get("/code/:code", (req, res) => controller.findByCode(req, res));
 ataItemsRoutes.get("/:id/movements", (req, res) => controller.listMovements(req, res));
+ataItemsRoutes.get("/:id/external-balance", (req, res) => controller.externalBalance(req, res));
+ataItemsRoutes.post("/:id/external-balance/sync", requirePermission("atas.manage"), (req, res) =>
+  controller.importExternalBalance(req, res)
+);
 ataItemsRoutes.get("/:id", (req, res) => controller.findById(req, res));
 ataItemsRoutes.patch("/:id", requirePermission("atas.manage"), (req, res) =>
   controller.update(req, res)

@@ -23,6 +23,11 @@ export class AtasController {
     return res.status(200).json(await contratosGovBalanceService.getAtaBalance(id));
   }
 
+  async importExternalBalance(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    return res.status(200).json(await contratosGovBalanceService.importAtaBalance(id, req.user!));
+  }
+
   async syncPncp(req: Request, res: Response) {
     const { id } = ataIdParamSchema.parse(req.params);
     return res.status(200).json(await pncpService.syncAta(id));

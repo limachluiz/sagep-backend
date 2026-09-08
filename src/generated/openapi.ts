@@ -2321,6 +2321,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/atas/{id}/external-balance/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Importar a fotografia pública de saldo de todos os itens
+         * @description Grava os saldos externos para comparação e auditoria sem alterar reservas, consumos ou saldo operacional do SAGEP.
+         */
+        post: operations["atas_post_byId_externalBalance_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/atas/{id}/coverage-groups": {
         parameters: {
             query?: never;
@@ -2440,6 +2460,43 @@ export interface paths {
         get: operations["ataItems_get_byId_movements"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ata-items/{id}/external-balance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar o saldo público de um item da ATA */
+        get: operations["ataItems_get_byId_externalBalance"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ata-items/{id}/external-balance/sync": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Importar a fotografia pública de saldo de um item
+         * @description Atualiza o snapshot externo do item e registra a sincronização na auditoria.
+         */
+        post: operations["ataItems_post_byId_externalBalance_sync"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3923,6 +3980,13 @@ export interface components {
                 detailUrl?: string;
             }[];
             warnings: string[];
+            import?: {
+                /** Format: date-time */
+                importedAt?: string;
+                itemsImported?: number;
+                /** @enum {boolean} */
+                operationalBalanceChanged?: false;
+            } | null;
         };
         /**
          * @description Cria a ATA e toda a estrutura inicial de grupos/localidades em uma unica operacao.
@@ -4159,6 +4223,21 @@ export interface components {
             externalItemNumber?: string | null;
             /** Format: date-time */
             externalLastSyncAt?: string | null;
+            externalBalanceSnapshot?: {
+                source?: string;
+                externalItemNumber?: string;
+                managerRegisteredQuantity?: string | null;
+                managerCommittedQuantity?: string | null;
+                managerAvailableQuantity?: string | null;
+                publishedTotalAvailableForCommitment?: string;
+                publishedAvailableForAdhesion?: string;
+                /** Format: uri */
+                sourceUrl?: string;
+                /** Format: date-time */
+                checkedAt?: string;
+                /** Format: date-time */
+                updatedAt?: string;
+            } | null;
             balance?: {
                 initialQuantity?: string;
                 reservedQuantity?: string;
@@ -9942,6 +10021,35 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    atas_post_byId_externalBalance_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID da ata. */
+                id: components["parameters"]["AtaId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalAtaBalance"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     atas_post_byId_coverageGroups: {
         parameters: {
             query?: never;
@@ -10217,6 +10325,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AtaItemBalanceMovementsResponse"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    ataItems_get_byId_externalBalance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID do item da ata. */
+                id: components["parameters"]["AtaItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalAtaBalance"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    ataItems_post_byId_externalBalance_sync: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Identificador UUID do item da ata. */
+                id: components["parameters"]["AtaItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalAtaBalance"];
                 };
             };
             400: components["responses"]["BadRequest"];
