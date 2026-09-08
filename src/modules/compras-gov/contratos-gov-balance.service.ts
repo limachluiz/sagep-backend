@@ -117,6 +117,14 @@ function findTable(tables: ReturnType<typeof readTables>, required: string[]) {
   return matches[0]!.rows;
 }
 
+function findOptionalTable(tables: ReturnType<typeof readTables>, required: string[]) {
+  const matches = tables.filter((table) => required.every((header) => table.headers.includes(header)));
+  if (matches.length > 1) {
+    throw new AppError("O Contratos.gov.br apresentou mais de uma tabela de saldo compatível.", 502, "EXTERNAL_BALANCE_SCHEMA_CHANGED");
+  }
+  return matches[0]?.rows ?? [];
+}
+
 function scalar($: cheerio.CheerioAPI, section: string, label: string) {
   const text = clean($(section).text());
   const match = text.match(new RegExp(`${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(-?\\d+(?:[.,]\\d+)?)`, "i"));
@@ -124,6 +132,16 @@ function scalar($: cheerio.CheerioAPI, section: string, label: string) {
     throw new AppError(`O Contratos.gov.br não informou “${label}”.`, 502, "EXTERNAL_BALANCE_SCHEMA_CHANGED");
   }
   return parsePublicDecimal(match[1]);
+}
+
+function optionalScalar($: cheerio.CheerioAPI, section: string, label: string) {
+  const text = clean($(section).text());
+  const match = text.match(new RegExp(`${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*(-?\\d+(?:[.,]\\d+)?)`, "i"));
+  return match?.[1] ? parsePublicDecimal(match[1]) : null;
+}
+
+function sumPublicDecimals(values: string[]) {
+  return values.reduce((total, value) => total.add(value), new Prisma.Decimal(0)).toString();
 }
 
 type ParseContext = {
@@ -154,7 +172,7 @@ export function parseExternalBalanceItem(html: string, context: ParseContext): E
 
   const tables = readTables($);
   const allocationRows = findTable(tables, ["Código", "Tipo da unidade", "Quantidade disponível para remanejamento/empenho"]);
-  const unitRows = findTable(tables, ["Unidade", "Tipo", "Quantidade registrada", "Quantidade empenhada", "Saldo para empenho"]);
+  const unitRows = findOptionalTable(tables, ["Unidade", "Tipo", "Quantidade registrada", "Quantidade empenhada", "Saldo para empenho"]);
   const allocations = allocationRows.map((row) => ({
     unit: unitCode(row["Código"] ?? ""),
     role: row["Tipo da unidade"] ?? "",
@@ -170,6 +188,13 @@ export function parseExternalBalanceItem(html: string, context: ParseContext): E
   }));
   const managerUnit = units.find((unit) => unit.unit === context.uasg);
   const managerAllocation = allocations.find((allocation) => allocation.unit === context.uasg);
+  const publishedTotalRegisteredAuthorized = optionalScalar($, "#tab4", "Quantidade Registrada/Autorizada:")
+    ?? sumPublicDecimals(allocations.map((allocation) => allocation.registered));
+  const publishedTotalAvailableForCommitment = optionalScalar($, "#tab4", "Saldo para Empenho:")
+    ?? sumPublicDecimals(allocations.map((allocation) => allocation.availableForRedistributionOrCommitment));
+  const publishedAdhesionLimit = scalar($, "#tab3", "Qtd. limite para adesão:");
+  const publishedAvailableForAdhesion = optionalScalar($, "#tab3", "Quantidade disponivel para adesão:")
+    ?? publishedAdhesionLimit;
 
   return {
     ataItemId: context.ataItemId,
@@ -180,10 +205,10 @@ export function parseExternalBalanceItem(html: string, context: ParseContext): E
     managerRegisteredQuantity: managerUnit?.registered ?? managerAllocation?.registered ?? null,
     managerCommittedQuantity: managerUnit?.committed ?? null,
     managerAvailableQuantity: managerUnit?.availableForCommitment ?? managerAllocation?.availableForRedistributionOrCommitment ?? null,
-    publishedTotalRegisteredAuthorized: scalar($, "#tab4", "Quantidade Registrada/Autorizada:"),
-    publishedTotalAvailableForCommitment: scalar($, "#tab4", "Saldo para Empenho:"),
-    publishedAdhesionLimit: scalar($, "#tab3", "Qtd. limite para adesão:"),
-    publishedAvailableForAdhesion: scalar($, "#tab3", "Quantidade disponivel para adesão:"),
+    publishedTotalRegisteredAuthorized,
+    publishedTotalAvailableForCommitment,
+    publishedAdhesionLimit,
+    publishedAvailableForAdhesion,
     allocations,
     units,
     detailUrl: `${SOURCE}/transparencia/arpshow/itens/${context.itemNumber}/${context.contratosAtaId}/show`,
