@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ContratosGovBalanceService,
+  calculateOfficialOpeningBalance,
   createPublicSession,
   fetchText,
   parseExternalBalanceItem,
@@ -60,6 +61,18 @@ describe("consulta pública de saldo da ATA", () => {
   it("preserva a precisão das quantidades públicas", () => {
     expect(parsePublicDecimal("3.287,15400")).toBe("3287.15400");
     expect(parsePublicDecimal("117.00000")).toBe("117.00000");
+  });
+
+  it("calcula a abertura a partir do registrado oficial, sem tratar diferença cadastral como consumo", () => {
+    const result = calculateOfficialOpeningBalance("300", "300");
+    expect(result.initialQuantity.toString()).toBe("300");
+    expect(result.openingConsumedQuantity.toString()).toBe("0");
+  });
+
+  it("considera consumo histórico somente a diferença entre registrado e disponível", () => {
+    const result = calculateOfficialOpeningBalance("18000", "17640");
+    expect(result.initialQuantity.toString()).toBe("18000");
+    expect(result.openingConsumedQuantity.toString()).toBe("360");
   });
 
   it("extrai o saldo da unidade gerenciadora e os totais publicados", () => {

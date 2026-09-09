@@ -78,6 +78,20 @@ export type ExternalAtaBalance = {
   warnings: string[];
 };
 
+export function calculateOfficialOpeningBalance(registeredQuantity: string, availableQuantity: string) {
+  const initialQuantity = new Prisma.Decimal(registeredQuantity).toDecimalPlaces(5);
+  const available = new Prisma.Decimal(availableQuantity).toDecimalPlaces(5);
+  const openingConsumedQuantity = initialQuantity.sub(available).toDecimalPlaces(5);
+  if (openingConsumedQuantity.lessThan(0)) {
+    throw new AppError(
+      "O saldo oficial disponível é superior à quantidade registrada pela unidade gerenciadora.",
+      409,
+      "OPENING_BALANCE_IDENTITY_MISMATCH",
+    );
+  }
+  return { initialQuantity, openingConsumedQuantity };
+}
+
 type DiscoveryRow = {
   id?: number | string;
   numero?: string;
@@ -675,30 +689,25 @@ export class ContratosGovBalanceService {
       const item = itemsById.get(official.ataItemId);
       if (!item) throw new AppError("Item da ATA não encontrado para o saldo de abertura", 404);
       if (item.openingBalanceAppliedAt) return [];
-      if (official.managerAvailableQuantity == null) {
+      if (official.managerRegisteredQuantity == null || official.managerAvailableQuantity == null) {
         throw new AppError(
-          `O item ${item.referenceCode} não possui saldo disponível da UASG na consulta oficial.`,
+          `O item ${item.referenceCode} não possui quantidade registrada e saldo disponível da UASG na consulta oficial.`,
           409,
           "OPENING_BALANCE_OFFICIAL_VALUE_MISSING",
         );
       }
-      const initial = new Prisma.Decimal(item.initialQuantity);
-      const available = new Prisma.Decimal(official.managerAvailableQuantity);
-      const historicalConsumed = initial.sub(available).toDecimalPlaces(5);
-      if (historicalConsumed.lessThan(0)) {
-        throw new AppError(
-          `O saldo oficial do item ${item.referenceCode} é superior à quantidade inicial cadastrada.`,
-          409,
-          "OPENING_BALANCE_IDENTITY_MISMATCH",
-        );
-      }
-      return [{ item, official, historicalConsumed }];
+      const { initialQuantity, openingConsumedQuantity } = calculateOfficialOpeningBalance(
+        official.managerRegisteredQuantity,
+        official.managerAvailableQuantity,
+      );
+      return [{ item, official, initialQuantity, historicalConsumed: openingConsumedQuantity }];
     });
 
     if (result.retrieval === "LIVE") await this.importBalance(result, actor);
-    await prisma.$transaction(applications.map(({ item, historicalConsumed }) => prisma.ataItem.update({
+    await prisma.$transaction(applications.map(({ item, initialQuantity, historicalConsumed }) => prisma.ataItem.update({
       where: { id: item.id },
       data: {
+        initialQuantity,
         openingConsumedQuantity: historicalConsumed,
         openingBalanceAppliedAt: appliedAt,
         openingBalanceCheckedAt: checkedAt,
@@ -706,14 +715,15 @@ export class ContratosGovBalanceService {
         openingBalanceAppliedById: actor.id,
       },
     })));
-    await Promise.all(applications.map(({ item, official, historicalConsumed }) => auditService.log({
+    await Promise.all(applications.map(({ item, official, initialQuantity, historicalConsumed }) => auditService.log({
       entityType: "ATA_ITEM",
       entityId: item.id,
       action: "UPDATE",
       actor: { id: actor.id, name: actor.name ?? actor.email ?? null },
       summary: `Saldo de abertura aplicado ao item ${item.referenceCode}`,
       after: {
-        initialQuantity: item.initialQuantity.toString(),
+        previousInitialQuantity: item.initialQuantity.toString(),
+        initialQuantity: initialQuantity.toString(),
         openingConsumedQuantity: historicalConsumed.toString(),
         operationalAvailableQuantity: official.managerAvailableQuantity,
         checkedAt: result.checkedAt,

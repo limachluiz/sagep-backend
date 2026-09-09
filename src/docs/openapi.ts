@@ -5812,7 +5812,7 @@ export const openApiDocument: OpenApiDocument = {
       },
     },
     "/atas/{id}/opening-balance/apply": {
-      post: withStepUp({ tags: ["atas"], summary: "Aplicar saldo oficial como saldo operacional de abertura", description: "Registra como consumo histórico a diferença entre a quantidade original e o saldo oficial, sem sobrescrever a quantidade original da ATA.", security: bearerSecurity, parameters: [{ $ref: "#/components/parameters/AtaId" }], requestBody: { required: true, content: jsonContent("#/components/schemas/OpeningBalanceApplicationRequest") }, responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+      post: withStepUp({ tags: ["atas"], summary: "Aplicar saldo oficial como saldo operacional de abertura", description: "Adota a quantidade registrada pela unidade gerenciadora como quantidade inicial e registra como consumo histórico apenas a diferença para o saldo oficial disponível.", security: bearerSecurity, parameters: [{ $ref: "#/components/parameters/AtaId" }], requestBody: { required: true, content: jsonContent("#/components/schemas/OpeningBalanceApplicationRequest") }, responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
     },
     "/atas/{id}/coverage-groups": {
       post: {
