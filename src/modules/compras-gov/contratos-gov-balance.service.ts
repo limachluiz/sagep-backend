@@ -546,7 +546,7 @@ export class ContratosGovBalanceService {
     const { contratosAtaId, firstHtml } = await this.resolvePublicAta(ataId, ata, mappedItems[0]!, session);
 
     const firstItemId = mappedItems[0]!.id;
-    const items = await mapWithConcurrency(mappedItems, 2, async (item) => {
+    const items = await mapWithConcurrency(mappedItems, 4, async (item) => {
       const html = item.id === firstItemId ? firstHtml : await fetchText(`${SOURCE}/transparencia/arpshow/itens/${item.itemNumber}/${contratosAtaId}/show`, undefined, session);
       return parseExternalBalanceItem(html, { ...item, ataNumber, uasg: ata.externalUasg!, pregaoNumber: ata.externalPregaoNumber!, pregaoYear: ata.externalPregaoYear!, contratosAtaId: contratosAtaId!, ataItemId: item.id });
     });
