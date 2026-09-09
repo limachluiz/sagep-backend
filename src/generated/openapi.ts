@@ -4025,6 +4025,8 @@ export interface components {
             checkedAt: string;
             /** Format: date-time */
             sourceUpdatedAt?: string | null;
+            /** @enum {string} */
+            retrieval: "LIVE" | "SNAPSHOT_FALLBACK";
             identity: {
                 ataNumber?: string;
                 uasg?: string;

@@ -9,6 +9,8 @@ import { systemSettingsService } from "../system-settings/system-settings.servic
 const SOURCE = "https://contratos.sistema.gov.br";
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const MAX_RESPONSE_BYTES = 8 * 1024 * 1024;
+const MAX_REDIRECTS = 5;
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
 type PublicUnitBalance = {
   unit: string;
@@ -63,6 +65,7 @@ export type ExternalAtaBalance = {
   sourceUrl: string;
   checkedAt: string;
   sourceUpdatedAt: null;
+  retrieval: "LIVE" | "SNAPSHOT_FALLBACK";
   identity: {
     ataNumber: string;
     uasg: string;
@@ -83,6 +86,9 @@ type DiscoveryRow = {
 };
 
 const cache = new Map<string, { expiresAt: number; value: ExternalAtaBalance }>();
+export type PublicSession = { cookies: Map<string, string>; expiresAt: number };
+let publicSession: PublicSession | null = null;
+let publicSessionPromise: Promise<PublicSession> | null = null;
 
 type BalanceActor = { id: string; name?: string | null; email?: string | null };
 
@@ -256,32 +262,118 @@ export function parseExternalBalanceItem(html: string, context: ParseContext): E
   };
 }
 
-async function fetchText(url: string, init?: RequestInit) {
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      ...init,
-      signal: AbortSignal.timeout(env.CONTRATOS_GOV_REQUEST_TIMEOUT_MS),
-      headers: { Accept: "text/html,application/json", "User-Agent": "SAGEP/1.0 public-balance", ...init?.headers },
-    });
-  } catch {
-    throw new AppError("Não foi possível conectar ao Contratos.gov.br.", 502, "EXTERNAL_BALANCE_UNAVAILABLE");
+function updateSessionCookies(session: PublicSession, response: Response) {
+  const headers = response.headers as Headers & { getSetCookie?: () => string[] };
+  const setCookies = headers.getSetCookie?.() ?? (response.headers.get("set-cookie") ? [response.headers.get("set-cookie")!] : []);
+  for (const setCookie of setCookies) {
+    const pair = setCookie.split(";", 1)[0];
+    const separator = pair?.indexOf("=") ?? -1;
+    if (separator <= 0) continue;
+    session.cookies.set(pair!.slice(0, separator).trim(), pair!.slice(separator + 1).trim());
   }
-  if (!response.ok) throw new AppError(`Contratos.gov.br indisponível (HTTP ${response.status}).`, 502, "EXTERNAL_BALANCE_UNAVAILABLE");
+}
+
+function sessionHeaders(session: PublicSession) {
+  const cookie = [...session.cookies].map(([name, value]) => `${name}=${value}`).join("; ");
+  const xsrf = session.cookies.get("XSRF-TOKEN");
+  let xsrfHeader: string | undefined;
+  if (xsrf) {
+    try { xsrfHeader = decodeURIComponent(xsrf); }
+    catch { xsrfHeader = xsrf; }
+  }
+  return {
+    ...(cookie ? { Cookie: cookie } : {}),
+    ...(xsrfHeader ? { "X-XSRF-TOKEN": xsrfHeader } : {}),
+  };
+}
+
+async function requestWithSession(url: string, init: RequestInit, session: PublicSession) {
+  let currentUrl = url;
+  let currentInit = init;
+  for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
+    const response = await fetch(currentUrl, {
+      ...currentInit,
+      redirect: "manual",
+      signal: AbortSignal.timeout(env.CONTRATOS_GOV_REQUEST_TIMEOUT_MS),
+      headers: {
+        Accept: "text/html,application/json",
+        "User-Agent": "SAGEP/1.0 public-balance",
+        ...sessionHeaders(session),
+        ...currentInit.headers,
+      },
+    });
+    updateSessionCookies(session, response);
+    if (![301, 302, 303, 307, 308].includes(response.status)) return response;
+    const location = response.headers.get("location");
+    if (!location) return response;
+    const nextUrl = new URL(location, currentUrl);
+    if (nextUrl.origin !== SOURCE) throw new AppError("O Contratos.gov.br redirecionou para uma origem não reconhecida.", 502, "EXTERNAL_BALANCE_UNAVAILABLE");
+    if ([301, 302, 303].includes(response.status) && currentInit.method?.toUpperCase() === "POST") {
+      currentInit = { method: "GET" };
+    }
+    currentUrl = nextUrl.toString();
+  }
+  throw new AppError("O Contratos.gov.br excedeu o limite de redirecionamentos.", 502, "EXTERNAL_BALANCE_UNAVAILABLE");
+}
+
+export async function createPublicSession() {
+  const session: PublicSession = { cookies: new Map(), expiresAt: Date.now() + 30 * 60 * 1000 };
+  for (const path of ["/login", "/transparencia"]) {
+    let response: Response;
+    try { response = await requestWithSession(`${SOURCE}${path}`, { method: "GET" }, session); }
+    catch { throw new AppError("Não foi possível iniciar a sessão pública do Contratos.gov.br.", 502, "EXTERNAL_BALANCE_UNAVAILABLE"); }
+    if (!response.ok) throw new AppError(`Contratos.gov.br indisponível (HTTP ${response.status}).`, 502, "EXTERNAL_BALANCE_UNAVAILABLE");
+    await response.arrayBuffer();
+  }
+  return session;
+}
+
+async function getPublicSession(forceRefresh = false) {
+  if (!forceRefresh && publicSession && publicSession.expiresAt > Date.now()) return publicSession;
+  if (!forceRefresh && publicSessionPromise) return publicSessionPromise;
+  publicSessionPromise = createPublicSession();
+  try { publicSession = await publicSessionPromise; return publicSession; }
+  finally { publicSessionPromise = null; }
+}
+
+function looksLikeLoginPage(body: string) {
+  return /id=["']transparencia["']/.test(body) && /acessogov\/autorizacao/.test(body);
+}
+
+export async function fetchText(url: string, init: RequestInit | undefined, session: PublicSession) {
+  let response: Response | null = null;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      response = await requestWithSession(url, init ?? {}, session);
+    } catch (error) {
+      if (attempt === 1) {
+        if (error instanceof AppError) throw error;
+        throw new AppError("Não foi possível conectar ao Contratos.gov.br.", 502, "EXTERNAL_BALANCE_UNAVAILABLE");
+      }
+      continue;
+    }
+    if (!RETRYABLE_STATUS.has(response.status) || attempt === 1) break;
+    await response.arrayBuffer();
+  }
+  if (!response?.ok) throw new AppError(`Contratos.gov.br indisponível (HTTP ${response?.status ?? 502}).`, 502, "EXTERNAL_BALANCE_UNAVAILABLE");
   const body = await response.text();
   if (Buffer.byteLength(body, "utf8") > MAX_RESPONSE_BYTES) {
     throw new AppError("A resposta do Contratos.gov.br excedeu o limite de segurança.", 502, "EXTERNAL_BALANCE_TOO_LARGE");
   }
+  if (looksLikeLoginPage(body)) {
+    publicSession = null;
+    throw new AppError("A sessão pública do Contratos.gov.br expirou.", 502, "EXTERNAL_BALANCE_SESSION_EXPIRED");
+  }
   return body;
 }
 
-async function discoverAtaId(uasg: string, ataNumber: string) {
+async function discoverAtaId(uasg: string, ataNumber: string, session: PublicSession) {
   const form = new URLSearchParams({ draw: "1", start: "0", length: "2000", "search[value]": uasg, "search[regex]": "false" });
   const raw = await fetchText(`${SOURCE}/transparencia/transparencia/arp-item`, {
     method: "POST",
     body: form,
     headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8", "X-Requested-With": "XMLHttpRequest" },
-  });
+  }, session);
   let parsed: { data?: DiscoveryRow[] };
   try { parsed = JSON.parse(raw) as { data?: DiscoveryRow[] }; }
   catch { throw new AppError("A busca pública de atas retornou um formato inválido.", 502, "EXTERNAL_BALANCE_SCHEMA_CHANGED"); }
@@ -306,6 +398,83 @@ async function mapWithConcurrency<T, R>(values: T[], concurrency: number, mapper
 }
 
 export class ContratosGovBalanceService {
+  private async loadStoredBalance(ataId: string, itemId?: string): Promise<ExternalAtaBalance | null> {
+    const ata = await prisma.ata.findUnique({
+      where: { id: ataId },
+      select: {
+        number: true,
+        externalUasg: true,
+        externalPregaoNumber: true,
+        externalPregaoYear: true,
+        externalAtaNumber: true,
+        externalPncpControlNumber: true,
+        externalContratosAtaId: true,
+        items: {
+          where: { deletedAt: null, ...(itemId ? { id: itemId } : {}) },
+          orderBy: { ataItemCode: "asc" },
+          select: {
+            id: true,
+            referenceCode: true,
+            description: true,
+            unit: true,
+            externalItemNumber: true,
+            externalBalanceSnapshot: true,
+          },
+        },
+      },
+    });
+    if (!ata?.externalUasg || !ata.externalPregaoNumber || !ata.externalPregaoYear) return null;
+    const storedItems = ata.items.flatMap((item) => {
+      const snapshot = item.externalBalanceSnapshot;
+      if (!snapshot) return [];
+      const raw = snapshot.rawSnapshot && typeof snapshot.rawSnapshot === "object" && !Array.isArray(snapshot.rawSnapshot)
+        ? snapshot.rawSnapshot as Record<string, unknown>
+        : {};
+      return [{
+        ataItemId: item.id,
+        itemNumber: snapshot.externalItemNumber || item.externalItemNumber || item.referenceCode,
+        referenceCode: item.referenceCode,
+        description: item.description,
+        unit: item.unit,
+        managerRegisteredQuantity: snapshot.managerRegisteredQuantity?.toString() ?? null,
+        managerCommittedQuantity: snapshot.managerCommittedQuantity?.toString() ?? null,
+        managerAvailableQuantity: snapshot.managerAvailableQuantity?.toString() ?? null,
+        publishedTotalRegisteredAuthorized: snapshot.publishedTotalRegisteredAuthorized.toString(),
+        publishedTotalAvailableForCommitment: snapshot.publishedTotalAvailableForCommitment.toString(),
+        publishedAdhesionLimit: snapshot.publishedAdhesionLimit.toString(),
+        publishedAvailableForAdhesion: snapshot.publishedAvailableForAdhesion.toString(),
+        allocations: Array.isArray(raw.allocations) ? raw.allocations as PublicAllocation[] : [],
+        units: Array.isArray(raw.units) ? raw.units as PublicUnitBalance[] : [],
+        commitments: Array.isArray(raw.commitments) ? raw.commitments as PublicCommitment[] : [],
+        detailUrl: snapshot.sourceUrl,
+        checkedAt: snapshot.checkedAt,
+      }];
+    });
+    if (!storedItems.length) return null;
+    const checkedAt = storedItems.reduce((latest, item) => item.checkedAt > latest ? item.checkedAt : latest, storedItems[0]!.checkedAt);
+    const contratosAtaId = ata.externalContratosAtaId ?? "";
+    return {
+      source: "CONTRATOS_GOV_TRANSPARENCIA",
+      sourceLabel: "Contratos.gov.br",
+      sourceUrl: `${SOURCE}/transparencia/arp-item`,
+      checkedAt: checkedAt.toISOString(),
+      sourceUpdatedAt: null,
+      retrieval: "SNAPSHOT_FALLBACK",
+      identity: {
+        ataNumber: ata.externalAtaNumber || ata.number,
+        uasg: ata.externalUasg,
+        pregaoNumber: ata.externalPregaoNumber,
+        pregaoYear: ata.externalPregaoYear,
+        pncpControlNumber: ata.externalPncpControlNumber,
+        contratosAtaId,
+      },
+      items: storedItems.map(({ checkedAt: _checkedAt, ...item }) => item),
+      warnings: [
+        `O Contratos.gov.br está temporariamente indisponível. Exibindo o último snapshot salvo em ${checkedAt.toLocaleString("pt-BR", { timeZone: "America/Manaus" })}.`,
+      ],
+    };
+  }
+
   private async loadAta(ataId: string, itemId?: string) {
     const ata = await prisma.ata.findUnique({
       where: { id: ataId },
@@ -330,10 +499,11 @@ export class ContratosGovBalanceService {
     ataId: string,
     ata: Awaited<ReturnType<ContratosGovBalanceService["loadAta"]>>,
     item: { id: string; itemNumber: string; referenceCode: string; description: string; unit: string },
+    session: PublicSession,
   ) {
     const ataNumber = ata.externalAtaNumber || ata.number;
     const validateCandidate = async (candidateId: string) => {
-      const html = await fetchText(`${SOURCE}/transparencia/arpshow/itens/${item.itemNumber}/${candidateId}/show`);
+      const html = await fetchText(`${SOURCE}/transparencia/arpshow/itens/${item.itemNumber}/${candidateId}/show`, undefined, session);
       parseExternalBalanceItem(html, {
         ...item, ataItemId: item.id, ataNumber, uasg: ata.externalUasg!,
         pregaoNumber: ata.externalPregaoNumber!, pregaoYear: ata.externalPregaoYear!, contratosAtaId: candidateId,
@@ -349,7 +519,7 @@ export class ContratosGovBalanceService {
       }
     }
 
-    const candidateIds = await discoverAtaId(ata.externalUasg!, ataNumber);
+    const candidateIds = await discoverAtaId(ata.externalUasg!, ataNumber, session);
     for (const candidateId of candidateIds) {
       try {
         const firstHtml = await validateCandidate(candidateId);
@@ -365,24 +535,24 @@ export class ContratosGovBalanceService {
   private async queryAtaBalance(ataId: string, itemId?: string, forceRefresh = false) {
     const cached = !itemId && !forceRefresh ? cache.get(ataId) : undefined;
     if (cached && cached.expiresAt > Date.now()) return cached.value;
-    const ata = await this.loadAta(ataId, itemId);
+    const [ata, session] = await Promise.all([this.loadAta(ataId, itemId), getPublicSession(forceRefresh)]);
     const ataNumber = ata.externalAtaNumber || ata.number;
     const mappedItems = ata.items
       .filter((item) => /^\d+$/.test(item.externalItemNumber ?? ""))
       .map((item) => ({ ...item, itemNumber: item.externalItemNumber!.padStart(5, "0") }));
     if (!mappedItems.length) throw new AppError("Nenhum item da ATA possui vínculo com o Compras.gov.br.", 422, "EXTERNAL_BALANCE_ITEMS_NOT_CONFIGURED");
 
-    const { contratosAtaId, firstHtml } = await this.resolvePublicAta(ataId, ata, mappedItems[0]!);
+    const { contratosAtaId, firstHtml } = await this.resolvePublicAta(ataId, ata, mappedItems[0]!, session);
 
     const firstItemId = mappedItems[0]!.id;
-    const items = await mapWithConcurrency(mappedItems, 4, async (item) => {
-      const html = item.id === firstItemId ? firstHtml : await fetchText(`${SOURCE}/transparencia/arpshow/itens/${item.itemNumber}/${contratosAtaId}/show`);
+    const items = await mapWithConcurrency(mappedItems, 2, async (item) => {
+      const html = item.id === firstItemId ? firstHtml : await fetchText(`${SOURCE}/transparencia/arpshow/itens/${item.itemNumber}/${contratosAtaId}/show`, undefined, session);
       return parseExternalBalanceItem(html, { ...item, ataNumber, uasg: ata.externalUasg!, pregaoNumber: ata.externalPregaoNumber!, pregaoYear: ata.externalPregaoYear!, contratosAtaId: contratosAtaId!, ataItemId: item.id });
     });
     const warnings = ata.items.length === mappedItems.length ? [] : [`${ata.items.length - mappedItems.length} item(ns) sem vínculo externo não foram consultados.`];
     const value: ExternalAtaBalance = {
       source: "CONTRATOS_GOV_TRANSPARENCIA", sourceLabel: "Contratos.gov.br",
-      sourceUrl: `${SOURCE}/transparencia/arp-item`, checkedAt: new Date().toISOString(), sourceUpdatedAt: null,
+      sourceUrl: `${SOURCE}/transparencia/arp-item`, checkedAt: new Date().toISOString(), sourceUpdatedAt: null, retrieval: "LIVE",
       identity: { ataNumber, uasg: ata.externalUasg!, pregaoNumber: ata.externalPregaoNumber!, pregaoYear: ata.externalPregaoYear!, pncpControlNumber: ata.externalPncpControlNumber, contratosAtaId },
       items, warnings,
     };
@@ -391,13 +561,25 @@ export class ContratosGovBalanceService {
   }
 
   async getAtaBalance(ataId: string) {
-    return this.queryAtaBalance(ataId);
+    try { return await this.queryAtaBalance(ataId); }
+    catch (error) {
+      if (!(error instanceof AppError) || error.statusCode < 500) throw error;
+      const stored = await this.loadStoredBalance(ataId);
+      if (stored) return stored;
+      throw error;
+    }
   }
 
   async getItemBalance(itemId: string) {
     const item = await prisma.ataItem.findUnique({ where: { id: itemId }, select: { ataId: true, deletedAt: true } });
     if (!item || item.deletedAt) throw new AppError("Item da ata não encontrado", 404);
-    return this.queryAtaBalance(item.ataId, itemId);
+    try { return await this.queryAtaBalance(item.ataId, itemId); }
+    catch (error) {
+      if (!(error instanceof AppError) || error.statusCode < 500) throw error;
+      const stored = await this.loadStoredBalance(item.ataId, itemId);
+      if (stored) return stored;
+      throw error;
+    }
   }
 
   private snapshotData(item: ExternalAtaBalanceItem, checkedAt: Date) {
@@ -446,11 +628,13 @@ export class ContratosGovBalanceService {
   }
 
   async importAtaBalance(ataId: string, actor: BalanceActor) {
-    return this.importBalance(await this.getAtaBalance(ataId), actor);
+    return this.importBalance(await this.queryAtaBalance(ataId, undefined, true), actor);
   }
 
   async importItemBalance(itemId: string, actor: BalanceActor) {
-    return this.importBalance(await this.getItemBalance(itemId), actor);
+    const item = await prisma.ataItem.findUnique({ where: { id: itemId }, select: { ataId: true, deletedAt: true } });
+    if (!item || item.deletedAt) throw new AppError("Item da ata não encontrado", 404);
+    return this.importBalance(await this.queryAtaBalance(item.ataId, itemId, true), actor);
   }
 
   private async applyOpeningBalance(result: ExternalAtaBalance, actor: BalanceActor, reason: string) {
@@ -547,7 +731,9 @@ export class ContratosGovBalanceService {
   }
 
   async applyItemOpeningBalance(itemId: string, actor: BalanceActor, reason: string) {
-    return this.applyOpeningBalance(await this.getItemBalance(itemId), actor, reason);
+    const item = await prisma.ataItem.findUnique({ where: { id: itemId }, select: { ataId: true, deletedAt: true } });
+    if (!item || item.deletedAt) throw new AppError("Item da ata não encontrado", 404);
+    return this.applyOpeningBalance(await this.queryAtaBalance(item.ataId, itemId, true), actor, reason);
   }
 }
 

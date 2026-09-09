@@ -4691,6 +4691,7 @@
           "sourceLabel",
           "sourceUrl",
           "checkedAt",
+          "retrieval",
           "identity",
           "items",
           "warnings"
@@ -4720,6 +4721,13 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "retrieval": {
+            "type": "string",
+            "enum": [
+              "LIVE",
+              "SNAPSHOT_FALLBACK"
+            ]
           },
           "identity": {
             "type": "object",

@@ -2423,13 +2423,14 @@ export const openApiDocument: OpenApiDocument = {
       },
       ExternalAtaBalance: {
         type: "object",
-        required: ["source", "sourceLabel", "sourceUrl", "checkedAt", "identity", "items", "warnings"],
+        required: ["source", "sourceLabel", "sourceUrl", "checkedAt", "retrieval", "identity", "items", "warnings"],
         properties: {
           source: { type: "string", enum: ["CONTRATOS_GOV_TRANSPARENCIA"] },
           sourceLabel: { type: "string", enum: ["Contratos.gov.br"] },
           sourceUrl: { type: "string", format: "uri" },
           checkedAt: { type: "string", format: "date-time" },
           sourceUpdatedAt: { type: "string", format: "date-time", nullable: true },
+          retrieval: { type: "string", enum: ["LIVE", "SNAPSHOT_FALLBACK"] },
           identity: {
             type: "object",
             properties: {

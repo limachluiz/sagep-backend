@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { parseExternalBalanceItem, parsePublicDecimal } from "../src/modules/compras-gov/contratos-gov-balance.service.js";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  createPublicSession,
+  fetchText,
+  parseExternalBalanceItem,
+  parsePublicDecimal,
+} from "../src/modules/compras-gov/contratos-gov-balance.service.js";
 
 const context = {
   ataItemId: "item-13",
@@ -45,6 +50,8 @@ const html = `
   </main>`;
 
 describe("consulta pública de saldo da ATA", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
   it("preserva a precisão das quantidades públicas", () => {
     expect(parsePublicDecimal("3.287,15400")).toBe("3287.15400");
     expect(parsePublicDecimal("117.00000")).toBe("117.00000");
@@ -89,5 +96,46 @@ describe("consulta pública de saldo da ATA", () => {
     expect(() => parseExternalBalanceItem(html.replace("90012/2025", "90013/2025"), context)).toThrow(
       "não corresponde à ATA ou ao item",
     );
+  });
+
+  it("inicia a sessão pública e envia cookies e token CSRF nas consultas", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("login", {
+        status: 200,
+        headers: [
+          ["set-cookie", "XSRF-TOKEN=token%3D; Path=/"],
+          ["set-cookie", "laravel_session=session-123; Path=/; HttpOnly"],
+        ],
+      }))
+      .mockResolvedValueOnce(new Response("transparencia", { status: 200 }))
+      .mockResolvedValueOnce(new Response('{"data":[]}', { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const session = await createPublicSession();
+    await fetchText("https://contratos.sistema.gov.br/transparencia/transparencia/arp-item", {
+      method: "POST",
+      body: "draw=1",
+    }, session);
+
+    const request = fetchMock.mock.calls[2]![1] as RequestInit;
+    expect(request.headers).toMatchObject({
+      Cookie: expect.stringContaining("laravel_session=session-123"),
+      "X-XSRF-TOKEN": "token=",
+    });
+  });
+
+  it("repete uma consulta quando o portal responde com falha temporária", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response("indisponível", { status: 503 }))
+      .mockResolvedValueOnce(new Response("ok", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const result = await fetchText("https://contratos.sistema.gov.br/transparencia/arp-item", undefined, {
+      cookies: new Map(),
+      expiresAt: Date.now() + 60_000,
+    });
+
+    expect(result).toBe("ok");
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });
