@@ -1995,6 +1995,8 @@ export class ProjectsService {
       commitmentNoteSnapshot?: CommitmentNoteSnapshot;
       commitmentNoteSyncStatus?: "VALIDADO" | "DIVERGENTE" | "NAO_VALIDADO";
       commitmentNoteDivergenceReason?: string | null;
+      commitmentNoteBalanceImpactMode?: "CONSUME" | "ALREADY_INCLUDED";
+      commitmentNoteBalanceImpactReason?: string | null;
     },
   ) {
     await this.ensureCanManage(projectId, user);
@@ -2263,12 +2265,22 @@ export class ProjectsService {
       });
 
       if (isFirstCommitmentNoteRegistration) {
-        await ataItemBalanceService.consumeForProjectCommitmentNote(
-          projectId,
-          this.getAuditActor(user),
-          updatedProject.commitmentNoteNumber ?? "sem-numero",
-          tx,
-        );
+        if (options?.commitmentNoteBalanceImpactMode === "ALREADY_INCLUDED") {
+          await ataItemBalanceService.reconcileHistoricalCommitmentNote(
+            projectId,
+            this.getAuditActor(user),
+            updatedProject.commitmentNoteNumber ?? "sem-numero",
+            options.commitmentNoteBalanceImpactReason ?? "Consumo contemplado no saldo de abertura",
+            tx,
+          );
+        } else {
+          await ataItemBalanceService.consumeForProjectCommitmentNote(
+            projectId,
+            this.getAuditActor(user),
+            updatedProject.commitmentNoteNumber ?? "sem-numero",
+            tx,
+          );
+        }
       }
 
       if (options?.commitmentNoteSnapshot) {
@@ -2305,6 +2317,10 @@ export class ProjectsService {
             rawSnapshot: snapshot.rawSnapshot as Prisma.InputJsonValue,
             lastSyncAt: snapshot.fetchedAt,
             active: true,
+            balanceImpactMode: options.commitmentNoteBalanceImpactMode ?? "CONSUME",
+            balanceImpactReason: options.commitmentNoteBalanceImpactReason,
+            balanceImpactDecidedAt: new Date(),
+            balanceImpactDecidedById: user.id,
           },
           update: {
             projectId,
@@ -2324,6 +2340,10 @@ export class ProjectsService {
             lastSyncAt: snapshot.fetchedAt,
             lastSyncError: null,
             active: true,
+            balanceImpactMode: options.commitmentNoteBalanceImpactMode ?? "CONSUME",
+            balanceImpactReason: options.commitmentNoteBalanceImpactReason,
+            balanceImpactDecidedAt: new Date(),
+            balanceImpactDecidedById: user.id,
           },
         });
 
@@ -3037,13 +3057,19 @@ export class ProjectsService {
         },
       });
 
-      await ataItemBalanceService.reverseConsumedForProject(
-        projectId,
-        this.getAuditActor(user),
-        reason,
-        serviceOrder?.id,
-        tx,
-      );
+      const activeCommitmentNote = await tx.commitmentNote.findFirst({
+        where: { projectId, active: true },
+        select: { balanceImpactMode: true },
+      });
+      if (activeCommitmentNote?.balanceImpactMode !== "ALREADY_INCLUDED") {
+        await ataItemBalanceService.reverseConsumedForProject(
+          projectId,
+          this.getAuditActor(user),
+          reason,
+          serviceOrder?.id,
+          tx,
+        );
+      }
 
       const archivedAt = new Date();
 

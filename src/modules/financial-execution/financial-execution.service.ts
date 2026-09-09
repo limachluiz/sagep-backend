@@ -45,6 +45,66 @@ function serializeNote<T extends Record<string, unknown>>(note: T) {
 }
 
 export class FinancialExecutionService {
+  private async assertCommitmentNoteAvailable(input: {
+    projectId: string;
+    externalCode: string;
+    managementUnit: string;
+    management: string;
+    number: string;
+  }) {
+    const existing = await prisma.commitmentNote.findFirst({
+      where: {
+        OR: [
+          { externalCode: input.externalCode },
+          { managementUnit: input.managementUnit, management: input.management, number: input.number },
+        ],
+      },
+      select: { id: true, projectId: true, active: true, project: { select: { projectCode: true, title: true } } },
+    });
+    if (!existing) return;
+    if (existing.projectId === input.projectId) {
+      throw new AppError("Esta Nota de Empenho já está registrada neste projeto.", 409, "COMMITMENT_NOTE_ALREADY_REGISTERED", { commitmentNoteId: existing.id });
+    }
+    throw new AppError(
+      `Esta Nota de Empenho já está vinculada ao projeto PRJ-${existing.project.projectCode}.`,
+      409,
+      "COMMITMENT_NOTE_REGISTERED_TO_ANOTHER_PROJECT",
+      { commitmentNoteId: existing.id, projectId: existing.projectId, projectCode: existing.project.projectCode },
+    );
+  }
+
+  private async validateBalanceImpact(
+    input: RegisterCommitmentNoteInput,
+    issuedAt: Date | null,
+  ) {
+    if (input.balanceImpactMode !== "ALREADY_INCLUDED") return;
+    const settings = await systemSettingsService.getEffective();
+    if (!settings.implantationModeActive || !settings.implantationCutoffAt) {
+      throw new AppError("O registro sem novo consumo só está disponível no modo de implantação.", 409, "IMPLANTATION_MODE_REQUIRED");
+    }
+    if (issuedAt && issuedAt.getTime() > settings.implantationCutoffAt.getTime() + 86_399_999) {
+      throw new AppError("A NE foi emitida após a data de corte da implantação e deve consumir saldo normalmente.", 409, "COMMITMENT_NOTE_AFTER_IMPLANTATION_CUTOFF");
+    }
+    const activeDiex = await prisma.diexRequest.findFirst({
+      where: { projectId: input.projectId, archivedAt: null, deletedAt: null },
+      orderBy: { createdAt: "desc" },
+      select: {
+        items: { select: { estimateItem: { select: { ataItem: { select: { id: true, openingBalanceAppliedAt: true } } } } } },
+      },
+    });
+    const missingOpeningBalance = activeDiex?.items
+      .map((item) => item.estimateItem.ataItem)
+      .filter((item) => !item.openingBalanceAppliedAt) ?? [];
+    if (!activeDiex || missingOpeningBalance.length) {
+      throw new AppError(
+        "Todos os itens da NE histórica precisam possuir saldo de abertura aplicado.",
+        409,
+        "OPENING_BALANCE_REQUIRED",
+        { ataItemIds: missingOpeningBalance.map((item) => item.id) },
+      );
+    }
+  }
+
   private async portalCoordinates(input: { managementUnit?: string; management?: string }) {
     const settings = await systemSettingsService.getEffective();
     return {
@@ -192,6 +252,14 @@ export class FinancialExecutionService {
     if (preview.validation.divergences.length && !input.acceptDivergence) {
       throw new AppError("A Nota de Empenho possui divergências que precisam ser confirmadas", 409, "COMMITMENT_NOTE_DIVERGENCE", preview.validation);
     }
+    await this.assertCommitmentNoteAvailable({
+      projectId: input.projectId,
+      externalCode: preview.snapshot.externalCode,
+      managementUnit: preview.snapshot.managementUnit,
+      management: preview.snapshot.management,
+      number: preview.snapshot.number,
+    });
+    await this.validateBalanceImpact(input, preview.snapshot.issuedAt);
 
     const project = await projectsService.updateFlow(input.projectId, {
       stage: "AGUARDANDO_NOTA_EMPENHO",
@@ -201,6 +269,8 @@ export class FinancialExecutionService {
       commitmentNoteSnapshot: preview.snapshot,
       commitmentNoteSyncStatus: preview.validation.divergences.length ? "DIVERGENTE" : "VALIDADO",
       commitmentNoteDivergenceReason: preview.validation.divergences.join("; ") || null,
+      commitmentNoteBalanceImpactMode: input.balanceImpactMode,
+      commitmentNoteBalanceImpactReason: input.balanceImpactReason ?? null,
     });
 
     const note = await prisma.commitmentNote.findUnique({
@@ -260,6 +330,15 @@ export class FinancialExecutionService {
       fetchedAt: registeredAt,
     };
 
+    await this.assertCommitmentNoteAvailable({
+      projectId: input.projectId,
+      externalCode: snapshot.externalCode,
+      managementUnit: snapshot.managementUnit,
+      management: snapshot.management,
+      number: snapshot.number,
+    });
+    await this.validateBalanceImpact(input, snapshot.issuedAt);
+
     const project = await projectsService.updateFlow(input.projectId, {
       stage: "AGUARDANDO_NOTA_EMPENHO",
       commitmentNoteNumber: input.number,
@@ -268,6 +347,8 @@ export class FinancialExecutionService {
       commitmentNoteSnapshot: snapshot,
       commitmentNoteSyncStatus: "NAO_VALIDADO",
       commitmentNoteDivergenceReason: `Registro manual: ${input.manualReason}`,
+      commitmentNoteBalanceImpactMode: input.balanceImpactMode,
+      commitmentNoteBalanceImpactReason: input.balanceImpactReason ?? null,
     });
 
     const note = await prisma.commitmentNote.findUnique({

@@ -50,7 +50,7 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(181);
+    expect(operationIds).toHaveLength(184);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
@@ -108,6 +108,25 @@ describe("contratos HTTP transversais", () => {
     const certificateSchema = (openApiDocument.components.schemas as Record<string, any>).CertificateStatus;
     expect(certificateSchema.required).toContain("renewalAutomation");
     expect(certificateSchema.properties.renewalAutomation.properties.proxyReloadMode.enum).toEqual(["AUTOMATIC", "MANUAL"]);
+  });
+
+  it("protege a conciliação inicial de saldos e o controle do modo de implantação", () => {
+    const paths = openApiDocument.paths as Record<string, any>;
+    for (const [route, method] of [
+      ["/system-settings/implantation-mode", "put"],
+      ["/atas/{id}/opening-balance/apply", "post"],
+      ["/ata-items/{id}/opening-balance/apply", "post"],
+    ] as const) {
+      const operation = paths[route][method];
+      expect(operation["x-permissions"]).toEqual(["settings.manage"]);
+      expect(operation["x-roles"]).toEqual(["ADMIN"]);
+      expect(operation.parameters).toContainEqual({ $ref: "#/components/parameters/StepUpToken" });
+    }
+
+    const registerSchema = openApiDocument.components.schemas.CommitmentNoteRegisterRequest;
+    const registration = registerSchema.allOf[1].properties;
+    expect(registration.balanceImpactMode.enum).toEqual(["CONSUME", "ALREADY_INCLUDED"]);
+    expect(registration.balanceImpactMode.default).toBe("CONSUME");
   });
 
   it("protege exportação e restauração da autoridade com reautenticação administrativa", () => {

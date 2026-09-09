@@ -3,7 +3,7 @@ import { Prisma } from "../../generated/prisma/client.js";
 import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { auditService } from "../audit/audit.service.js";
-import type { IntegrationProviderInput, PortalApiTokenInput, UpdateSystemSettingsInput } from "./system-settings.schemas.js";
+import type { ImplantationModeInput, IntegrationProviderInput, PortalApiTokenInput, UpdateSystemSettingsInput } from "./system-settings.schemas.js";
 import { assertAllowedIntegrationUrl } from "../../shared/integration-url.js";
 import { decryptPortalApiToken, encryptPortalApiToken, secretEncryptionSource } from "../../shared/secret-envelope.js";
 
@@ -24,6 +24,11 @@ const DEFAULTS = {
   defaultBiddingYear: null as number | null,
   defaultImmediateCommitment: true,
   defaultEstimateGroup: "3",
+  implantationModeActive: false,
+  implantationCutoffAt: null as Date | null,
+  implantationReason: null as string | null,
+  implantationChangedAt: null as Date | null,
+  implantationChangedById: null as string | null,
   portalApiTokenEncrypted: null as string | null,
   portalApiTokenUpdatedAt: null as Date | null,
   portalApiTokenUpdatedById: null as string | null,
@@ -49,6 +54,49 @@ function publicConfiguration<T extends Record<string, unknown>>(settings: T) {
 }
 
 export class SystemSettingsService {
+  async setImplantationMode(input: ImplantationModeInput, user: CurrentUser) {
+    const before = await this.getEffective();
+    const changedAt = new Date();
+    const updated = await prisma.systemConfiguration.upsert({
+      where: { id: "default" },
+      create: {
+        id: "default",
+        implantationModeActive: input.active,
+        implantationCutoffAt: input.active ? input.cutoffAt! : before.implantationCutoffAt,
+        implantationReason: input.reason,
+        implantationChangedAt: changedAt,
+        implantationChangedById: user.id,
+        updatedById: user.id,
+      },
+      update: {
+        implantationModeActive: input.active,
+        implantationCutoffAt: input.active ? input.cutoffAt! : before.implantationCutoffAt,
+        implantationReason: input.reason,
+        implantationChangedAt: changedAt,
+        implantationChangedById: user.id,
+        updatedById: user.id,
+      },
+    });
+    await auditService.log({
+      entityType: "SYSTEM_SETTINGS",
+      entityId: "IMPLANTATION_MODE",
+      action: "UPDATE",
+      actor: { id: user.id, name: user.name ?? user.email },
+      summary: input.active ? "Modo de implantação ativado" : "Modo de implantação desativado",
+      before: {
+        active: before.implantationModeActive,
+        cutoffAt: before.implantationCutoffAt,
+        reason: before.implantationReason,
+      },
+      after: {
+        active: updated.implantationModeActive,
+        cutoffAt: updated.implantationCutoffAt,
+        reason: updated.implantationReason,
+      },
+    });
+    return this.get();
+  }
+
   async getEffective() {
     const stored = await prisma.systemConfiguration.findUnique({ where: { id: "default" } });
     const settings = stored ? { ...DEFAULTS, ...stored } : { ...DEFAULTS, updatedById: null, createdAt: null, updatedAt: null };

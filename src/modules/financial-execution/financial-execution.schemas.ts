@@ -29,13 +29,19 @@ export const registerCommitmentNoteSchema = z.object({
   manualReason: z.string().trim().min(10, "Informe uma justificativa com pelo menos 10 caracteres").max(500).optional(),
   confirmManualRegistration: z.boolean().default(false),
   acceptDivergence: z.boolean().default(false),
+  balanceImpactMode: z.enum(["CONSUME", "ALREADY_INCLUDED"]).default("CONSUME"),
+  balanceImpactReason: z.string().trim().min(10, "Informe uma justificativa com pelo menos 10 caracteres").max(500).optional(),
 }).superRefine((input, context) => {
-  if (input.registrationMode !== "MANUAL") return;
-  if (!input.manualReason) {
-    context.addIssue({ code: "custom", path: ["manualReason"], message: "Informe a justificativa do registro manual" });
+  if (input.registrationMode === "MANUAL") {
+    if (!input.manualReason) {
+      context.addIssue({ code: "custom", path: ["manualReason"], message: "Informe a justificativa do registro manual" });
+    }
+    if (!input.confirmManualRegistration) {
+      context.addIssue({ code: "custom", path: ["confirmManualRegistration"], message: "Confirme que a NE não foi validada no Portal" });
+    }
   }
-  if (!input.confirmManualRegistration) {
-    context.addIssue({ code: "custom", path: ["confirmManualRegistration"], message: "Confirme que a NE não foi validada no Portal" });
+  if (input.balanceImpactMode === "ALREADY_INCLUDED" && !input.balanceImpactReason) {
+    context.addIssue({ code: "custom", path: ["balanceImpactReason"], message: "Justifique por que a NE não deve consumir novamente o saldo" });
   }
 });
 

@@ -1379,6 +1379,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/system-settings/implantation-mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Ativar ou encerrar o modo controlado de implantação
+         * @description Ação exclusiva de administrador, com data de corte, justificativa e auditoria permanente.
+         */
+        put: operations["settings_put_systemSettings_implantationMode"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system-settings/connections/test": {
         parameters: {
             query?: never;
@@ -2341,6 +2361,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/atas/{id}/opening-balance/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Aplicar saldo oficial como saldo operacional de abertura
+         * @description Registra como consumo histórico a diferença entre a quantidade original e o saldo oficial, sem sobrescrever a quantidade original da ATA.
+         */
+        post: operations["atas_post_byId_openingBalance_apply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/atas/{id}/coverage-groups": {
         parameters: {
             query?: never;
@@ -2497,6 +2537,23 @@ export interface paths {
          * @description Atualiza o snapshot externo do item e registra a sincronização na auditoria.
          */
         post: operations["ataItems_post_byId_externalBalance_sync"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ata-items/{id}/opening-balance/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Aplicar saldo oficial de abertura para um item */
+        post: operations["ataItems_post_byId_openingBalance_apply"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3784,8 +3841,21 @@ export interface components {
             confirmManualRegistration: boolean;
             /** @default false */
             acceptDivergence: boolean;
+            /**
+             * @default CONSUME
+             * @enum {string}
+             */
+            balanceImpactMode: "CONSUME" | "ALREADY_INCLUDED";
+            balanceImpactReason?: string;
         };
         CommitmentNoteResponse: {
+            /** @enum {string} */
+            balanceImpactMode?: "CONSUME" | "ALREADY_INCLUDED";
+            balanceImpactReason?: string | null;
+            /** Format: date-time */
+            balanceImpactDecidedAt?: string | null;
+            balanceImpactDecidedById?: string | null;
+        } & {
             [key: string]: unknown;
         };
         CommitmentNoteListResponse: {
@@ -3993,6 +4063,13 @@ export interface components {
                 detailUrl?: string;
             }[];
             warnings: string[];
+            openingBalance?: {
+                /** Format: date-time */
+                appliedAt?: string;
+                itemsApplied?: number;
+                /** @enum {boolean} */
+                operationalBalanceChanged?: true;
+            };
             import?: {
                 /** Format: date-time */
                 importedAt?: string;
@@ -4000,6 +4077,11 @@ export interface components {
                 /** @enum {boolean} */
                 operationalBalanceChanged?: false;
             } | null;
+        };
+        OpeningBalanceApplicationRequest: {
+            reason: string;
+            /** @enum {boolean} */
+            confirm: true;
         };
         /**
          * @description Cria a ATA e toda a estrutura inicial de grupos/localidades em uma unica operacao.
@@ -4227,6 +4309,13 @@ export interface components {
             unitPrice?: string;
             /** @description Saldo inicial configurado para o item da ATA. */
             initialQuantity?: string;
+            /** @description Consumo histórico incorporado no saldo de abertura. */
+            openingConsumedQuantity?: string;
+            /** Format: date-time */
+            openingBalanceAppliedAt?: string | null;
+            /** Format: date-time */
+            openingBalanceCheckedAt?: string | null;
+            openingBalanceReason?: string | null;
             notes?: string | null;
             isActive?: boolean;
             /** Format: date-time */
@@ -4255,10 +4344,12 @@ export interface components {
                 initialQuantity?: string;
                 reservedQuantity?: string;
                 consumedQuantity?: string;
+                openingConsumedQuantity?: string;
                 availableQuantity?: string;
                 initialAmount?: string;
                 reservedAmount?: string;
                 consumedAmount?: string;
+                openingConsumedAmount?: string;
                 availableAmount?: string;
                 lowStock?: boolean;
                 insufficient?: boolean;
@@ -4481,10 +4572,25 @@ export interface components {
             defaultBiddingYear?: number | null;
             defaultImmediateCommitment?: boolean;
             defaultEstimateGroup?: string;
+            implantationModeActive?: boolean;
+            /** Format: date-time */
+            implantationCutoffAt?: string | null;
+            implantationReason?: string | null;
+            /** Format: date-time */
+            implantationChangedAt?: string | null;
+            implantationChangedById?: string | null;
             portalApiToken?: components["schemas"]["PortalApiTokenStatus"];
             connections?: {
                 [key: string]: unknown;
             };
+        };
+        ImplantationModeRequest: {
+            active: boolean;
+            /** Format: date-time */
+            cutoffAt?: string;
+            reason: string;
+            /** @enum {boolean} */
+            confirm: true;
         };
         PortalApiTokenStatus: {
             configured: boolean;
@@ -8062,6 +8168,40 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    settings_put_systemSettings_implantationMode: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImplantationModeRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettings"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     settings_post_systemSettings_connections_test: {
         parameters: {
             query?: never;
@@ -10063,6 +10203,43 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    atas_post_byId_openingBalance_apply: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path: {
+                /** @description Identificador UUID da ata. */
+                id: components["parameters"]["AtaId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpeningBalanceApplicationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalAtaBalance"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     atas_post_byId_coverageGroups: {
         parameters: {
             query?: never;
@@ -10403,6 +10580,43 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    ataItems_post_byId_openingBalance_apply: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path: {
+                /** @description Identificador UUID do item da ata. */
+                id: components["parameters"]["AtaItemId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpeningBalanceApplicationRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExternalAtaBalance"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };

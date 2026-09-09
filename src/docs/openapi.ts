@@ -2226,6 +2226,8 @@ export const openApiDocument: OpenApiDocument = {
               manualReason: { type: "string", minLength: 10, maxLength: 500 },
               confirmManualRegistration: { type: "boolean", default: false },
               acceptDivergence: { type: "boolean", default: false },
+              balanceImpactMode: { type: "string", enum: ["CONSUME", "ALREADY_INCLUDED"], default: "CONSUME" },
+              balanceImpactReason: { type: "string", minLength: 10, maxLength: 500 },
             },
           },
         ],
@@ -2233,6 +2235,12 @@ export const openApiDocument: OpenApiDocument = {
       CommitmentNoteResponse: {
         type: "object",
         additionalProperties: true,
+        properties: {
+          balanceImpactMode: { type: "string", enum: ["CONSUME", "ALREADY_INCLUDED"] },
+          balanceImpactReason: { type: ["string", "null"] },
+          balanceImpactDecidedAt: { type: ["string", "null"], format: "date-time" },
+          balanceImpactDecidedById: { type: ["string", "null"] },
+        },
       },
       CommitmentNoteListResponse: {
         type: "object",
@@ -2462,6 +2470,14 @@ export const openApiDocument: OpenApiDocument = {
             },
           },
           warnings: { type: "array", items: { type: "string" } },
+          openingBalance: {
+            type: "object",
+            properties: {
+              appliedAt: { type: "string", format: "date-time" },
+              itemsApplied: { type: "integer" },
+              operationalBalanceChanged: { type: "boolean", enum: [true] },
+            },
+          },
           import: {
             type: "object",
             nullable: true,
@@ -2471,6 +2487,14 @@ export const openApiDocument: OpenApiDocument = {
               operationalBalanceChanged: { type: "boolean", enum: [false] },
             },
           },
+        },
+      },
+      OpeningBalanceApplicationRequest: {
+        type: "object",
+        required: ["reason", "confirm"],
+        properties: {
+          reason: { type: "string", minLength: 10, maxLength: 500 },
+          confirm: { type: "boolean", enum: [true] },
         },
       },
       AtaCreateRequest: {
@@ -2718,6 +2742,10 @@ export const openApiDocument: OpenApiDocument = {
             type: "string",
             description: "Saldo inicial configurado para o item da ATA.",
           },
+          openingConsumedQuantity: { type: "string", description: "Consumo histórico incorporado no saldo de abertura." },
+          openingBalanceAppliedAt: { type: "string", format: "date-time", nullable: true },
+          openingBalanceCheckedAt: { type: "string", format: "date-time", nullable: true },
+          openingBalanceReason: { type: "string", nullable: true },
           notes: { type: "string", nullable: true },
           isActive: { type: "boolean" },
           deletedAt: { type: "string", format: "date-time", nullable: true },
@@ -2746,10 +2774,12 @@ export const openApiDocument: OpenApiDocument = {
               initialQuantity: { type: "string" },
               reservedQuantity: { type: "string" },
               consumedQuantity: { type: "string" },
+              openingConsumedQuantity: { type: "string" },
               availableQuantity: { type: "string" },
               initialAmount: { type: "string" },
               reservedAmount: { type: "string" },
               consumedAmount: { type: "string" },
+              openingConsumedAmount: { type: "string" },
               availableAmount: { type: "string" },
               lowStock: { type: "boolean" },
               insufficient: { type: "boolean" },
@@ -3048,7 +3078,22 @@ export const openApiDocument: OpenApiDocument = {
           portalTransparenciaBaseUrl: { type: "string", format: "uri" }, portalSyncIntervalMinutes: { type: "integer", minimum: 15 }, portalSyncOnStartup: { type: "boolean" },
           comprasGovBaseUrl: { type: "string", format: "uri" }, pncpBaseUrl: { type: "string", format: "uri" }, defaultBiddingNumber: { type: ["string", "null"] }, defaultBiddingYear: { type: ["integer", "null"] },
           defaultImmediateCommitment: { type: "boolean" }, defaultEstimateGroup: { type: "string" },
+          implantationModeActive: { type: "boolean" },
+          implantationCutoffAt: { type: ["string", "null"], format: "date-time" },
+          implantationReason: { type: ["string", "null"] },
+          implantationChangedAt: { type: ["string", "null"], format: "date-time" },
+          implantationChangedById: { type: ["string", "null"] },
           portalApiToken: { $ref: "#/components/schemas/PortalApiTokenStatus" }, connections: { type: "object", additionalProperties: true },
+        },
+      },
+      ImplantationModeRequest: {
+        type: "object",
+        required: ["active", "reason", "confirm"],
+        properties: {
+          active: { type: "boolean" },
+          cutoffAt: { type: "string", format: "date-time" },
+          reason: { type: "string", minLength: 10, maxLength: 500 },
+          confirm: { type: "boolean", enum: [true] },
         },
       },
       PortalApiTokenStatus: {
@@ -4904,6 +4949,9 @@ export const openApiDocument: OpenApiDocument = {
       get: { tags: ["settings"], summary: "Consultar integrações e parâmetros institucionais", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
       put: withStepUp({ tags: ["settings"], summary: "Atualizar integrações e parâmetros institucionais", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SystemSettings") }, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
     },
+    "/system-settings/implantation-mode": {
+      put: withStepUp({ tags: ["settings"], summary: "Ativar ou encerrar o modo controlado de implantação", description: "Ação exclusiva de administrador, com data de corte, justificativa e auditoria permanente.", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/ImplantationModeRequest") }, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
     "/system-settings/connections/test": {
       post: withStepUp({ tags: ["settings"], summary: "Testar todas as conexões configuradas", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/IntegrationConnectionCheck"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
     },
@@ -5725,6 +5773,9 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["atas.manage"],
       },
     },
+    "/atas/{id}/opening-balance/apply": {
+      post: withStepUp({ tags: ["atas"], summary: "Aplicar saldo oficial como saldo operacional de abertura", description: "Registra como consumo histórico a diferença entre a quantidade original e o saldo oficial, sem sobrescrever a quantidade original da ATA.", security: bearerSecurity, parameters: [{ $ref: "#/components/parameters/AtaId" }], requestBody: { required: true, content: jsonContent("#/components/schemas/OpeningBalanceApplicationRequest") }, responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
+    },
     "/atas/{id}/coverage-groups": {
       post: {
         tags: ["atas"],
@@ -5912,6 +5963,9 @@ export const openApiDocument: OpenApiDocument = {
         responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses },
         "x-permissions": ["atas.manage"],
       },
+    },
+    "/ata-items/{id}/opening-balance/apply": {
+      post: withStepUp({ tags: ["ata-items"], summary: "Aplicar saldo oficial de abertura para um item", security: bearerSecurity, parameters: [{ $ref: "#/components/parameters/AtaItemId" }], requestBody: { required: true, content: jsonContent("#/components/schemas/OpeningBalanceApplicationRequest") }, responses: { "200": okJson("#/components/schemas/ExternalAtaBalance"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"], "x-roles": ["ADMIN"] }),
     },
     "/ata-items/{id}": {
       get: {

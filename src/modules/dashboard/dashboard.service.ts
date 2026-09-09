@@ -75,10 +75,12 @@ type DashboardAtaItemSnapshot = {
     initialQuantity: string;
     reservedQuantity: string;
     consumedQuantity: string;
+    openingConsumedQuantity: string;
     availableQuantity: string;
     initialAmount: string;
     reservedAmount: string;
     consumedAmount: string;
+    openingConsumedAmount: string;
     availableAmount: string;
     lowStock: boolean;
     insufficient: boolean;
@@ -542,6 +544,7 @@ export class DashboardService {
         description: true,
         unitPrice: true,
         initialQuantity: true,
+        openingConsumedQuantity: true,
         isActive: true,
         deletedAt: true,
         ata: {
@@ -572,8 +575,8 @@ export class DashboardService {
     const reservedItems = ataItems.filter(
       (item) => toNumber(item.balance.reservedQuantity) > 0,
     );
-    const consumedItems = ataItems.filter(
-      (item) => toNumber(item.balance.consumedQuantity) > 0,
+    const consumedItems = ataItems.filter((item) =>
+      toNumber(item.balance.consumedQuantity) + toNumber(item.balance.openingConsumedQuantity) > 0
     );
     const criticalItems = [...ataItems]
       .filter(
@@ -616,7 +619,9 @@ export class DashboardService {
         recentReversals: alerts.inventoryAlerts.reversals.length,
         staleReservations: alerts.inventoryAlerts.staleReservations.length,
         totalReservedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.reservedAmount)),
-        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.consumedAmount)),
+        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) =>
+          String(toNumber(item.balance.consumedAmount) + toNumber(item.balance.openingConsumedAmount))
+        )),
         totalAvailableAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.availableAmount)),
       },
       criticalItems,
@@ -645,7 +650,9 @@ export class DashboardService {
     const lowStockItems = ataItems.filter((item) => item.balance.lowStock);
     const insufficientItems = ataItems.filter((item) => item.balance.insufficient);
     const reservedItems = ataItems.filter((item) => toNumber(item.balance.reservedQuantity) > 0);
-    const consumedItems = ataItems.filter((item) => toNumber(item.balance.consumedQuantity) > 0);
+    const consumedItems = ataItems.filter((item) =>
+      toNumber(item.balance.consumedQuantity) + toNumber(item.balance.openingConsumedQuantity) > 0
+    );
     const reversalMovements = scopedMovements.filter(
       (movement) => movement.movementType === "REVERSE_CONSUME",
     );
@@ -683,7 +690,9 @@ export class DashboardService {
         itemsWithActiveReserve: reservedItems.length,
         itemsWithActiveConsumption: consumedItems.length,
         totalReservedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.reservedAmount)),
-        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.consumedAmount)),
+        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) =>
+          String(toNumber(item.balance.consumedAmount) + toNumber(item.balance.openingConsumedAmount))
+        )),
         totalAvailableAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.availableAmount)),
       },
       periodActivity: movementSummary,

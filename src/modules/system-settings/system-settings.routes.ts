@@ -4,6 +4,7 @@ import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { SystemSettingsController } from "./system-settings.controller.js";
 import { sensitiveRateLimiter } from "../../middlewares/rate-limit.middleware.js";
 import { requireStepUp } from "../../middlewares/step-up.middleware.js";
+import { requireRole } from "../../middlewares/role.middleware.js";
 
 export const systemSettingsRoutes = Router();
 const controller = new SystemSettingsController();
@@ -11,6 +12,7 @@ const controller = new SystemSettingsController();
 systemSettingsRoutes.use(authMiddleware);
 systemSettingsRoutes.get("/", requirePermission("settings.view"), (req, res) => controller.get(req, res));
 systemSettingsRoutes.put("/", requirePermission("settings.manage"), requireStepUp, (req, res) => controller.update(req, res));
+systemSettingsRoutes.put("/implantation-mode", sensitiveRateLimiter, requireRole("ADMIN"), requirePermission("settings.manage"), requireStepUp, (req, res) => controller.setImplantationMode(req, res));
 systemSettingsRoutes.put("/portal-api-token", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.savePortalApiToken(req, res));
 systemSettingsRoutes.delete("/portal-api-token", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.removePortalApiToken(req, res));
 systemSettingsRoutes.post("/connections/test", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.testAll(req, res));

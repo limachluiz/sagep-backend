@@ -91,6 +91,7 @@ export class PregoesService {
         ataId: true,
         unitPrice: true,
         initialQuantity: true,
+        openingConsumedQuantity: true,
         isActive: true,
         deletedAt: true,
         ata: { select: { pregaoId: true } },
@@ -100,8 +101,9 @@ export class PregoesService {
 
     return pregoes.map((pregao) => {
       const pregaoItems = items.filter((item) => item.ata.pregaoId === pregao.id);
-      const sum = (field: "initialAmount" | "reservedAmount" | "consumedAmount" | "availableAmount") =>
+      const sum = (field: "initialAmount" | "reservedAmount" | "consumedAmount" | "openingConsumedAmount" | "availableAmount") =>
         pregaoItems.reduce((total, item) => total + Number(balances.get(item.id)?.[field] ?? 0), 0).toFixed(2);
+      const consumedAmount = (Number(sum("consumedAmount")) + Number(sum("openingConsumedAmount"))).toFixed(2);
       return {
         ...pregao,
         metrics: {
@@ -114,7 +116,7 @@ export class PregoesService {
           itemCount: pregaoItems.length,
           totalAmount: sum("initialAmount"),
           reservedAmount: sum("reservedAmount"),
-          consumedAmount: sum("consumedAmount"),
+          consumedAmount,
           availableAmount: sum("availableAmount"),
         },
       };

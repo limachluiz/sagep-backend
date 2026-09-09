@@ -140,6 +140,7 @@ const estimateInclude = {
           unit: true,
           unitPrice: true,
           initialQuantity: true,
+          openingConsumedQuantity: true,
           isActive: true,
           deletedAt: true,
         },
@@ -687,6 +688,7 @@ export class EstimatesService {
         unit: string;
         unitPrice: Prisma.Decimal;
         initialQuantity: Prisma.Decimal;
+        openingConsumedQuantity: Prisma.Decimal;
         isActive: boolean;
         deletedAt: Date | null;
       };
@@ -720,6 +722,7 @@ export class EstimatesService {
           unit: string;
           unitPrice: Prisma.Decimal;
           initialQuantity: Prisma.Decimal;
+          openingConsumedQuantity: Prisma.Decimal;
           isActive: boolean;
           deletedAt: Date | null;
         };
@@ -903,6 +906,7 @@ export class EstimatesService {
               unit: true,
               unitPrice: true,
               initialQuantity: true,
+              openingConsumedQuantity: true,
               isActive: true,
               deletedAt: true,
             },
@@ -920,6 +924,7 @@ export class EstimatesService {
               unit: true,
               unitPrice: true,
               initialQuantity: true,
+              openingConsumedQuantity: true,
               isActive: true,
               deletedAt: true,
             },

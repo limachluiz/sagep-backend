@@ -111,3 +111,7 @@ export const ataCoverageGroupParamSchema = ataIdParamSchema.extend({
 export const ataCodeParamSchema = z.object({
   code: z.coerce.number().int().positive("Código da ata inválido"),
 });
+export const applyOpeningBalanceSchema = z.object({
+  reason: z.string().trim().min(10, "Informe uma justificativa com pelo menos 10 caracteres").max(500),
+  confirm: z.literal(true),
+});

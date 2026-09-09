@@ -26,6 +26,18 @@ export const portalApiTokenSchema = z.object({
   token: z.string().trim().min(8, "Informe um token válido").max(512),
 });
 
+export const implantationModeSchema = z.object({
+  active: z.boolean(),
+  cutoffAt: z.coerce.date().optional(),
+  reason: z.string().trim().min(10, "Informe uma justificativa com pelo menos 10 caracteres").max(500),
+  confirm: z.literal(true),
+}).superRefine((input, context) => {
+  if (input.active && !input.cutoffAt) {
+    context.addIssue({ code: "custom", path: ["cutoffAt"], message: "Informe a data de corte da implantação" });
+  }
+});
+
 export type UpdateSystemSettingsInput = z.infer<typeof updateSystemSettingsSchema>;
 export type IntegrationProviderInput = z.infer<typeof integrationProviderSchema>["provider"];
 export type PortalApiTokenInput = z.infer<typeof portalApiTokenSchema>;
+export type ImplantationModeInput = z.infer<typeof implantationModeSchema>;

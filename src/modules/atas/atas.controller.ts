@@ -9,6 +9,7 @@ import {
   replaceAtaCoverageSchema,
   updateAtaCoverageGroupSchema,
   updateAtaSchema,
+  applyOpeningBalanceSchema,
 } from "./atas.schemas.js";
 import { AtasService } from "./atas.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
@@ -26,6 +27,12 @@ export class AtasController {
   async importExternalBalance(req: Request, res: Response) {
     const { id } = ataIdParamSchema.parse(req.params);
     return res.status(200).json(await contratosGovBalanceService.importAtaBalance(id, req.user!));
+  }
+
+  async applyOpeningBalance(req: Request, res: Response) {
+    const { id } = ataIdParamSchema.parse(req.params);
+    const { reason } = applyOpeningBalanceSchema.parse(req.body);
+    return res.status(200).json(await contratosGovBalanceService.applyAtaOpeningBalance(id, req.user!, reason));
   }
 
   async syncPncp(req: Request, res: Response) {

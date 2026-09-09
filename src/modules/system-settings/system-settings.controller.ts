@@ -1,8 +1,11 @@
 import { Request, Response } from "express";
-import { integrationProviderSchema, portalApiTokenSchema, updateSystemSettingsSchema } from "./system-settings.schemas.js";
+import { implantationModeSchema, integrationProviderSchema, portalApiTokenSchema, updateSystemSettingsSchema } from "./system-settings.schemas.js";
 import { systemSettingsService } from "./system-settings.service.js";
 
 export class SystemSettingsController {
+  async setImplantationMode(req: Request, res: Response) {
+    return res.status(200).json(await systemSettingsService.setImplantationMode(implantationModeSchema.parse(req.body), req.user!));
+  }
   async get(_req: Request, res: Response) {
     return res.status(200).json(await systemSettingsService.get());
   }

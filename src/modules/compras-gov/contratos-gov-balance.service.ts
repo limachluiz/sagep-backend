@@ -4,6 +4,7 @@ import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
+import { systemSettingsService } from "../system-settings/system-settings.service.js";
 
 const SOURCE = "https://contratos.sistema.gov.br";
 const CACHE_TTL_MS = 10 * 60 * 1000;
@@ -361,8 +362,8 @@ export class ContratosGovBalanceService {
     throw new AppError("Nenhuma ATA pública corresponde ao pregão cadastrado no SAGEP.", 404, "EXTERNAL_BALANCE_NOT_FOUND");
   }
 
-  private async queryAtaBalance(ataId: string, itemId?: string) {
-    const cached = !itemId ? cache.get(ataId) : undefined;
+  private async queryAtaBalance(ataId: string, itemId?: string, forceRefresh = false) {
+    const cached = !itemId && !forceRefresh ? cache.get(ataId) : undefined;
     if (cached && cached.expiresAt > Date.now()) return cached.value;
     const ata = await this.loadAta(ataId, itemId);
     const ataNumber = ata.externalAtaNumber || ata.number;
@@ -450,6 +451,103 @@ export class ContratosGovBalanceService {
 
   async importItemBalance(itemId: string, actor: BalanceActor) {
     return this.importBalance(await this.getItemBalance(itemId), actor);
+  }
+
+  private async applyOpeningBalance(result: ExternalAtaBalance, actor: BalanceActor, reason: string) {
+    const settings = await systemSettingsService.getEffective();
+    if (!settings.implantationModeActive || !settings.implantationCutoffAt) {
+      throw new AppError("Ative o modo de implantação antes de aplicar um saldo de abertura.", 409, "IMPLANTATION_MODE_REQUIRED");
+    }
+
+    const itemIds = result.items.map((item) => item.ataItemId);
+    const [items, consumedMovements] = await Promise.all([
+      prisma.ataItem.findMany({
+        where: { id: { in: itemIds }, deletedAt: null },
+        select: { id: true, referenceCode: true, initialQuantity: true },
+      }),
+      prisma.ataItemBalanceMovement.findMany({
+        where: { ataItemId: { in: itemIds }, movementType: { in: ["CONSUME", "REVERSE_CONSUME"] } },
+        select: { ataItemId: true },
+        distinct: ["ataItemId"],
+      }),
+    ]);
+    if (consumedMovements.length) {
+      throw new AppError(
+        "O saldo de abertura não pode ser reaplicado depois que o SAGEP registrou consumos nos itens selecionados.",
+        409,
+        "OPENING_BALANCE_HAS_OPERATIONAL_CONSUMPTION",
+        { ataItemIds: consumedMovements.map((movement) => movement.ataItemId) },
+      );
+    }
+
+    const itemsById = new Map(items.map((item) => [item.id, item]));
+    const checkedAt = new Date(result.checkedAt);
+    const appliedAt = new Date();
+    const applications = result.items.map((official) => {
+      const item = itemsById.get(official.ataItemId);
+      if (!item) throw new AppError("Item da ATA não encontrado para o saldo de abertura", 404);
+      if (official.managerAvailableQuantity == null) {
+        throw new AppError(
+          `O item ${item.referenceCode} não possui saldo disponível da UASG na consulta oficial.`,
+          409,
+          "OPENING_BALANCE_OFFICIAL_VALUE_MISSING",
+        );
+      }
+      const initial = new Prisma.Decimal(item.initialQuantity);
+      const available = new Prisma.Decimal(official.managerAvailableQuantity);
+      const historicalConsumed = initial.sub(available).toDecimalPlaces(5);
+      if (historicalConsumed.lessThan(0)) {
+        throw new AppError(
+          `O saldo oficial do item ${item.referenceCode} é superior à quantidade inicial cadastrada.`,
+          409,
+          "OPENING_BALANCE_IDENTITY_MISMATCH",
+        );
+      }
+      return { item, official, historicalConsumed };
+    });
+
+    await this.importBalance(result, actor);
+    await prisma.$transaction(applications.map(({ item, historicalConsumed }) => prisma.ataItem.update({
+      where: { id: item.id },
+      data: {
+        openingConsumedQuantity: historicalConsumed,
+        openingBalanceAppliedAt: appliedAt,
+        openingBalanceCheckedAt: checkedAt,
+        openingBalanceReason: reason,
+        openingBalanceAppliedById: actor.id,
+      },
+    })));
+    await Promise.all(applications.map(({ item, official, historicalConsumed }) => auditService.log({
+      entityType: "ATA_ITEM",
+      entityId: item.id,
+      action: "UPDATE",
+      actor: { id: actor.id, name: actor.name ?? actor.email ?? null },
+      summary: `Saldo de abertura aplicado ao item ${item.referenceCode}`,
+      after: {
+        initialQuantity: item.initialQuantity.toString(),
+        openingConsumedQuantity: historicalConsumed.toString(),
+        operationalAvailableQuantity: official.managerAvailableQuantity,
+        checkedAt: result.checkedAt,
+      },
+      metadata: { reason, sourceUrl: official.detailUrl, implantationCutoffAt: settings.implantationCutoffAt },
+    })));
+
+    return {
+      ...result,
+      openingBalance: {
+        appliedAt: appliedAt.toISOString(),
+        itemsApplied: applications.length,
+        operationalBalanceChanged: true,
+      },
+    };
+  }
+
+  async applyAtaOpeningBalance(ataId: string, actor: BalanceActor, reason: string) {
+    return this.applyOpeningBalance(await this.queryAtaBalance(ataId, undefined, true), actor, reason);
+  }
+
+  async applyItemOpeningBalance(itemId: string, actor: BalanceActor, reason: string) {
+    return this.applyOpeningBalance(await this.getItemBalance(itemId), actor, reason);
   }
 }
 

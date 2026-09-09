@@ -219,6 +219,11 @@ enum AtaItemBalanceMovementType {
   ADJUSTMENT
 }
 
+enum CommitmentNoteBalanceImpactMode {
+  CONSUME
+  ALREADY_INCLUDED
+}
+
 model User {
   id                            String                       @id @default(cuid())
   userCode                      Int                          @unique @default(autoincrement())
@@ -275,6 +280,11 @@ model SystemConfiguration {
   defaultBiddingYear         Int?
   defaultImmediateCommitment Boolean   @default(true)
   defaultEstimateGroup       String    @default("3")
+  implantationModeActive     Boolean   @default(false)
+  implantationCutoffAt       DateTime?
+  implantationReason         String?
+  implantationChangedAt      DateTime?
+  implantationChangedById    String?
   deploymentHostName         String?
   deploymentExpectedIp       String?
   deploymentGateway          String?
@@ -454,6 +464,10 @@ model CommitmentNote {
   lastSyncAt         DateTime
   lastSyncError      String?
   active             Boolean                       @default(true)
+  balanceImpactMode  CommitmentNoteBalanceImpactMode @default(CONSUME)
+  balanceImpactReason String?
+  balanceImpactDecidedAt DateTime?
+  balanceImpactDecidedById String?
   project            Project                       @relation(fields: [projectId], references: [id], onDelete: Restrict)
   documents          FinancialDocument[]
   invoices           Invoice[]
@@ -464,6 +478,7 @@ model CommitmentNote {
   @@index([financialStatus])
   @@index([syncStatus])
   @@index([lastSyncAt])
+  @@unique([managementUnit, management, number])
 }
 
 model FinancialDocument {
@@ -717,7 +732,12 @@ model AtaItem {
   estimateItems                    EstimateItem[]
   balanceMovements                 AtaItemBalanceMovement[]
   unitPrice                        Decimal                  @db.Decimal(14, 2)
-  initialQuantity                  Decimal                  @default(1000) @db.Decimal(14, 2)
+  initialQuantity                  Decimal                  @default(1000) @db.Decimal(18, 5)
+  openingConsumedQuantity          Decimal                  @default(0) @db.Decimal(18, 5)
+  openingBalanceAppliedAt          DateTime?
+  openingBalanceCheckedAt          DateTime?
+  openingBalanceReason             String?
+  openingBalanceAppliedById        String?
   notes                            String?
   isActive                         Boolean                  @default(true)
   deletedAt                        DateTime?
@@ -776,7 +796,7 @@ model AtaItemBalanceMovement {
   actorUserId    String?
   actorName      String?
   movementType   AtaItemBalanceMovementType
-  quantity       Decimal                    @db.Decimal(14, 2)
+  quantity       Decimal                    @db.Decimal(18, 5)
   unitPrice      Decimal                    @db.Decimal(14, 2)
   totalAmount    Decimal                    @db.Decimal(14, 2)
   summary        String
@@ -831,7 +851,7 @@ model EstimateItem {
   referenceCode     String
   description       String
   unit              String
-  quantity          Decimal                  @db.Decimal(14, 2)
+  quantity          Decimal                  @db.Decimal(18, 5)
   unitPrice         Decimal                  @db.Decimal(14, 2)
   subtotal          Decimal                  @db.Decimal(14, 2)
   notes             String?
@@ -901,7 +921,7 @@ model DiexRequestItem {
   itemCode          String
   description       String
   supplyUnit        String
-  quantityRequested Decimal      @db.Decimal(14, 2)
+  quantityRequested Decimal      @db.Decimal(18, 5)
   unitPrice         Decimal      @db.Decimal(14, 2)
   totalPrice        Decimal      @db.Decimal(14, 2)
   notes             String?
@@ -976,7 +996,7 @@ model ServiceOrderItem {
   itemCode             String
   description          String
   supplyUnit           String
-  quantityOrdered      Decimal      @db.Decimal(14, 2)
+  quantityOrdered      Decimal      @db.Decimal(18, 5)
   unitPrice            Decimal      @db.Decimal(14, 2)
   totalPrice           Decimal      @db.Decimal(14, 2)
   notes                String?

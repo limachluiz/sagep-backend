@@ -10,6 +10,7 @@ import {
 import { AtaItemsService } from "./ata-items.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
 import { contratosGovBalanceService } from "../compras-gov/contratos-gov-balance.service.js";
+import { applyOpeningBalanceSchema } from "../atas/atas.schemas.js";
 
 const ataItemsService = new AtaItemsService();
 
@@ -22,6 +23,12 @@ export class AtaItemsController {
   async importExternalBalance(req: Request, res: Response) {
     const { id } = ataItemIdParamSchema.parse(req.params);
     return res.status(200).json(await contratosGovBalanceService.importItemBalance(id, req.user!));
+  }
+
+  async applyOpeningBalance(req: Request, res: Response) {
+    const { id } = ataItemIdParamSchema.parse(req.params);
+    const { reason } = applyOpeningBalanceSchema.parse(req.body);
+    return res.status(200).json(await contratosGovBalanceService.applyItemOpeningBalance(id, req.user!, reason));
   }
 
   async create(req: Request, res: Response) {

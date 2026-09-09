@@ -4,6 +4,7 @@ import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { requireRole } from "../../middlewares/role.middleware.js";
 import { AtaItemsController } from "../ata-items/ata-items.controller.js";
 import { AtasController } from "./atas.controller.js";
+import { requireStepUp } from "../../middlewares/step-up.middleware.js";
 
 export const atasRoutes = Router();
 const controller = new AtasController();
@@ -54,6 +55,9 @@ atasRoutes.get("/:id/items", (req, res) => ataItemsController.listByAta(req, res
 atasRoutes.get("/:id/external-balance", (req, res) => controller.externalBalance(req, res));
 atasRoutes.post("/:id/external-balance/sync", requirePermission("atas.manage"), (req, res) =>
   controller.importExternalBalance(req, res)
+);
+atasRoutes.post("/:id/opening-balance/apply", requireRole("ADMIN"), requirePermission("settings.manage"), requireStepUp, (req, res) =>
+  controller.applyOpeningBalance(req, res)
 );
 atasRoutes.post("/:id/items/correct-descriptions", requirePermission("atas.manage"), (req, res) =>
   ataItemsController.correctDescriptionsByAta(req, res)

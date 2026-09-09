@@ -18,6 +18,7 @@ type AtaItemForBalance = {
   description?: string;
   unitPrice: Prisma.Decimal;
   initialQuantity: Prisma.Decimal;
+  openingConsumedQuantity: Prisma.Decimal;
   isActive?: boolean;
   deletedAt?: Date | null;
 };
@@ -26,10 +27,12 @@ type BalanceSummary = {
   initialQuantity: string;
   reservedQuantity: string;
   consumedQuantity: string;
+  openingConsumedQuantity: string;
   availableQuantity: string;
   initialAmount: string;
   reservedAmount: string;
   consumedAmount: string;
+  openingConsumedAmount: string;
   availableAmount: string;
   lowStock: boolean;
   insufficient: boolean;
@@ -55,7 +58,7 @@ type BalanceMovementContext = {
 };
 
 function decimal(value: Prisma.Decimal | number | string) {
-  return new Prisma.Decimal(value).toDecimalPlaces(2);
+  return new Prisma.Decimal(value).toDecimalPlaces(5);
 }
 
 function zero() {
@@ -109,7 +112,11 @@ export class AtaItemBalanceService {
     }
 
     const initialQuantity = decimal(item.initialQuantity);
-    const availableQuantity = initialQuantity.sub(reservedQuantity).sub(consumedQuantity);
+    const openingConsumedQuantity = decimal(item.openingConsumedQuantity);
+    const availableQuantity = initialQuantity
+      .sub(openingConsumedQuantity)
+      .sub(reservedQuantity)
+      .sub(consumedQuantity);
 
     if (availableQuantity.lessThan(0)) {
       throw new AppError("Saldo negativo detectado para item da ATA", 409);
@@ -118,23 +125,26 @@ export class AtaItemBalanceService {
     const initialAmount = item.unitPrice.mul(initialQuantity).toDecimalPlaces(2);
     const reservedAmount = item.unitPrice.mul(reservedQuantity).toDecimalPlaces(2);
     const consumedAmount = item.unitPrice.mul(consumedQuantity).toDecimalPlaces(2);
+    const openingConsumedAmount = item.unitPrice.mul(openingConsumedQuantity).toDecimalPlaces(2);
     const availableAmount = item.unitPrice.mul(availableQuantity).toDecimalPlaces(2);
     const insufficient = availableQuantity.lessThanOrEqualTo(0);
     const lowStock = availableQuantity.greaterThan(0) && availableQuantity.lessThanOrEqualTo(1);
 
-      return {
-        initialQuantity: initialQuantity.toString(),
-        reservedQuantity: reservedQuantity.toString(),
-        consumedQuantity: consumedQuantity.toString(),
-        availableQuantity: availableQuantity.toString(),
-        initialAmount: initialAmount.toString(),
-        reservedAmount: reservedAmount.toString(),
-        consumedAmount: consumedAmount.toString(),
-        availableAmount: availableAmount.toString(),
-        lowStock,
-        insufficient,
-        lastMovementAt,
-      };
+    return {
+      initialQuantity: initialQuantity.toString(),
+      reservedQuantity: reservedQuantity.toString(),
+      consumedQuantity: consumedQuantity.toString(),
+      openingConsumedQuantity: openingConsumedQuantity.toString(),
+      availableQuantity: availableQuantity.toString(),
+      initialAmount: initialAmount.toString(),
+      reservedAmount: reservedAmount.toString(),
+      consumedAmount: consumedAmount.toString(),
+      openingConsumedAmount: openingConsumedAmount.toString(),
+      availableAmount: availableAmount.toString(),
+      lowStock,
+      insufficient,
+      lastMovementAt,
+    };
   }
 
   private async getMovementsForAtaItems(ataItemIds: string[], db: DbClient = prisma) {
@@ -195,6 +205,7 @@ export class AtaItemBalanceService {
         description: true,
         unitPrice: true,
         initialQuantity: true,
+        openingConsumedQuantity: true,
         isActive: true,
         deletedAt: true,
       },
@@ -231,6 +242,7 @@ export class AtaItemBalanceService {
         description: true,
         unitPrice: true,
         initialQuantity: true,
+        openingConsumedQuantity: true,
         isActive: true,
         deletedAt: true,
       },
@@ -380,6 +392,7 @@ export class AtaItemBalanceService {
     actor: BalanceActor,
     db: DbClient = prisma,
     reason = "Cancelamento do DIEx antes da Nota de Empenho",
+    source = "diex.remove",
   ) {
     const movements = await db.ataItemBalanceMovement.findMany({
       where: {
@@ -460,7 +473,7 @@ export class AtaItemBalanceService {
             movementType: "RELEASE",
             summary: `Liberação de saldo do DIEx: ${reason}`,
             metadata: {
-              source: "diex.remove",
+              source,
               reason,
             },
           },
@@ -468,6 +481,30 @@ export class AtaItemBalanceService {
         db,
       );
     }
+  }
+
+  async reconcileHistoricalCommitmentNote(
+    projectId: string,
+    actor: BalanceActor,
+    commitmentNoteNumber: string,
+    reason: string,
+    db: DbClient = prisma,
+  ) {
+    const activeDiex = await db.diexRequest.findFirst({
+      where: { projectId, archivedAt: null, deletedAt: null },
+      select: { id: true },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!activeDiex) {
+      throw new AppError("Não existe DIEx ativo para conciliar a Nota de Empenho histórica", 409);
+    }
+    await this.releaseForDiex(
+      activeDiex.id,
+      actor,
+      db,
+      `Reserva encerrada sem nova baixa: NE ${commitmentNoteNumber} já contemplada no saldo de abertura. ${reason}`,
+      "project.commitment-note.implantation-reconciliation",
+    );
   }
 
   async consumeForProjectCommitmentNote(
@@ -731,6 +768,7 @@ export class AtaItemBalanceService {
         description: true,
         unitPrice: true,
         initialQuantity: true,
+        openingConsumedQuantity: true,
         isActive: true,
         deletedAt: true,
       },
