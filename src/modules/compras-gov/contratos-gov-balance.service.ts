@@ -645,17 +645,20 @@ export class ContratosGovBalanceService {
     }
 
     const itemIds = result.items.map((item) => item.ataItemId);
-    const [items, consumedMovements] = await Promise.all([
-      prisma.ataItem.findMany({
-        where: { id: { in: itemIds }, deletedAt: null },
-        select: { id: true, referenceCode: true, initialQuantity: true },
-      }),
-      prisma.ataItemBalanceMovement.findMany({
-        where: { ataItemId: { in: itemIds }, movementType: { in: ["CONSUME", "REVERSE_CONSUME"] } },
-        select: { ataItemId: true },
-        distinct: ["ataItemId"],
-      }),
-    ]);
+    const items = await prisma.ataItem.findMany({
+      where: { id: { in: itemIds }, deletedAt: null },
+      select: { id: true, referenceCode: true, initialQuantity: true, openingBalanceAppliedAt: true },
+    });
+    const pendingItemIds = items
+      .filter((item) => !item.openingBalanceAppliedAt)
+      .map((item) => item.id);
+    const consumedMovements = pendingItemIds.length
+      ? await prisma.ataItemBalanceMovement.findMany({
+          where: { ataItemId: { in: pendingItemIds }, movementType: { in: ["CONSUME", "REVERSE_CONSUME"] } },
+          select: { ataItemId: true },
+          distinct: ["ataItemId"],
+        })
+      : [];
     if (consumedMovements.length) {
       throw new AppError(
         "O saldo de abertura não pode ser reaplicado depois que o SAGEP registrou consumos nos itens selecionados.",
@@ -668,9 +671,10 @@ export class ContratosGovBalanceService {
     const itemsById = new Map(items.map((item) => [item.id, item]));
     const checkedAt = new Date(result.checkedAt);
     const appliedAt = new Date();
-    const applications = result.items.map((official) => {
+    const applications = result.items.flatMap((official) => {
       const item = itemsById.get(official.ataItemId);
       if (!item) throw new AppError("Item da ATA não encontrado para o saldo de abertura", 404);
+      if (item.openingBalanceAppliedAt) return [];
       if (official.managerAvailableQuantity == null) {
         throw new AppError(
           `O item ${item.referenceCode} não possui saldo disponível da UASG na consulta oficial.`,
@@ -688,7 +692,7 @@ export class ContratosGovBalanceService {
           "OPENING_BALANCE_IDENTITY_MISMATCH",
         );
       }
-      return { item, official, historicalConsumed };
+      return [{ item, official, historicalConsumed }];
     });
 
     if (result.retrieval === "LIVE") await this.importBalance(result, actor);
