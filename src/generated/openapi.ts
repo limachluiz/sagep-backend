@@ -4345,11 +4345,15 @@ export interface components {
                 reservedQuantity?: string;
                 consumedQuantity?: string;
                 openingConsumedQuantity?: string;
+                /** @description Consumo total, somando carga histórica e consumo operacional do SAGEP. */
+                totalConsumedQuantity?: string;
                 availableQuantity?: string;
                 initialAmount?: string;
                 reservedAmount?: string;
                 consumedAmount?: string;
                 openingConsumedAmount?: string;
+                /** @description Valor consumido total, incluindo o saldo histórico de abertura. */
+                totalConsumedAmount?: string;
                 availableAmount?: string;
                 lowStock?: boolean;
                 insufficient?: boolean;

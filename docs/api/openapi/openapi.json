@@ -5534,6 +5534,10 @@
               "openingConsumedQuantity": {
                 "type": "string"
               },
+              "totalConsumedQuantity": {
+                "type": "string",
+                "description": "Consumo total, somando carga histórica e consumo operacional do SAGEP."
+              },
               "availableQuantity": {
                 "type": "string"
               },
@@ -5548,6 +5552,10 @@
               },
               "openingConsumedAmount": {
                 "type": "string"
+              },
+              "totalConsumedAmount": {
+                "type": "string",
+                "description": "Valor consumido total, incluindo o saldo histórico de abertura."
               },
               "availableAmount": {
                 "type": "string"

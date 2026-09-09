@@ -76,11 +76,13 @@ type DashboardAtaItemSnapshot = {
     reservedQuantity: string;
     consumedQuantity: string;
     openingConsumedQuantity: string;
+    totalConsumedQuantity: string;
     availableQuantity: string;
     initialAmount: string;
     reservedAmount: string;
     consumedAmount: string;
     openingConsumedAmount: string;
+    totalConsumedAmount: string;
     availableAmount: string;
     lowStock: boolean;
     insufficient: boolean;
@@ -575,9 +577,7 @@ export class DashboardService {
     const reservedItems = ataItems.filter(
       (item) => toNumber(item.balance.reservedQuantity) > 0,
     );
-    const consumedItems = ataItems.filter((item) =>
-      toNumber(item.balance.consumedQuantity) + toNumber(item.balance.openingConsumedQuantity) > 0
-    );
+    const consumedItems = ataItems.filter((item) => toNumber(item.balance.totalConsumedQuantity) > 0);
     const criticalItems = [...ataItems]
       .filter(
         (item) =>
@@ -619,9 +619,9 @@ export class DashboardService {
         recentReversals: alerts.inventoryAlerts.reversals.length,
         staleReservations: alerts.inventoryAlerts.staleReservations.length,
         totalReservedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.reservedAmount)),
-        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) =>
-          String(toNumber(item.balance.consumedAmount) + toNumber(item.balance.openingConsumedAmount))
-        )),
+        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.totalConsumedAmount)),
+        totalOpeningConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.openingConsumedAmount)),
+        totalSagepConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.consumedAmount)),
         totalAvailableAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.availableAmount)),
       },
       criticalItems,
@@ -650,9 +650,7 @@ export class DashboardService {
     const lowStockItems = ataItems.filter((item) => item.balance.lowStock);
     const insufficientItems = ataItems.filter((item) => item.balance.insufficient);
     const reservedItems = ataItems.filter((item) => toNumber(item.balance.reservedQuantity) > 0);
-    const consumedItems = ataItems.filter((item) =>
-      toNumber(item.balance.consumedQuantity) + toNumber(item.balance.openingConsumedQuantity) > 0
-    );
+    const consumedItems = ataItems.filter((item) => toNumber(item.balance.totalConsumedQuantity) > 0);
     const reversalMovements = scopedMovements.filter(
       (movement) => movement.movementType === "REVERSE_CONSUME",
     );
@@ -690,9 +688,9 @@ export class DashboardService {
         itemsWithActiveReserve: reservedItems.length,
         itemsWithActiveConsumption: consumedItems.length,
         totalReservedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.reservedAmount)),
-        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) =>
-          String(toNumber(item.balance.consumedAmount) + toNumber(item.balance.openingConsumedAmount))
-        )),
+        totalConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.totalConsumedAmount)),
+        totalOpeningConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.openingConsumedAmount)),
+        totalSagepConsumedAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.consumedAmount)),
         totalAvailableAmount: formatAmount(sumBalanceField(ataItems, (item) => item.balance.availableAmount)),
       },
       periodActivity: movementSummary,
@@ -1695,6 +1693,8 @@ export class DashboardService {
         totalWithServiceOrder: formatAmount(totalWithServiceOrder),
         inventoryCurrentReservedAmount: inventory.snapshot.totalReservedAmount,
         inventoryCurrentConsumedAmount: inventory.snapshot.totalConsumedAmount,
+        inventoryCurrentOpeningConsumedAmount: inventory.snapshot.totalOpeningConsumedAmount,
+        inventoryCurrentSagepConsumedAmount: inventory.snapshot.totalSagepConsumedAmount,
         inventoryCurrentAvailableAmount: inventory.snapshot.totalAvailableAmount,
         inventoryReversedAmountInPeriod: inventory.periodActivity.totalReversedAmount,
         byEstimateStatus: aggregateAmounts(

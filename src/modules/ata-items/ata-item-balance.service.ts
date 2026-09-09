@@ -28,11 +28,13 @@ type BalanceSummary = {
   reservedQuantity: string;
   consumedQuantity: string;
   openingConsumedQuantity: string;
+  totalConsumedQuantity: string;
   availableQuantity: string;
   initialAmount: string;
   reservedAmount: string;
   consumedAmount: string;
   openingConsumedAmount: string;
+  totalConsumedAmount: string;
   availableAmount: string;
   lowStock: boolean;
   insufficient: boolean;
@@ -126,6 +128,8 @@ export class AtaItemBalanceService {
     const reservedAmount = item.unitPrice.mul(reservedQuantity).toDecimalPlaces(2);
     const consumedAmount = item.unitPrice.mul(consumedQuantity).toDecimalPlaces(2);
     const openingConsumedAmount = item.unitPrice.mul(openingConsumedQuantity).toDecimalPlaces(2);
+    const totalConsumedQuantity = consumedQuantity.add(openingConsumedQuantity).toDecimalPlaces(5);
+    const totalConsumedAmount = consumedAmount.add(openingConsumedAmount).toDecimalPlaces(2);
     const availableAmount = item.unitPrice.mul(availableQuantity).toDecimalPlaces(2);
     const insufficient = availableQuantity.lessThanOrEqualTo(0);
     const lowStock = availableQuantity.greaterThan(0) && availableQuantity.lessThanOrEqualTo(1);
@@ -135,11 +139,13 @@ export class AtaItemBalanceService {
       reservedQuantity: reservedQuantity.toString(),
       consumedQuantity: consumedQuantity.toString(),
       openingConsumedQuantity: openingConsumedQuantity.toString(),
+      totalConsumedQuantity: totalConsumedQuantity.toString(),
       availableQuantity: availableQuantity.toString(),
       initialAmount: initialAmount.toString(),
       reservedAmount: reservedAmount.toString(),
       consumedAmount: consumedAmount.toString(),
       openingConsumedAmount: openingConsumedAmount.toString(),
+      totalConsumedAmount: totalConsumedAmount.toString(),
       availableAmount: availableAmount.toString(),
       lowStock,
       insufficient,
