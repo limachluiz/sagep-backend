@@ -9,6 +9,12 @@ const controller = new ReportsController();
 reportsRoutes.use(authMiddleware);
 
 reportsRoutes.get(
+  "/atas/balance-position.pdf",
+  requirePermission("reports.export"),
+  (req, res) => controller.ataBalancePositionPdf(req, res),
+);
+
+reportsRoutes.get(
   "/projects/executive-summary",
   requirePermission("reports.export"),
   requirePermission("dashboard.view_executive"),

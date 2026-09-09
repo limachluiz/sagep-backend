@@ -4,11 +4,31 @@ import { dashboardExecutiveQuerySchema } from "../dashboard/dashboard.schemas.js
 import { projectIdParamSchema } from "../projects/projects.schemas.js";
 import { ReportsService } from "./reports.service.js";
 import { DeliveryReportService } from "./delivery-report.service.js";
+import { ataBalanceReportService } from "./ata-balance-report.service.js";
 
 const reportsService = new ReportsService();
 const deliveryReportService = new DeliveryReportService();
 
 export class ReportsController {
+  async ataBalancePositionPdf(req: Request, res: Response) {
+    const filters = {
+      ataType: z.enum(["CFTV", "FIBRA_OPTICA"]).optional().parse(req.query.ataType),
+      status: z
+        .enum(["ALL", "ACTIVE", "EXPIRED", "INACTIVE"])
+        .default("ALL")
+        .parse(req.query.status),
+    };
+    const pdf = await ataBalanceReportService.generatePdf(filters, req.user!);
+    const date = new Date().toISOString().slice(0, 10);
+
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      `inline; filename="relatorio-posicao-atas-saldos-${date}.pdf"`,
+    );
+    return res.status(200).send(pdf);
+  }
+
   async deliveryReportPdf(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
     const result = await deliveryReportService.generate(id, req.user!);

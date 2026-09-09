@@ -15152,6 +15152,83 @@
         "operationId": "exports_get_projectsXlsx"
       }
     },
+    "/reports/atas/balance-position.pdf": {
+      "get": {
+        "tags": [
+          "Relatorios"
+        ],
+        "summary": "Gera a posicao consolidada das ATAs e seus saldos",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ataType",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "CFTV",
+                "FIBRA_OPTICA"
+              ]
+            },
+            "description": "Filtra pela natureza da ATA"
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ALL",
+                "ACTIVE",
+                "EXPIRED",
+                "INACTIVE"
+              ],
+              "default": "ALL"
+            },
+            "description": "Filtra pela situacao da ATA"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Relatorio PDF de posicao das ATAs e saldos",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "reports.export"
+        ],
+        "operationId": "relatorios_get_reports_atas_balancePositionPdf"
+      }
+    },
     "/reports/projects/executive-summary": {
       "get": {
         "tags": [

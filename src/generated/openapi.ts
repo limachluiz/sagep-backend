@@ -1838,6 +1838,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/atas/balance-position.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gera a posicao consolidada das ATAs e seus saldos */
+        get: operations["relatorios_get_reports_atas_balancePositionPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/projects/executive-summary": {
         parameters: {
             query?: never;
@@ -9140,6 +9157,37 @@ export interface operations {
                 };
                 content: {
                     "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    relatorios_get_reports_atas_balancePositionPdf: {
+        parameters: {
+            query?: {
+                /** @description Filtra pela natureza da ATA */
+                ataType?: "CFTV" | "FIBRA_OPTICA";
+                /** @description Filtra pela situacao da ATA */
+                status?: "ALL" | "ACTIVE" | "EXPIRED" | "INACTIVE";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatorio PDF de posicao das ATAs e saldos */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
                 };
             };
             400: components["responses"]["BadRequest"];

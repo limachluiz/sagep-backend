@@ -5149,6 +5149,39 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["reports.export"],
       },
     },
+    "/reports/atas/balance-position.pdf": {
+      get: {
+        tags: ["Relatorios"],
+        summary: "Gera a posicao consolidada das ATAs e seus saldos",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            in: "query",
+            name: "ataType",
+            schema: { type: "string", enum: ["CFTV", "FIBRA_OPTICA"] },
+            description: "Filtra pela natureza da ATA",
+          },
+          {
+            in: "query",
+            name: "status",
+            schema: {
+              type: "string",
+              enum: ["ALL", "ACTIVE", "EXPIRED", "INACTIVE"],
+              default: "ALL",
+            },
+            description: "Filtra pela situacao da ATA",
+          },
+        ],
+        responses: {
+          "200": {
+            description: "Relatorio PDF de posicao das ATAs e saldos",
+            content: binaryContent("application/pdf"),
+          },
+          ...defaultErrorResponses,
+        },
+        "x-permissions": ["reports.export"],
+      },
+    },
     "/reports/projects/executive-summary": {
       get: {
         tags: ["reports"],
