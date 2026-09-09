@@ -59,20 +59,22 @@ function stackedBar(entry: Report["charts"]["byType"][number]) {
     ["available", Number(entry.availableAmount)],
   ] as const;
   return `<div class="stack-row">
-    <div class="stack-label"><span>${escapeHtml(entry.label)}</span><strong>${amount(entry.initialAmount)}</strong></div>
-    <div class="stack">${segments.map(([kind, value]) => `<i class="${kind}" style="width:${Math.max((value / total) * 100, value > 0 ? 1 : 0)}%"></i>`).join("")}</div>
-    <small>${entry.itemCount} item(ns) - ${amount(entry.availableAmount)} disponíveis</small>
+    <div class="stack-label"><strong>${escapeHtml(entry.label)}</strong><span>${entry.ataCount} ATA(s)</span></div>
+    <p>Total registrado: <strong>${amount(entry.initialAmount)}</strong></p>
+    <p>Consumo total: <strong>${amount(entry.totalConsumedAmount)}</strong> (${percent(Number(entry.totalConsumedAmount) / total * 100)})</p>
+    <div class="stack">${segments.map(([kind, value]) => `<i class="${kind}" style="width:${Math.max((value / total) * 100, 0)}%"></i>`).join("")}</div>
+    <small>Reservado: ${amount(entry.reservedAmount)} · Disponível: ${amount(entry.availableAmount)}</small>
   </div>`;
 }
 
 function vendorBars(entries: Report["charts"]["byVendor"]) {
   const selected = entries.slice(0, 7);
-  const max = Math.max(...selected.map((item) => Number(item.initialAmount)), 1);
+  const max = Math.max(...selected.map((item) => Number(item.totalConsumedAmount)), 1);
   if (!selected.length) return '<div class="empty">Nenhum fornecedor no recorte.</div>';
   return selected.map((entry) => `<div class="bar-row">
-    <div><span>${escapeHtml(entry.label)}</span><strong>${amount(entry.initialAmount)}</strong></div>
-    <div class="bar-track"><i style="width:${Math.max((Number(entry.initialAmount) / max) * 100, 2)}%"></i></div>
-    <small>${entry.itemCount} item(ns) - saldo ${amount(entry.availableAmount)}</small>
+    <div><span>${escapeHtml(entry.label)}</span><strong>${amount(entry.totalConsumedAmount)}</strong></div>
+    <div class="bar-track"><i style="width:${(Number(entry.totalConsumedAmount) / max) * 100}%"></i></div>
+    <small>${entry.ataCount} ATA(s) · Registrado: ${amount(entry.initialAmount)} · Disponível: ${amount(entry.availableAmount)}</small>
   </div>`).join("");
 }
 
@@ -109,6 +111,7 @@ function ataTable(report: Report) {
       <td class="money"><strong>${amount(entry.availableAmount)}</strong></td>
       <td><span class="pill ${entry.ata.status.toLowerCase()}">${escapeHtml(ataStatus(entry.ata.status))}</span></td>
     </tr>`).join("")}
+    <tr class="totals"><td colspan="3"><strong>TOTAL DO RECORTE</strong></td><td class="number">${report.summary.itemCount}</td><td class="money">${amount(report.summary.initialAmount)}</td><td class="money">${amount(report.summary.totalConsumedAmount)}</td><td class="money">${amount(report.summary.reservedAmount)}</td><td class="money">${amount(report.summary.availableAmount)}</td><td>${report.summary.ataCount} ATAs</td></tr>
   </tbody></table>`;
 }
 
@@ -158,17 +161,20 @@ export function renderAtaBalanceReportHtml(report: Report) {
     .stack-row{margin:8px 0}.stack-label,.bar-row>div:first-child{display:flex;justify-content:space-between;gap:8px;font-size:7px}.stack{display:flex;height:8px;overflow:hidden;border-radius:5px;background:#eef1ea;margin:4px 0}.stack i{height:100%}.stack .opening{background:#9a6b2f}.stack .sagep{background:#4d5f36}.stack .reserved{background:#c5a34b}.stack .available{background:#dfe6d8}.stack-row small,.bar-row small{color:#7b8275;font-size:6.5px}.bar-row{margin:7px 0}.bar-track{height:6px;background:#eef1ea;border-radius:4px;overflow:hidden;margin:3px 0}.bar-track i{display:block;height:100%;background:linear-gradient(90deg,#44542d,#849454);border-radius:4px}
     .governance{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.governance article{border:1px solid #dfe4d9;border-radius:8px;padding:8px}.governance span{display:block;color:#777;font-size:7px}.governance strong{display:block;font-size:12px;margin:3px 0}.progress{height:5px;background:#edf0e9;border-radius:4px;overflow:hidden}.progress i{display:block;height:100%;background:#60713b}
     table{width:100%;border-collapse:collapse;font-size:7px;page-break-inside:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}th{text-align:left;background:#34412d;color:#fff;padding:6px 5px;font-size:6.5px;text-transform:uppercase;letter-spacing:.3px}th:first-child{border-radius:6px 0 0 0}th:last-child{border-radius:0 6px 0 0}td{padding:5px;border-bottom:1px solid #e5e9e1;vertical-align:top}tbody tr:nth-child(even){background:#f8faf6}td strong{display:block}td small{display:block;color:#747c70;margin-top:2px;line-height:1.25}.money,.number{text-align:right;white-space:nowrap}.description{max-width:250px;line-height:1.3}.detail-table{font-size:6.4px}.detail-table td{padding:4.5px}.pill{display:inline-block;margin-top:3px;padding:2px 5px;border-radius:999px;background:#e8ede3;color:#4f6137;font-size:6px;font-weight:700;white-space:nowrap}.pill.low{background:#fff0cf;color:#8a5c08}.pill.exhausted{background:#f9dcda;color:#a13a34}.pill.inactive,.pill.expired{background:#ececeb;color:#676760}.pill.upcoming{background:#e5edf7;color:#45617e}.all-clear,.empty{border:1px dashed #bdc8b4;border-radius:9px;padding:18px;text-align:center;background:#f7faf5;color:#596651}.muted{color:#888}.page-break{break-before:page}.method{margin-top:10px;border-left:3px solid #75834c;background:#f4f7f1;padding:8px 10px;color:#5e6758;line-height:1.45;font-size:7px}.signature{margin-top:9px;display:flex;justify-content:space-between;color:#777;font-size:6.5px}
+    .panels{grid-template-columns:1fr 1fr}.panel:last-child{grid-column:1/-1;min-height:0;columns:2;column-gap:24px}.panel:last-child h3{column-span:all}.bar-row{break-inside:avoid;margin:10px 0}.bar-row>div:first-child strong{white-space:nowrap}.stack-row{margin:12px 0 18px}.stack-row p{margin:5px 0;font-size:9px}.stack-label{font-size:9px}.totals td{background:#e5ecde;font-weight:bold;border-top:2px solid #60713b}.panel{min-height:145px}
   </style></head><body>
     <header class="hero"><div class="brand"><img class="logo" src="${report.branding.ctaLogo}" alt="4º CTA"><div><span class="eyebrow">4º Centro de Telemática de Área - Divisão Técnica</span><h1>Posição das ATAs e Saldos</h1><p>Visão executiva do estoque contratual, consumo histórico, reservas e disponibilidade operacional</p></div></div><div class="meta"><strong>${escapeHtml(scope)}</strong><span>${escapeHtml(status)}</span><br><span>Emitido em ${date(report.generatedAt, true)}</span><br><span>Responsável: ${escapeHtml(report.generatedBy)}</span></div></header>
     <section class="metrics">
-      ${metric("Valor inicial", amount(report.summary.initialAmount), `${report.summary.ataCount} ATA(s) e ${report.summary.itemCount} item(ns)`)}
-      ${metric("Consumo histórico", amount(report.summary.openingConsumedAmount), `${report.summary.openingAppliedItemCount} item(ns) conciliados`, "gold")}
+      ${metric("Total registrado nas ATAs", amount(report.summary.initialAmount), `${report.summary.ataCount} ATA(s) e ${report.summary.itemCount} item(ns)`)}
+      ${metric("Consumo total", amount(report.summary.totalConsumedAmount), "Histórico de implantação + consumo SAGEP", "gold")}
       ${metric("Consumo SAGEP", amount(report.summary.sagepConsumedAmount), "Notas de Empenho registradas")}
       ${metric("Valor reservado", amount(report.summary.reservedAmount), "DIEx aguardando consumo", "gold")}
       ${metric("Saldo disponível", amount(report.summary.availableAmount), percent(report.summary.availablePercent))}
       ${metric("Itens críticos", report.summary.lowStockItemCount + report.summary.exhaustedItemCount, `${report.summary.exhaustedItemCount} esgotado(s)`, report.summary.exhaustedItemCount ? "critical" : "")}
     </section>
-    <section class="section"><div class="section-head"><div><span>PAINEL EXECUTIVO</span><h2>Composição e distribuição do saldo</h2></div><p>Valores calculados no momento da emissão a partir da base operacional do SAGEP.</p></div><div class="panels"><div class="panel"><h3>Composição financeira consolidada</h3>${compositionChart(report)}</div><div class="panel"><h3>Posição por natureza da solução</h3>${report.charts.byType.map(stackedBar).join("") || '<div class="empty">Sem dados.</div>'}</div><div class="panel"><h3>Maiores fornecedores por valor registrado</h3>${vendorBars(report.charts.byVendor)}</div></div></section>
+    <section class="section"><div class="section-head"><div><span>PAINEL EXECUTIVO</span><h2>Composição e distribuição do saldo</h2></div><p>Valores calculados no momento da emissão a partir da base operacional do SAGEP.</p></div><div class="panels"><div class="panel"><h3>Composição financeira consolidada</h3>${compositionChart(report)}</div><div class="panel"><h3>Total e consumo por natureza</h3>${report.charts.byType.map(stackedBar).join("") || '<div class="empty">Sem dados.</div>'}</div><div class="panel"><h3>Consumo das ATAs por fornecedor</h3>${vendorBars(report.charts.byVendor)}</div></div></section>
+    <div class="method"><strong>Como ler os valores.</strong> Total registrado = soma dos itens cadastrados (quantidade inicial × preço unitário), não o valor global do pregão. Consumo total = histórico aplicado + consumo por NE no SAGEP; reservas não são consumo. Valores por fornecedor não representam pagamentos ou serviços já entregues. Cores: marrom = histórico, verde escuro = SAGEP, dourado = reservas, verde claro = disponível.</div>
+    ${report.summary.openingAppliedItemCount < report.summary.itemCount ? `<div class="method"><strong>Conciliação incompleta:</strong> ${report.summary.itemCount - report.summary.openingAppliedItemCount} item(ns) sem saldo de abertura aplicado. O consumo histórico pode estar subestimado e o disponível superestimado; ausência de conciliação não significa ausência de consumo.</div>` : ""}
     <section class="section"><div class="section-head"><div><span>GOVERNANÇA DOS DADOS</span><h2>Cobertura da conciliação oficial</h2></div><p>Último snapshot oficial: ${date(report.summary.lastSnapshotAt, true)}</p></div><div class="governance">
       <article><span>ATAs vigentes</span><strong>${report.summary.activeAtaCount} de ${report.summary.ataCount}</strong><div class="progress"><i style="width:${report.summary.ataCount ? (report.summary.activeAtaCount / report.summary.ataCount) * 100 : 0}%"></i></div></article>
       <article><span>Itens ativos</span><strong>${report.summary.activeItemCount} de ${report.summary.itemCount}</strong><div class="progress"><i style="width:${report.summary.itemCount ? (report.summary.activeItemCount / report.summary.itemCount) * 100 : 0}%"></i></div></article>

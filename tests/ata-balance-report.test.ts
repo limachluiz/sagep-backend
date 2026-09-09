@@ -57,6 +57,22 @@ function sourceItem(overrides: Partial<AtaBalanceReportSourceItem> = {}): AtaBal
 }
 
 describe("ATA balance position report", () => {
+  it("groups supplier ATAs by CNPJ and ranks consumption rather than registered value", () => {
+    const first = sourceItem();
+    const second = sourceItem({ id: "item-2", ata: { ...first.ata, id: "ata-2", vendorName: "Nome alternativo" } });
+    const third = sourceItem({ id: "item-3", ata: { ...first.ata, id: "ata-3", vendorCnpj: "11111111000111" }, balance: { ...first.balance, initialAmount: "10000", openingConsumedAmount: "0", consumedAmount: "0", totalConsumedAmount: "0", reservedAmount: "0", availableAmount: "10000" } });
+    const report = buildAtaBalanceReportData([first, second, third], { status: "ALL" }, "Teste");
+    expect(report.charts.byVendor).toHaveLength(2);
+    expect(report.charts.byVendor[0]).toMatchObject({ ataCount: 2, totalConsumedAmount: "600.00" });
+    for (const groups of [report.atas, report.charts.byVendor, report.charts.byType]) {
+      for (const field of ["initialAmount", "totalConsumedAmount", "reservedAmount", "availableAmount"] as const) {
+        expect(groups.reduce((sum, group) => sum + Number(group[field]), 0).toFixed(2)).toBe(report.summary[field]);
+      }
+    }
+    const html = renderAtaBalanceReportHtml({ ...report, branding: { ctaLogo: "" } });
+    expect(html).toContain("Consumo das ATAs por fornecedor");
+    expect(html).toContain("TOTAL DO RECORTE");
+  });
   it("consolidates the persisted opening balance with SAGEP consumption and reservations", () => {
     const report = buildAtaBalanceReportData(
       [sourceItem()],

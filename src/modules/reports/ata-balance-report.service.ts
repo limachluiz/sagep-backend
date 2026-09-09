@@ -112,6 +112,8 @@ function groupAmounts<T>(
     key: String(group),
     label: label(group),
     itemCount: values.length,
+    ataCount: new Set(values.map((item) => item.ata.id)).size,
+    totalConsumedAmount: money(values.reduce((sum, item) => sum + number(item.balance.openingConsumedAmount) + number(item.balance.consumedAmount), 0)),
     initialAmount: money(values.reduce((sum, item) => sum + number(item.balance.initialAmount), 0)),
     openingConsumedAmount: money(values.reduce((sum, item) => sum + number(item.balance.openingConsumedAmount), 0)),
     sagepConsumedAmount: money(values.reduce((sum, item) => sum + number(item.balance.consumedAmount), 0)),
@@ -183,8 +185,10 @@ export function buildAtaBalanceReportData(
   })).sort((a, b) => number(b.initialAmount) - number(a.initialAmount));
   const byType = groupAmounts(filteredItems, (item) => item.ata.type, (type) => type === "CFTV" ? "CFTV" : "Fibra óptica / ponto lógico")
     .sort((a, b) => number(b.initialAmount) - number(a.initialAmount));
-  const byVendor = groupAmounts(filteredItems, (item) => item.ata.vendorName, (vendor) => vendor)
-    .sort((a, b) => number(b.initialAmount) - number(a.initialAmount));
+  const vendorKey = (item: ReportItem) => item.ata.vendorCnpj?.replace(/\D/g, "") || item.ata.vendorName.trim().toLocaleUpperCase("pt-BR");
+  const vendorNames = new Map(filteredItems.map((item) => [vendorKey(item), item.ata.vendorName]));
+  const byVendor = groupAmounts(filteredItems, vendorKey, (key) => vendorNames.get(key)!)
+    .sort((a, b) => number(b.totalConsumedAmount) - number(a.totalConsumedAmount) || a.label.localeCompare(b.label));
   const criticalItems = detail.filter((item) => item.status === "EXHAUSTED" || item.status === "LOW")
     .sort((a, b) => number(a.balance.availableAmount) - number(b.balance.availableAmount));
 
