@@ -4071,6 +4071,8 @@ export interface components {
                 itemsApplied?: number;
                 /** @enum {boolean} */
                 operationalBalanceChanged?: true;
+                /** @enum {string} */
+                appliedFrom?: "LIVE_QUERY" | "SAVED_SNAPSHOT";
             };
             import?: {
                 /** Format: date-time */
@@ -4084,6 +4086,11 @@ export interface components {
             reason: string;
             /** @enum {boolean} */
             confirm: true;
+            /**
+             * @default LIVE
+             * @enum {string}
+             */
+            source: "LIVE" | "SAVED_SNAPSHOT";
         };
         /**
          * @description Cria a ATA e toda a estrutura inicial de grupos/localidades em uma unica operacao.

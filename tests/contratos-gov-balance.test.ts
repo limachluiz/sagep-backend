@@ -1,9 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  ContratosGovBalanceService,
   createPublicSession,
   fetchText,
   parseExternalBalanceItem,
   parsePublicDecimal,
+  type ExternalAtaBalance,
 } from "../src/modules/compras-gov/contratos-gov-balance.service.js";
 
 const context = {
@@ -50,7 +52,10 @@ const html = `
   </main>`;
 
 describe("consulta pública de saldo da ATA", () => {
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
 
   it("preserva a precisão das quantidades públicas", () => {
     expect(parsePublicDecimal("3.287,15400")).toBe("3287.15400");
@@ -137,5 +142,43 @@ describe("consulta pública de saldo da ATA", () => {
 
     expect(result).toBe("ok");
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("aplica explicitamente o snapshot salvo sem consultar novamente o portal", async () => {
+    const service = new ContratosGovBalanceService();
+    const snapshot = { retrieval: "SNAPSHOT_FALLBACK" } as ExternalAtaBalance;
+    const internals = service as unknown as {
+      loadStoredBalance: (ataId: string) => Promise<ExternalAtaBalance | null>;
+      queryAtaBalance: (ataId: string, itemId?: string, forceRefresh?: boolean) => Promise<ExternalAtaBalance>;
+      applyOpeningBalance: (result: ExternalAtaBalance, actor: { id: string }, reason: string) => Promise<unknown>;
+    };
+    const loadStoredBalance = vi.spyOn(internals, "loadStoredBalance").mockResolvedValue(snapshot);
+    const queryAtaBalance = vi.spyOn(internals, "queryAtaBalance");
+    const applyOpeningBalance = vi.spyOn(internals, "applyOpeningBalance").mockResolvedValue({ applied: true });
+
+    await service.applyAtaOpeningBalance("ata-1", { id: "admin-1" }, "Carga inicial da implantação", "SAVED_SNAPSHOT");
+
+    expect(loadStoredBalance).toHaveBeenCalledWith("ata-1");
+    expect(queryAtaBalance).not.toHaveBeenCalled();
+    expect(applyOpeningBalance).toHaveBeenCalledWith(snapshot, { id: "admin-1" }, "Carga inicial da implantação");
+  });
+
+  it("mantém a consulta ao vivo como origem padrão do saldo de abertura", async () => {
+    const service = new ContratosGovBalanceService();
+    const live = { retrieval: "LIVE" } as ExternalAtaBalance;
+    const internals = service as unknown as {
+      loadStoredBalance: (ataId: string) => Promise<ExternalAtaBalance | null>;
+      queryAtaBalance: (ataId: string, itemId?: string, forceRefresh?: boolean) => Promise<ExternalAtaBalance>;
+      applyOpeningBalance: (result: ExternalAtaBalance, actor: { id: string }, reason: string) => Promise<unknown>;
+    };
+    const loadStoredBalance = vi.spyOn(internals, "loadStoredBalance");
+    const queryAtaBalance = vi.spyOn(internals, "queryAtaBalance").mockResolvedValue(live);
+    const applyOpeningBalance = vi.spyOn(internals, "applyOpeningBalance").mockResolvedValue({ applied: true });
+
+    await service.applyAtaOpeningBalance("ata-1", { id: "admin-1" }, "Carga inicial da implantação");
+
+    expect(queryAtaBalance).toHaveBeenCalledWith("ata-1", undefined, true);
+    expect(loadStoredBalance).not.toHaveBeenCalled();
+    expect(applyOpeningBalance).toHaveBeenCalledWith(live, { id: "admin-1" }, "Carga inicial da implantação");
   });
 });

@@ -4864,6 +4864,13 @@
                 "enum": [
                   true
                 ]
+              },
+              "appliedFrom": {
+                "type": "string",
+                "enum": [
+                  "LIVE_QUERY",
+                  "SAVED_SNAPSHOT"
+                ]
               }
             }
           },
@@ -4905,6 +4912,14 @@
             "enum": [
               true
             ]
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "LIVE",
+              "SAVED_SNAPSHOT"
+            ],
+            "default": "LIVE"
           }
         }
       },

@@ -91,6 +91,7 @@ let publicSession: PublicSession | null = null;
 let publicSessionPromise: Promise<PublicSession> | null = null;
 
 type BalanceActor = { id: string; name?: string | null; email?: string | null };
+type OpeningBalanceSource = "LIVE" | "SAVED_SNAPSHOT";
 
 function clean(value: string) {
   return value.replace(/\s+/g, " ").trim();
@@ -690,7 +691,7 @@ export class ContratosGovBalanceService {
       return { item, official, historicalConsumed };
     });
 
-    await this.importBalance(result, actor);
+    if (result.retrieval === "LIVE") await this.importBalance(result, actor);
     await prisma.$transaction(applications.map(({ item, historicalConsumed }) => prisma.ataItem.update({
       where: { id: item.id },
       data: {
@@ -713,7 +714,13 @@ export class ContratosGovBalanceService {
         operationalAvailableQuantity: official.managerAvailableQuantity,
         checkedAt: result.checkedAt,
       },
-      metadata: { reason, sourceUrl: official.detailUrl, implantationCutoffAt: settings.implantationCutoffAt },
+      metadata: {
+        reason,
+        sourceUrl: official.detailUrl,
+        implantationCutoffAt: settings.implantationCutoffAt,
+        appliedFrom: result.retrieval === "LIVE" ? "LIVE_QUERY" : "SAVED_SNAPSHOT",
+        snapshotCheckedAt: result.checkedAt,
+      },
     })));
 
     return {
@@ -722,18 +729,39 @@ export class ContratosGovBalanceService {
         appliedAt: appliedAt.toISOString(),
         itemsApplied: applications.length,
         operationalBalanceChanged: true,
+        appliedFrom: result.retrieval === "LIVE" ? "LIVE_QUERY" : "SAVED_SNAPSHOT",
       },
     };
   }
 
-  async applyAtaOpeningBalance(ataId: string, actor: BalanceActor, reason: string) {
-    return this.applyOpeningBalance(await this.queryAtaBalance(ataId, undefined, true), actor, reason);
+  async applyAtaOpeningBalance(ataId: string, actor: BalanceActor, reason: string, source: OpeningBalanceSource = "LIVE") {
+    const result = source === "SAVED_SNAPSHOT"
+      ? await this.loadStoredBalance(ataId)
+      : await this.queryAtaBalance(ataId, undefined, true);
+    if (!result) {
+      throw new AppError(
+        "Nenhum snapshot de saldo foi salvo para esta ATA.",
+        409,
+        "OPENING_BALANCE_SNAPSHOT_REQUIRED",
+      );
+    }
+    return this.applyOpeningBalance(result, actor, reason);
   }
 
-  async applyItemOpeningBalance(itemId: string, actor: BalanceActor, reason: string) {
+  async applyItemOpeningBalance(itemId: string, actor: BalanceActor, reason: string, source: OpeningBalanceSource = "LIVE") {
     const item = await prisma.ataItem.findUnique({ where: { id: itemId }, select: { ataId: true, deletedAt: true } });
     if (!item || item.deletedAt) throw new AppError("Item da ata não encontrado", 404);
-    return this.applyOpeningBalance(await this.queryAtaBalance(item.ataId, itemId, true), actor, reason);
+    const result = source === "SAVED_SNAPSHOT"
+      ? await this.loadStoredBalance(item.ataId, itemId)
+      : await this.queryAtaBalance(item.ataId, itemId, true);
+    if (!result) {
+      throw new AppError(
+        "Nenhum snapshot de saldo foi salvo para este item.",
+        409,
+        "OPENING_BALANCE_SNAPSHOT_REQUIRED",
+      );
+    }
+    return this.applyOpeningBalance(result, actor, reason);
   }
 }
 

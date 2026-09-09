@@ -114,4 +114,5 @@ export const ataCodeParamSchema = z.object({
 export const applyOpeningBalanceSchema = z.object({
   reason: z.string().trim().min(10, "Informe uma justificativa com pelo menos 10 caracteres").max(500),
   confirm: z.literal(true),
+  source: z.enum(["LIVE", "SAVED_SNAPSHOT"]).default("LIVE"),
 });

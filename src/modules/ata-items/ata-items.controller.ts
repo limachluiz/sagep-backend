@@ -27,8 +27,8 @@ export class AtaItemsController {
 
   async applyOpeningBalance(req: Request, res: Response) {
     const { id } = ataItemIdParamSchema.parse(req.params);
-    const { reason } = applyOpeningBalanceSchema.parse(req.body);
-    return res.status(200).json(await contratosGovBalanceService.applyItemOpeningBalance(id, req.user!, reason));
+    const { reason, source } = applyOpeningBalanceSchema.parse(req.body);
+    return res.status(200).json(await contratosGovBalanceService.applyItemOpeningBalance(id, req.user!, reason, source));
   }
 
   async create(req: Request, res: Response) {

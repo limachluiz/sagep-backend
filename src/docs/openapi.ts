@@ -2477,6 +2477,7 @@ export const openApiDocument: OpenApiDocument = {
               appliedAt: { type: "string", format: "date-time" },
               itemsApplied: { type: "integer" },
               operationalBalanceChanged: { type: "boolean", enum: [true] },
+              appliedFrom: { type: "string", enum: ["LIVE_QUERY", "SAVED_SNAPSHOT"] },
             },
           },
           import: {
@@ -2496,6 +2497,7 @@ export const openApiDocument: OpenApiDocument = {
         properties: {
           reason: { type: "string", minLength: 10, maxLength: 500 },
           confirm: { type: "boolean", enum: [true] },
+          source: { type: "string", enum: ["LIVE", "SAVED_SNAPSHOT"], default: "LIVE" },
         },
       },
       AtaCreateRequest: {
