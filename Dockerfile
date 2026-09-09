@@ -86,11 +86,15 @@ COPY --from=build /app/dist ./dist
 COPY --from=build /app/src/assets ./src/assets
 COPY --from=build /app/src/generated ./src/generated
 
-RUN mkdir -p /app/backups /app/evidence-files /app/bootstrap \
-  && chown -R sagep:sagep /app /home/sagep \
+RUN install -d -o sagep -g sagep -m 0700 \
+    /app/backups \
+    /app/evidence-files \
+    /app/bootstrap \
+    /app/pki \
+    /app/tls \
+  && chown -R sagep:sagep /app/node_modules/@prisma/engines \
   && test -x /usr/bin/chromium \
-  && chromium --version \
-  && node --input-type=module -e 'import fs from "node:fs"; import puppeteer from "puppeteer"; const executable = await puppeteer.executablePath(); fs.accessSync(executable, fs.constants.X_OK); console.log(`Chromium disponível em ${executable}`);'
+  && chromium --version
 
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
