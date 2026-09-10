@@ -85,6 +85,25 @@ describe("status macro do workflow", () => {
     });
   });
 
+  it("permite excluir projeto sem execução iniciada e bloqueia após o início", () => {
+    expect(() => service.assertCanDeleteProject({
+      id: "project-1",
+      stage: "AGUARDANDO_INICIO_EXECUCAO",
+      signedServiceOrderReceivedAt: new Date("2026-09-01"),
+    })).not.toThrow();
+
+    expect(() => service.assertCanDeleteProject({
+      id: "project-1",
+      stage: "CANCELADO",
+    })).not.toThrow();
+
+    expect(() => service.assertCanDeleteProject({
+      id: "project-1",
+      stage: "SERVICO_EM_EXECUCAO",
+      executionStartedAt: new Date("2026-09-02"),
+    })).toThrow("execução já foi iniciada");
+  });
+
   it("bloqueia o início até o recebimento da OS assinada nas OS novas", () => {
     const snapshot = {
       id: "project-1",

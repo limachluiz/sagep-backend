@@ -1670,8 +1670,8 @@ export class EstimatesService {
 
     const before = await this.ensureCanManage(estimateId, user, true);
 
-    if (!before.archivedAt) {
-      throw new AppError("A estimativa precisa estar arquivada antes da exclusão", 409);
+    if (!before.archivedAt && before.status !== "CANCELADA") {
+      throw new AppError("Somente estimativas canceladas ou arquivadas podem ser excluídas", 409);
     }
 
     const deletedAt = new Date();
@@ -1713,6 +1713,7 @@ export class EstimatesService {
       metadata: {
         permissionUsed: "estimates.delete",
         softDelete: true,
+        invalidatedDocuments: true,
         dependents: deleted.dependents,
       },
     });

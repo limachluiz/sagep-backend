@@ -3342,7 +3342,7 @@ export class ProjectsService {
     }
 
     const projectAccess = await this.ensureCanManage(projectId, user, true);
-    workflowService.assertCanArchiveProject(this.buildWorkflowSnapshot(projectAccess));
+    workflowService.assertCanDeleteProject(this.buildWorkflowSnapshot(projectAccess));
 
     const before = await prisma.project.findUnique({
       where: { id: projectId },
@@ -3363,10 +3363,6 @@ export class ProjectsService {
 
     if (!before || before.deletedAt) {
       throw new AppError("Projeto não encontrado", 404);
-    }
-
-    if (!before.archivedAt) {
-      throw new AppError("O projeto precisa estar arquivado antes da exclusão", 409);
     }
 
     const deletedAt = new Date();
@@ -3430,6 +3426,7 @@ export class ProjectsService {
       metadata: {
         permissionUsed: "projects.delete",
         softDelete: true,
+        invalidatedDocuments: true,
         dependents: deleted.dependents,
       },
     });

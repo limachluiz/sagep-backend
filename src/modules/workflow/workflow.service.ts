@@ -172,6 +172,18 @@ export class WorkflowService {
     }
   }
 
+  assertCanDeleteProject(project: WorkflowProjectSnapshot) {
+    if (project.executionStartedAt || (
+      !this.isStageBefore(project.stage, "SERVICO_EM_EXECUCAO") &&
+      project.stage !== "CANCELADO"
+    )) {
+      throw new AppError(
+        "Não é possível excluir um projeto cuja execução já foi iniciada",
+        409,
+      );
+    }
+  }
+
   validateStageRequirements(
     stage: ProjectStageValue,
     snapshot: WorkflowProjectSnapshot,
