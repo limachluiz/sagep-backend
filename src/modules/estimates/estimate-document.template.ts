@@ -84,12 +84,19 @@ function formatQuantity(value: string | number) {
 }
 
 function getProjectTypeLabel(ataType: string) {
-  return ataType === "CFTV" ? "Projeto CFTV" : "Projeto Fibra Óptica";
+  return ataType === "CFTV" ? "Projeto CFTV" : "Projeto FO + Ponto Lógico";
+}
+
+function getProjectDescription(ataType: string) {
+  return ataType === "CFTV"
+    ? "Implantação, modernização ou ampliação da solução de Circuito Fechado de Televisão (CFTV)"
+    : "Implantação, modernização ou ampliação da infraestrutura de redes (Fibra óptica ou Pontos lógicos)";
 }
 
 export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
   const omDisplay = data.om?.sigla || data.omName || "-";
   const headerTitle = `${getProjectTypeLabel(data.ata.type)}: ${data.project.title}`;
+  const projectDescription = getProjectDescription(data.ata.type);
 
   const rows = data.items
     .map((item, index) => {
@@ -105,7 +112,7 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
         return `
           <tr>
             <td class="project-description" rowspan="${data.items.length}">
-              ${escapeHtml(data.project.title)}
+              ${escapeHtml(projectDescription)}
             </td>
             <td class="om" rowspan="${data.items.length}">
               ${escapeHtml(omDisplay)}
@@ -343,7 +350,7 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
         <td><strong>${escapeHtml(headerTitle)}</strong></td>
       </tr>
       <tr>
-        <td class="muted">${escapeHtml(data.project.description || data.project.title)}</td>
+        <td class="muted">${escapeHtml(projectDescription)}</td>
       </tr>
     </table>
   </div>

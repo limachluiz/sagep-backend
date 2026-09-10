@@ -59,7 +59,7 @@ describe("renderEstimateDocumentHtml", () => {
     expect(html).not.toContain("<strong>Projeto:</strong> Projeto");
   });
 
-  it("exibe no campo central o título informado na criação do projeto", () => {
+  it("exibe o título no cabeçalho e a descrição técnica sem repetir o nome do projeto", () => {
     const html = renderEstimateDocumentHtml({
       ...input,
       project: {
@@ -70,10 +70,16 @@ describe("renderEstimateDocumentHtml", () => {
     });
     const projectCell = html.match(/<td class="project-description"[^>]*>([\s\S]*?)<\/td>/)?.[1] ?? "";
 
-    expect(projectCell).toContain("Modernização do CFTV da CRO/12");
-    expect(projectCell).not.toContain("Projeto de Circuito Fechado de Televisão");
+    expect(projectCell).toContain("Implantação, modernização ou ampliação da solução de Circuito Fechado de Televisão (CFTV)");
+    expect(projectCell).not.toContain("Modernização do CFTV da CRO/12");
     expect(projectCell).not.toContain("Descrição complementar");
     expect(html).toContain("Projeto CFTV: Modernização do CFTV da CRO/12");
     expect(html).not.toContain("Projeto CFTV: CRO/12");
+  });
+
+  it("usa uma descrição de redes que admite fibra óptica ou pontos lógicos separadamente", () => {
+    const html = renderEstimateDocumentHtml({ ...input, ata: { ...input.ata, type: "FO_PONTO_LOGICO" } });
+    expect(html).toContain("Projeto FO + Ponto Lógico: CRO 12");
+    expect(html).toContain("Implantação, modernização ou ampliação da infraestrutura de redes (Fibra óptica ou Pontos lógicos)");
   });
 });
