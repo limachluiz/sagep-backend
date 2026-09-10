@@ -150,7 +150,25 @@ async function fetchPortalJson(url: string, token: string, notFoundMessage: stri
   if (response.status === 404) throw new AppError(notFoundMessage, 404, "PORTAL_TRANSPARENCIA_NOT_FOUND", { url });
   if (response.status === 429) throw new AppError("Limite de consultas do Portal da Transparência atingido", 429, "PORTAL_TRANSPARENCIA_RATE_LIMIT");
   if (!response.ok) throw new AppError("Falha ao consultar o Portal da Transparência", 502, "PORTAL_TRANSPARENCIA_ERROR", { status: response.status, url });
-  return response.json() as Promise<unknown>;
+  const body = await response.text();
+  if (!body.trim()) {
+    throw new AppError(notFoundMessage, 404, "PORTAL_TRANSPARENCIA_NOT_FOUND", { url });
+  }
+  let payload: unknown;
+  try {
+    payload = JSON.parse(body);
+  } catch {
+    throw new AppError(
+      "O Portal da Transparência retornou uma resposta inválida",
+      502,
+      "PORTAL_TRANSPARENCIA_INVALID_RESPONSE",
+      { url },
+    );
+  }
+  if (Array.isArray(payload) && payload.length === 0) {
+    throw new AppError(notFoundMessage, 404, "PORTAL_TRANSPARENCIA_NOT_FOUND", { url });
+  }
+  return payload;
 }
 
 function parseDocument(record: JsonRecord, fallbackCode: string): ParsedFinancialDocument {

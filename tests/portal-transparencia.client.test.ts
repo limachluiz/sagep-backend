@@ -51,6 +51,27 @@ describe("PortalTransparenciaClient", () => {
       .toBe("160016000012026NE000534");
   });
 
+  it("trata resposta vazia como Nota de Empenho não localizada", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("", { status: 200 })));
+
+    await expect(portalTransparenciaClient.fetchCommitmentNote("160016", "00001", "2026NE001243"))
+      .rejects.toMatchObject({
+        message: "Nota de Empenho não localizada no Portal da Transparência",
+        statusCode: 404,
+        code: "PORTAL_TRANSPARENCIA_NOT_FOUND",
+      });
+  });
+
+  it("trata lista vazia como Nota de Empenho não localizada", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("[]", {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    })));
+
+    await expect(portalTransparenciaClient.fetchCommitmentNote("160016", "00001", "2026NE001243"))
+      .rejects.toMatchObject({ statusCode: 404, code: "PORTAL_TRANSPARENCIA_NOT_FOUND" });
+  });
+
   it("interpreta empenho, liquidação e pagamento retornados pela API pública", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
