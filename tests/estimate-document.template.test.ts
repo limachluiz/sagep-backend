@@ -55,7 +55,7 @@ describe("renderEstimateDocumentHtml", () => {
   it("não repete a palavra Projeto no rodapé", () => {
     const html = renderEstimateDocumentHtml(input);
 
-    expect(html).toContain("<strong>Projeto CFTV: CRO/12</strong>");
+    expect(html).toContain("<strong>Projeto CFTV: CRO 12</strong>");
     expect(html).not.toContain("<strong>Projeto:</strong> Projeto");
   });
 
@@ -73,5 +73,7 @@ describe("renderEstimateDocumentHtml", () => {
     expect(projectCell).toContain("Modernização do CFTV da CRO/12");
     expect(projectCell).not.toContain("Projeto de Circuito Fechado de Televisão");
     expect(projectCell).not.toContain("Descrição complementar");
+    expect(html).toContain("Projeto CFTV: Modernização do CFTV da CRO/12");
+    expect(html).not.toContain("Projeto CFTV: CRO/12");
   });
 });

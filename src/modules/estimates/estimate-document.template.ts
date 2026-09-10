@@ -89,7 +89,7 @@ function getProjectTypeLabel(ataType: string) {
 
 export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
   const omDisplay = data.om?.sigla || data.omName || "-";
-  const headerTitle = `${getProjectTypeLabel(data.ata.type)}: ${omDisplay}`;
+  const headerTitle = `${getProjectTypeLabel(data.ata.type)}: ${data.project.title}`;
 
   const rows = data.items
     .map((item, index) => {
