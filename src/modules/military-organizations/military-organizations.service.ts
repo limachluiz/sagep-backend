@@ -26,6 +26,7 @@ type ListMilitaryOrganizationsFilters = {
   stateUf?: "AM" | "RO" | "RR" | "AC";
   active?: boolean;
   search?: string;
+  archived?: "active" | "archived" | "all";
 };
 
 type MilitaryOrganizationActor = {
@@ -35,6 +36,22 @@ type MilitaryOrganizationActor = {
 };
 
 export class MilitaryOrganizationsService {
+  private where(filters: ListMilitaryOrganizationsFilters): Prisma.MilitaryOrganizationWhereInput {
+    const AND: Prisma.MilitaryOrganizationWhereInput[] = [];
+    if (filters.code) AND.push({ omCode: filters.code });
+    if (filters.sigla) AND.push({ sigla: { contains: filters.sigla, mode: "insensitive" } });
+    if (filters.cityName) AND.push({ cityName: { contains: filters.cityName, mode: "insensitive" } });
+    if (filters.stateUf) AND.push({ stateUf: filters.stateUf });
+    if (filters.active !== undefined) AND.push({ isActive: filters.active });
+    if (filters.archived === "archived") AND.push({ archivedAt: { not: null } });
+    else if (filters.archived !== "all") AND.push({ archivedAt: null });
+    if (filters.search) AND.push({ OR: [
+      { sigla: { contains: filters.search, mode: "insensitive" } },
+      { name: { contains: filters.search, mode: "insensitive" } },
+      { cityName: { contains: filters.search, mode: "insensitive" } },
+    ] });
+    return AND.length ? { AND } : {};
+  }
   async create(data: CreateMilitaryOrganizationInput) {
     const exists = await prisma.militaryOrganization.findFirst({
       where: { sigla: { equals: data.sigla.trim().toUpperCase(), mode: "insensitive" } },
@@ -56,46 +73,42 @@ export class MilitaryOrganizationsService {
   }
 
   async list(filters: ListMilitaryOrganizationsFilters) {
-    const andConditions: Prisma.MilitaryOrganizationWhereInput[] = [];
-
-    if (filters.code) {
-      andConditions.push({ omCode: filters.code });
-    }
-
-    if (filters.sigla) {
-      andConditions.push({
-        sigla: { contains: filters.sigla, mode: "insensitive" },
-      });
-    }
-
-    if (filters.cityName) {
-      andConditions.push({
-        cityName: { contains: filters.cityName, mode: "insensitive" },
-      });
-    }
-
-    if (filters.stateUf) {
-      andConditions.push({ stateUf: filters.stateUf });
-    }
-
-    if (filters.active !== undefined) {
-      andConditions.push({ isActive: filters.active });
-    }
-
-    if (filters.search) {
-      andConditions.push({
-        OR: [
-          { sigla: { contains: filters.search, mode: "insensitive" } },
-          { name: { contains: filters.search, mode: "insensitive" } },
-          { cityName: { contains: filters.search, mode: "insensitive" } },
-        ],
-      });
-    }
-
     return prisma.militaryOrganization.findMany({
-      where: andConditions.length ? { AND: andConditions } : undefined,
+      where: this.where(filters),
       orderBy: [{ stateUf: "asc" }, { cityName: "asc" }, { sigla: "asc" }],
     });
+  }
+
+  async bulkAction(input: { action: "INACTIVATE" | "ARCHIVE" | "DELETE"; ids?: string[]; allMatching: boolean; filters?: ListMilitaryOrganizationsFilters }, actor: MilitaryOrganizationActor) {
+    const targets = await prisma.militaryOrganization.findMany({
+      where: input.allMatching ? this.where(input.filters ?? {}) : { id: { in: input.ids ?? [] } },
+      select: { id: true, omCode: true, sigla: true, name: true, cityName: true, stateUf: true, isActive: true, archivedAt: true, _count: { select: { projects: true, estimates: true } } },
+    });
+    if (!targets.length) throw new AppError("Nenhuma OM encontrada para a operação", 404, "MILITARY_ORGANIZATIONS_BULK_EMPTY");
+    const now = new Date();
+    const succeeded: string[] = [];
+    const failed: Array<{ id: string; sigla: string; reason: string }> = [];
+    await prisma.$transaction(async (tx) => {
+      for (const target of targets) {
+        if (input.action === "DELETE" && (target._count.projects || target._count.estimates)) {
+          failed.push({ id: target.id, sigla: target.sigla, reason: `Possui ${target._count.projects} projeto(s) e ${target._count.estimates} estimativa(s) vinculados` });
+          continue;
+        }
+        const before = { ...target, _count: undefined };
+        if (input.action === "DELETE") await tx.militaryOrganization.delete({ where: { id: target.id } });
+        else await tx.militaryOrganization.update({ where: { id: target.id }, data: input.action === "ARCHIVE" ? { archivedAt: now, isActive: false } : { isActive: false } });
+        const action = input.action === "DELETE" ? "DELETE" : input.action === "ARCHIVE" ? "ARCHIVE" : "STATUS_CHANGE";
+        await tx.auditLog.create({ data: {
+          entityType: "SYSTEM_SETTINGS", entityId: target.id, action,
+          actorUserId: actor.id, actorName: actor.name ?? actor.email,
+          summary: `Organização Militar ${target.sigla} ${input.action === "DELETE" ? "excluída" : input.action === "ARCHIVE" ? "arquivada" : "inativada"} em lote`,
+          beforeJson: before, afterJson: input.action === "DELETE" ? undefined : { ...before, isActive: false, archivedAt: input.action === "ARCHIVE" ? now : target.archivedAt },
+          metadata: { bulkAction: input.action, selectedAllMatching: input.allMatching },
+        } });
+        succeeded.push(target.id);
+      }
+    });
+    return { action: input.action, requested: targets.length, succeeded: succeeded.length, failed: failed.length, succeededIds: succeeded, failures: failed };
   }
 
   async findById(id: string) {

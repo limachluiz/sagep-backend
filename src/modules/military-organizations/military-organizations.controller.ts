@@ -6,6 +6,7 @@ import {
   militaryOrganizationIdParamSchema,
   updateMilitaryOrganizationSchema,
   militaryOrganizationsCsvRequestSchema,
+  bulkMilitaryOrganizationsActionSchema,
 } from "./military-organizations.schemas.js";
 import { MilitaryOrganizationsService } from "./military-organizations.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
@@ -13,6 +14,10 @@ import { buildListResponse } from "../../shared/pagination.js";
 const service = new MilitaryOrganizationsService();
 
 export class MilitaryOrganizationsController {
+  async bulkAction(req: Request, res: Response) {
+    const input = bulkMilitaryOrganizationsActionSchema.parse(req.body);
+    return res.status(200).json(await service.bulkAction(input, req.user!));
+  }
   template(_req: Request, res: Response) {
     res.setHeader("Content-Type", "text/csv; charset=utf-8");
     res.setHeader("Content-Disposition", 'attachment; filename="modelo-importacao-oms.csv"');

@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { requirePermission } from "../../middlewares/permission.middleware.js";
+import { requireStepUp } from "../../middlewares/step-up.middleware.js";
 import { MilitaryOrganizationsController } from "./military-organizations.controller.js";
 
 export const militaryOrganizationsRoutes = Router();
@@ -14,6 +15,13 @@ militaryOrganizationsRoutes.get(
   "/import/template",
   requirePermission("military_organizations.manage"),
   (req, res) => controller.template(req, res),
+);
+
+militaryOrganizationsRoutes.post(
+  "/bulk-action",
+  requirePermission("military_organizations.manage"),
+  requireStepUp,
+  (req, res) => controller.bulkAction(req, res),
 );
 
 militaryOrganizationsRoutes.post(

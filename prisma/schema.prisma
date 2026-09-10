@@ -876,8 +876,11 @@ model MilitaryOrganization {
   estimates Estimate[]
   projects  Project[]
   isActive  Boolean        @default(true)
+  archivedAt DateTime?
   createdAt DateTime       @default(now())
   updatedAt DateTime       @updatedAt
+
+  @@index([archivedAt])
 }
 
 model DiexRequest {

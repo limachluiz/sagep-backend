@@ -2992,6 +2992,7 @@ export const openApiDocument: OpenApiDocument = {
           cityName: { type: "string" },
           stateUf: { type: "string", enum: ["AM", "RO", "RR", "AC"] },
           isActive: { type: "boolean" },
+          archivedAt: { type: "string", format: "date-time", nullable: true },
           createdAt: { type: "string", format: "date-time" },
           updatedAt: { type: "string", format: "date-time" },
         },
@@ -4110,6 +4111,7 @@ export const openApiDocument: OpenApiDocument = {
             enum: ["PENDENTE", "EM_ANDAMENTO", "REVISAO", "CONCLUIDA", "CANCELADA"],
           }),
           queryParameter("search", "Busca textual.", { type: "string" }),
+          queryParameter("archived", "Visibilidade de OMs arquivadas.", { type: "string", enum: ["active", "archived", "all"], default: "active" }),
         ],
         responses: {
           "200": okJson("#/components/schemas/TaskListEnvelope"),
@@ -6087,6 +6089,16 @@ export const openApiDocument: OpenApiDocument = {
         },
         "x-permissions": ["military_organizations.manage"],
       },
+    },
+    "/military-organizations/bulk-action": {
+      post: withStepUp({
+        tags: ["military-organizations"],
+        summary: "Inativar, arquivar ou excluir OMs em lote",
+        security: bearerSecurity,
+        requestBody: { required: true, content: { "application/json": { schema: { type: "object", required: ["action", "allMatching"], properties: { action: { type: "string", enum: ["INACTIVATE", "ARCHIVE", "DELETE"] }, ids: { type: "array", maxItems: 500, items: { type: "string" } }, allMatching: { type: "boolean" }, filters: { type: "object", additionalProperties: true } } } } } },
+        responses: { "200": { description: "Resultado da operação em lote", content: { "application/json": { schema: { type: "object", properties: { action: { type: "string" }, requested: { type: "integer" }, succeeded: { type: "integer" }, failed: { type: "integer" }, succeededIds: { type: "array", items: { type: "string" } }, failures: { type: "array", items: { type: "object", properties: { id: { type: "string" }, sigla: { type: "string" }, reason: { type: "string" } } } } } } } } }, ...defaultErrorResponses },
+        "x-permissions": ["military_organizations.manage"],
+      }),
     },
     "/military-organizations/code/{code}": {
       get: {

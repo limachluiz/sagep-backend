@@ -28,7 +28,15 @@ export const listMilitaryOrganizationsQuerySchema = paginationQuerySchema.extend
   stateUf: ufEnum.optional(),
   active: optionalBoolean,
   search: optionalString,
+  archived: z.enum(["active", "archived", "all"]).default("active"),
 });
+
+export const bulkMilitaryOrganizationsActionSchema = z.object({
+  action: z.enum(["INACTIVATE", "ARCHIVE", "DELETE"]),
+  ids: z.array(z.string().min(1)).min(1).max(500).optional(),
+  allMatching: z.boolean().default(false),
+  filters: listMilitaryOrganizationsQuerySchema.pick({ stateUf: true, cityName: true, active: true, search: true, archived: true }).optional(),
+}).refine((data) => data.allMatching || Boolean(data.ids?.length), { message: "Selecione ao menos uma OM" });
 
 export const militaryOrganizationIdParamSchema = z.object({
   id: z.string().min(1, "Id da OM é obrigatório"),
