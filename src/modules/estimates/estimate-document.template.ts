@@ -87,6 +87,11 @@ function getProjectTypeLabel(ataType: string) {
   return ataType === "CFTV" ? "Projeto CFTV" : "Projeto de Infraestrutura de Redes";
 }
 
+function formatItemNumber(value: string) {
+  const digits = value.match(/\d/g)?.join("") ?? "";
+  return digits ? digits.padStart(2, "0").slice(-2) : value.trim().slice(-2);
+}
+
 function getProjectDescription(ataType: string) {
   return ataType === "CFTV"
     ? "Implantação, modernização ou ampliação da solução de Circuito Fechado de Televisão (CFTV)"
@@ -106,7 +111,7 @@ export function renderEstimateDocumentHtml(data: EstimateDocumentInput) {
         <td class="money">R$ ${formatMoney(item.unitPrice)}</td>
         <td class="money">R$ ${formatMoney(item.subtotal)}</td>
       `;
-      const itemCodeCell = `<td class="item-code">${escapeHtml(item.referenceCode)}</td>`;
+      const itemCodeCell = `<td class="item-code">${escapeHtml(formatItemNumber(item.referenceCode))}</td>`;
 
       if (index === 0) {
         return `

@@ -49,7 +49,8 @@ describe("renderEstimateDocumentHtml", () => {
     expect(row.indexOf('class="pregao"')).toBeLessThan(row.indexOf('class="item-code"'));
     expect(row).toContain("160016");
     expect(row).toContain("04/2025");
-    expect(row).toContain("00001");
+    expect(row).toContain('<td class="item-code">01</td>');
+    expect(row).not.toContain('<td class="item-code">00001</td>');
   });
 
   it("não repete a palavra Projeto no rodapé", () => {
