@@ -84,7 +84,7 @@ function formatQuantity(value: string | number) {
 }
 
 function getProjectTypeLabel(ataType: string) {
-  return ataType === "CFTV" ? "Projeto CFTV" : "Projeto FO + Ponto Lógico";
+  return ataType === "CFTV" ? "Projeto CFTV" : "Projeto de Infraestrutura de Redes";
 }
 
 function getProjectDescription(ataType: string) {

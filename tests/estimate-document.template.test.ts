@@ -79,7 +79,8 @@ describe("renderEstimateDocumentHtml", () => {
 
   it("usa uma descrição de redes que admite fibra óptica ou pontos lógicos separadamente", () => {
     const html = renderEstimateDocumentHtml({ ...input, ata: { ...input.ata, type: "FO_PONTO_LOGICO" } });
-    expect(html).toContain("Projeto FO + Ponto Lógico: CRO 12");
+    expect(html).toContain("Projeto de Infraestrutura de Redes: CRO 12");
+    expect(html).not.toContain("Projeto FO + Ponto Lógico");
     expect(html).toContain("Implantação, modernização ou ampliação da infraestrutura de redes (Fibra óptica ou Pontos lógicos)");
   });
 });
