@@ -138,7 +138,7 @@ function recordsFromPayload(payload: unknown) {
   return nested.length ? nested : [root];
 }
 
-export async function fetchPortalJson(url: string, token: string, notFoundMessage: string) {
+export async function fetchPortalJson(url: string, token: string, notFoundMessage: string, options: { allowEmptyArray?: boolean } = {}) {
   const response = await fetch(url, {
     headers: { "chave-api-dados": token, Accept: "application/json" },
     redirect: "manual",
@@ -165,7 +165,7 @@ export async function fetchPortalJson(url: string, token: string, notFoundMessag
       { url },
     );
   }
-  if (Array.isArray(payload) && payload.length === 0) {
+  if (Array.isArray(payload) && payload.length === 0 && !options.allowEmptyArray) {
     throw new AppError(notFoundMessage, 404, "PORTAL_TRANSPARENCIA_NOT_FOUND", { url });
   }
   return payload;

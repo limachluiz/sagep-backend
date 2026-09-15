@@ -49,7 +49,7 @@ export async function discoveryPage(input: z.infer<typeof discoveryPageSchema>) 
   const settings = await systemSettingsService.getEffective();
   const url = new URL(`${settings.portalTransparenciaBaseUrl.replace(/\/$/, "")}/despesas/documentos-por-favorecido`);
   Object.entries({ codigoPessoa: input.cnpj, ug: input.ug, ano: input.year, fase: 1, pagina: input.page, ordenacaoResultado: 3 }).forEach(([k, v]) => url.searchParams.set(k, String(v)));
-  const payload = await fetchPortalJson(url.toString(), token, "Fonte não confirmou a página; a consulta permanece incompleta");
+  const payload = await fetchPortalJson(url.toString(), token, "Portal não confirmou a página (resposta ausente ou HTTP 404); a consulta permanece incompleta", { allowEmptyArray: true });
   if (!Array.isArray(payload) || payload.some(v => !v || typeof v !== "object" || Array.isArray(v))) throw new AppError("Formato inesperado na busca de NEs", 502, "DISCOVERY_INVALID_RESPONSE");
   return { ...filterDiscoveryRows(payload, input.startDate, input.endDate), exhausted: payload.length === 0,
     fingerprint: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), source: "Portal da Transparência", fetchedAt: new Date().toISOString() };
@@ -62,6 +62,6 @@ export async function discoveryDocuments(code: string) {
   const settings = await systemSettingsService.getEffective();
   const base = settings.portalTransparenciaBaseUrl.replace(/\/$/, "");
   const document = await fetchPortalJson(`${base}/despesas/documentos/${code}`, token, "Documento não localizado");
-  const related = await fetchPortalJson(`${base}/despesas/documentos-relacionados?codigoDocumento=${code}&fase=1`, token, "Documentos relacionados indisponíveis");
+  const related = await fetchPortalJson(`${base}/despesas/documentos-relacionados?codigoDocumento=${code}&fase=1`, token, "Documentos relacionados indisponíveis", { allowEmptyArray: true });
   return { document, related, fetchedAt: new Date().toISOString() };
 }
