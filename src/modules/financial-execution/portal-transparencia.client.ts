@@ -138,7 +138,7 @@ function recordsFromPayload(payload: unknown) {
   return nested.length ? nested : [root];
 }
 
-async function fetchPortalJson(url: string, token: string, notFoundMessage: string) {
+export async function fetchPortalJson(url: string, token: string, notFoundMessage: string) {
   const response = await fetch(url, {
     headers: { "chave-api-dados": token, Accept: "application/json" },
     redirect: "manual",

@@ -48,3 +48,15 @@ Alertas financeiros são agregados aos alertas operacionais. `DELETE
 /operational-alerts` limpa as notificações visíveis apenas para o usuário
 autenticado. A dispensa fica válida enquanto a origem não mudar; uma nova
 sincronização ou alteração do projeto pode fazer o alerta reaparecer.
+
+## Descoberta de NEs por fornecedor
+
+Rotas autenticadas, com permissão `financial_execution.view`:
+
+- `GET /financial-execution/discovery/options`: pregões cadastrados, fornecedores e vigências das ATAs; UG padrão das integrações.
+- `POST /financial-execution/discovery/page`: `pregaoIds`, `cnpj`, `ug`, `startDate`, `endDate` (YYYY-MM-DD), `year` e `page`. Valida o fornecedor nos pregões e consulta uma página oficial de empenhos. Apenas uma resposta vazia válida indica `exhausted`; erros e páginas fora do período não indicam término.
+- `GET /financial-execution/discovery/documents/:code`: documento oficial e documentos relacionados, sem limitar a data destes ao intervalo de emissão das NEs.
+
+O frontend percorre fornecedor × UG × ano sequencialmente, informa cobertura por combinação e interrompe em erro, repetição ou limite de páginas. Datas ausentes permanecem sinalizadas. A combinação mínima/máxima das vigências das ATAs sugere o intervalo, editável para qualquer quantidade de pregões. A busca não confirma vínculo licitatório só pelo CNPJ e não grava/consome saldos.
+
+Esta etapa oferece consulta; importação persistente, conciliação de vínculo e consolidação de totais financeiros ainda não estão implementadas. Validar a cobertura com respostas autenticadas reais antes de oferecer garantia de completude. Mudanças na fonte durante a paginação podem afetar a estabilidade dos resultados.

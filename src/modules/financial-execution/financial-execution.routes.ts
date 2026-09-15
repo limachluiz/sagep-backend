@@ -1,3 +1,4 @@
+import { discoveryOptions, discoveryPage, discoveryPageSchema, discoveryDocuments } from "./ne-discovery.service.js";
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { requirePermission } from "../../middlewares/permission.middleware.js";
@@ -7,6 +8,9 @@ export const financialExecutionRoutes = Router();
 const controller = new FinancialExecutionController();
 
 financialExecutionRoutes.use(authMiddleware);
+financialExecutionRoutes.get("/discovery/options", requirePermission("financial_execution.view"), async (_req, res) => { res.json(await discoveryOptions()); });
+financialExecutionRoutes.post("/discovery/page", requirePermission("financial_execution.view"), async (req, res) => { res.json(await discoveryPage(discoveryPageSchema.parse(req.body))); });
+financialExecutionRoutes.get("/discovery/documents/:code", requirePermission("financial_execution.view"), async (req, res) => { res.json(await discoveryDocuments(String(req.params.code))); });
 financialExecutionRoutes.get("/commitment-notes", requirePermission("financial_execution.view"), (req, res) => controller.list(req, res));
 financialExecutionRoutes.get("/commitment-notes/:id", requirePermission("financial_execution.view"), (req, res) => controller.details(req, res));
 financialExecutionRoutes.get("/summary", requirePermission("financial_execution.view"), (req, res) => controller.summary(req, res));
