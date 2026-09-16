@@ -21,3 +21,7 @@ describe("CNPJ from exact official ATA", () => {
     await expect(client([item]).resolveAtaSupplier(input, "Outra empresa")).rejects.toThrow("ambíguo");
   });
 });
+it("accepts equivalent ATA formatting without confusing different years", async () => {
+  await expect(client([item]).resolveAtaSupplier({ ...input, numeroAta: "ARP 93/2025" }, "Empresa Ltda")).resolves.toBe("12345678000190");
+  await expect(client([item]).resolveAtaSupplier({ ...input, numeroAta: "93/2024" }, "Empresa Ltda")).rejects.toThrow();
+});

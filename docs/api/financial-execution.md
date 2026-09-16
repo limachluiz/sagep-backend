@@ -70,3 +70,11 @@ A migration `20260915195000_discovered_commitments` cria `DiscoveredCommitment`,
 - `DELETE /financial-execution/discovery/archive/:code`: exclui somente a cópia da base de consulta; mesma permissão de gerenciamento. Pode ser importada novamente.
 
 A aba NEs importadas consulta as cópias persistidas sem depender da disponibilidade da fonte. Não representa vínculo licitatório confirmado nem compõe totais financeiros. A correção de CNPJ usa o endpoint existente de edição de ATA e a permissão `atas.manage`. Não deduz CNPJ por nome empresarial. O contador de páginas na busca descreve respostas da API já processadas; a tabela de resultados tem paginação própria.
+
+### Recuperação dinâmica de CNPJ (PNCP)
+
+Quando a ATA possui controle PNCP, o resolver consulta `/v1/orgaos/{cnpj}/compras/{ano}/{sequencial}/itens/{numeroItem}/resultados`, derivando o órgão, ano e sequencial do controle e os itens de `AtaItem.externalItemNumber`. Usa `niFornecedor` e `nomeRazaoSocialFornecedor` dos resultados ativos de pessoa jurídica, exigindo nome normalizado equivalente e CNPJ único. O CNPJ do órgão no controle PNCP nunca é usado como CNPJ do fornecedor.
+
+Ordem: cadastro preenchido, snapshots oficiais locais, resultados dos itens PNCP; o caminho Compras.gov é usado quando não há controle PNCP. Não há nomes ou CNPJs de empresas fixados no código. O cache de respostas PNCP dura 5 minutos, comporta até 500 URLs e compartilha requisições simultâneas; erros não são armazenados. Os itens são consultados progressivamente até um resultado oficial completo identificar o fornecedor, com prazo total de 20 segundos e limite explícito de 100 itens. A URL do item comprobatório acompanha a resposta. A interface processa até duas ATAs ao mesmo tempo. Falhas não são interpretadas como resultado vazio. O retorno comprova a identidade do fornecedor em um item da ATA; não representa varredura de todos os resultados do pregão. Alteração concorrente do cadastro impede sobrescrita automática.
+
+Validação real de leitura em 16/09/2026: o cliente novo recuperou o fornecedor do item 1 da compra PNCP `00394452000103-1-018542/2025`; não foi executada gravação no banco de produção.

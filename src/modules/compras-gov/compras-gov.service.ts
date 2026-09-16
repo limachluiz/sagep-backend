@@ -960,11 +960,16 @@ export class ComprasGovService {
   async resolveAtaSupplier(input: PreviewInput, vendorName: string) {
     if (!input.numeroAta) throw new AppError("ATA sem identificação oficial", 422);
     const atas = await this.fetchExternalAtas(input);
-    const exact = atas.filter(ata => this.getAtaNumber(ata.numeroAtaRegistroPreco) === input.numeroAta);
+    const sameAta = (value: unknown) => {
+      const expected = this.parseAtaIdentifier(input.numeroAta);
+      const actual = this.parseAtaIdentifier(value);
+      return Boolean(expected.number && actual.number === expected.number && expected.year && actual.year === expected.year);
+    };
+    const exact = atas.filter(ata => sameAta(ata.numeroAtaRegistroPreco));
     if (exact.length !== 1) throw new AppError("Não foi possível confirmar uma única ATA oficial", 422);
     const items = await this.fetchExternalItems(input);
     const normalizeName = (name: string) => name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
-    const candidates = items.filter(item => this.getAtaNumber(item.numeroAtaRegistroPreco) === input.numeroAta);
+    const candidates = items.filter(item => sameAta(item.numeroAtaRegistroPreco));
     const cnpjs = [...new Set(candidates.filter(item => normalizeName(String(item.nomeRazaoSocialFornecedor ?? "")) === normalizeName(vendorName))
       .map(item => this.normalizeVendorCnpj(item.niFornecedor)).filter((value): value is string => Boolean(value)))];
     if (cnpjs.length !== 1) throw new AppError("CNPJ ausente ou ambíguo na fonte oficial para este fornecedor; confira o cadastro", 422);

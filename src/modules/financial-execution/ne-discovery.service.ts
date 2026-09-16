@@ -1,3 +1,4 @@
+import { resolvePncpSupplier } from "./supplier-pncp.client.js";
 import { ComprasGovService } from "../compras-gov/compras-gov.service.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
@@ -67,10 +68,44 @@ export async function discoveryDocuments(code: string) {
   return { document, related, fetchedAt: new Date().toISOString() };
 }
 
+export function supplierCnpjFromSnapshots(snapshots: unknown[], vendorName: string): string | null {
+  const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const candidates = new Set<string>();
+  for (const raw of snapshots) {
+    if (!raw || typeof raw !== "object") continue;
+    const commitments = (raw as { commitments?: unknown }).commitments;
+    if (!Array.isArray(commitments)) continue;
+    for (const commitment of commitments) {
+      if (typeof commitment?.supplier !== "string") continue;
+      const supplier = commitment.supplier as string;
+      const match = supplier.match(/^(\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2})\s*[-–:]\s*(.+)$/);
+      if (match && normalize(match[2]!) === normalize(vendorName)) candidates.add(match[1]!.replace(/\D/g, ""));
+    }
+  }
+  return candidates.size === 1 ? [...candidates][0]! : null;
+}
+
 export async function resolveAtaCnpj(id: string) {
   const ata = await prisma.ata.findUnique({ where: { id } });
   if (!ata) throw new AppError("ATA não encontrada", 404);
   if (ata.vendorCnpj && /^\d{14}$/.test(ata.vendorCnpj.replace(/\D/g, ""))) return { cnpj: ata.vendorCnpj, updated: false };
+  const snapshots = await prisma.ataItemExternalBalanceSnapshot.findMany({ where: { ataItem: { ataId: id }, source: "CONTRATOS_GOV_TRANSPARENCIA" }, select: { rawSnapshot: true } });
+  const savedCnpj = supplierCnpjFromSnapshots(snapshots.map(s => s.rawSnapshot), ata.vendorName);
+  if (savedCnpj) {
+    const result = await prisma.ata.updateMany({ where: { id, vendorCnpj: ata.vendorCnpj }, data: { vendorCnpj: savedCnpj } });
+    return { cnpj: savedCnpj, updated: result.count === 1, source: "Consulta oficial de saldo salva" };
+  }
+  if (ata.externalPncpControlNumber) {
+    const [settings, items] = await Promise.all([
+      systemSettingsService.getEffective(),
+      prisma.ataItem.findMany({ where: { ataId: id }, select: { externalItemNumber: true } }),
+    ]);
+    const result = await resolvePncpSupplier(settings.pncpBaseUrl, ata.externalPncpControlNumber,
+      items.flatMap(item => item.externalItemNumber ? [item.externalItemNumber] : []), ata.vendorName);
+    const saved = await prisma.ata.updateMany({ where: { id, vendorCnpj: ata.vendorCnpj }, data: { vendorCnpj: result.cnpj } });
+    if (!saved.count) throw new AppError("Cadastro alterado durante a consulta; atualize a tela para conferir o CNPJ", 409);
+    return { ...result, updated: true };
+  }
   if (!ata.externalUasg || !ata.externalPregaoNumber || !ata.externalPregaoYear || !ata.externalAtaNumber) {
     throw new AppError("ATA sem identificação de origem suficiente para consultar o CNPJ automaticamente", 422);
   }

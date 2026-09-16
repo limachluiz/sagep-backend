@@ -37,3 +37,14 @@ describe("NE discovery coverage", () => {
     expect(mocks.fetch).not.toHaveBeenCalled();
   });
 });
+
+import { supplierCnpjFromSnapshots } from "../src/modules/financial-execution/ne-discovery.service.js";
+describe("supplier in stored official balance snapshots", () => {
+  it("extracts the CNPJ only for the exact normalized vendor name", () => {
+    expect(supplierCnpjFromSnapshots([{ commitments: [{ supplier: "26.605.545/0001-15 - SIDI SERVICOS DE COMUNICACAO LTDA" }] }], "SIDI SERVIÇOS DE COMUNICAÇÃO LTDA")).toBe("26605545000115");
+  });
+  it("refuses unrelated vendors and conflicting identifiers", () => {
+    expect(supplierCnpjFromSnapshots([{ commitments: [{ supplier: "26.605.545/0001-15 - OUTRA EMPRESA" }] }], "SIDI")).toBeNull();
+    expect(supplierCnpjFromSnapshots([{ commitments: [{ supplier: "26605545000115 - SIDI" }, { supplier: "12345678000190 - SIDI" }] }], "SIDI")).toBeNull();
+  });
+});
