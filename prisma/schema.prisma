@@ -1067,3 +1067,13 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
   @@index([actorUserId, createdAt])
 }
+
+// Independent consultation archive. Never participates in project/ATA balances.
+model DiscoveredCommitment {
+  id           String   @id @default(cuid())
+  externalCode String   @unique
+  snapshot     Json
+  importedById String
+  importedAt   DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}

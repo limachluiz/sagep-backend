@@ -35,7 +35,7 @@ export async function discoveryOptions() {
     systemSettingsService.getEffective(),
     prisma.pregao.findMany({ orderBy: [{ year: "desc" }, { number: "asc" }], select: {
       id: true, number: true, year: true, uasg: true, type: true,
-      atas: { select: { number: true, vendorName: true, vendorCnpj: true, validFrom: true, validUntil: true } },
+      atas: { select: { id: true, number: true, vendorName: true, vendorCnpj: true, validFrom: true, validUntil: true } },
     } }),
   ]);
   return { defaultUg: settings.uasg, pregoes };

@@ -59,4 +59,14 @@ Rotas autenticadas, com permissão `financial_execution.view`:
 
 O frontend percorre fornecedor × UG × ano sequencialmente, informa cobertura por combinação e interrompe em erro, repetição ou limite de páginas. Datas ausentes permanecem sinalizadas. A combinação mínima/máxima das vigências das ATAs sugere o intervalo, editável para qualquer quantidade de pregões. A busca não confirma vínculo licitatório só pelo CNPJ e não grava/consome saldos.
 
-Esta etapa oferece consulta; importação persistente, conciliação de vínculo e consolidação de totais financeiros ainda não estão implementadas. Validar a cobertura com respostas autenticadas reais antes de oferecer garantia de completude. Mudanças na fonte durante a paginação podem afetar a estabilidade dos resultados.
+Esta etapa oferece consulta e importação independente conforme descrito abaixo; conciliação de vínculo e consolidação de totais financeiros ainda não estão implementadas. Validar a cobertura com respostas autenticadas reais antes de oferecer garantia de completude. Mudanças na fonte durante a paginação podem afetar a estabilidade dos resultados.
+
+### Base independente de NEs importadas
+
+A migration `20260915195000_discovered_commitments` cria `DiscoveredCommitment`, sem relações com saldos, projetos ou a carteira financeira. Aplicar com o fluxo normal de `prisma migrate deploy` antes de usar esta versão. Nenhuma migration é executada automaticamente por uma consulta.
+
+- `GET /financial-execution/discovery/archive?page=1&search=...`: base paginada, 20 registros por página; permissão `financial_execution.view`.
+- `POST /financial-execution/discovery/archive/:code`: importa/atualiza pelo código completo, lendo documento e vínculos novamente na fonte. Permissão `financial_execution.manage`. Chave única impede duplicatas. Falha na fonte preserva a cópia anterior.
+- `DELETE /financial-execution/discovery/archive/:code`: exclui somente a cópia da base de consulta; mesma permissão de gerenciamento. Pode ser importada novamente.
+
+A aba NEs importadas consulta as cópias persistidas sem depender da disponibilidade da fonte. Não representa vínculo licitatório confirmado nem compõe totais financeiros. A correção de CNPJ usa o endpoint existente de edição de ATA e a permissão `atas.manage`. Não deduz CNPJ por nome empresarial. O contador de páginas na busca descreve respostas da API já processadas; a tabela de resultados tem paginação própria.
