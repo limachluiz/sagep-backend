@@ -1,5 +1,5 @@
 import { archiveCodeSchema, archiveQuerySchema, importDiscoveredNote, listArchivedNotes, deleteArchivedNote } from "./ne-archive.service.js";
-import { discoveryOptions, discoveryPage, discoveryPageSchema, discoveryDocuments } from "./ne-discovery.service.js";
+import { resolveAtaCnpj, discoveryOptions, discoveryPage, discoveryPageSchema, discoveryDocuments } from "./ne-discovery.service.js";
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { requirePermission } from "../../middlewares/permission.middleware.js";
@@ -9,6 +9,7 @@ export const financialExecutionRoutes = Router();
 const controller = new FinancialExecutionController();
 
 financialExecutionRoutes.use(authMiddleware);
+financialExecutionRoutes.post("/discovery/suppliers/:id/resolve", requirePermission("atas.manage"), async (req, res) => { res.json(await resolveAtaCnpj(String(req.params.id))); });
 financialExecutionRoutes.get("/discovery/archive", requirePermission("financial_execution.view"), async (req, res) => { res.json(await listArchivedNotes(archiveQuerySchema.parse(req.query))); });
 financialExecutionRoutes.post("/discovery/archive/:code", requirePermission("financial_execution.manage"), async (req, res) => { res.json(await importDiscoveredNote(archiveCodeSchema.parse(req.params.code), req.user!.id)); });
 financialExecutionRoutes.delete("/discovery/archive/:code", requirePermission("financial_execution.manage"), async (req, res) => { await deleteArchivedNote(archiveCodeSchema.parse(req.params.code)); res.status(204).end(); });

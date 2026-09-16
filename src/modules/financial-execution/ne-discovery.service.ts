@@ -1,3 +1,4 @@
+import { ComprasGovService } from "../compras-gov/compras-gov.service.js";
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
@@ -64,4 +65,17 @@ export async function discoveryDocuments(code: string) {
   const document = await fetchPortalJson(`${base}/despesas/documentos/${code}`, token, "Documento não localizado");
   const related = await fetchPortalJson(`${base}/despesas/documentos-relacionados?codigoDocumento=${code}&fase=1`, token, "Documentos relacionados indisponíveis", { allowEmptyArray: true });
   return { document, related, fetchedAt: new Date().toISOString() };
+}
+
+export async function resolveAtaCnpj(id: string) {
+  const ata = await prisma.ata.findUnique({ where: { id } });
+  if (!ata) throw new AppError("ATA não encontrada", 404);
+  if (ata.vendorCnpj && /^\d{14}$/.test(ata.vendorCnpj.replace(/\D/g, ""))) return { cnpj: ata.vendorCnpj, updated: false };
+  if (!ata.externalUasg || !ata.externalPregaoNumber || !ata.externalPregaoYear || !ata.externalAtaNumber) {
+    throw new AppError("ATA sem identificação de origem suficiente para consultar o CNPJ automaticamente", 422);
+  }
+  const cnpj = await new ComprasGovService().resolveAtaSupplier({ uasg: ata.externalUasg, numeroPregao: ata.externalPregaoNumber, anoPregao: ata.externalPregaoYear, numeroAta: ata.externalAtaNumber }, ata.vendorName);
+  // Preserve a concurrent manual correction and never change quantities or prices.
+  const result = await prisma.ata.updateMany({ where: { id, vendorCnpj: ata.vendorCnpj }, data: { vendorCnpj: cnpj } });
+  return { cnpj, updated: result.count === 1, source: "Compras.gov.br" };
 }
