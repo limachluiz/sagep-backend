@@ -1,0 +1,1 @@
+ALTER TABLE "DiscoveredCommitment" ADD COLUMN "origin" TEXT NOT NULL DEFAULT 'IMPORTED';

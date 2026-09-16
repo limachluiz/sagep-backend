@@ -1070,6 +1070,7 @@ model AuditLog {
 
 // Independent consultation archive. Never participates in project/ATA balances.
 model DiscoveredCommitment {
+  origin       String   @default("IMPORTED")
   id           String   @id @default(cuid())
   externalCode String   @unique
   snapshot     Json

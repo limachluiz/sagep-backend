@@ -54,7 +54,7 @@ sincronização ou alteração do projeto pode fazer o alerta reaparecer.
 Rotas autenticadas, com permissão `financial_execution.view`:
 
 - `GET /financial-execution/discovery/options`: pregões cadastrados, fornecedores e vigências das ATAs; UG padrão das integrações.
-- `POST /financial-execution/discovery/page`: `pregaoIds`, `cnpj`, `ug`, `startDate`, `endDate` (YYYY-MM-DD), `year` e `page`. Valida o fornecedor nos pregões e consulta uma página oficial de empenhos. Apenas uma resposta vazia válida indica `exhausted`; erros e páginas fora do período não indicam término.
+- `POST /financial-execution/discovery/page`: `pregaoIds`, `ataIds` (opcional, restringe às ATAs selecionadas), `cnpj`, `ug`, `startDate`, `endDate` (YYYY-MM-DD), `year` e `page`. Valida o fornecedor nos pregões e consulta uma página oficial de empenhos. Apenas uma resposta vazia válida indica `exhausted`; erros e páginas fora do período não indicam término.
 - `GET /financial-execution/discovery/documents/:code`: documento oficial e documentos relacionados, sem limitar a data destes ao intervalo de emissão das NEs.
 
 O frontend percorre fornecedor × UG × ano sequencialmente, informa cobertura por combinação e interrompe em erro, repetição ou limite de páginas. Datas ausentes permanecem sinalizadas. A combinação mínima/máxima das vigências das ATAs sugere o intervalo, editável para qualquer quantidade de pregões. A busca não confirma vínculo licitatório só pelo CNPJ e não grava/consome saldos.
@@ -63,13 +63,13 @@ Esta etapa oferece consulta e importação independente conforme descrito abaixo
 
 ### Base independente de NEs importadas
 
-A migration `20260915195000_discovered_commitments` cria `DiscoveredCommitment`, sem relações com saldos, projetos ou a carteira financeira. Aplicar com o fluxo normal de `prisma migrate deploy` antes de usar esta versão. Nenhuma migration é executada automaticamente por uma consulta.
+A migration `20260915195000_discovered_commitments` cria `DiscoveredCommitment`, sem relações que movimentem saldos ou projetos. Aplicar com o fluxo normal de `prisma migrate deploy` antes de usar esta versão. Nenhuma migration é executada automaticamente por uma consulta.
 
-- `GET /financial-execution/discovery/archive?page=1&search=...`: base paginada, 20 registros por página; permissão `financial_execution.view`.
+- `GET /financial-execution/discovery/archive?page=1&pageSize=10&search=...`: base paginada, 10 registros por padrão, opções 10/20/30/50; permissão `financial_execution.view`.
 - `POST /financial-execution/discovery/archive/:code`: importa/atualiza pelo código completo, lendo documento e vínculos novamente na fonte. Permissão `financial_execution.manage`. Chave única impede duplicatas. Falha na fonte preserva a cópia anterior.
 - `DELETE /financial-execution/discovery/archive/:code`: exclui somente a cópia da base de consulta; mesma permissão de gerenciamento. Pode ser importada novamente.
 
-A aba NEs importadas consulta as cópias persistidas sem depender da disponibilidade da fonte. Não representa vínculo licitatório confirmado nem compõe totais financeiros. A correção de CNPJ usa o endpoint existente de edição de ATA e a permissão `atas.manage`. Não deduz CNPJ por nome empresarial. O contador de páginas na busca descreve respostas da API já processadas; a tabela de resultados tem paginação própria.
+A aba NEs importadas consulta as cópias persistidas sem depender da disponibilidade da fonte. Não representa vínculo licitatório confirmado. As cópias agora compõem a carteira consolidada, sem consumo dos saldos das ATAs ou duplicação de NEs de projetos. A correção de CNPJ usa o endpoint existente de edição de ATA e a permissão `atas.manage`. Não deduz CNPJ por nome empresarial. O contador de páginas na busca descreve respostas da API já processadas; a tabela de resultados tem paginação própria.
 
 ### Recuperação dinâmica de CNPJ (PNCP)
 
@@ -78,3 +78,17 @@ Quando a ATA possui controle PNCP, o resolver consulta `/v1/orgaos/{cnpj}/compra
 Ordem: cadastro preenchido, snapshots oficiais locais, resultados dos itens PNCP; o caminho Compras.gov é usado quando não há controle PNCP. Não há nomes ou CNPJs de empresas fixados no código. O cache de respostas PNCP dura 5 minutos, comporta até 500 URLs e compartilha requisições simultâneas; erros não são armazenados. Os itens são consultados progressivamente até um resultado oficial completo identificar o fornecedor, com prazo total de 20 segundos e limite explícito de 100 itens. A URL do item comprobatório acompanha a resposta. A interface processa até duas ATAs ao mesmo tempo. Falhas não são interpretadas como resultado vazio. O retorno comprova a identidade do fornecedor em um item da ATA; não representa varredura de todos os resultados do pregão. Alteração concorrente do cadastro impede sobrescrita automática.
 
 Validação real de leitura em 16/09/2026: o cliente novo recuperou o fornecedor do item 1 da compra PNCP `00394452000103-1-018542/2025`; não foi executada gravação no banco de produção.
+
+### Seleção, importação em lote e carteira consolidada
+
+Aplicar também a migration `20260916160000_discovered_origin` com `prisma migrate deploy` antes de iniciar o novo backend. A origem padrão dos registros existentes é `IMPORTED`.
+
+- `POST /discovery/archive/:code` aceita `{ origin: "IMPORTED" | "STANDALONE", replaceOrigin?: "IMPORTED" | "STANDALONE" }` (prefixo `/financial-execution`). Importação e avulsa compartilham a chave única UG + gestão + número. Uma origem diferente retorna 409 `NE_DUPLICATE_ORIGIN`; substituir exige a origem anterior explicitamente confirmada. Atualizações concorrentes são recusadas para evitar sobrescrever uma decisão recente.
+- `GET /discovery/archive/keys?search=...`: lista os códigos do filtro (até 5000) para confirmar o conjunto exato da exclusão.
+- `POST /discovery/archive/delete-selected` recebe `{ codes: [...] }`, de 1 a 5000 códigos. Exclui exclusivamente cópias da base de consulta. Não cancela NEs vinculadas a projetos.
+- A interface processa importações em sequência e apresenta sucessos, falhas e conflitos individualmente. Seleção atravessa páginas; importar todas usa todo o resultado encontrado, não somente a página visível. Remover dos resultados da busca não exclui cópias já salvas.
+- `GET /financial-execution/portfolio` retorna registros de projetos acessíveis e cópias importadas/avulsas, deduplicados pelo código completo. Registros ativos de projeto têm prioridade. Uma cópia de NE vinculada a projeto fora do escopo do usuário não permite contornar esse escopo.
+- Totais utilizam valores explicitamente disponíveis. Ausência de valores de liquidação/pagamento é `null`, não zero. Não somamos valores integrais de documentos relacionados: uma OB pode abranger outras NEs. Valores incompatíveis (como pago maior que empenhado) são exibidos como divergentes e excluídos dos totais; registros incompletos ficam a conferir. A interface identifica que os totais são apenas os valores informados.
+- A busca apresenta modal centralizado, seleção por ATA e fornecedor, paginação local 10/20/30/50 e carga de CNPJ individual ou das ATAs selecionadas. O período sugerido usa a menor data inicial e maior data final das ATAs selecionadas.
+
+A migração e a integração autenticada com dados reais precisam ser verificadas no ambiente de instalação. Os testes locais usam respostas simuladas e não comprovam cobertura integral da fonte.

@@ -1,3 +1,4 @@
+import { archivedFinancial, financialPosition, consolidatePortfolio } from "./portfolio-summary.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
@@ -201,7 +202,8 @@ export class FinancialExecutionService {
       },
     });
 
-    return { snapshot, registered };
+    const archived = await prisma.discoveredCommitment.findUnique({ where: { externalCode: snapshot.externalCode }, select: { origin: true, updatedAt: true } });
+    return { snapshot, registered, archived };
   }
 
   private compare(snapshot: PortalCommitmentSnapshot, expected: Awaited<ReturnType<FinancialExecutionService["expectedProjectFinancials"]>>) {
@@ -390,6 +392,25 @@ export class FinancialExecutionService {
         manualReason: input.manualReason!,
       },
     };
+  }
+
+  async portfolio(user: CurrentUser) {
+    const [notes, archived, activeKeys] = await Promise.all([
+      prisma.commitmentNote.findMany({ where: { active: true, project: this.projectAccessWhere(user) }, include: { project: { select: { id: true, projectCode: true, title: true } } } }),
+      prisma.discoveredCommitment.findMany({ orderBy: { updatedAt: "desc" } }),
+      prisma.commitmentNote.findMany({ where: { active: true }, select: { externalCode: true } }),
+    ]);
+    return consolidatePortfolio(
+      notes.map(n => {
+        const amounts = financialPosition(Number(n.currentAmount), Number(n.liquidatedAmount), Number(n.paidAmount), n.supplierName ?? "Não informado");
+        return { externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, project: n.project, ...amounts,
+          status: amounts.inconsistent ? amounts.status : n.syncStatus !== "VALIDADO" ? "A_CONFERIR" : n.financialStatus,
+          incomplete: amounts.incomplete || n.syncStatus !== "VALIDADO",
+        };
+      }),
+      archived.map(n => ({ externalCode: n.externalCode, number: n.externalCode.slice(11), origin: n.origin, updatedAt: n.updatedAt, project: null, ...archivedFinancial(n.snapshot) })),
+      activeKeys.map(n => n.externalCode),
+    );
   }
 
   async list(filters: ListCommitmentNotesInput, user: CurrentUser) {

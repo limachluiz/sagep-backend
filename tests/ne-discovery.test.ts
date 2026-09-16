@@ -28,6 +28,11 @@ describe("NE discovery coverage", () => {
     expect(url.searchParams.get("pagina")).toBe("2");
     expect(url.searchParams.get("codigoPessoa")).toBe(input.cnpj);
   });
+  it("limits supplier validation to the selected ATA IDs", async () => {
+    mocks.fetch.mockResolvedValue([]);
+    await discoveryPage({ ...input, ataIds: ["ata-one"] });
+    expect(mocks.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: { in: ["ata-one"] }, pregaoId: { in: ["one"] } }) }));
+  });
   it("only an empty successful array ends pagination", async () => {
     mocks.fetch.mockResolvedValue([]); expect((await discoveryPage(input)).exhausted).toBe(true);
     mocks.fetch.mockResolvedValue({ error: "unavailable" }); await expect(discoveryPage(input)).rejects.toThrow("Formato inesperado");

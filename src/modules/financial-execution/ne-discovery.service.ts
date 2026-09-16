@@ -10,6 +10,7 @@ import { fetchPortalJson } from "./portal-transparencia.client.js";
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v, "Data inválida");
 export const discoveryPageSchema = z.object({
   pregaoIds: z.array(z.string().min(1)).min(1).max(50),
+  ataIds: z.array(z.string().min(1)).min(1).max(200).optional(),
   cnpj: z.string().regex(/^\d{14}$/),
   ug: z.string().regex(/^\d{6}$/),
   startDate: date, endDate: date,
@@ -44,7 +45,7 @@ export async function discoveryOptions() {
 }
 
 export async function discoveryPage(input: z.infer<typeof discoveryPageSchema>) {
-  const atas = await prisma.ata.findMany({ where: { pregaoId: { in: input.pregaoIds } }, select: { vendorCnpj: true } });
+  const atas = await prisma.ata.findMany({ where: { pregaoId: { in: input.pregaoIds }, ...(input.ataIds && { id: { in: input.ataIds } }) }, select: { vendorCnpj: true } });
   if (!atas.some(a => a.vendorCnpj?.replace(/\D/g, "") === input.cnpj)) throw new AppError("Fornecedor não pertence aos pregões selecionados", 400, "DISCOVERY_SUPPLIER_INVALID");
   const token = await systemSettingsService.getPortalApiToken();
   if (!token) throw new AppError("Configure o token do Portal da Transparência nas integrações", 503, "PORTAL_TRANSPARENCIA_NOT_CONFIGURED");

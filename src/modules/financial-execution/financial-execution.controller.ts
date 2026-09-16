@@ -10,6 +10,7 @@ import {
 import { financialExecutionService } from "./financial-execution.service.js";
 
 export class FinancialExecutionController {
+  async portfolio(req: Request, res: Response) { return res.json(await financialExecutionService.portfolio(req.user!)); }
   async lookup(req: Request, res: Response) {
     return res.status(200).json(await financialExecutionService.lookup(standaloneCommitmentNoteLookupSchema.parse(req.body), req.user!));
   }
