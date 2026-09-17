@@ -97,17 +97,19 @@ A migração e a integração autenticada com dados reais precisam ser verificad
 
 A documentação oficial `https://api.portaldatransparencia.gov.br/v3/api-docs` define o endpoint paginado `GET /api-de-dados/despesas/empenhos-impactados?codigoDocumento=...&fase=2|3&pagina=...`. O DTO `EmpenhoImpactadoBasicoDTO` informa `empenho`, `subitem`, `valorLiquidado`, `valorPago` e `valorRestoPago`. O DTO do documento principal informa `valor`, mas não os totais de liquidação/pagamento; por isso somente ler esse documento não preenchia os cartões.
 
-A importação agora enriquece a cópia salva com `snapshot.financial` (versão 1). Para cada documento relacionado de liquidação/pagamento:
+A importação agora enriquece a cópia salva com `snapshot.financial` (versão 2). Para cada documento relacionado de liquidação/pagamento:
 
 1. Consulta as páginas de empenhos impactados até receber uma lista vazia válida. Página repetida, erro de fonte, prazo de 60s ou limite de 100 páginas impedem publicar um total parcial daquele documento.
 2. Seleciona apenas o código completo da NE, incluindo UG e gestão. Nunca associa somente pelo número abreviado.
 3. Deduplica documentos e subitens; conflitos de valores são sinalizados. Soma valores com o sinal original, incluindo estornos. Na fase 3, soma `valorPago` e `valorRestoPago` informado separadamente pela fonte.
 4. Salva os subitens comprobatórios e a parcela atribuída à NE. O valor integral da NS/OB não é utilizado como parcela de cada NE. Respostas completas de empenhos impactados têm cache de 5 minutos e limite de 300 entradas, compartilhado entre consultas simultâneas.
 
-Quando há valor confirmado de pagamento/liquidação mas a outra fase não tem dados, a situação identifica a fase conhecida e a NE continua contada entre as que precisam de conferência. Ausência de documentos continua sendo valor não informado, não zero. Um valor de zero explícito é preservado.
+Quando há valor confirmado de pagamento/liquidação mas a outra fase não tem dados, a situação identifica a fase conhecida e a NE continua contada entre as que precisam de conferência. Se somente parte dos documentos de uma fase for confirmada, o subtotal comprovado é exibido e somado, enquanto `liquidatedComplete`/`paidComplete` permanecem falsos e a NE é marcada como parcial. Ausência de documentos continua sendo valor não informado, não zero. Um valor de zero explícito é preservado.
+
+Snapshots da versão 1 são reparados durante a leitura: se o total da fase estiver nulo, a carteira soma os valores individuais já comprovados em `documents`, sem exigir nova importação. O diagnóstico agregado informa quantas NEs possuem liquidações ou pagamentos parcialmente confirmados; documentos ainda sem parcela mantêm o registro a conferir.
 
 - `GET /financial-execution/discovery/archive/:code`: detalhe salvo com resumo financeiro calculado, documento, relacionados e evidências por subitem. Usa `financial_execution.view`.
-- `POST /financial-execution/discovery/archive/:code/sync`: atualiza uma cópia existente preservando sua origem; usa `financial_execution.manage`. Erro ao confirmar parcelas de uma cópia existente mantém o snapshot anterior.
+- `POST /financial-execution/discovery/archive/:code/sync`: atualiza uma cópia existente preservando sua origem; usa `financial_execution.manage`. Valores já confirmados são preservados mesmo quando outro documento da mesma fase falha, com indicação explícita de apuração parcial.
 - Na carteira, **Atualizar liquidações e pagamentos** atualiza as cópias importadas/avulsas sequencialmente e apresenta falhas por NE. É necessário executar essa atualização para enriquecer as importações feitas antes desta versão. Não consulta o governo a cada abertura de tela.
 - A sincronização das NEs vinculadas a projetos usa a mesma atribuição por empenho. Assim, uma NS ou OB compartilhada não tem mais seu valor integral lançado em cada projeto; erro ou ambiguidade na atribuição interrompe a sincronização e preserva os valores anteriores.
 - Filtros por empresa, situação e texto são combinados na lista e reiniciam a paginação. Os cartões mantêm o total da carteira completa, identificado na tela.

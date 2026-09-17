@@ -26,4 +26,10 @@ describe("consolidated portfolio", () => {
     const result = consolidatePortfolio([], [{ externalCode: "a", ...financialPosition(10, 0, 20, "A") }, { externalCode: "b", ...financialPosition(50, null, null, "B") }], []);
     expect(result.totals).toEqual({ committed: 50, liquidated: 0, paid: 0, pending: 2 });
   });
+  it("reports every NE with partially confirmed financial evidence", () => {
+    const partial = { externalCode: "a", ...financialPosition(100, 100, 75, "A", { paymentIncomplete: true, unresolvedPayments: 1 }) };
+    const result = consolidatePortfolio([], [partial], []);
+    expect(result.totals).toMatchObject({ paid: 75, pending: 1 });
+    expect(result.diagnostics).toEqual({ partialLiquidations: 0, partialPayments: 1 });
+  });
 });

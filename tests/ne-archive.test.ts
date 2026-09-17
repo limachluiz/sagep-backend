@@ -36,11 +36,12 @@ describe("NE archive and origin conflicts", () => {
     await expect(importDiscoveredNote(code, "user")).rejects.toThrow("unavailable");
     expect(mocks.create).not.toHaveBeenCalled(); expect(mocks.updateMany).not.toHaveBeenCalled();
   });
-  it("preserves the previous copy when payment allocation fails", async () => {
+  it("persists partial payment evidence so confirmed amounts remain visible", async () => {
     mocks.findUnique.mockResolvedValue({ id: "one", externalCode: code, origin: "IMPORTED", snapshot: {}, updatedAt: new Date() });
-    mocks.source.mockResolvedValue({ document: { valor: 100 }, related: [], financial: { documents: [{ error: "HTTP 429" }] } });
-    await expect(refreshArchivedNote(code, "user")).rejects.toMatchObject({ statusCode: 502, code: "NE_PAYMENTS_INCOMPLETE" });
-    expect(mocks.updateMany).not.toHaveBeenCalled();
+    mocks.source.mockResolvedValue({ document: { valor: 100 }, related: [], financial: { version: 2, externalCode: code, paid: 50, paidComplete: false, documents: [{ phase: 3, amount: 50 }, { phase: 3, amount: null, error: "HTTP 429" }] } });
+    mocks.updateMany.mockResolvedValue({ count: 1 });
+    await refreshArchivedNote(code, "user");
+    expect(mocks.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ snapshot: expect.objectContaining({ financial: expect.objectContaining({ paid: 50, paidComplete: false }) }) }) }));
   });
   it("refreshes a standalone copy without changing its origin", async () => {
     mocks.findUnique.mockResolvedValue({ id: "one", externalCode: code, origin: "STANDALONE", snapshot: {}, updatedAt: new Date() });

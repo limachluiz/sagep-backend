@@ -3,8 +3,9 @@ import { moneyFrom } from "./portfolio-summary.js";
 
 type RecordValue = Record<string, unknown>;
 export type PaymentEvidence = {
-  version: 1; externalCode: string; checkedAt: string;
+  version: 1 | 2; externalCode: string; checkedAt: string;
   liquidated: number | null; paid: number | null;
+  liquidatedComplete?: boolean; paidComplete?: boolean;
   documents: Array<{ code: string; phase: 2 | 3; amount: number | null; subitems: RecordValue[]; error?: string }>;
 };
 const fullCode = /^\d{15}(?:NE|NS|OB)\d{6}$/;
@@ -81,7 +82,21 @@ export async function collectPaymentEvidence(base: string, token: string, extern
   }
   const sum = (phase: 2 | 3) => {
     const items = documents.filter(d => d.phase === phase);
-    return !items.length || items.some(d => d.amount === null) ? null : Math.round(items.reduce((n,d) => n + d.amount!, 0) * 100) / 100;
+    const known = items.filter(d => d.amount !== null);
+    return {
+      amount: known.length ? Math.round(known.reduce((n,d) => n + d.amount!, 0) * 100) / 100 : null,
+      complete: items.length > 0 && known.length === items.length,
+    };
   };
-  return { version: 1, externalCode, checkedAt: new Date().toISOString(), liquidated: sum(2), paid: sum(3), documents };
+  const liquidated = sum(2), paid = sum(3);
+  return {
+    version: 2,
+    externalCode,
+    checkedAt: new Date().toISOString(),
+    liquidated: liquidated.amount,
+    paid: paid.amount,
+    liquidatedComplete: liquidated.complete,
+    paidComplete: paid.complete,
+    documents,
+  };
 }

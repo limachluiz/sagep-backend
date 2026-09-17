@@ -17,9 +17,6 @@ export async function importDiscoveredNote(code: string, userId: string, input =
     throw new AppError("Esta NE já existe com outra origem. Escolha manter o cadastro existente ou substituí-lo pelo novo.", 409, "NE_DUPLICATE_ORIGIN", { externalCode: code, existingOrigin: existing.origin });
   }
   const snapshot = await discoveryDocuments(code, true);
-  if (existing && snapshot.financial?.documents.some(d => d.error)) {
-    throw new AppError("Não foi possível confirmar todos os valores de liquidação/pagamento. A cópia anterior foi preservada; tente atualizar novamente.", 502, "NE_PAYMENTS_INCOMPLETE");
-  }
   const data = { snapshot: JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonValue, importedById: userId, origin: input.origin };
   if (existing) {
     const result = await prisma.discoveredCommitment.updateMany({ where: { id: existing.id, updatedAt: existing.updatedAt, origin: existing.origin }, data });

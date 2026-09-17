@@ -33,13 +33,49 @@ describe("financial amounts allocated to an exact NE", () => {
     expect(evidence.liquidated).toBe(100); expect(evidence.paid).toBeNull();
     expect(archivedFinancial({ document: { documento: ne, valor: "100,00" }, financial: evidence })).toMatchObject({ liquidated: 100, status: "LIQUIDADA" });
   });
-  it("does not publish partial totals on error or repeated pages", async () => {
+  it("publishes the confirmed subtotal and marks the phase incomplete when another payment fails", async () => {
+    fetcher
+      .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorPago: "75" }])
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error("HTTP 429"));
+    const mixed = await collectPaymentEvidence(base, "mixed", ne, [
+      { documento: ob, fase: "3" },
+      { documento: "160016000012026OB000002", fase: "3" },
+    ], fetcher);
+    expect(mixed).toMatchObject({ paid: 75, paidComplete: false });
+    expect(archivedFinancial({ document: { documento: ne, valor: 100 }, financial: mixed }, ne)).toMatchObject({
+      paid: 75,
+      status: "PARCIALMENTE_PAGA",
+      incomplete: true,
+      paymentIncomplete: true,
+      unresolvedPayments: 1,
+    });
+  });
+  it("does not invent a total when every related payment fails", async () => {
     fetcher.mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorPago: "100" }]).mockRejectedValueOnce(new Error("HTTP 429"));
     const failed = await collectPaymentEvidence(base, "failure", ne, [{ documento: ob, fase: "3" }], fetcher);
-    expect(failed.paid).toBeNull(); expect(failed.documents[0]?.error).toContain("429");
+    expect(failed.paid).toBeNull(); expect(failed.paidComplete).toBe(false); expect(failed.documents[0]?.error).toContain("429");
     fetcher.mockResolvedValue([{ empenho: ne, subitem: "1", valorPago: "100" }]);
     const repeated = await collectPaymentEvidence(base, "repeat", ne, [{ documento: ob, fase: "3" }], fetcher);
     expect(repeated.paid).toBeNull(); expect(repeated.documents[0]?.error).toContain("repetiu");
+  });
+  it("repairs version 1 snapshots whose summary was null despite confirmed payment documents", () => {
+    const result = archivedFinancial({
+      document: { documento: ne, valor: "100,00" },
+      financial: {
+        version: 1,
+        externalCode: ne,
+        checkedAt: "2026-09-16T22:22:21Z",
+        liquidated: 100,
+        paid: null,
+        documents: [
+          { code: ob, phase: 3, amount: 60, subitems: [{}] },
+          { code: "160016000012026OB000002", phase: 3, amount: 30, subitems: [{}] },
+          { code: "160016000012026OB000003", phase: 3, amount: null, subitems: [], error: "Valor não confirmado" },
+        ],
+      },
+    }, ne);
+    expect(result).toMatchObject({ paid: 90, paymentIncomplete: true, unresolvedPayments: 1, status: "PARCIALMENTE_PAGA" });
   });
   it("does not turn absent documents or missing amounts into zero", async () => {
     expect((await collectPaymentEvidence(base, "empty", ne, [], fetcher)).paid).toBeNull();
