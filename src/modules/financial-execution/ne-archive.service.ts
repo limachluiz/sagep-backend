@@ -1,3 +1,4 @@
+import { archivedFinancial } from "./portfolio-summary.js";
 import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
@@ -15,7 +16,10 @@ export async function importDiscoveredNote(code: string, userId: string, input =
   if (existing && existing.origin !== input.origin && input.replaceOrigin !== existing.origin) {
     throw new AppError("Esta NE já existe com outra origem. Escolha manter o cadastro existente ou substituí-lo pelo novo.", 409, "NE_DUPLICATE_ORIGIN", { externalCode: code, existingOrigin: existing.origin });
   }
-  const snapshot = await discoveryDocuments(code);
+  const snapshot = await discoveryDocuments(code, true);
+  if (existing && snapshot.financial?.documents.some(d => d.error)) {
+    throw new AppError("Não foi possível confirmar todos os valores de liquidação/pagamento. A cópia anterior foi preservada; tente atualizar novamente.", 502, "NE_PAYMENTS_INCOMPLETE");
+  }
   const data = { snapshot: JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonValue, importedById: userId, origin: input.origin };
   if (existing) {
     const result = await prisma.discoveredCommitment.updateMany({ where: { id: existing.id, updatedAt: existing.updatedAt, origin: existing.origin }, data });
@@ -43,3 +47,13 @@ export async function deleteArchivedNotes(codes: string[]) {
   return prisma.discoveredCommitment.deleteMany({ where: { externalCode: { in: codes.map(code => archiveCodeSchema.parse(code)) } } });
 }
 export async function deleteArchivedNote(code: string) { await deleteArchivedNotes([code]); }
+
+export async function archivedNote(code: string) {
+  const note = await prisma.discoveredCommitment.findUnique({ where: { externalCode: archiveCodeSchema.parse(code) } });
+  if (!note) throw new AppError("NE não encontrada na base de consulta", 404);
+  return { ...note, financial: archivedFinancial(note.snapshot, note.externalCode) };
+}
+export async function refreshArchivedNote(code: string, userId: string) {
+  const note = await archivedNote(code);
+  return importDiscoveredNote(code, userId, archiveImportSchema.parse({ origin: note.origin }));
+}

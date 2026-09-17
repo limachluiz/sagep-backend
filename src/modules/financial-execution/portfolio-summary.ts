@@ -1,3 +1,4 @@
+import type { PaymentEvidence } from "./ne-payment-evidence.js";
 type Json = Record<string, unknown>;
 export function moneyFrom(value: unknown): number | null {
   if (typeof value === "number") return Number.isFinite(value) ? value : null;
@@ -11,14 +12,15 @@ function field(root: Json, names: string[]): unknown {
   for (const name of names) if (root[name] !== undefined && root[name] !== null) return root[name];
   return undefined;
 }
-export function archivedFinancial(snapshot: unknown) {
-  const data = snapshot as { document?: Json | Json[] } | null;
+export function archivedFinancial(snapshot: unknown, externalCode?: string) {
+  const data = snapshot as { document?: Json | Json[]; financial?: PaymentEvidence } | null;
   const raw = data?.document;
   const candidate = Array.isArray(raw) ? raw[0] : raw;
   const root: Json = candidate && typeof candidate === "object" ? candidate : {};
   const current = moneyFrom(field(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho", "valorEmpenhado", "valor"]));
-  const liquidated = moneyFrom(field(root, ["valorLiquidado", "valorLiquidadoDoEmpenho"]));
-  const paid = moneyFrom(field(root, ["valorPago", "valorPagoDoEmpenho"]));
+  const evidence = data?.financial?.version === 1 && data.financial.externalCode === (externalCode ?? root.documento) ? data.financial : undefined;
+  const liquidated = moneyFrom(field(root, ["valorLiquidado", "valorLiquidadoDoEmpenho"])) ?? evidence?.liquidated ?? null;
+  const paid = moneyFrom(field(root, ["valorPago", "valorPagoDoEmpenho"])) ?? evidence?.paid ?? null;
   const beneficiary = root.favorecido && typeof root.favorecido === "object" ? root.favorecido as Json : {};
   const supplier = field(root, ["nomeFavorecido", "nomeFornecedor", "nomePessoa", "razaoSocial"]) ?? field(beneficiary, ["nome", "razaoSocial"]) ?? (typeof root.favorecido === "string" ? root.favorecido : undefined);
   const supplierName = typeof supplier === "string" ? supplier : "Não informado";
@@ -27,7 +29,7 @@ export function archivedFinancial(snapshot: unknown) {
 export function financialPosition(current: number | null, liquidated: number | null, paid: number | null, supplierName: string) {
   const inconsistent = [current, liquidated, paid].some(v => v !== null && v < 0) || (current !== null && paid !== null && paid > current + 0.01) || (current !== null && liquidated !== null && liquidated > current + 0.01) || (liquidated !== null && paid !== null && paid > liquidated + 0.01);
   const incomplete = current === null || liquidated === null || paid === null;
-  const status = inconsistent ? "DIVERGENTE" : incomplete ? "A_CONFERIR" : paid! > 0 && paid! >= current! - 0.01 ? "PAGA" : paid! > 0 ? "PARCIALMENTE_PAGA" : liquidated! > 0 && liquidated! >= current! - 0.01 ? "LIQUIDADA" : liquidated! > 0 ? "PARCIALMENTE_LIQUIDADA" : "NAO_LIQUIDADA";
+  const status = inconsistent ? "DIVERGENTE" : paid !== null && paid > 0 && current !== null && paid >= current - 0.01 ? "PAGA" : paid !== null && paid > 0 ? "PARCIALMENTE_PAGA" : liquidated !== null && liquidated > 0 && current !== null && liquidated >= current - 0.01 ? "LIQUIDADA" : liquidated !== null && liquidated > 0 ? "PARCIALMENTE_LIQUIDADA" : incomplete ? "A_CONFERIR" : "NAO_LIQUIDADA";
   return { current, liquidated, paid, supplierName, status, inconsistent, incomplete };
 }
 

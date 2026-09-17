@@ -92,3 +92,25 @@ Aplicar também a migration `20260916160000_discovered_origin` com `prisma migra
 - A busca apresenta modal centralizado, seleção por ATA e fornecedor, paginação local 10/20/30/50 e carga de CNPJ individual ou das ATAs selecionadas. O período sugerido usa a menor data inicial e maior data final das ATAs selecionadas.
 
 A migração e a integração autenticada com dados reais precisam ser verificadas no ambiente de instalação. Os testes locais usam respostas simuladas e não comprovam cobertura integral da fonte.
+
+### Liquidações e pagamentos por empenho (16/09/2026)
+
+A documentação oficial `https://api.portaldatransparencia.gov.br/v3/api-docs` define o endpoint paginado `GET /api-de-dados/despesas/empenhos-impactados?codigoDocumento=...&fase=2|3&pagina=...`. O DTO `EmpenhoImpactadoBasicoDTO` informa `empenho`, `subitem`, `valorLiquidado`, `valorPago` e `valorRestoPago`. O DTO do documento principal informa `valor`, mas não os totais de liquidação/pagamento; por isso somente ler esse documento não preenchia os cartões.
+
+A importação agora enriquece a cópia salva com `snapshot.financial` (versão 1). Para cada documento relacionado de liquidação/pagamento:
+
+1. Consulta as páginas de empenhos impactados até receber uma lista vazia válida. Página repetida, erro de fonte, prazo de 60s ou limite de 100 páginas impedem publicar um total parcial daquele documento.
+2. Seleciona apenas o código completo da NE, incluindo UG e gestão. Nunca associa somente pelo número abreviado.
+3. Deduplica documentos e subitens; conflitos de valores são sinalizados. Soma valores com o sinal original, incluindo estornos. Na fase 3, soma `valorPago` e `valorRestoPago` informado separadamente pela fonte.
+4. Salva os subitens comprobatórios e a parcela atribuída à NE. O valor integral da NS/OB não é utilizado como parcela de cada NE. Respostas completas de empenhos impactados têm cache de 5 minutos e limite de 300 entradas, compartilhado entre consultas simultâneas.
+
+Quando há valor confirmado de pagamento/liquidação mas a outra fase não tem dados, a situação identifica a fase conhecida e a NE continua contada entre as que precisam de conferência. Ausência de documentos continua sendo valor não informado, não zero. Um valor de zero explícito é preservado.
+
+- `GET /financial-execution/discovery/archive/:code`: detalhe salvo com resumo financeiro calculado, documento, relacionados e evidências por subitem. Usa `financial_execution.view`.
+- `POST /financial-execution/discovery/archive/:code/sync`: atualiza uma cópia existente preservando sua origem; usa `financial_execution.manage`. Erro ao confirmar parcelas de uma cópia existente mantém o snapshot anterior.
+- Na carteira, **Atualizar liquidações e pagamentos** atualiza as cópias importadas/avulsas sequencialmente e apresenta falhas por NE. É necessário executar essa atualização para enriquecer as importações feitas antes desta versão. Não consulta o governo a cada abertura de tela.
+- A sincronização das NEs vinculadas a projetos usa a mesma atribuição por empenho. Assim, uma NS ou OB compartilhada não tem mais seu valor integral lançado em cada projeto; erro ou ambiguidade na atribuição interrompe a sincronização e preserva os valores anteriores.
+- Filtros por empresa, situação e texto são combinados na lista e reiniciam a paginação. Os cartões mantêm o total da carteira completa, identificado na tela.
+- O clique na NE abre o mesmo modal nas abas carteira e importadas; NEs de projetos utilizam o endpoint de detalhes existente com controle de acesso ao projeto. A UG de uma NE manual vem do campo cadastrado, não do identificador interno.
+
+Não há nova migração nesta versão: as evidências complementam o JSON já persistido. Testes usam o formato publicado pela API e respostas simuladas; a validação autenticada das parcelas no ambiente do usuário continua necessária.

@@ -86,6 +86,15 @@ describe("PortalTransparenciaClient", () => {
         { codigoDocumento: "160016000012026NS000100", numeroDocumento: "2026NS000100", fase: "Liquidação", valor: "R$ 10.000,00" },
         { codigoDocumento: "160016000012026OB000200", numeroDocumento: "2026OB000200", fase: "Pagamento", valor: "R$ 10.000,00" },
       ]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { empenho: "160016000012026NE000534", subitem: "01", valorLiquidado: "R$ 10.000,00" },
+      ]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { empenho: "160016000012026NE000534", subitem: "01", valorPago: "R$ 10.000,00", valorRestoPago: "R$ 0,00" },
+        { empenho: "160016000012026NE000999", subitem: "01", valorPago: "R$ 90.000,00", valorRestoPago: "R$ 0,00" },
+      ]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ codigoDocumento: "160016000012026NS000100", numeroDocumento: "2026NS000100", fase: "Liquidação", valor: "R$ 10.000,00" }), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({ codigoDocumento: "160016000012026OB000200", numeroDocumento: "2026OB000200", fase: "Pagamento", valor: "R$ 10.000,00" }), { status: 200, headers: { "Content-Type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);

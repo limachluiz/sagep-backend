@@ -1,5 +1,6 @@
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { AppError } from "../../shared/app-error.js";
+import { collectPaymentEvidence } from "./ne-payment-evidence.js";
 
 export type FinancialPhase = "EMPENHO" | "LIQUIDACAO" | "PAGAMENTO" | "ANULACAO" | "OUTRO";
 
@@ -235,7 +236,17 @@ export class PortalTransparenciaClient {
       relatedUrl.toString(),
       token,
       "Documentos relacionados da Nota de Empenho não foram localizados",
+      { allowEmptyArray: true },
     );
+    const allocation = await collectPaymentEvidence(baseUrl, token, externalCode, relatedPayload, fetchPortalJson);
+    const allocationError = allocation.documents.find((document) => document.error);
+    if (allocationError) {
+      throw new AppError(
+        `Não foi possível atribuir ${allocationError.phase === 2 ? "a liquidação" : "o pagamento"} ${allocationError.code} a esta NE: ${allocationError.error}`,
+        502,
+        "PORTAL_FINANCIAL_ALLOCATION_INCOMPLETE",
+      );
+    }
     const relatedDocuments = await Promise.all(recordsFromPayload(relatedPayload).map(async (relation) => {
       const summary = parseDocument(relation, externalCode);
       if (!/^\d{6}\d{5}\d{4}(?:NS|OB|NE)\d{6}$/i.test(summary.externalCode) || summary.externalCode === externalCode) return summary;
@@ -261,8 +272,10 @@ export class PortalTransparenciaClient {
     const cancelledAmount = documents.filter((item) => item.phase === "ANULACAO").reduce((sum, item) => sum + Math.abs(item.amount), 0);
     const currentFromPortal = decimalFor(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]);
     const currentAmount = currentFromPortal || Math.max(0, originalAmount - cancelledAmount);
-    const liquidatedAmount = documents.filter((item) => item.phase === "LIQUIDACAO").reduce((sum, item) => sum + Math.abs(item.amount), 0);
-    const paidAmount = documents.filter((item) => item.phase === "PAGAMENTO").reduce((sum, item) => sum + Math.abs(item.amount), 0);
+    // A related NS/OB can cover several commitment notes. Use only the subitems
+    // explicitly allocated to this full NE code, never the whole document value.
+    const liquidatedAmount = allocation.liquidated ?? 0;
+    const paidAmount = allocation.paid ?? 0;
 
     return {
       source: "PORTAL_TRANSPARENCIA",

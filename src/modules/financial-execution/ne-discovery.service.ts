@@ -1,3 +1,4 @@
+import { collectPaymentEvidence } from "./ne-payment-evidence.js";
 import { resolvePncpSupplier } from "./supplier-pncp.client.js";
 import { ComprasGovService } from "../compras-gov/compras-gov.service.js";
 import { createHash } from "node:crypto";
@@ -58,7 +59,7 @@ export async function discoveryPage(input: z.infer<typeof discoveryPageSchema>) 
     fingerprint: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), source: "Portal da Transparência", fetchedAt: new Date().toISOString() };
 }
 
-export async function discoveryDocuments(code: string) {
+export async function discoveryDocuments(code: string, withPayments = false) {
   if (!/^\d{11}\d{4}NE\d{6}$/.test(code)) throw new AppError("Código de NE inválido", 400, "INVALID_NE");
   const token = await systemSettingsService.getPortalApiToken();
   if (!token) throw new AppError("Token não configurado", 503, "PORTAL_TRANSPARENCIA_NOT_CONFIGURED");
@@ -66,7 +67,8 @@ export async function discoveryDocuments(code: string) {
   const base = settings.portalTransparenciaBaseUrl.replace(/\/$/, "");
   const document = await fetchPortalJson(`${base}/despesas/documentos/${code}`, token, "Documento não localizado");
   const related = await fetchPortalJson(`${base}/despesas/documentos-relacionados?codigoDocumento=${code}&fase=1`, token, "Documentos relacionados indisponíveis", { allowEmptyArray: true });
-  return { document, related, fetchedAt: new Date().toISOString() };
+  const financial = withPayments ? await collectPaymentEvidence(base, token, code, related, fetchPortalJson) : undefined;
+  return { document, related, ...(financial ? { financial } : {}), fetchedAt: new Date().toISOString() };
 }
 
 export function supplierCnpjFromSnapshots(snapshots: unknown[], vendorName: string): string | null {

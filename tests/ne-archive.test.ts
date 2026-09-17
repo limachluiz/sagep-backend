@@ -3,13 +3,13 @@ const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), create: vi.fn(), updateMa
 // Only the archive delegate is exposed: any write to project/ATA balances fails.
 vi.mock("../src/config/prisma.js", () => ({ prisma: { discoveredCommitment: mocks } }));
 vi.mock("../src/modules/financial-execution/ne-discovery.service.js", () => ({ discoveryDocuments: mocks.source }));
-import { archiveImportSchema, archiveQuerySchema, importDiscoveredNote, deleteArchivedNotes } from "../src/modules/financial-execution/ne-archive.service.js";
+import { archiveImportSchema, archiveQuerySchema, importDiscoveredNote, deleteArchivedNotes, refreshArchivedNote } from "../src/modules/financial-execution/ne-archive.service.js";
 const code = "160016000012026NE000534";
 beforeEach(() => { vi.resetAllMocks(); mocks.source.mockResolvedValue({ document: { valor: "33.698,40" }, related: [], fetchedAt: "2026-09-15T12:00:00Z" }); mocks.findUnique.mockResolvedValue(null); });
 describe("NE archive and origin conflicts", () => {
   it("imports authoritative snapshots without writing balances", async () => {
     await importDiscoveredNote(code, "user");
-    expect(mocks.source).toHaveBeenCalledWith(code);
+    expect(mocks.source).toHaveBeenCalledWith(code, true);
     expect(mocks.create).toHaveBeenCalledWith({ data: expect.objectContaining({ importedById: "user", externalCode: code, origin: "IMPORTED", snapshot: expect.objectContaining({ related: [] }) }) });
   });
   it("refreshes the same origin without creating another NE", async () => {
@@ -35,6 +35,18 @@ describe("NE archive and origin conflicts", () => {
     mocks.source.mockRejectedValue(new Error("unavailable"));
     await expect(importDiscoveredNote(code, "user")).rejects.toThrow("unavailable");
     expect(mocks.create).not.toHaveBeenCalled(); expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+  it("preserves the previous copy when payment allocation fails", async () => {
+    mocks.findUnique.mockResolvedValue({ id: "one", externalCode: code, origin: "IMPORTED", snapshot: {}, updatedAt: new Date() });
+    mocks.source.mockResolvedValue({ document: { valor: 100 }, related: [], financial: { documents: [{ error: "HTTP 429" }] } });
+    await expect(refreshArchivedNote(code, "user")).rejects.toMatchObject({ statusCode: 502, code: "NE_PAYMENTS_INCOMPLETE" });
+    expect(mocks.updateMany).not.toHaveBeenCalled();
+  });
+  it("refreshes a standalone copy without changing its origin", async () => {
+    mocks.findUnique.mockResolvedValue({ id: "one", externalCode: code, origin: "STANDALONE", snapshot: {}, updatedAt: new Date() });
+    mocks.updateMany.mockResolvedValue({ count: 1 });
+    await refreshArchivedNote(code, "user");
+    expect(mocks.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ origin: "STANDALONE" }) }));
   });
   it("rejects malformed identifiers before contacting the source", async () => {
     await expect(importDiscoveredNote("bad", "user")).rejects.toThrow(); expect(mocks.source).not.toHaveBeenCalled();
