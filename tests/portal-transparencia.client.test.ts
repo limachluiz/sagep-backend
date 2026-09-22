@@ -85,6 +85,8 @@ describe("PortalTransparenciaClient", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify([
         { codigoDocumento: "160016000012026NS000100", numeroDocumento: "2026NS000100", fase: "Liquidação", valor: "R$ 10.000,00" },
         { codigoDocumento: "160016000012026OB000200", numeroDocumento: "2026OB000200", fase: "Pagamento", valor: "R$ 10.000,00" },
+        { codigoDocumento: "160016000012026DF000301", numeroDocumento: "2026DF000301", fase: "Pagamento", valor: "- R$ 500,00", especie: "Estorno / Cancelamento" },
+        { codigoDocumento: "160016000012026DF000302", numeroDocumento: "2026DF000302", fase: "Pagamento", valor: "R$ 500,00", especie: "Original" },
         { codigoDocumento: "160016000012026DR000300", numeroDocumento: "2026DR000300", fase: "Pagamento", valor: "R$ 500,00" },
       ]), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify([
@@ -106,7 +108,7 @@ describe("PortalTransparenciaClient", () => {
     expect(snapshot.liquidatedAmount).toBe(10_000);
     expect(snapshot.paidAmount).toBe(10_000);
     expect(snapshot.financialStatus).toBe("PAGA");
-    expect(snapshot.documents).toHaveLength(4);
+    expect(snapshot.documents).toHaveLength(6);
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("/despesas/documentos-relacionados?"), expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("codigoDocumento=160016000012026NE000534"), expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("fase=1"), expect.any(Object));

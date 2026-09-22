@@ -278,9 +278,9 @@ export class PortalTransparenciaClient {
     // explicitly allocated to this full NE code, never the whole document value.
     const liquidatedAmount = allocation.liquidated ?? 0;
     const netPaidAmount = allocation.paidNet ?? allocation.paid ?? 0;
-    const deductions = relatedDocuments
+    const deductions = documents
       .filter((item) => /(?:DR|DF)\d{6}$/i.test(item.externalCode))
-      .reduce((sum, item) => sum + Math.abs(item.amount), 0);
+      .reduce((sum, item) => sum + item.amount, 0);
     const paidAmount = deductions > 0 && Math.abs(netPaidAmount + deductions - liquidatedAmount) <= 0.01
       ? Math.round((netPaidAmount + deductions) * 100) / 100
       : allocation.paid ?? 0;

@@ -51,15 +51,26 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
   const evidenceTypes = evidence?.documents.map(document => financialDocumentType(document.code)) ?? [];
   const liquidationCompleted = [...relatedTypes, ...evidenceTypes].includes("NS");
   const paymentCompleted = liquidationCompleted && [...relatedTypes, ...evidenceTypes].includes("OB");
-  const deductionValues = related
-    .filter(item => item && typeof item === "object" && ["DR", "DF"].includes(financialDocumentType(field(item as Json, ["documento", "codigoDocumento", "codigo", "idDocumento"])) ?? ""))
-    .map(item => moneyFrom(field(item as Json, ["valor", "valorDocumento"])));
-  const relatedDeductions = deductionValues.length > 0 && deductionValues.every(value => value !== null)
-    ? Math.round(deductionValues.reduce((total, value) => total + Math.abs(value!), 0) * 100) / 100
+  const deductionByCode = new Map<string, number>();
+  let deductionsValid = false;
+  for (const item of related) {
+    if (!item || typeof item !== "object") continue;
+    const code = String(field(item as Json, ["documento", "codigoDocumento", "codigo", "idDocumento"]) ?? "").trim();
+    if (!["DR", "DF"].includes(financialDocumentType(code) ?? "")) continue;
+    deductionsValid = true;
+    const amount = moneyFrom(field(item as Json, ["valor", "valorDocumento"]));
+    const previous = deductionByCode.get(code);
+    if (amount === null || (previous !== undefined && Math.abs(previous - amount) > 0.001)) { deductionsValid = false; break; }
+    deductionByCode.set(code, amount);
+  }
+  const relatedDeductions = deductionsValid
+    ? Math.round([...deductionByCode.values()].reduce((total, value) => total + value, 0) * 100) / 100
     : null;
   const paidNet = evidence?.paidNet ?? paymentEvidence.amount;
-  const deductions = evidence?.deductions ?? relatedDeductions;
-  const reconciledPaid = paidNet !== null && deductions !== null && liquidated !== null && Math.abs(paidNet + deductions - liquidated) <= 0.01
+  // Prefer the related records so snapshots that summed absolute values are
+  // repaired during reading without requiring another synchronization.
+  const deductions = relatedDeductions ?? evidence?.deductions ?? null;
+  const reconciledPaid = paidNet !== null && deductions !== null && deductions > 0 && liquidated !== null && Math.abs(paidNet + deductions - liquidated) <= 0.01
     ? Math.round((paidNet + deductions) * 100) / 100
     : paymentEvidence.amount;
   const paid = paidFromRoot ?? reconciledPaid;

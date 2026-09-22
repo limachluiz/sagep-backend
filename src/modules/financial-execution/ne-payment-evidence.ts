@@ -103,11 +103,19 @@ export async function collectPaymentEvidence(base: string, token: string, extern
   };
   const liquidated = sum(2), paid = sum(3);
   const deductionRows = related.filter(row => ["DR", "DF"].includes(financialDocumentType(row?.documento ?? row?.codigoDocumento) ?? ""));
-  const deductionValues = deductionRows.map(row => moneyFrom(row?.valor ?? row?.valorDocumento));
-  const deductions = deductionRows.length > 0 && deductionValues.every(value => value !== null)
-    ? Math.round(deductionValues.reduce((total, value) => total + Math.abs(value!), 0) * 100) / 100
+  const deductionByCode = new Map<string, number>();
+  let deductionsValid = deductionRows.length > 0;
+  for (const row of deductionRows) {
+    const code = String(row?.documento ?? row?.codigoDocumento ?? "").trim();
+    const amount = moneyFrom(row?.valor ?? row?.valorDocumento);
+    const previous = deductionByCode.get(code);
+    if (amount === null || (previous !== undefined && Math.abs(previous - amount) > 0.001)) { deductionsValid = false; break; }
+    deductionByCode.set(code, amount);
+  }
+  const deductions = deductionsValid
+    ? Math.round([...deductionByCode.values()].reduce((total, value) => total + value, 0) * 100) / 100
     : null;
-  const grossPaid = paid.amount !== null && deductions !== null && liquidated.amount !== null
+  const grossPaid = paid.amount !== null && deductions !== null && deductions > 0 && liquidated.amount !== null
     && Math.abs(paid.amount + deductions - liquidated.amount) <= 0.01
     ? Math.round((paid.amount + deductions) * 100) / 100
     : paid.amount;

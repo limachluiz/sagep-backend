@@ -99,6 +99,28 @@ describe("financial amounts allocated to an exact NE", () => {
     expect(archivedFinancial({ document: { documento: ne, valor: "32.200,00" }, related, financial: evidence }, ne))
       .toMatchObject({ status: "PAGA", incomplete: false, paid: 32_200, paymentIncomplete: false, unresolvedPayments: 0 });
   });
+  it("nets original and cancelled DR/DF records and repairs an absolute-value snapshot", async () => {
+    const related = [
+      { documento: ns, fase: "Liquidação" },
+      { documento: ob, fase: "Pagamento" },
+      { documento: "160016000012026DF800881", fase: "Pagamento", valor: "- 555,75", especie: "Estorno / Cancelamento" },
+      { documento: "160016000012026DF800916", fase: "Pagamento", valor: "555,75", especie: "Original" },
+      { documento: "160016000012026DR800149", fase: "Pagamento", valor: "475,00", especie: "Original" },
+      { documento: "160016000012026DF800819", fase: "Pagamento", valor: "555,75", especie: "Original" },
+      { documento: "160016000012026DF800819", fase: "Pagamento", valor: "555,75", especie: "Original" },
+    ];
+    fetcher
+      .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorLiquidado: "9.500,00" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorPago: "8.469,25" }])
+      .mockResolvedValueOnce([]);
+    const evidence = await collectPaymentEvidence(base, "signed-deductions", ne, related, fetcher);
+    expect(evidence).toMatchObject({ paid: 9_500, paidNet: 8_469.25, deductions: 1_030.75, paidComplete: true });
+    expect(evidence.documents.map(document => document.code)).toEqual([ns, ob]);
+    const staleAbsoluteSnapshot = { ...evidence, paid: 8_469.25, deductions: 2_142.25 };
+    expect(archivedFinancial({ document: { documento: ne, valor: "9.500,00" }, related, financial: staleAbsoluteSnapshot }, ne))
+      .toMatchObject({ status: "PAGA", paid: 9_500, paidNet: 8_469.25, deductions: 1_030.75, incomplete: false });
+  });
   it("publishes the confirmed subtotal and marks the phase incomplete when another payment fails", async () => {
     fetcher
       .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorPago: "75" }])
