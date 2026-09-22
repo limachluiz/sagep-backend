@@ -106,6 +106,8 @@ A importação agora enriquece a cópia salva com `snapshot.financial` (versão 
 
 Quando há valor confirmado de pagamento/liquidação mas a outra fase não tem dados, a situação identifica a fase conhecida e a NE continua contada entre as que precisam de conferência. Se somente parte dos documentos de uma fase for confirmada, o subtotal comprovado é exibido e somado, enquanto `liquidatedComplete`/`paidComplete` permanecem falsos e a NE é marcada como parcial. Ausência de documentos continua sendo valor não informado, não zero. Um valor de zero explícito é preservado.
 
+O estado do processo segue os documentos oficiais: NS confirma liquidação; NS acompanhada de OB confirma pagamento concluído. A OB representa o repasse líquido ao fornecedor e documentos DR/DF representam retenções ou deduções. Quando `OB + DR/DF` reconcilia com a NS, o total pago registra o valor bruto executado e a resposta também preserva `paidNet` e `deductions` para demonstrar a composição. DR e DF não são tratados como uma segunda parcela pendente. Snapshots antigos que os classificaram como pagamento incompleto são corrigidos durante a leitura.
+
 Snapshots da versão 1 são reparados durante a leitura: se o total da fase estiver nulo, a carteira soma os valores individuais já comprovados em `documents`, sem exigir nova importação. O diagnóstico agregado informa quantas NEs possuem liquidações ou pagamentos parcialmente confirmados; documentos ainda sem parcela mantêm o registro a conferir.
 
 - `GET /financial-execution/discovery/archive/:code`: detalhe salvo com resumo financeiro calculado, documento, relacionados e evidências por subitem. Usa `financial_execution.view`.

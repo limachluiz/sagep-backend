@@ -191,8 +191,10 @@ function deriveStatus(current: number, liquidated: number, paid: number, cancell
   const tolerance = 0.01;
   if (current <= tolerance && cancelled > tolerance) return "ANULADA";
   if (cancelled > tolerance) return "PARCIALMENTE_ANULADA";
-  const hasPayment = documents.some((item) => item.phase === "PAGAMENTO");
-  const hasLiquidation = documents.some((item) => item.phase === "LIQUIDACAO");
+  const hasPayment = documents.some((item) => /OB\d{6}$/i.test(item.externalCode));
+  const hasLiquidation = documents.some((item) => /NS\d{6}$/i.test(item.externalCode));
+  if (hasLiquidation && hasPayment) return "PAGA";
+  if (hasLiquidation) return "LIQUIDADA";
   if ((paid > tolerance && paid + tolerance >= current) || (hasPayment && paid === 0)) return "PAGA";
   if (paid > tolerance) return "PARCIALMENTE_PAGA";
   if ((liquidated > tolerance && liquidated + tolerance >= current) || (hasLiquidation && liquidated === 0)) return "LIQUIDADA";
@@ -275,7 +277,13 @@ export class PortalTransparenciaClient {
     // A related NS/OB can cover several commitment notes. Use only the subitems
     // explicitly allocated to this full NE code, never the whole document value.
     const liquidatedAmount = allocation.liquidated ?? 0;
-    const paidAmount = allocation.paid ?? 0;
+    const netPaidAmount = allocation.paidNet ?? allocation.paid ?? 0;
+    const deductions = relatedDocuments
+      .filter((item) => /(?:DR|DF)\d{6}$/i.test(item.externalCode))
+      .reduce((sum, item) => sum + Math.abs(item.amount), 0);
+    const paidAmount = deductions > 0 && Math.abs(netPaidAmount + deductions - liquidatedAmount) <= 0.01
+      ? Math.round((netPaidAmount + deductions) * 100) / 100
+      : allocation.paid ?? 0;
 
     return {
       source: "PORTAL_TRANSPARENCIA",

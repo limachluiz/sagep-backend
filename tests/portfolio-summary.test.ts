@@ -17,6 +17,12 @@ describe("consolidated portfolio", () => {
   it("reads totals explicitly provided by the source", () => {
     expect(archivedFinancial({ document: { valorAtual: 100, valorLiquidado: 100, valorPago: 100, favorecido: { nome: "Fornecedor" } } })).toMatchObject({ status: "PAGA", supplierName: "Fornecedor" });
   });
+  it("uses the documentary lifecycle instead of comparing a net OB with the gross NS", () => {
+    expect(financialPosition(28_800, 28_800, 28_800, "Fornecedor", { liquidationCompleted: true, paymentCompleted: true, paidNet: 27_936, deductions: 864 }))
+      .toMatchObject({ status: "PAGA", incomplete: false, paid: 28_800, paidNet: 27_936, deductions: 864 });
+    expect(financialPosition(28_800, 28_800, null, "Fornecedor", { liquidationCompleted: true, paymentCompleted: false }))
+      .toMatchObject({ status: "LIQUIDADA", incomplete: false });
+  });
   it("deduplicates by official code and does not expose a project outside access scope via archive", () => {
     const row = (externalCode: string, amount: number) => ({ externalCode, ...financialPosition(amount, 0, 0, "Fornecedor") });
     const result = consolidatePortfolio([row("project", 100)], [row("project", 200), row("private-project", 300), row("imported", 50), row("imported", 50)], ["project", "private-project"]);

@@ -3,17 +3,28 @@ import { moneyFrom } from "./portfolio-summary.js";
 
 type RecordValue = Record<string, unknown>;
 export type PaymentEvidence = {
-  version: 1 | 2; externalCode: string; checkedAt: string;
+  version: 1 | 2 | 3; externalCode: string; checkedAt: string;
   liquidated: number | null; paid: number | null;
+  paidNet?: number | null; deductions?: number | null;
   liquidatedComplete?: boolean; paidComplete?: boolean;
   documents: Array<{ code: string; phase: 2 | 3; amount: number | null; subitems: RecordValue[]; error?: string }>;
 };
 const fullCode = /^\d{15}(?:NE|NS|OB)\d{6}$/;
+export function financialDocumentType(code: unknown): "NS" | "OB" | "DR" | "DF" | null {
+  const match = String(code ?? "").trim().toUpperCase().match(/^\d{15}(NS|OB|DR|DF)\d{6}$/);
+  return match?.[1] as "NS" | "OB" | "DR" | "DF" | undefined ?? null;
+}
 const cache = new Map<string, { expires: number; value: Promise<RecordValue[]> }>();
 type PortalFetcher = (url: string, token: string, notFoundMessage: string, options?: { allowEmptyArray?: boolean }) => Promise<unknown>;
-export function paymentPhase(value: unknown): 2 | 3 | null {
+export function paymentPhase(value: unknown, code?: unknown): 2 | 3 | null {
+  const documentType = code === undefined ? null : financialDocumentType(code);
+  if (code !== undefined && !documentType) return null;
   const phase = String(value ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-  return phase === "2" || phase.includes("LIQUIDA") ? 2 : phase === "3" || phase.includes("PAGAMENTO") ? 3 : null;
+  const declared = phase === "2" || phase.includes("LIQUIDA") ? 2 : phase === "3" || phase.includes("PAGAMENTO") ? 3 : null;
+  if (documentType === "NS") return declared === 3 ? null : 2;
+  if (documentType === "OB") return declared === 2 ? null : 3;
+  if (documentType === "DR" || documentType === "DF") return null;
+  return declared;
 }
 async function impacts(base: string, token: string, code: string, phase: 2 | 3, fetchPortalJson: PortalFetcher): Promise<RecordValue[]> {
   // Auth is part of the cache key without storing the credential in plain text.
@@ -68,9 +79,11 @@ export async function collectPaymentEvidence(base: string, token: string, extern
   const documents: PaymentEvidence["documents"] = [];
   const seen = new Set<string>();
   for (const row of related) {
-    const phase = paymentPhase(row?.fase);
-    if (!phase) continue;
     const code = String(row.documento ?? row.codigoDocumento ?? "").trim();
+    // DR/DF and other auxiliary records describe deductions/retentions. They are
+    // evidence attached to the payment, not another amount still to be paid.
+    const phase = paymentPhase(row?.fase, code);
+    if (!phase) continue;
     const key = `${phase}:${code}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -89,12 +102,23 @@ export async function collectPaymentEvidence(base: string, token: string, extern
     };
   };
   const liquidated = sum(2), paid = sum(3);
+  const deductionRows = related.filter(row => ["DR", "DF"].includes(financialDocumentType(row?.documento ?? row?.codigoDocumento) ?? ""));
+  const deductionValues = deductionRows.map(row => moneyFrom(row?.valor ?? row?.valorDocumento));
+  const deductions = deductionRows.length > 0 && deductionValues.every(value => value !== null)
+    ? Math.round(deductionValues.reduce((total, value) => total + Math.abs(value!), 0) * 100) / 100
+    : null;
+  const grossPaid = paid.amount !== null && deductions !== null && liquidated.amount !== null
+    && Math.abs(paid.amount + deductions - liquidated.amount) <= 0.01
+    ? Math.round((paid.amount + deductions) * 100) / 100
+    : paid.amount;
   return {
-    version: 2,
+    version: 3,
     externalCode,
     checkedAt: new Date().toISOString(),
     liquidated: liquidated.amount,
-    paid: paid.amount,
+    paid: grossPaid,
+    paidNet: paid.amount,
+    deductions,
     liquidatedComplete: liquidated.complete,
     paidComplete: paid.complete,
     documents,

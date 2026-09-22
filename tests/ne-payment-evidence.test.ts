@@ -33,6 +33,72 @@ describe("financial amounts allocated to an exact NE", () => {
     expect(evidence.liquidated).toBe(100); expect(evidence.paid).toBeNull();
     expect(archivedFinancial({ document: { documento: ne, valor: "100,00" }, financial: evidence })).toMatchObject({ liquidated: 100, status: "LIQUIDADA" });
   });
+  it("treats NS plus OB as a completed payment even when the OB is net of deductions", async () => {
+    const dr = "160016000012026DR000171";
+    fetcher
+      .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorLiquidado: "28.800,00" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorPago: "27.936,00" }])
+      .mockResolvedValueOnce([]);
+    const related = [
+      { documento: ns, fase: "Liquidação" },
+      { documento: ob, fase: "Pagamento" },
+      { documento: dr, fase: "Pagamento", valor: "864,00" },
+    ];
+    const evidence = await collectPaymentEvidence(base, "deductions", ne, related, fetcher);
+    expect(evidence).toMatchObject({ liquidated: 28_800, paid: 28_800, paidNet: 27_936, deductions: 864, liquidatedComplete: true, paidComplete: true });
+    expect(evidence.documents.map(document => document.code)).toEqual([ns, ob]);
+    expect(fetcher).toHaveBeenCalledTimes(4);
+    expect(archivedFinancial({ document: { documento: ne, valor: "28.800,00" }, related, financial: evidence }, ne)).toMatchObject({
+      liquidated: 28_800,
+      paid: 28_800,
+      paidNet: 27_936,
+      deductions: 864,
+      status: "PAGA",
+      incomplete: false,
+      paymentIncomplete: false,
+      unresolvedPayments: 0,
+    });
+  });
+  it("repairs saved snapshots by ignoring DR as an unpaid payment document", () => {
+    const related = [
+      { documento: ns, fase: "Liquidação" },
+      { documento: ob, fase: "Pagamento" },
+      { documento: "160016000012026DR000171", fase: "Pagamento", valor: "864,00" },
+    ];
+    const result = archivedFinancial({
+      document: { documento: ne, valor: "28.800,00" },
+      related,
+      financial: {
+        version: 2, externalCode: ne, checkedAt: "2026-09-22T12:17:04Z",
+        liquidated: 28_800, paid: 27_936, liquidatedComplete: true, paidComplete: false,
+        documents: [
+          { code: ns, phase: 2, amount: 28_800, subitems: [] },
+          { code: ob, phase: 3, amount: 27_936, subitems: [] },
+          { code: "160016000012026DR000171", phase: 3, amount: null, subitems: [], error: "Código completo do documento não informado" },
+        ],
+      },
+    }, ne);
+    expect(result).toMatchObject({ status: "PAGA", incomplete: false, paid: 28_800, paidNet: 27_936, deductions: 864, paymentIncomplete: false, unresolvedPayments: 0 });
+  });
+  it("reconciles DF deductions without treating the DF as an unpaid document", async () => {
+    const df = "160016000012026DF801187";
+    fetcher
+      .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorLiquidado: "32.200,00" }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorPago: "31.395,00" }])
+      .mockResolvedValueOnce([]);
+    const related = [
+      { documento: ns, fase: "Liquidação" },
+      { documento: ob, fase: "Pagamento" },
+      { documento: df, fase: "Pagamento", valor: "805,00" },
+    ];
+    const evidence = await collectPaymentEvidence(base, "df-deduction", ne, related, fetcher);
+    expect(evidence).toMatchObject({ paid: 32_200, paidNet: 31_395, deductions: 805, paidComplete: true });
+    expect(evidence.documents.map(document => document.code)).toEqual([ns, ob]);
+    expect(archivedFinancial({ document: { documento: ne, valor: "32.200,00" }, related, financial: evidence }, ne))
+      .toMatchObject({ status: "PAGA", incomplete: false, paid: 32_200, paymentIncomplete: false, unresolvedPayments: 0 });
+  });
   it("publishes the confirmed subtotal and marks the phase incomplete when another payment fails", async () => {
     fetcher
       .mockResolvedValueOnce([{ empenho: ne, subitem: "1", valorPago: "75" }])
