@@ -5151,6 +5151,59 @@ export const openApiDocument: OpenApiDocument = {
         "x-permissions": ["reports.export"],
       },
     },
+    "/reports/financial-execution/commitment-notes": {
+      get: {
+        tags: ["Relatorios"],
+        summary: "Consultar a prévia do relatório financeiro de Notas de Empenho",
+        security: bearerSecurity,
+        parameters: [
+          queryParameter("search", "NE, fornecedor, CNPJ, UG ou projeto", { type: "string" }),
+          queryParameter("supplier", "Nome exato do fornecedor", { type: "string" }),
+          queryParameter("status", "Situação financeira consolidada", { type: "string" }),
+          queryParameter("origin", "Origem da NE", { type: "string", enum: ["PROJECT", "IMPORTED", "STANDALONE"] }),
+          queryParameter("managementUnit", "UG emitente", { type: "string", pattern: "^\\d{6}$" }),
+          queryParameter("issuedFrom", "Data inicial de emissão", { type: "string", format: "date" }),
+          queryParameter("issuedTo", "Data final de emissão", { type: "string", format: "date" }),
+          queryParameter("codes", "Até 100 códigos completos separados por vírgula", { type: "string" }),
+        ],
+        responses: { "200": { description: "Prévia consolidada do relatório", content: { "application/json": { schema: { type: "object" } } } }, ...defaultErrorResponses },
+        "x-permissions": ["reports.export", "financial_execution.view"],
+      },
+    },
+    "/reports/financial-execution/commitment-notes.pdf": {
+      get: {
+        tags: ["Relatorios"], summary: "Gerar relatório financeiro de Notas de Empenho em PDF", security: bearerSecurity,
+        parameters: [
+          queryParameter("search", "NE, fornecedor, CNPJ, UG ou projeto", { type: "string" }),
+          queryParameter("supplier", "Nome exato do fornecedor", { type: "string" }),
+          queryParameter("status", "Situação financeira consolidada", { type: "string" }),
+          queryParameter("origin", "Origem da NE", { type: "string", enum: ["PROJECT", "IMPORTED", "STANDALONE"] }),
+          queryParameter("managementUnit", "UG emitente", { type: "string", pattern: "^\\d{6}$" }),
+          queryParameter("issuedFrom", "Data inicial de emissão", { type: "string", format: "date" }),
+          queryParameter("issuedTo", "Data final de emissão", { type: "string", format: "date" }),
+          queryParameter("codes", "Até 100 códigos completos separados por vírgula", { type: "string" }),
+        ],
+        responses: { "200": { description: "Relatório PDF", content: binaryContent("application/pdf") }, ...defaultErrorResponses },
+        "x-permissions": ["reports.export", "financial_execution.view"],
+      },
+    },
+    "/reports/financial-execution/commitment-notes.xlsx": {
+      get: {
+        tags: ["Relatorios"], summary: "Exportar a posição financeira das Notas de Empenho em XLSX", security: bearerSecurity,
+        parameters: [
+          queryParameter("search", "NE, fornecedor, CNPJ, UG ou projeto", { type: "string" }),
+          queryParameter("supplier", "Nome exato do fornecedor", { type: "string" }),
+          queryParameter("status", "Situação financeira consolidada", { type: "string" }),
+          queryParameter("origin", "Origem da NE", { type: "string", enum: ["PROJECT", "IMPORTED", "STANDALONE"] }),
+          queryParameter("managementUnit", "UG emitente", { type: "string", pattern: "^\\d{6}$" }),
+          queryParameter("issuedFrom", "Data inicial de emissão", { type: "string", format: "date" }),
+          queryParameter("issuedTo", "Data final de emissão", { type: "string", format: "date" }),
+          queryParameter("codes", "Até 100 códigos completos separados por vírgula", { type: "string" }),
+        ],
+        responses: { "200": { description: "Planilha XLSX", content: binaryContent("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") }, ...defaultErrorResponses },
+        "x-permissions": ["reports.export", "financial_execution.view"],
+      },
+    },
     "/reports/atas/balance-position.pdf": {
       get: {
         tags: ["Relatorios"],

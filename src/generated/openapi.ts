@@ -1838,6 +1838,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/reports/financial-execution/commitment-notes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Consultar a prévia do relatório financeiro de Notas de Empenho */
+        get: operations["relatorios_get_reports_financialExecution_commitmentNotes"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reports/financial-execution/commitment-notes.pdf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Gerar relatório financeiro de Notas de Empenho em PDF */
+        get: operations["relatorios_get_reports_financialExecution_commitmentNotesPdf"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/reports/financial-execution/commitment-notes.xlsx": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Exportar a posição financeira das Notas de Empenho em XLSX */
+        get: operations["relatorios_get_reports_financialExecution_commitmentNotesXlsx"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/reports/atas/balance-position.pdf": {
         parameters: {
             query?: never;
@@ -2389,7 +2440,7 @@ export interface paths {
         put?: never;
         /**
          * Aplicar saldo oficial como saldo operacional de abertura
-         * @description Registra como consumo histórico a diferença entre a quantidade original e o saldo oficial, sem sobrescrever a quantidade original da ATA.
+         * @description Adota a quantidade registrada pela unidade gerenciadora como quantidade inicial e registra como consumo histórico apenas a diferença para o saldo oficial disponível.
          */
         post: operations["atas_post_byId_openingBalance_apply"];
         delete?: never;
@@ -2617,6 +2668,23 @@ export interface paths {
          * @description Cria uma OM com `sigla` unica no catalogo.
          */
         post: operations["militaryOrganizations_post_collection"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/military-organizations/bulk-action": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Inativar, arquivar ou excluir OMs em lote */
+        post: operations["militaryOrganizations_post_bulkAction"];
         delete?: never;
         options?: never;
         head?: never;
@@ -4508,6 +4576,8 @@ export interface components {
             /** @enum {string} */
             stateUf?: "AM" | "RO" | "RR" | "AC";
             isActive?: boolean;
+            /** Format: date-time */
+            archivedAt?: string | null;
             /** Format: date-time */
             createdAt?: string;
             /** Format: date-time */
@@ -6432,6 +6502,8 @@ export interface operations {
                 status?: "PENDENTE" | "EM_ANDAMENTO" | "REVISAO" | "CONCLUIDA" | "CANCELADA";
                 /** @description Busca textual. */
                 search?: string;
+                /** @description Visibilidade de OMs arquivadas. */
+                archived?: "active" | "archived" | "all";
             };
             header?: never;
             path?: never;
@@ -9167,6 +9239,135 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    relatorios_get_reports_financialExecution_commitmentNotes: {
+        parameters: {
+            query?: {
+                /** @description NE, fornecedor, CNPJ, UG ou projeto */
+                search?: string;
+                /** @description Nome exato do fornecedor */
+                supplier?: string;
+                /** @description Situação financeira consolidada */
+                status?: string;
+                /** @description Origem da NE */
+                origin?: "PROJECT" | "IMPORTED" | "STANDALONE";
+                /** @description UG emitente */
+                managementUnit?: string;
+                /** @description Data inicial de emissão */
+                issuedFrom?: string;
+                /** @description Data final de emissão */
+                issuedTo?: string;
+                /** @description Até 100 códigos completos separados por vírgula */
+                codes?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Prévia consolidada do relatório */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": Record<string, never>;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    relatorios_get_reports_financialExecution_commitmentNotesPdf: {
+        parameters: {
+            query?: {
+                /** @description NE, fornecedor, CNPJ, UG ou projeto */
+                search?: string;
+                /** @description Nome exato do fornecedor */
+                supplier?: string;
+                /** @description Situação financeira consolidada */
+                status?: string;
+                /** @description Origem da NE */
+                origin?: "PROJECT" | "IMPORTED" | "STANDALONE";
+                /** @description UG emitente */
+                managementUnit?: string;
+                /** @description Data inicial de emissão */
+                issuedFrom?: string;
+                /** @description Data final de emissão */
+                issuedTo?: string;
+                /** @description Até 100 códigos completos separados por vírgula */
+                codes?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Relatório PDF */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    relatorios_get_reports_financialExecution_commitmentNotesXlsx: {
+        parameters: {
+            query?: {
+                /** @description NE, fornecedor, CNPJ, UG ou projeto */
+                search?: string;
+                /** @description Nome exato do fornecedor */
+                supplier?: string;
+                /** @description Situação financeira consolidada */
+                status?: string;
+                /** @description Origem da NE */
+                origin?: "PROJECT" | "IMPORTED" | "STANDALONE";
+                /** @description UG emitente */
+                managementUnit?: string;
+                /** @description Data inicial de emissão */
+                issuedFrom?: string;
+                /** @description Data final de emissão */
+                issuedTo?: string;
+                /** @description Até 100 códigos completos separados por vírgula */
+                codes?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Planilha XLSX */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     relatorios_get_reports_atas_balancePositionPdf: {
         parameters: {
             query?: {
@@ -10844,6 +11045,59 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             404: components["responses"]["NotFound"];
             409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    militaryOrganizations_post_bulkAction: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    action: "INACTIVATE" | "ARCHIVE" | "DELETE";
+                    ids?: string[];
+                    allMatching: boolean;
+                    filters?: {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+        responses: {
+            /** @description Resultado da operação em lote */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        action?: string;
+                        requested?: number;
+                        succeeded?: number;
+                        failed?: number;
+                        succeededIds?: string[];
+                        failures?: {
+                            id?: string;
+                            sigla?: string;
+                            reason?: string;
+                        }[];
+                    };
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
             500: components["responses"]["InternalServerError"];
         };
     };

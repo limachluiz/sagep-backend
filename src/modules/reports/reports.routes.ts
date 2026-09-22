@@ -9,6 +9,25 @@ const controller = new ReportsController();
 reportsRoutes.use(authMiddleware);
 
 reportsRoutes.get(
+  "/financial-execution/commitment-notes",
+  requirePermission("reports.export"),
+  requirePermission("financial_execution.view"),
+  (req, res) => controller.commitmentNotesReport(req, res),
+);
+reportsRoutes.get(
+  "/financial-execution/commitment-notes.pdf",
+  requirePermission("reports.export"),
+  requirePermission("financial_execution.view"),
+  (req, res) => controller.commitmentNotesReportPdf(req, res),
+);
+reportsRoutes.get(
+  "/financial-execution/commitment-notes.xlsx",
+  requirePermission("reports.export"),
+  requirePermission("financial_execution.view"),
+  (req, res) => controller.commitmentNotesReportXlsx(req, res),
+);
+
+reportsRoutes.get(
   "/atas/balance-position.pdf",
   requirePermission("reports.export"),
   (req, res) => controller.ataBalancePositionPdf(req, res),

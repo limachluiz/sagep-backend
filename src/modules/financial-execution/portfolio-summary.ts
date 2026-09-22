@@ -46,6 +46,10 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
   const beneficiary = root.favorecido && typeof root.favorecido === "object" ? root.favorecido as Json : {};
   const supplier = field(root, ["nomeFavorecido", "nomeFornecedor", "nomePessoa", "razaoSocial"]) ?? field(beneficiary, ["nome", "razaoSocial"]) ?? (typeof root.favorecido === "string" ? root.favorecido : undefined);
   const supplierName = typeof supplier === "string" ? supplier : "Não informado";
+  const supplierCnpjValue = field(root, ["codigoFavorecido", "cnpjFavorecido", "cnpjFornecedor"]) ?? field(beneficiary, ["codigo", "cnpj"]);
+  const supplierCnpj = typeof supplierCnpjValue === "string" ? supplierCnpjValue : null;
+  const issuedAtValue = field(root, ["data", "dataEmissao", "dataEmissaoDocumento"]);
+  const issuedAt = typeof issuedAtValue === "string" || issuedAtValue instanceof Date ? issuedAtValue : null;
   const related = Array.isArray(data?.related) ? data.related : [];
   const relatedTypes = related.map(item => financialDocumentType(item && typeof item === "object" ? field(item as Json, ["documento", "codigoDocumento", "codigo", "idDocumento"]) : null));
   const evidenceTypes = evidence?.documents.map(document => financialDocumentType(document.code)) ?? [];
@@ -74,7 +78,7 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
     ? Math.round((paidNet + deductions) * 100) / 100
     : paymentEvidence.amount;
   const paid = paidFromRoot ?? reconciledPaid;
-  return financialPosition(current, liquidated, paid, supplierName, {
+  return { ...financialPosition(current, liquidated, paid, supplierName, {
     liquidationIncomplete: liquidatedFromRoot === null && liquidationEvidence.documents > 0 && !liquidationEvidence.complete,
     paymentIncomplete: paidFromRoot === null && paymentEvidence.documents > 0 && !paymentEvidence.complete,
     unresolvedLiquidations: liquidationEvidence.unresolved,
@@ -83,7 +87,7 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
     paymentCompleted,
     paidNet,
     deductions,
-  });
+  }), supplierCnpj, issuedAt };
 }
 export function financialPosition(current: number | null, liquidated: number | null, paid: number | null, supplierName: string, evidence: { liquidationIncomplete?: boolean; paymentIncomplete?: boolean; unresolvedLiquidations?: number; unresolvedPayments?: number; liquidationCompleted?: boolean; paymentCompleted?: boolean; paidNet?: number | null; deductions?: number | null } = {}) {
   const inconsistent = [current, liquidated, paid].some(v => v !== null && v < 0) || (current !== null && paid !== null && paid > current + 0.01) || (current !== null && liquidated !== null && liquidated > current + 0.01) || (liquidated !== null && paid !== null && paid > liquidated + 0.01);

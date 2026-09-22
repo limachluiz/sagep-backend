@@ -5949,6 +5949,11 @@
           "isActive": {
             "type": "boolean"
           },
+          "archivedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
           "createdAt": {
             "type": "string",
             "format": "date-time"
@@ -9774,6 +9779,21 @@
             "description": "Busca textual.",
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "archived",
+            "in": "query",
+            "required": false,
+            "description": "Visibilidade de OMs arquivadas.",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "active",
+                "archived",
+                "all"
+              ],
+              "default": "active"
             }
           }
         ],
@@ -15152,6 +15172,398 @@
         "operationId": "exports_get_projectsXlsx"
       }
     },
+    "/reports/financial-execution/commitment-notes": {
+      "get": {
+        "tags": [
+          "Relatorios"
+        ],
+        "summary": "Consultar a prévia do relatório financeiro de Notas de Empenho",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "NE, fornecedor, CNPJ, UG ou projeto",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "supplier",
+            "in": "query",
+            "required": false,
+            "description": "Nome exato do fornecedor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Situação financeira consolidada",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "description": "Origem da NE",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PROJECT",
+                "IMPORTED",
+                "STANDALONE"
+              ]
+            }
+          },
+          {
+            "name": "managementUnit",
+            "in": "query",
+            "required": false,
+            "description": "UG emitente",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6}$"
+            }
+          },
+          {
+            "name": "issuedFrom",
+            "in": "query",
+            "required": false,
+            "description": "Data inicial de emissão",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "issuedTo",
+            "in": "query",
+            "required": false,
+            "description": "Data final de emissão",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "codes",
+            "in": "query",
+            "required": false,
+            "description": "Até 100 códigos completos separados por vírgula",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Prévia consolidada do relatório",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "reports.export",
+          "financial_execution.view"
+        ],
+        "operationId": "relatorios_get_reports_financialExecution_commitmentNotes"
+      }
+    },
+    "/reports/financial-execution/commitment-notes.pdf": {
+      "get": {
+        "tags": [
+          "Relatorios"
+        ],
+        "summary": "Gerar relatório financeiro de Notas de Empenho em PDF",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "NE, fornecedor, CNPJ, UG ou projeto",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "supplier",
+            "in": "query",
+            "required": false,
+            "description": "Nome exato do fornecedor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Situação financeira consolidada",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "description": "Origem da NE",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PROJECT",
+                "IMPORTED",
+                "STANDALONE"
+              ]
+            }
+          },
+          {
+            "name": "managementUnit",
+            "in": "query",
+            "required": false,
+            "description": "UG emitente",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6}$"
+            }
+          },
+          {
+            "name": "issuedFrom",
+            "in": "query",
+            "required": false,
+            "description": "Data inicial de emissão",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "issuedTo",
+            "in": "query",
+            "required": false,
+            "description": "Data final de emissão",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "codes",
+            "in": "query",
+            "required": false,
+            "description": "Até 100 códigos completos separados por vírgula",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Relatório PDF",
+            "content": {
+              "application/pdf": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "reports.export",
+          "financial_execution.view"
+        ],
+        "operationId": "relatorios_get_reports_financialExecution_commitmentNotesPdf"
+      }
+    },
+    "/reports/financial-execution/commitment-notes.xlsx": {
+      "get": {
+        "tags": [
+          "Relatorios"
+        ],
+        "summary": "Exportar a posição financeira das Notas de Empenho em XLSX",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "NE, fornecedor, CNPJ, UG ou projeto",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "supplier",
+            "in": "query",
+            "required": false,
+            "description": "Nome exato do fornecedor",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "description": "Situação financeira consolidada",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "origin",
+            "in": "query",
+            "required": false,
+            "description": "Origem da NE",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "PROJECT",
+                "IMPORTED",
+                "STANDALONE"
+              ]
+            }
+          },
+          {
+            "name": "managementUnit",
+            "in": "query",
+            "required": false,
+            "description": "UG emitente",
+            "schema": {
+              "type": "string",
+              "pattern": "^\\d{6}$"
+            }
+          },
+          {
+            "name": "issuedFrom",
+            "in": "query",
+            "required": false,
+            "description": "Data inicial de emissão",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "issuedTo",
+            "in": "query",
+            "required": false,
+            "description": "Data final de emissão",
+            "schema": {
+              "type": "string",
+              "format": "date"
+            }
+          },
+          {
+            "name": "codes",
+            "in": "query",
+            "required": false,
+            "description": "Até 100 códigos completos separados por vírgula",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Planilha XLSX",
+            "content": {
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "reports.export",
+          "financial_execution.view"
+        ],
+        "operationId": "relatorios_get_reports_financialExecution_commitmentNotesXlsx"
+      }
+    },
     "/reports/atas/balance-position.pdf": {
       "get": {
         "tags": [
@@ -17449,7 +17861,7 @@
           "atas"
         ],
         "summary": "Aplicar saldo oficial como saldo operacional de abertura",
-        "description": "Registra como consumo histórico a diferença entre a quantidade original e o saldo oficial, sem sobrescrever a quantidade original da ATA.",
+        "description": "Adota a quantidade registrada pela unidade gerenciadora como quantidade inicial e registra como consumo histórico apenas a diferença para o saldo oficial disponível.",
         "security": [
           {
             "bearerAuth": []
@@ -18620,6 +19032,137 @@
           "military_organizations.manage"
         ],
         "operationId": "militaryOrganizations_post_collection"
+      }
+    },
+    "/military-organizations/bulk-action": {
+      "post": {
+        "tags": [
+          "military-organizations"
+        ],
+        "summary": "Inativar, arquivar ou excluir OMs em lote",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "action",
+                  "allMatching"
+                ],
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "INACTIVATE",
+                      "ARCHIVE",
+                      "DELETE"
+                    ]
+                  },
+                  "ids": {
+                    "type": "array",
+                    "maxItems": 500,
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "allMatching": {
+                    "type": "boolean"
+                  },
+                  "filters": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Resultado da operação em lote",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "action": {
+                      "type": "string"
+                    },
+                    "requested": {
+                      "type": "integer"
+                    },
+                    "succeeded": {
+                      "type": "integer"
+                    },
+                    "failed": {
+                      "type": "integer"
+                    },
+                    "succeededIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "failures": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "sigla": {
+                            "type": "string"
+                          },
+                          "reason": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "428": {
+            "$ref": "#/components/responses/StepUpRequired"
+          },
+          "500": {
+            "$ref": "#/components/responses/InternalServerError"
+          }
+        },
+        "x-permissions": [
+          "military_organizations.manage"
+        ],
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/StepUpToken"
+          }
+        ],
+        "x-step-up": true,
+        "operationId": "militaryOrganizations_post_bulkAction"
       }
     },
     "/military-organizations/code/{code}": {

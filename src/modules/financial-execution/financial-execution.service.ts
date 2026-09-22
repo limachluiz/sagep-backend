@@ -403,7 +403,7 @@ export class FinancialExecutionService {
     return consolidatePortfolio(
       notes.map(n => {
         const amounts = financialPosition(Number(n.currentAmount), Number(n.liquidatedAmount), Number(n.paidAmount), n.supplierName ?? "Não informado");
-        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, project: n.project, ...amounts,
+        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
           status: amounts.inconsistent ? amounts.status : n.syncStatus !== "VALIDADO" ? "A_CONFERIR" : n.financialStatus,
           incomplete: amounts.incomplete || n.syncStatus !== "VALIDADO",
         };
