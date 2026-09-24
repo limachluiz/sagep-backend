@@ -16,6 +16,25 @@ function field(root: Json, names: string[]): unknown {
   for (const name of names) if (root[name] !== undefined && root[name] !== null) return root[name];
   return undefined;
 }
+export function creditNotesFrom(value: unknown): string[] {
+  const found = new Set<string>();
+  const visit = (candidate: unknown, depth = 0) => {
+    if (candidate == null || depth > 8) return;
+    if (typeof candidate === "string") {
+      for (const match of candidate.toUpperCase().matchAll(/\d{4}NC\d{6}/g)) found.add(match[0]);
+      return;
+    }
+    if (Array.isArray(candidate)) {
+      for (const item of candidate) visit(item, depth + 1);
+      return;
+    }
+    if (typeof candidate === "object") {
+      for (const nested of Object.values(candidate as Json)) visit(nested, depth + 1);
+    }
+  };
+  visit(value);
+  return [...found].sort();
+}
 export function archivedFinancial(snapshot: unknown, externalCode?: string) {
   const data = snapshot as { document?: Json | Json[]; related?: unknown; financial?: PaymentEvidence } | null;
   const raw = data?.document;
@@ -87,7 +106,7 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
     paymentCompleted,
     paidNet,
     deductions,
-  }), supplierCnpj, issuedAt };
+  }), supplierCnpj, issuedAt, creditNotes: creditNotesFrom(data) };
 }
 export function financialPosition(current: number | null, liquidated: number | null, paid: number | null, supplierName: string, evidence: { liquidationIncomplete?: boolean; paymentIncomplete?: boolean; unresolvedLiquidations?: number; unresolvedPayments?: number; liquidationCompleted?: boolean; paymentCompleted?: boolean; paidNet?: number | null; deductions?: number | null } = {}) {
   const inconsistent = [current, liquidated, paid].some(v => v !== null && v < 0) || (current !== null && paid !== null && paid > current + 0.01) || (current !== null && liquidated !== null && liquidated > current + 0.01) || (liquidated !== null && paid !== null && paid > liquidated + 0.01);

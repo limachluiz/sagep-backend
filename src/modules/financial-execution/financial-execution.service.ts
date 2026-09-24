@@ -1,4 +1,4 @@
-import { archivedFinancial, financialPosition, consolidatePortfolio } from "./portfolio-summary.js";
+import { archivedFinancial, creditNotesFrom, financialPosition, consolidatePortfolio } from "./portfolio-summary.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
@@ -403,7 +403,7 @@ export class FinancialExecutionService {
     return consolidatePortfolio(
       notes.map(n => {
         const amounts = financialPosition(Number(n.currentAmount), Number(n.liquidatedAmount), Number(n.paidAmount), n.supplierName ?? "Não informado");
-        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
+        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, creditNotes: creditNotesFrom(n.rawSnapshot), supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
           status: amounts.inconsistent ? amounts.status : n.syncStatus !== "VALIDADO" ? "A_CONFERIR" : n.financialStatus,
           incomplete: amounts.incomplete || n.syncStatus !== "VALIDADO",
         };
@@ -471,6 +471,7 @@ export class FinancialExecutionService {
     if (!note) throw new AppError("Nota de Empenho não encontrada", 404);
     return {
       ...serializeNote(note),
+      creditNotes: creditNotesFrom(note.rawSnapshot),
       documents: note.documents.map((document) => ({ ...document, amount: Number(document.amount) })),
       invoices: note.invoices.map((invoice) => ({ ...invoice, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount) })),
     };

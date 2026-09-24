@@ -1,8 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { archivedFinancial, financialPosition, consolidatePortfolio, moneyFrom } from "../src/modules/financial-execution/portfolio-summary.js";
+import { archivedFinancial, creditNotesFrom, financialPosition, consolidatePortfolio, moneyFrom } from "../src/modules/financial-execution/portfolio-summary.js";
 describe("consolidated portfolio", () => {
   it("keeps missing liquidation/payment unknown even if related documents are absent", () => {
     expect(archivedFinancial({ document: { valor: "R$ 1.234,56", nomeFavorecido: "Fornecedor" }, related: [] })).toMatchObject({ current: 1234.56, liquidated: null, paid: null, status: "A_CONFERIR", incomplete: true, supplierName: "Fornecedor" });
+  });
+  it("extracts the issue date and only NC references present in the saved official data", () => {
+    const snapshot = { document: { data: "21/01/2026", observacao: "Crédito recebido pela 2026NC400044/DCT", codigoDocumento: "160016000012026NC400044" } };
+    expect(archivedFinancial(snapshot)).toMatchObject({ issuedAt: "21/01/2026", creditNotes: ["2026NC400044"] });
+    expect(creditNotesFrom({ observacao: "Sem nota de crédito referenciada" })).toEqual([]);
   });
   it("does not sum whole related payments that may cover multiple NEs", () => {
     expect(archivedFinancial({ document: { valor: 100 }, related: [{ fase: "Pagamento", valor: 200 }] }).paid).toBeNull();

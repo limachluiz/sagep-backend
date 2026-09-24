@@ -33,7 +33,7 @@ export async function listArchivedNotes(query: z.infer<typeof archiveQuerySchema
     prisma.discoveredCommitment.findMany({ where, orderBy: { externalCode: "desc" }, skip: (query.page - 1) * query.pageSize, take: query.pageSize }),
     prisma.discoveredCommitment.count({ where }),
   ]);
-  return { items, total, page: query.page, pageSize: query.pageSize };
+  return { items: items.map(item => ({ ...item, financial: archivedFinancial(item.snapshot, item.externalCode) })), total, page: query.page, pageSize: query.pageSize };
 }
 export async function archiveKeys(search: string) {
   const items = await prisma.discoveredCommitment.findMany({ where: { externalCode: { contains: search, mode: "insensitive" } }, select: { externalCode: true }, take: 5001 });
