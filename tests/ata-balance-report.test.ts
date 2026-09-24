@@ -36,7 +36,7 @@ function sourceItem(overrides: Partial<AtaBalanceReportSourceItem> = {}): AtaBal
       isActive: true,
       validFrom: new Date("2026-01-01T00:00:00Z"),
       validUntil: new Date("2026-12-31T23:59:59Z"),
-      pregao: { pregaoCode: 1, number: "90001", year: "2026", uasg: "160123" },
+      pregao: { id: "pregao-1", pregaoCode: 1, number: "90001", year: "2026", uasg: "160123" },
     },
     balance: {
       initialQuantity: "10",
@@ -117,6 +117,40 @@ describe("ATA balance position report", () => {
 
     expect(report.summary.itemCount).toBe(1);
     expect(report.items[0].ata.type).toBe("FIBRA_OPTICA");
+  });
+
+  it("filters a specific procurement and ATA before consolidating balances", () => {
+    const first = sourceItem();
+    const second = sourceItem({
+      id: "item-2",
+      ata: {
+        ...first.ata,
+        id: "ata-2",
+        ataCode: 2,
+        number: "02/2026",
+        pregao: { ...first.ata.pregao!, id: "pregao-2", number: "90002" },
+      },
+    });
+    const third = sourceItem({
+      id: "item-3",
+      ata: { ...first.ata, id: "ata-3", ataCode: 3, number: "03/2026" },
+    });
+
+    const byProcurement = buildAtaBalanceReportData(
+      [first, second, third],
+      { pregaoId: "pregao-1", status: "ALL" },
+      "Administrador",
+    );
+    expect(byProcurement.summary.ataCount).toBe(2);
+    expect(byProcurement.items.map((item) => item.ata.id)).toEqual(["ata-1", "ata-3"]);
+
+    const byAta = buildAtaBalanceReportData(
+      [first, second, third],
+      { pregaoId: "pregao-1", ataId: "ata-3", status: "ALL" },
+      "Administrador",
+    );
+    expect(byAta.summary.ataCount).toBe(1);
+    expect(byAta.items[0].ata.number).toBe("03/2026");
   });
 
   it("renders executive, governance, critical and traceability sections", () => {

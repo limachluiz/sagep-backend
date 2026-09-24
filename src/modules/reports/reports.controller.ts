@@ -42,6 +42,8 @@ export class ReportsController {
         .enum(["ALL", "ACTIVE", "EXPIRED", "INACTIVE"])
         .default("ALL")
         .parse(req.query.status),
+      pregaoId: z.string().trim().min(1).max(100).optional().parse(req.query.pregaoId),
+      ataId: z.string().trim().min(1).max(100).optional().parse(req.query.ataId),
     };
     const pdf = await ataBalanceReportService.generatePdf(filters, req.user!);
     const date = new Date().toISOString().slice(0, 10);

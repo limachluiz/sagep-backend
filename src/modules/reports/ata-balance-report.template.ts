@@ -149,7 +149,13 @@ function detailTable(report: Report) {
 }
 
 export function renderAtaBalanceReportHtml(report: Report) {
-  const scope = report.filters.ataType ? ataType(report.filters.ataType) : "Todas as ATAs";
+  const selectedAta = report.filters.ataId ? report.atas[0]?.ata : null;
+  const selectedPregao = report.filters.pregaoId ? report.atas[0]?.ata.pregao : null;
+  const scope = selectedAta
+    ? `ATA ${selectedAta.number} · ${selectedAta.vendorName}`
+    : selectedPregao
+      ? `Pregão ${selectedPregao.number}/${selectedPregao.year} · UASG ${selectedPregao.uasg}`
+      : report.filters.ataType ? ataType(report.filters.ataType) : "Todas as ATAs";
   const status = ({ ALL: "Todas as situações", ACTIVE: "Somente vigentes", EXPIRED: "Somente vencidas", INACTIVE: "Somente inativas" } as const)[report.filters.status];
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><style>
     *{box-sizing:border-box}body{margin:0;color:#243021;background:#fff;font-family:Arial,sans-serif;font-size:9px;-webkit-print-color-adjust:exact;print-color-adjust:exact}

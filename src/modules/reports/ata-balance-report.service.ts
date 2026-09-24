@@ -9,6 +9,8 @@ import { renderAtaBalanceReportHtml } from "./ata-balance-report.template.js";
 export type AtaBalanceReportFilters = {
   ataType?: "CFTV" | "FIBRA_OPTICA";
   status: "ALL" | "ACTIVE" | "EXPIRED" | "INACTIVE";
+  pregaoId?: string;
+  ataId?: string;
 };
 
 type ReportUser = {
@@ -63,7 +65,7 @@ export type AtaBalanceReportSourceItem = {
     isActive: boolean;
     validFrom: Date | null;
     validUntil: Date | null;
-    pregao: { pregaoCode: number; number: string; year: string; uasg: string } | null;
+    pregao: { id: string; pregaoCode: number; number: string; year: string; uasg: string } | null;
   };
   balance: Balance;
 };
@@ -130,6 +132,8 @@ export function buildAtaBalanceReportData(
 ) {
   const filteredItems = sourceItems.filter((item) => {
     if (filters.ataType && item.ata.type !== filters.ataType) return false;
+    if (filters.pregaoId && item.ata.pregao?.id !== filters.pregaoId) return false;
+    if (filters.ataId && item.ata.id !== filters.ataId) return false;
     const status = ataStatus(item.ata, generatedAt);
     if (filters.status === "ACTIVE" && status !== "ACTIVE") return false;
     if (filters.status === "EXPIRED" && status !== "EXPIRED") return false;
@@ -265,7 +269,7 @@ export class AtaBalanceReportService {
             isActive: true,
             validFrom: true,
             validUntil: true,
-            pregao: { select: { pregaoCode: true, number: true, year: true, uasg: true } },
+            pregao: { select: { id: true, pregaoCode: true, number: true, year: true, uasg: true } },
           },
         },
       },
