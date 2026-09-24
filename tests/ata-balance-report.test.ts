@@ -36,6 +36,14 @@ function sourceItem(overrides: Partial<AtaBalanceReportSourceItem> = {}): AtaBal
       isActive: true,
       validFrom: new Date("2026-01-01T00:00:00Z"),
       validUntil: new Date("2026-12-31T23:59:59Z"),
+      coverageGroups: [{
+        code: "REGIAO_1",
+        name: "Região 1",
+        localities: [
+          { cityName: "Manaus", stateUf: "AM" },
+          { cityName: "Iranduba", stateUf: "AM" },
+        ],
+      }],
       pregao: { id: "pregao-1", pregaoCode: 1, number: "90001", year: "2026", uasg: "160123" },
     },
     balance: {
@@ -179,6 +187,9 @@ describe("ATA balance position report", () => {
     expect(html).toContain("Câmera IP PoE tipo Bullet");
     expect(html).toContain("Diferença:");
     expect(html).toContain("Aplicado em");
+    expect(html).toContain("01/01/2026 a 31/12/2026");
+    expect(html).toContain("Região 1");
+    expect(html).toContain("Manaus-AM, Iranduba-AM");
     expect(html).not.toContain("NaN");
   });
 });

@@ -30,6 +30,23 @@ function date(value: unknown, includeTime = false) {
   }).format(parsed);
 }
 
+function validityDate(value: unknown) {
+  if (!value) return "Não informada";
+  const parsed = value instanceof Date ? value : new Date(String(value));
+  if (Number.isNaN(parsed.getTime())) return "Não informada";
+  return new Intl.DateTimeFormat("pt-BR", { timeZone: "UTC", dateStyle: "short" }).format(parsed);
+}
+
+function coverageHtml(ata: Report["atas"][number]["ata"]) {
+  if (!ata.coverageGroups.length) return '<small>Região e localidades não informadas</small>';
+  return ata.coverageGroups.map((group) => {
+    const localities = group.localities.length
+      ? group.localities.map((locality) => `${locality.cityName}-${locality.stateUf}`).join(", ")
+      : "Localidades não informadas";
+    return `<strong class="coverage-region">${escapeHtml(group.name)}</strong><small>${escapeHtml(localities)}</small>`;
+  }).join("");
+}
+
 function percent(value: unknown) {
   return `${Number(value ?? 0).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`;
 }
@@ -99,11 +116,12 @@ function compositionChart(report: Report) {
 
 function ataTable(report: Report) {
   if (!report.atas.length) return '<div class="empty">Nenhuma ATA encontrada para o recorte selecionado.</div>';
-  return `<table><thead><tr><th>ATA / Pregão</th><th>Fornecedor</th><th>Tipo</th><th>Itens</th><th>Valor inicial</th><th>Consumo total</th><th>Reservado</th><th>Disponível</th><th>Situação</th></tr></thead><tbody>
+  return `<table><thead><tr><th>ATA / Pregão</th><th>Fornecedor</th><th>Tipo</th><th>Vigência / Região e localidades</th><th>Itens</th><th>Valor inicial</th><th>Consumo total</th><th>Reservado</th><th>Disponível</th><th>Situação</th></tr></thead><tbody>
     ${report.atas.map((entry) => `<tr>
       <td><strong>ATA ${escapeHtml(entry.ata.number)}</strong><small>${entry.ata.pregao ? `PE ${escapeHtml(entry.ata.pregao.number)}/${escapeHtml(entry.ata.pregao.year)} - UASG ${escapeHtml(entry.ata.pregao.uasg)}` : "Pregão não vinculado"}</small></td>
       <td>${escapeHtml(entry.ata.vendorName)}<small>${escapeHtml(entry.ata.vendorCnpj ?? "CNPJ não informado")}</small></td>
       <td>${escapeHtml(ataType(entry.ata.type))}</td>
+      <td class="coverage-cell"><strong>${validityDate(entry.ata.validFrom)} a ${validityDate(entry.ata.validUntil)}</strong>${coverageHtml(entry.ata)}</td>
       <td class="number">${entry.itemCount}</td>
       <td class="money">${amount(entry.initialAmount)}</td>
       <td class="money">${amount(Number(entry.openingConsumedAmount) + Number(entry.sagepConsumedAmount))}</td>
@@ -111,7 +129,7 @@ function ataTable(report: Report) {
       <td class="money"><strong>${amount(entry.availableAmount)}</strong></td>
       <td><span class="pill ${entry.ata.status.toLowerCase()}">${escapeHtml(ataStatus(entry.ata.status))}</span></td>
     </tr>`).join("")}
-    <tr class="totals"><td colspan="3"><strong>TOTAL DO RECORTE</strong></td><td class="number">${report.summary.itemCount}</td><td class="money">${amount(report.summary.initialAmount)}</td><td class="money">${amount(report.summary.totalConsumedAmount)}</td><td class="money">${amount(report.summary.reservedAmount)}</td><td class="money">${amount(report.summary.availableAmount)}</td><td>${report.summary.ataCount} ATAs</td></tr>
+    <tr class="totals"><td colspan="4"><strong>TOTAL DO RECORTE</strong></td><td class="number">${report.summary.itemCount}</td><td class="money">${amount(report.summary.initialAmount)}</td><td class="money">${amount(report.summary.totalConsumedAmount)}</td><td class="money">${amount(report.summary.reservedAmount)}</td><td class="money">${amount(report.summary.availableAmount)}</td><td>${report.summary.ataCount} ATAs</td></tr>
   </tbody></table>`;
 }
 
@@ -166,7 +184,7 @@ export function renderAtaBalanceReportHtml(report: Report) {
     .composition{display:flex;align-items:center;gap:13px}.donut{width:92px;height:92px;border-radius:50%;display:grid;place-items:center;flex:none}.donut>div{width:59px;height:59px;border-radius:50%;background:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}.donut strong{font-size:15px}.donut span{font-size:6px;color:#777;max-width:48px}.legend{flex:1;display:grid;gap:6px}.legend div{display:grid;grid-template-columns:8px 1fr auto;gap:5px;align-items:center}.legend i{width:7px;height:7px;border-radius:2px}.legend .opening{background:#9a6b2f}.legend .sagep{background:#4d5f36}.legend .reserved{background:#c5a34b}.legend .available{background:#dfe6d8;border:1px solid #bdc8b4}.legend span{color:#677060;font-size:7px}.legend strong{font-size:7px}
     .stack-row{margin:8px 0}.stack-label,.bar-row>div:first-child{display:flex;justify-content:space-between;gap:8px;font-size:7px}.stack{display:flex;height:8px;overflow:hidden;border-radius:5px;background:#eef1ea;margin:4px 0}.stack i{height:100%}.stack .opening{background:#9a6b2f}.stack .sagep{background:#4d5f36}.stack .reserved{background:#c5a34b}.stack .available{background:#dfe6d8}.stack-row small,.bar-row small{color:#7b8275;font-size:6.5px}.bar-row{margin:7px 0}.bar-track{height:6px;background:#eef1ea;border-radius:4px;overflow:hidden;margin:3px 0}.bar-track i{display:block;height:100%;background:linear-gradient(90deg,#44542d,#849454);border-radius:4px}
     .governance{display:grid;grid-template-columns:repeat(4,1fr);gap:7px}.governance article{border:1px solid #dfe4d9;border-radius:8px;padding:8px}.governance span{display:block;color:#777;font-size:7px}.governance strong{display:block;font-size:12px;margin:3px 0}.progress{height:5px;background:#edf0e9;border-radius:4px;overflow:hidden}.progress i{display:block;height:100%;background:#60713b}
-    table{width:100%;border-collapse:collapse;font-size:7px;page-break-inside:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}th{text-align:left;background:#34412d;color:#fff;padding:6px 5px;font-size:6.5px;text-transform:uppercase;letter-spacing:.3px}th:first-child{border-radius:6px 0 0 0}th:last-child{border-radius:0 6px 0 0}td{padding:5px;border-bottom:1px solid #e5e9e1;vertical-align:top}tbody tr:nth-child(even){background:#f8faf6}td strong{display:block}td small{display:block;color:#747c70;margin-top:2px;line-height:1.25}.money,.number{text-align:right;white-space:nowrap}.description{max-width:250px;line-height:1.3}.detail-table{font-size:6.4px}.detail-table td{padding:4.5px}.pill{display:inline-block;margin-top:3px;padding:2px 5px;border-radius:999px;background:#e8ede3;color:#4f6137;font-size:6px;font-weight:700;white-space:nowrap}.pill.low{background:#fff0cf;color:#8a5c08}.pill.exhausted{background:#f9dcda;color:#a13a34}.pill.inactive,.pill.expired{background:#ececeb;color:#676760}.pill.upcoming{background:#e5edf7;color:#45617e}.all-clear,.empty{border:1px dashed #bdc8b4;border-radius:9px;padding:18px;text-align:center;background:#f7faf5;color:#596651}.muted{color:#888}.page-break{break-before:page}.method{margin-top:10px;border-left:3px solid #75834c;background:#f4f7f1;padding:8px 10px;color:#5e6758;line-height:1.45;font-size:7px}.signature{margin-top:9px;display:flex;justify-content:space-between;color:#777;font-size:6.5px}
+    table{width:100%;border-collapse:collapse;font-size:7px;page-break-inside:auto}thead{display:table-header-group}tr{break-inside:avoid;page-break-inside:avoid}th{text-align:left;background:#34412d;color:#fff;padding:6px 5px;font-size:6.5px;text-transform:uppercase;letter-spacing:.3px}th:first-child{border-radius:6px 0 0 0}th:last-child{border-radius:0 6px 0 0}td{padding:5px;border-bottom:1px solid #e5e9e1;vertical-align:top}tbody tr:nth-child(even){background:#f8faf6}td strong{display:block}td small{display:block;color:#747c70;margin-top:2px;line-height:1.25}.money,.number{text-align:right;white-space:nowrap}.coverage-cell{min-width:155px;max-width:230px;line-height:1.25}.coverage-region{margin-top:4px;color:#4f6137}.description{max-width:250px;line-height:1.3}.detail-table{font-size:6.4px}.detail-table td{padding:4.5px}.pill{display:inline-block;margin-top:3px;padding:2px 5px;border-radius:999px;background:#e8ede3;color:#4f6137;font-size:6px;font-weight:700;white-space:nowrap}.pill.low{background:#fff0cf;color:#8a5c08}.pill.exhausted{background:#f9dcda;color:#a13a34}.pill.inactive,.pill.expired{background:#ececeb;color:#676760}.pill.upcoming{background:#e5edf7;color:#45617e}.all-clear,.empty{border:1px dashed #bdc8b4;border-radius:9px;padding:18px;text-align:center;background:#f7faf5;color:#596651}.muted{color:#888}.page-break{break-before:page}.method{margin-top:10px;border-left:3px solid #75834c;background:#f4f7f1;padding:8px 10px;color:#5e6758;line-height:1.45;font-size:7px}.signature{margin-top:9px;display:flex;justify-content:space-between;color:#777;font-size:6.5px}
     .panels{grid-template-columns:1fr 1fr}.panel:last-child{grid-column:1/-1;min-height:0;columns:2;column-gap:24px}.panel:last-child h3{column-span:all}.bar-row{break-inside:avoid;margin:10px 0}.bar-row>div:first-child strong{white-space:nowrap}.stack-row{margin:12px 0 18px}.stack-row p{margin:5px 0;font-size:9px}.stack-label{font-size:9px}.totals td{background:#e5ecde;font-weight:bold;border-top:2px solid #60713b}.panel{min-height:145px}
   </style></head><body>
     <header class="hero"><div class="brand"><img class="logo" src="${report.branding.ctaLogo}" alt="4º CTA"><div><span class="eyebrow">4º Centro de Telemática de Área - Divisão Técnica</span><h1>Posição das ATAs e Saldos</h1><p>Visão executiva do estoque contratual, consumo histórico, reservas e disponibilidade operacional</p></div></div><div class="meta"><strong>${escapeHtml(scope)}</strong><span>${escapeHtml(status)}</span><br><span>Emitido em ${date(report.generatedAt, true)}</span><br><span>Responsável: ${escapeHtml(report.generatedBy)}</span></div></header>

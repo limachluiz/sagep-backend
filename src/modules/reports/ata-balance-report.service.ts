@@ -65,6 +65,11 @@ export type AtaBalanceReportSourceItem = {
     isActive: boolean;
     validFrom: Date | null;
     validUntil: Date | null;
+    coverageGroups: Array<{
+      code: string;
+      name: string;
+      localities: Array<{ cityName: string; stateUf: string }>;
+    }>;
     pregao: { id: string; pregaoCode: number; number: string; year: string; uasg: string } | null;
   };
   balance: Balance;
@@ -269,6 +274,17 @@ export class AtaBalanceReportService {
             isActive: true,
             validFrom: true,
             validUntil: true,
+            coverageGroups: {
+              select: {
+                code: true,
+                name: true,
+                localities: {
+                  select: { cityName: true, stateUf: true },
+                  orderBy: [{ stateUf: "asc" }, { cityName: "asc" }],
+                },
+              },
+              orderBy: { code: "asc" },
+            },
             pregao: { select: { id: true, pregaoCode: true, number: true, year: true, uasg: true } },
           },
         },
