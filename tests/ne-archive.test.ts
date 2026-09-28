@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn(), deleteMany: vi.fn(), source: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn(), deleteMany: vi.fn(), source: vi.fn() }));
 // Only the archive delegate is exposed: any write to project/ATA balances fails.
 vi.mock("../src/config/prisma.js", () => ({ prisma: { discoveredCommitment: mocks } }));
 vi.mock("../src/modules/financial-execution/ne-discovery.service.js", () => ({ discoveryDocuments: mocks.source }));
-import { archiveImportSchema, archiveQuerySchema, importDiscoveredNote, deleteArchivedNotes, refreshArchivedNote } from "../src/modules/financial-execution/ne-archive.service.js";
+import { archiveImportSchema, archiveMetadataSchema, archiveQuerySchema, importDiscoveredNote, deleteArchivedNotes, refreshArchivedNote, updateArchivedNoteMetadata } from "../src/modules/financial-execution/ne-archive.service.js";
 const code = "160016000012026NE000534";
 beforeEach(() => { vi.resetAllMocks(); mocks.source.mockResolvedValue({ document: { valor: "33.698,40" }, related: [], fetchedAt: "2026-09-15T12:00:00Z" }); mocks.findUnique.mockResolvedValue(null); });
 describe("NE archive and origin conflicts", () => {
@@ -11,6 +11,16 @@ describe("NE archive and origin conflicts", () => {
     await importDiscoveredNote(code, "user");
     expect(mocks.source).toHaveBeenCalledWith(code, true);
     expect(mocks.create).toHaveBeenCalledWith({ data: expect.objectContaining({ importedById: "user", externalCode: code, origin: "IMPORTED", snapshot: expect.objectContaining({ related: [] }) }) });
+  });
+  it("persists the attended OM/observation during import", async () => {
+    await importDiscoveredNote(code, "user", archiveImportSchema.parse({ attendedUnit: "17º B Log · enlace principal" }));
+    expect(mocks.create).toHaveBeenCalledWith({ data: expect.objectContaining({ attendedUnit: "17º B Log · enlace principal" }) });
+  });
+  it("updates metadata later without consulting the official source", async () => {
+    mocks.update.mockResolvedValue({ externalCode: code, snapshot: {}, attendedUnit: "HGuPV" });
+    await updateArchivedNoteMetadata(code, archiveMetadataSchema.parse({ attendedUnit: "HGuPV" }));
+    expect(mocks.update).toHaveBeenCalledWith({ where: { externalCode: code }, data: { attendedUnit: "HGuPV" } });
+    expect(mocks.source).not.toHaveBeenCalled();
   });
   it("refreshes the same origin without creating another NE", async () => {
     const existing = { id: "one", origin: "IMPORTED", updatedAt: new Date() };

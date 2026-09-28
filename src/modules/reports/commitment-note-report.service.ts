@@ -86,7 +86,7 @@ export function filterCommitmentNoteReportRows(rows: PortfolioRow[], filters: Co
     const issuedAt = parseDate(row.issuedAt);
     if (from && (!issuedAt || issuedAt < from)) return false;
     if (to && (!issuedAt || issuedAt > to)) return false;
-    if (query && !normalized(`${row.number} ${row.externalCode} ${row.supplierName} ${row.supplierCnpj ?? ""} ${row.managementUnit} ${row.project?.title ?? ""}`).includes(query)) return false;
+    if (query && !normalized(`${row.number} ${row.externalCode} ${row.supplierName} ${row.supplierCnpj ?? ""} ${row.managementUnit} ${row.attendedUnit ?? ""} ${row.project?.title ?? ""}`).includes(query)) return false;
     return true;
   }).sort((a, b) => b.externalCode.localeCompare(a.externalCode, "pt-BR"));
 }
@@ -214,7 +214,7 @@ export class CommitmentNoteReportService {
     summary.getColumn(1).width = 24; summary.getColumn(2).width = 42; summary.getColumn(2).numFmt = "#,##0.00"; summary.getRow(1).font = { bold: true };
     const sheet = workbook.addWorksheet("Notas de Empenho");
     sheet.columns = [
-      { header: "NE", key: "number", width: 18 }, { header: "Código completo", key: "externalCode", width: 30 }, { header: "UG", key: "managementUnit", width: 10 }, { header: "Origem", key: "origin", width: 14 }, { header: "Fornecedor", key: "supplierName", width: 42 }, { header: "CNPJ", key: "supplierCnpj", width: 20 }, { header: "Emissão", key: "issuedAt", width: 14 }, { header: "Empenhado", key: "current", width: 17 }, { header: "Liquidado", key: "liquidated", width: 17 }, { header: "Pago", key: "paid", width: 17 }, { header: "OB líquido", key: "paidNet", width: 17 }, { header: "DR/DF", key: "deductions", width: 17 }, { header: "Situação", key: "status", width: 24 }, { header: "Projeto", key: "project", width: 38 }, { header: "Última atualização", key: "updatedAt", width: 22 },
+      { header: "NE", key: "number", width: 18 }, { header: "Código completo", key: "externalCode", width: 30 }, { header: "UG", key: "managementUnit", width: 10 }, { header: "Origem", key: "origin", width: 14 }, { header: "OM atendida / Observação", key: "attendedUnit", width: 38 }, { header: "Fornecedor", key: "supplierName", width: 42 }, { header: "CNPJ", key: "supplierCnpj", width: 20 }, { header: "Emissão", key: "issuedAt", width: 14 }, { header: "Empenhado", key: "current", width: 17 }, { header: "Liquidado", key: "liquidated", width: 17 }, { header: "Pago", key: "paid", width: 17 }, { header: "OB líquido", key: "paidNet", width: 17 }, { header: "DR/DF", key: "deductions", width: 17 }, { header: "Situação", key: "status", width: 24 }, { header: "Projeto", key: "project", width: 38 }, { header: "Última atualização", key: "updatedAt", width: 22 },
     ];
     for (const row of report.rows) sheet.addRow({ ...row, status: statusLabels[row.status] ?? row.status, issuedAt: parseDate(row.issuedAt), project: row.project ? `PRJ-${row.project.projectCode} · ${row.project.title}` : "", updatedAt: parseDate(row.updatedAt) });
     sheet.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } }; sheet.getRow(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF293622" } };

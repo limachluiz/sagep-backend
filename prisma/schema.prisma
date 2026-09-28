@@ -1074,6 +1074,7 @@ model DiscoveredCommitment {
   id           String   @id @default(cuid())
   externalCode String   @unique
   snapshot     Json
+  attendedUnit String?
   importedById String
   importedAt   DateTime @default(now())
   updatedAt    DateTime @updatedAt

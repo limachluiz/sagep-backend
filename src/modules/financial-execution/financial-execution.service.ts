@@ -403,12 +403,12 @@ export class FinancialExecutionService {
     return consolidatePortfolio(
       notes.map(n => {
         const amounts = financialPosition(Number(n.currentAmount), Number(n.liquidatedAmount), Number(n.paidAmount), n.supplierName ?? "Não informado");
-        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, creditNotes: creditNotesFrom(n.rawSnapshot), supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
+        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, creditNotes: creditNotesFrom(n.rawSnapshot), attendedUnit: null, supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
           status: amounts.inconsistent ? amounts.status : n.syncStatus !== "VALIDADO" ? "A_CONFERIR" : n.financialStatus,
           incomplete: amounts.incomplete || n.syncStatus !== "VALIDADO",
         };
       }),
-      archived.map(n => ({ noteId: null, managementUnit: n.externalCode.slice(0, 6), externalCode: n.externalCode, number: n.externalCode.slice(11), origin: n.origin, updatedAt: n.updatedAt, project: null, ...archivedFinancial(n.snapshot, n.externalCode) })),
+      archived.map(n => ({ noteId: null, managementUnit: n.externalCode.slice(0, 6), externalCode: n.externalCode, number: n.externalCode.slice(11), origin: n.origin, updatedAt: n.updatedAt, attendedUnit: n.attendedUnit, project: null, ...archivedFinancial(n.snapshot, n.externalCode) })),
       activeKeys.map(n => n.externalCode),
     );
   }
