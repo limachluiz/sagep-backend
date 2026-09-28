@@ -181,6 +181,12 @@ describe("ATA balance position report", () => {
     });
 
     expect(html).toContain("Posição das ATAs e Saldos");
+    expect(html).toContain("IDENTIFICAÇÃO CONTRATUAL DO RECORTE");
+    expect(html).toContain("ATAs consideradas neste relatório");
+    expect(html.indexOf("IDENTIFICAÇÃO CONTRATUAL DO RECORTE")).toBeLessThan(html.indexOf("PAINEL EXECUTIVO"));
+    expect(html).toContain("PE 90001/2026 · UASG 160123");
+    expect(html).toContain("Fornecedor Exemplo");
+    expect(html).toContain("Região e localidades atendidas");
     expect(html).toContain("Composição financeira consolidada");
     expect(html).toContain("Cobertura da conciliação oficial");
     expect(html).toContain("Itens com saldo crítico ou esgotado");
