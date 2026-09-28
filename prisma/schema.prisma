@@ -875,6 +875,7 @@ model MilitaryOrganization {
   stateUf   FederativeUnit
   estimates Estimate[]
   projects  Project[]
+  discoveredCommitments DiscoveredCommitment[] @relation("DiscoveredCommitmentAttendedOm")
   isActive  Boolean        @default(true)
   archivedAt DateTime?
   createdAt DateTime       @default(now())
@@ -1074,8 +1075,12 @@ model DiscoveredCommitment {
   id           String   @id @default(cuid())
   externalCode String   @unique
   snapshot     Json
-  attendedUnit String?
+  attendedOmId String?
+  attendedOm   MilitaryOrganization? @relation("DiscoveredCommitmentAttendedOm", fields: [attendedOmId], references: [id], onDelete: SetNull)
+  observation  String?
   importedById String
   importedAt   DateTime @default(now())
   updatedAt    DateTime @updatedAt
+
+  @@index([attendedOmId])
 }

@@ -397,18 +397,21 @@ export class FinancialExecutionService {
   async portfolio(user: CurrentUser) {
     const [notes, archived, activeKeys] = await Promise.all([
       prisma.commitmentNote.findMany({ where: { active: true, project: this.projectAccessWhere(user) }, include: { project: { select: { id: true, projectCode: true, title: true } } } }),
-      prisma.discoveredCommitment.findMany({ orderBy: { updatedAt: "desc" } }),
+      prisma.discoveredCommitment.findMany({
+        include: { attendedOm: { select: { id: true, sigla: true, name: true, cityName: true, stateUf: true, isActive: true } } },
+        orderBy: { updatedAt: "desc" },
+      }),
       prisma.commitmentNote.findMany({ where: { active: true }, select: { externalCode: true } }),
     ]);
     return consolidatePortfolio(
       notes.map(n => {
         const amounts = financialPosition(Number(n.currentAmount), Number(n.liquidatedAmount), Number(n.paidAmount), n.supplierName ?? "Não informado");
-        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, creditNotes: creditNotesFrom(n.rawSnapshot), attendedUnit: null, supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
+        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, creditNotes: creditNotesFrom(n.rawSnapshot), attendedOm: null, observation: null, supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
           status: amounts.inconsistent ? amounts.status : n.syncStatus !== "VALIDADO" ? "A_CONFERIR" : n.financialStatus,
           incomplete: amounts.incomplete || n.syncStatus !== "VALIDADO",
         };
       }),
-      archived.map(n => ({ noteId: null, managementUnit: n.externalCode.slice(0, 6), externalCode: n.externalCode, number: n.externalCode.slice(11), origin: n.origin, updatedAt: n.updatedAt, attendedUnit: n.attendedUnit, project: null, ...archivedFinancial(n.snapshot, n.externalCode) })),
+      archived.map(n => ({ noteId: null, managementUnit: n.externalCode.slice(0, 6), externalCode: n.externalCode, number: n.externalCode.slice(11), origin: n.origin, updatedAt: n.updatedAt, attendedOm: n.attendedOm, observation: n.observation, project: null, ...archivedFinancial(n.snapshot, n.externalCode) })),
       activeKeys.map(n => n.externalCode),
     );
   }

@@ -1,4 +1,4 @@
-import { archivedNote, refreshArchivedNote, archiveImportSchema, archiveMetadataSchema, archiveBulkDeleteSchema, archiveKeys, deleteArchivedNotes, archiveCodeSchema, archiveQuerySchema, importDiscoveredNote, listArchivedNotes, updateArchivedNoteMetadata, deleteArchivedNote } from "./ne-archive.service.js";
+import { archivedNote, refreshArchivedNote, archiveImportSchema, archiveMetadataSchema, archiveBulkDeleteSchema, archiveKeys, deleteArchivedNotes, archiveCodeSchema, archiveQuerySchema, importDiscoveredNote, listArchivedNotes, updateArchivedNoteMetadata, deleteArchivedNote, attendedOmOptions } from "./ne-archive.service.js";
 import { resolveAtaCnpj, discoveryOptions, discoveryPage, discoveryPageSchema, discoveryDocuments } from "./ne-discovery.service.js";
 import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
@@ -13,6 +13,7 @@ financialExecutionRoutes.get("/portfolio", requirePermission("financial_executio
 financialExecutionRoutes.post("/discovery/suppliers/:id/resolve", requirePermission("atas.manage"), async (req, res) => { res.json(await resolveAtaCnpj(String(req.params.id))); });
 financialExecutionRoutes.get("/discovery/archive/keys", requirePermission("financial_execution.manage"), async (req, res) => { res.json(await archiveKeys(archiveQuerySchema.parse(req.query).search)); });
 financialExecutionRoutes.post("/discovery/archive/delete-selected", requirePermission("financial_execution.manage"), async (req, res) => { res.json(await deleteArchivedNotes(archiveBulkDeleteSchema.parse(req.body).codes)); });
+financialExecutionRoutes.get("/discovery/attended-organizations", requirePermission("financial_execution.view"), async (_req, res) => { res.json(await attendedOmOptions()); });
 financialExecutionRoutes.get("/discovery/archive", requirePermission("financial_execution.view"), async (req, res) => { res.json(await listArchivedNotes(archiveQuerySchema.parse(req.query))); });
 financialExecutionRoutes.get("/discovery/archive/:code", requirePermission("financial_execution.view"), async (req, res) => { res.json(await archivedNote(archiveCodeSchema.parse(req.params.code))); });
 financialExecutionRoutes.patch("/discovery/archive/:code/metadata", requirePermission("financial_execution.manage"), async (req, res) => { res.json(await updateArchivedNoteMetadata(archiveCodeSchema.parse(req.params.code), archiveMetadataSchema.parse(req.body))); });
