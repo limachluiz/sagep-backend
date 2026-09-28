@@ -9,6 +9,16 @@ describe("consolidated portfolio", () => {
     expect(archivedFinancial(snapshot)).toMatchObject({ issuedAt: "21/01/2026", creditNotes: ["2026NC400044"] });
     expect(creditNotesFrom({ observacao: "Sem nota de crédito referenciada" })).toEqual([]);
   });
+  it("extracts the latest liquidation and payment dates from the official lifecycle", () => {
+    const result = archivedFinancial({ document: { data: "21/01/2026" }, related: [
+      { documento: "160016000012026NS003912", data: "24/06/2026" },
+      { documento: "160016000012026NS003913", data: "25/06/2026" },
+      { documento: "160016000012026OB001763", data: "01/07/2026" },
+      { documento: "160016000012026DR800149", data: "02/07/2026" },
+      { documento: "160016000012026DF800881", data: "13/07/2026", valor: "- 555,75", especie: "Estorno / Cancelamento" },
+    ] });
+    expect(result).toMatchObject({ issuedAt: "21/01/2026", liquidatedAt: "2026-06-25T12:00:00.000Z", paidAt: "2026-07-02T12:00:00.000Z" });
+  });
   it("does not sum whole related payments that may cover multiple NEs", () => {
     expect(archivedFinancial({ document: { valor: 100 }, related: [{ fase: "Pagamento", valor: 200 }] }).paid).toBeNull();
   });

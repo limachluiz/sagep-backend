@@ -16,6 +16,34 @@ function field(root: Json, names: string[]): unknown {
   for (const name of names) if (root[name] !== undefined && root[name] !== null) return root[name];
   return undefined;
 }
+function lifecycleDate(value: unknown): Date | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
+  if (typeof value !== "string" || !value.trim()) return null;
+  const source = value.trim();
+  const br = source.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  const isoDate = source.match(/^(\d{4})-(\d{2})-(\d{2})(?!\d)/);
+  const parsed = br
+    ? new Date(`${br[3]}-${br[2]}-${br[1]}T12:00:00Z`)
+    : isoDate && source.length === 10
+      ? new Date(`${source}T12:00:00Z`)
+      : new Date(source);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+function latestRelatedDate(related: unknown[], types: Array<"NS" | "OB" | "DR" | "DF">) {
+  let latest: Date | null = null;
+  for (const item of related) {
+    if (!item || typeof item !== "object") continue;
+    const root = item as Json;
+    const type = financialDocumentType(field(root, ["documento", "codigoDocumento", "codigo", "idDocumento", "externalCode"]));
+    if (!type || !types.includes(type)) continue;
+    const species = String(field(root, ["especie", "species"]) ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const amount = moneyFrom(field(root, ["valor", "valorDocumento", "amount"]));
+    if (species.includes("estorno") || species.includes("cancelamento") || (amount !== null && amount < 0)) continue;
+    const parsed = lifecycleDate(field(root, ["data", "dataEmissao", "dataEmissaoDocumento", "issuedAt"]));
+    if (parsed && (!latest || parsed > latest)) latest = parsed;
+  }
+  return latest?.toISOString() ?? null;
+}
 export function creditNotesFrom(value: unknown): string[] {
   const found = new Set<string>();
   const visit = (candidate: unknown, depth = 0) => {
@@ -70,6 +98,8 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
   const issuedAtValue = field(root, ["data", "dataEmissao", "dataEmissaoDocumento"]);
   const issuedAt = typeof issuedAtValue === "string" || issuedAtValue instanceof Date ? issuedAtValue : null;
   const related = Array.isArray(data?.related) ? data.related : [];
+  const liquidatedAt = latestRelatedDate(related, ["NS"]);
+  const paidAt = latestRelatedDate(related, ["OB", "DR", "DF"]);
   const relatedTypes = related.map(item => financialDocumentType(item && typeof item === "object" ? field(item as Json, ["documento", "codigoDocumento", "codigo", "idDocumento"]) : null));
   const evidenceTypes = evidence?.documents.map(document => financialDocumentType(document.code)) ?? [];
   const liquidationCompleted = [...relatedTypes, ...evidenceTypes].includes("NS");
@@ -106,7 +136,7 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
     paymentCompleted,
     paidNet,
     deductions,
-  }), supplierCnpj, issuedAt, creditNotes: creditNotesFrom(data) };
+  }), supplierCnpj, issuedAt, liquidatedAt, paidAt, creditNotes: creditNotesFrom(data) };
 }
 export function financialPosition(current: number | null, liquidated: number | null, paid: number | null, supplierName: string, evidence: { liquidationIncomplete?: boolean; paymentIncomplete?: boolean; unresolvedLiquidations?: number; unresolvedPayments?: number; liquidationCompleted?: boolean; paymentCompleted?: boolean; paidNet?: number | null; deductions?: number | null } = {}) {
   const inconsistent = [current, liquidated, paid].some(v => v !== null && v < 0) || (current !== null && paid !== null && paid > current + 0.01) || (current !== null && liquidated !== null && liquidated > current + 0.01) || (liquidated !== null && paid !== null && paid > liquidated + 0.01);

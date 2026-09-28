@@ -396,7 +396,7 @@ export class FinancialExecutionService {
 
   async portfolio(user: CurrentUser) {
     const [notes, archived, activeKeys] = await Promise.all([
-      prisma.commitmentNote.findMany({ where: { active: true, project: this.projectAccessWhere(user) }, include: { project: { select: { id: true, projectCode: true, title: true } } } }),
+      prisma.commitmentNote.findMany({ where: { active: true, project: this.projectAccessWhere(user) }, include: { project: { select: { id: true, projectCode: true, title: true } }, documents: { select: { phase: true, issuedAt: true, species: true, amount: true } } } }),
       prisma.discoveredCommitment.findMany({
         include: { attendedOm: { select: { id: true, sigla: true, name: true, cityName: true, stateUf: true, isActive: true } } },
         orderBy: { updatedAt: "desc" },
@@ -406,7 +406,12 @@ export class FinancialExecutionService {
     return consolidatePortfolio(
       notes.map(n => {
         const amounts = financialPosition(Number(n.currentAmount), Number(n.liquidatedAmount), Number(n.paidAmount), n.supplierName ?? "Não informado");
-        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, creditNotes: creditNotesFrom(n.rawSnapshot), attendedOm: null, observation: null, supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
+        const latestPhaseDate = (phase: "LIQUIDACAO" | "PAGAMENTO") => n.documents.reduce<Date | null>((latest, document) => {
+          const species = (document.species ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+          if (document.phase !== phase || !document.issuedAt || species.includes("estorno") || species.includes("cancelamento") || Number(document.amount) < 0) return latest;
+          return !latest || document.issuedAt > latest ? document.issuedAt : latest;
+        }, null);
+        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, liquidatedAt: latestPhaseDate("LIQUIDACAO"), paidAt: latestPhaseDate("PAGAMENTO"), creditNotes: creditNotesFrom(n.rawSnapshot), attendedOm: null, observation: null, supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
           status: amounts.inconsistent ? amounts.status : n.syncStatus !== "VALIDADO" ? "A_CONFERIR" : n.financialStatus,
           incomplete: amounts.incomplete || n.syncStatus !== "VALIDADO",
         };
