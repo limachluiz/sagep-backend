@@ -396,7 +396,7 @@ export class FinancialExecutionService {
 
   async portfolio(user: CurrentUser) {
     const [notes, archived, activeKeys] = await Promise.all([
-      prisma.commitmentNote.findMany({ where: { active: true, project: this.projectAccessWhere(user) }, include: { project: { select: { id: true, projectCode: true, title: true } }, documents: { select: { phase: true, issuedAt: true, species: true, amount: true } } } }),
+      prisma.commitmentNote.findMany({ where: { active: true, project: this.projectAccessWhere(user) }, include: { project: { select: { id: true, projectCode: true, title: true, om: { select: { id: true, sigla: true, name: true, cityName: true, stateUf: true, isActive: true } }, creditNotes: { where: { status: { not: "CANCELLED" } }, select: { number: true } } } }, documents: { select: { phase: true, issuedAt: true, species: true, amount: true } } } }),
       prisma.discoveredCommitment.findMany({
         include: { attendedOm: { select: { id: true, sigla: true, name: true, cityName: true, stateUf: true, isActive: true } } },
         orderBy: { updatedAt: "desc" },
@@ -406,12 +406,14 @@ export class FinancialExecutionService {
     return consolidatePortfolio(
       notes.map(n => {
         const amounts = financialPosition(Number(n.currentAmount), Number(n.liquidatedAmount), Number(n.paidAmount), n.supplierName ?? "Não informado");
+        const { om, creditNotes: projectCreditNotes, ...project } = n.project;
+        const creditNotes = [...new Set([...projectCreditNotes.map((creditNote) => creditNote.number), ...creditNotesFrom(n.rawSnapshot)])].sort((a, b) => a.localeCompare(b, "pt-BR"));
         const latestPhaseDate = (phase: "LIQUIDACAO" | "PAGAMENTO") => n.documents.reduce<Date | null>((latest, document) => {
           const species = (document.species ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
           if (document.phase !== phase || !document.issuedAt || species.includes("estorno") || species.includes("cancelamento") || Number(document.amount) < 0) return latest;
           return !latest || document.issuedAt > latest ? document.issuedAt : latest;
         }, null);
-        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, liquidatedAt: latestPhaseDate("LIQUIDACAO"), paidAt: latestPhaseDate("PAGAMENTO"), creditNotes: creditNotesFrom(n.rawSnapshot), attendedOm: null, observation: null, supplierCnpj: n.supplierCnpj, project: n.project, ...amounts,
+        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, liquidatedAt: latestPhaseDate("LIQUIDACAO"), paidAt: latestPhaseDate("PAGAMENTO"), creditNotes, attendedOm: om, observation: null, supplierCnpj: n.supplierCnpj, project, ...amounts,
           status: amounts.inconsistent ? amounts.status : n.syncStatus !== "VALIDADO" ? "A_CONFERIR" : n.financialStatus,
           incomplete: amounts.incomplete || n.syncStatus !== "VALIDADO",
         };
@@ -471,7 +473,7 @@ export class FinancialExecutionService {
     const note = await prisma.commitmentNote.findFirst({
       where: { id, project: this.projectAccessWhere(user) },
       include: {
-        project: { include: { om: true } },
+        project: { include: { om: true, creditNotes: { where: { status: { not: "CANCELLED" } }, select: { number: true } } } },
         documents: { orderBy: [{ issuedAt: "asc" }, { createdAt: "asc" }] },
         invoices: { orderBy: { issuedAt: "asc" } },
       },
@@ -479,7 +481,7 @@ export class FinancialExecutionService {
     if (!note) throw new AppError("Nota de Empenho não encontrada", 404);
     return {
       ...serializeNote(note),
-      creditNotes: creditNotesFrom(note.rawSnapshot),
+      creditNotes: [...new Set([...note.project.creditNotes.map((creditNote) => creditNote.number), ...creditNotesFrom(note.rawSnapshot)])].sort((a, b) => a.localeCompare(b, "pt-BR")),
       documents: note.documents.map((document) => ({ ...document, amount: Number(document.amount) })),
       invoices: note.invoices.map((invoice) => ({ ...invoice, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount) })),
     };
