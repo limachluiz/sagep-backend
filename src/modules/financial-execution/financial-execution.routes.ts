@@ -4,6 +4,8 @@ import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { FinancialExecutionController } from "./financial-execution.controller.js";
+import { commitmentImportStatuses } from "./commitment-import-registry.service.js";
+import { z } from "zod";
 
 export const financialExecutionRoutes = Router();
 const controller = new FinancialExecutionController();
@@ -21,6 +23,7 @@ financialExecutionRoutes.post("/discovery/archive/:code/sync", requirePermission
 financialExecutionRoutes.post("/discovery/archive/:code", requirePermission("financial_execution.manage"), async (req, res) => { res.json(await importDiscoveredNote(archiveCodeSchema.parse(req.params.code), req.user!.id, archiveImportSchema.parse(req.body ?? {}))); });
 financialExecutionRoutes.delete("/discovery/archive/:code", requirePermission("financial_execution.manage"), async (req, res) => { await deleteArchivedNote(archiveCodeSchema.parse(req.params.code)); res.status(204).end(); });
 financialExecutionRoutes.get("/discovery/options", requirePermission("financial_execution.view"), async (_req, res) => { res.json(await discoveryOptions()); });
+financialExecutionRoutes.post("/discovery/statuses", requirePermission("financial_execution.view"), async (req, res) => { const codes = z.array(archiveCodeSchema).max(500).parse(req.body?.codes); res.json(await commitmentImportStatuses(codes)); });
 financialExecutionRoutes.post("/discovery/page", requirePermission("financial_execution.view"), async (req, res) => { res.json(await discoveryPage(discoveryPageSchema.parse(req.body))); });
 financialExecutionRoutes.get("/discovery/documents/:code", requirePermission("financial_execution.view"), async (req, res) => { res.json(await discoveryDocuments(String(req.params.code))); });
 financialExecutionRoutes.get("/commitment-notes", requirePermission("financial_execution.view"), (req, res) => controller.list(req, res));

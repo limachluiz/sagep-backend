@@ -1,0 +1,21 @@
+import { Router } from "express";
+import { authMiddleware } from "../../middlewares/auth.middleware.js";
+import { requirePermission } from "../../middlewares/permission.middleware.js";
+import { requireStepUp } from "../../middlewares/step-up.middleware.js";
+import { sensitiveRateLimiter } from "../../middlewares/rate-limit.middleware.js";
+import { NotificationSettingsController } from "./notification-settings.controller.js";
+
+export const notificationSettingsRoutes = Router();
+const controller = new NotificationSettingsController();
+notificationSettingsRoutes.use(authMiddleware);
+notificationSettingsRoutes.get("/", requirePermission("settings.view"), (req, res) => controller.get(req, res));
+notificationSettingsRoutes.put("/smtp", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.saveSmtp(req, res));
+notificationSettingsRoutes.post("/smtp/test", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.testSmtp(req, res));
+notificationSettingsRoutes.put("/telegram", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.saveTelegram(req, res));
+notificationSettingsRoutes.post("/telegram/test", sensitiveRateLimiter, requirePermission("settings.manage"), requireStepUp, (req, res) => controller.testTelegram(req, res));
+notificationSettingsRoutes.post("/email-lists", requirePermission("settings.manage"), (req, res) => controller.createList(req, res));
+notificationSettingsRoutes.put("/email-lists/:id", requirePermission("settings.manage"), (req, res) => controller.updateList(req, res));
+notificationSettingsRoutes.delete("/email-lists/:id", requirePermission("settings.manage"), (req, res) => controller.deleteList(req, res));
+notificationSettingsRoutes.get("/automation", requirePermission("settings.view"), (req, res) => controller.automation(req, res));
+notificationSettingsRoutes.put("/automation", requirePermission("settings.manage"), (req, res) => controller.saveAutomation(req, res));
+notificationSettingsRoutes.post("/automation/run", sensitiveRateLimiter, requirePermission("settings.manage"), (req, res) => controller.runAutomation(req, res));

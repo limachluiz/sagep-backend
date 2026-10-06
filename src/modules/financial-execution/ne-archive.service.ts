@@ -4,6 +4,7 @@ import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/app-error.js";
 import { discoveryDocuments } from "./ne-discovery.service.js";
+import { claimCommitmentImport, completeCommitmentImport, failCommitmentImport } from "./commitment-import-registry.service.js";
 
 export const archiveCodeSchema = z.string().regex(/^\d{15}NE\d{6}$/);
 export const archiveQuerySchema = z.object({ page: z.coerce.number().int().min(1).default(1), pageSize: z.coerce.number().refine(n => [10,20,30,50].includes(n)).default(10), search: z.string().trim().max(100).default("") });
@@ -38,7 +39,10 @@ export async function importDiscoveredNote(code: string, userId: string, input =
   if (existing && existing.origin !== input.origin && input.replaceOrigin !== existing.origin) {
     throw new AppError("Esta NE já existe com outra origem. Escolha manter o cadastro existente ou substituí-lo pelo novo.", 409, "NE_DUPLICATE_ORIGIN", { externalCode: code, existingOrigin: existing.origin });
   }
-  const snapshot = await discoveryDocuments(code, true);
+  await claimCommitmentImport(code, userId, Boolean(input.replaceOrigin));
+  let snapshot;
+  try { snapshot = await discoveryDocuments(code, true); }
+  catch (error) { await failCommitmentImport(code, userId, error); throw error; }
   const data = {
     snapshot: JSON.parse(JSON.stringify(snapshot)) as Prisma.InputJsonValue,
     importedById: userId,
@@ -46,13 +50,25 @@ export async function importDiscoveredNote(code: string, userId: string, input =
     ...(input.attendedOmId !== undefined && { attendedOmId: input.attendedOmId }),
     ...(input.observation !== undefined && { observation: input.observation }),
   };
-  if (existing) {
-    const result = await prisma.discoveredCommitment.updateMany({ where: { id: existing.id, updatedAt: existing.updatedAt, origin: existing.origin }, data });
-    if (!result.count) throw new AppError("NE alterada durante a operação; atualize e tente novamente", 409);
-    return prisma.discoveredCommitment.findUniqueOrThrow({ where: { id: existing.id }, include: archiveInclude });
+  try {
+    const saved = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${code}))`;
+      const projectNote = await tx.commitmentNote.findUnique({ where: { externalCode: code }, select: { id: true } });
+      if (projectNote) throw new AppError("Esta NE já está vinculada a um projeto e não pode ser importada novamente.", 409, "NE_ALREADY_REGISTERED_IN_PROJECT", { externalCode: code, targetId: projectNote.id });
+      if (existing) {
+        const result = await tx.discoveredCommitment.updateMany({ where: { id: existing.id, updatedAt: existing.updatedAt, origin: existing.origin }, data });
+        if (!result.count) throw new AppError("NE alterada durante a operação; atualize e tente novamente", 409);
+        return tx.discoveredCommitment.findUniqueOrThrow({ where: { id: existing.id }, include: archiveInclude });
+      }
+      return tx.discoveredCommitment.create({ data: { externalCode: code, attendedOmId: input.attendedOmId ?? null, observation: input.observation ?? null, ...data }, include: archiveInclude });
+    }, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+    await completeCommitmentImport(code, userId, saved.id, saved.origin);
+    return saved;
+  } catch (error) {
+    await failCommitmentImport(code, userId, error);
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new AppError("NE cadastrada durante a operação; atualize e confira a duplicidade", 409);
+    throw error;
   }
-  try { return await prisma.discoveredCommitment.create({ data: { externalCode: code, attendedOmId: input.attendedOmId ?? null, observation: input.observation ?? null, ...data }, include: archiveInclude }); }
-  catch (error) { if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") throw new AppError("NE cadastrada durante a operação; atualize e confira a duplicidade", 409); throw error; }
 }
 
 export async function listArchivedNotes(query: z.infer<typeof archiveQuerySchema>) {
@@ -88,7 +104,16 @@ export async function updateArchivedNoteMetadata(code: string, input: z.infer<ty
   return { ...note, financial: archivedFinancial(note.snapshot, note.externalCode) };
 }
 export async function deleteArchivedNotes(codes: string[]) {
-  return prisma.discoveredCommitment.deleteMany({ where: { externalCode: { in: codes.map(code => archiveCodeSchema.parse(code)) } } });
+  const externalCodes = codes.map(code => archiveCodeSchema.parse(code));
+  return prisma.$transaction(async (tx) => {
+    for (const code of [...externalCodes].sort()) await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${code}))`;
+    const result = await tx.discoveredCommitment.deleteMany({ where: { externalCode: { in: externalCodes } } });
+    const projectNotes = await tx.commitmentNote.findMany({ where: { externalCode: { in: externalCodes } }, select: { externalCode: true } });
+    const projectCodes = new Set(projectNotes.map(note => note.externalCode));
+    const availableCodes = externalCodes.filter(code => !projectCodes.has(code));
+    if (availableCodes.length) await tx.commitmentImportRegistry.updateMany({ where: { externalCode: { in: availableCodes } }, data: { status: "AVAILABLE", claimedById: null, claimedAt: null, importedById: null, importedAt: null, importedOrigin: null, targetId: null, lastError: null } });
+    return result;
+  });
 }
 export async function deleteArchivedNote(code: string) { await deleteArchivedNotes([code]); }
 
@@ -99,5 +124,5 @@ export async function archivedNote(code: string) {
 }
 export async function refreshArchivedNote(code: string, userId: string) {
   const note = await archivedNote(code);
-  return importDiscoveredNote(code, userId, archiveImportSchema.parse({ origin: note.origin }));
+  return importDiscoveredNote(code, userId, archiveImportSchema.parse({ origin: note.origin, replaceOrigin: note.origin }));
 }

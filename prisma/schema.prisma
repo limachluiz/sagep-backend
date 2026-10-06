@@ -14,6 +14,29 @@ enum UserRole {
   CONSULTA
 }
 
+enum CommitmentImportStatus {
+  AVAILABLE
+  IMPORTING
+  IMPORTED
+  FAILED
+}
+
+enum NotificationAutomationRunStatus {
+  RUNNING
+  SUCCESS
+  PARTIAL
+  FAILED
+  SKIPPED
+}
+
+enum NotificationAutomationEventType {
+  NE_DISCOVERED
+  NE_LIQUIDATED
+  NE_PAID
+  ATA_BALANCE_CHANGED
+  AUTOMATION_FAILED
+}
+
 enum ProjectStatus {
   PLANEJAMENTO
   EM_ANDAMENTO
@@ -303,6 +326,108 @@ model SystemConfiguration {
   updatedAt                  DateTime  @updatedAt
 }
 
+model NotificationChannelConfiguration {
+  id                        String   @id @default("default")
+  smtpEnabled               Boolean  @default(false)
+  smtpHost                  String?
+  smtpPort                  Int      @default(587)
+  smtpSecure                Boolean  @default(false)
+  smtpUsername              String?
+  smtpPasswordEncrypted     String?
+  smtpFromName              String?
+  smtpFromEmail             String?
+  telegramEnabled           Boolean  @default(false)
+  telegramBotTokenEncrypted String?
+  telegramChatId            String?
+  updatedById               String?
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+}
+
+model NotificationEmailList {
+  id          String                       @id @default(cuid())
+  name        String                       @unique
+  description String?
+  active      Boolean                      @default(true)
+  roles       UserRole[]                   @default([])
+  recipients  NotificationEmailRecipient[]
+  createdById String?
+  updatedById String?
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+}
+
+model NotificationEmailRecipient {
+  id        String                @id @default(cuid())
+  listId    String
+  email     String
+  name      String?
+  active    Boolean               @default(true)
+  list      NotificationEmailList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  createdAt DateTime              @default(now())
+  updatedAt DateTime              @updatedAt
+
+  @@unique([listId, email])
+  @@index([email, active])
+}
+
+model NotificationAutomationConfiguration {
+  id                     String     @id @default("default")
+  enabled                Boolean    @default(false)
+  timeZone               String     @default("America/Manaus")
+  hour                   Int        @default(7)
+  minute                 Int        @default(0)
+  weekdays               Int[]      @default([1, 2, 3, 4, 5])
+  syncTrackedCommitments Boolean    @default(true)
+  discoverCommitments    Boolean    @default(true)
+  syncAtaBalances        Boolean    @default(true)
+  managementUnits        String[]   @default([])
+  emailEnabled           Boolean    @default(true)
+  telegramEnabled        Boolean    @default(true)
+  emailListIds           String[]   @default([])
+  notifyRoles            UserRole[] @default([ADMIN, GESTOR])
+  maxDiscoveryPages      Int        @default(100)
+  lastScheduledKey       String?
+  updatedById            String?
+  createdAt              DateTime   @default(now())
+  updatedAt              DateTime   @updatedAt
+}
+
+model NotificationAutomationRun {
+  id            String                          @id @default(cuid())
+  trigger       String
+  status        NotificationAutomationRunStatus @default(RUNNING)
+  startedAt     DateTime                        @default(now())
+  finishedAt    DateTime?
+  summary       Json?
+  error         String?
+  requestedById String?
+
+  @@index([startedAt])
+  @@index([status, startedAt])
+}
+
+model NotificationAutomationEvent {
+  id             String                              @id @default(cuid())
+  eventKey       String                              @unique
+  type           NotificationAutomationEventType
+  title          String
+  description    String
+  detailsPath    String?
+  payload        Json?
+  occurredAt     DateTime                            @default(now())
+  lastSeenAt     DateTime                            @default(now())
+  emailSentAt    DateTime?
+  telegramSentAt DateTime?
+  emailError     String?
+  telegramError  String?
+  createdAt      DateTime                            @default(now())
+  updatedAt      DateTime                            @updatedAt
+
+  @@index([type, occurredAt])
+  @@index([occurredAt])
+}
+
 model IntegrationConnectionCheck {
   id          String                      @id @default(cuid())
   provider    IntegrationProvider
@@ -441,44 +566,44 @@ model ProjectCreditNote {
 }
 
 model CommitmentNote {
-  id                 String                        @id @default(cuid())
-  commitmentNoteCode Int                           @unique @default(autoincrement())
-  projectId          String
-  number             String
-  externalCode       String                        @unique
-  managementUnit     String                        @default("160016")
-  management         String                        @default("00001")
-  source             String                        @default("PORTAL_TRANSPARENCIA")
-  supplierName       String?
-  supplierCnpj       String?
-  issuedAt           DateTime?
-  originalAmount     Decimal                       @default(0) @db.Decimal(14, 2)
-  currentAmount      Decimal                       @default(0) @db.Decimal(14, 2)
-  liquidatedAmount   Decimal                       @default(0) @db.Decimal(14, 2)
-  paidAmount         Decimal                       @default(0) @db.Decimal(14, 2)
-  cancelledAmount    Decimal                       @default(0) @db.Decimal(14, 2)
-  financialStatus    CommitmentNoteFinancialStatus @default(NAO_LIQUIDADA)
-  syncStatus         ExternalSyncStatus            @default(VALIDADO)
-  divergenceReason   String?
-  rawSnapshot        Json?
-  lastSyncAt         DateTime
-  lastSyncError      String?
-  active             Boolean                       @default(true)
-  balanceImpactMode  CommitmentNoteBalanceImpactMode @default(CONSUME)
-  balanceImpactReason String?
-  balanceImpactDecidedAt DateTime?
+  id                       String                          @id @default(cuid())
+  commitmentNoteCode       Int                             @unique @default(autoincrement())
+  projectId                String
+  number                   String
+  externalCode             String                          @unique
+  managementUnit           String                          @default("160016")
+  management               String                          @default("00001")
+  source                   String                          @default("PORTAL_TRANSPARENCIA")
+  supplierName             String?
+  supplierCnpj             String?
+  issuedAt                 DateTime?
+  originalAmount           Decimal                         @default(0) @db.Decimal(14, 2)
+  currentAmount            Decimal                         @default(0) @db.Decimal(14, 2)
+  liquidatedAmount         Decimal                         @default(0) @db.Decimal(14, 2)
+  paidAmount               Decimal                         @default(0) @db.Decimal(14, 2)
+  cancelledAmount          Decimal                         @default(0) @db.Decimal(14, 2)
+  financialStatus          CommitmentNoteFinancialStatus   @default(NAO_LIQUIDADA)
+  syncStatus               ExternalSyncStatus              @default(VALIDADO)
+  divergenceReason         String?
+  rawSnapshot              Json?
+  lastSyncAt               DateTime
+  lastSyncError            String?
+  active                   Boolean                         @default(true)
+  balanceImpactMode        CommitmentNoteBalanceImpactMode @default(CONSUME)
+  balanceImpactReason      String?
+  balanceImpactDecidedAt   DateTime?
   balanceImpactDecidedById String?
-  project            Project                       @relation(fields: [projectId], references: [id], onDelete: Restrict)
-  documents          FinancialDocument[]
-  invoices           Invoice[]
-  createdAt          DateTime                      @default(now())
-  updatedAt          DateTime                      @updatedAt
+  project                  Project                         @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  documents                FinancialDocument[]
+  invoices                 Invoice[]
+  createdAt                DateTime                        @default(now())
+  updatedAt                DateTime                        @updatedAt
 
+  @@unique([managementUnit, management, number])
   @@index([projectId, active])
   @@index([financialStatus])
   @@index([syncStatus])
   @@index([lastSyncAt])
-  @@unique([managementUnit, management, number])
 }
 
 model FinancialDocument {
@@ -716,62 +841,62 @@ model AtaCoverageLocality {
 }
 
 model AtaItem {
-  id                               String                   @id @default(cuid())
-  ataItemCode                      Int                      @unique @default(autoincrement())
+  id                               String                          @id @default(cuid())
+  ataItemCode                      Int                             @unique @default(autoincrement())
   ataId                            String
   coverageGroupId                  String
   referenceCode                    String
   description                      String
   externalDescription              String?
   automaticDescription             String?
-  descriptionCorrectionStatus      String                   @default("OK")
+  descriptionCorrectionStatus      String                          @default("OK")
   descriptionCorrectionConfidence  Int?
   descriptionCorrectionSuggestions Json?
   descriptionEditedAt              DateTime?
   unit                             String
   estimateItems                    EstimateItem[]
   balanceMovements                 AtaItemBalanceMovement[]
-  unitPrice                        Decimal                  @db.Decimal(14, 2)
-  initialQuantity                  Decimal                  @default(1000) @db.Decimal(18, 5)
-  openingConsumedQuantity          Decimal                  @default(0) @db.Decimal(18, 5)
+  unitPrice                        Decimal                         @db.Decimal(14, 2)
+  initialQuantity                  Decimal                         @default(1000) @db.Decimal(18, 5)
+  openingConsumedQuantity          Decimal                         @default(0) @db.Decimal(18, 5)
   openingBalanceAppliedAt          DateTime?
   openingBalanceCheckedAt          DateTime?
   openingBalanceReason             String?
   openingBalanceAppliedById        String?
   notes                            String?
-  isActive                         Boolean                  @default(true)
+  isActive                         Boolean                         @default(true)
   deletedAt                        DateTime?
   externalSource                   String?
   externalItemId                   String?
   externalItemNumber               String?
   externalLastSyncAt               DateTime?
   externalBalanceSnapshot          AtaItemExternalBalanceSnapshot?
-  ata                              Ata                      @relation(fields: [ataId], references: [id], onDelete: Cascade)
-  coverageGroup                    AtaCoverageGroup         @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
-  createdAt                        DateTime                 @default(now())
-  updatedAt                        DateTime                 @updatedAt
+  ata                              Ata                             @relation(fields: [ataId], references: [id], onDelete: Cascade)
+  coverageGroup                    AtaCoverageGroup                @relation(fields: [coverageGroupId], references: [id], onDelete: Cascade)
+  createdAt                        DateTime                        @default(now())
+  updatedAt                        DateTime                        @updatedAt
 
   @@unique([ataId, coverageGroupId, referenceCode])
 }
 
 model AtaItemExternalBalanceSnapshot {
-  id                                     String   @id @default(cuid())
-  ataItemId                              String   @unique
-  source                                 String
-  externalItemNumber                     String
-  managerRegisteredQuantity              Decimal? @db.Decimal(18, 5)
-  managerCommittedQuantity               Decimal? @db.Decimal(18, 5)
-  managerAvailableQuantity               Decimal? @db.Decimal(18, 5)
-  publishedTotalRegisteredAuthorized     Decimal  @db.Decimal(18, 5)
-  publishedTotalAvailableForCommitment   Decimal  @db.Decimal(18, 5)
-  publishedAdhesionLimit                  Decimal  @db.Decimal(18, 5)
-  publishedAvailableForAdhesion           Decimal  @db.Decimal(18, 5)
-  sourceUrl                               String
-  checkedAt                              DateTime
-  rawSnapshot                            Json
-  ataItem                                AtaItem  @relation(fields: [ataItemId], references: [id], onDelete: Cascade)
-  createdAt                              DateTime @default(now())
-  updatedAt                              DateTime @updatedAt
+  id                                   String   @id @default(cuid())
+  ataItemId                            String   @unique
+  source                               String
+  externalItemNumber                   String
+  managerRegisteredQuantity            Decimal? @db.Decimal(18, 5)
+  managerCommittedQuantity             Decimal? @db.Decimal(18, 5)
+  managerAvailableQuantity             Decimal? @db.Decimal(18, 5)
+  publishedTotalRegisteredAuthorized   Decimal  @db.Decimal(18, 5)
+  publishedTotalAvailableForCommitment Decimal  @db.Decimal(18, 5)
+  publishedAdhesionLimit               Decimal  @db.Decimal(18, 5)
+  publishedAvailableForAdhesion        Decimal  @db.Decimal(18, 5)
+  sourceUrl                            String
+  checkedAt                            DateTime
+  rawSnapshot                          Json
+  ataItem                              AtaItem  @relation(fields: [ataItemId], references: [id], onDelete: Cascade)
+  createdAt                            DateTime @default(now())
+  updatedAt                            DateTime @updatedAt
 
   @@index([checkedAt])
 }
@@ -867,19 +992,19 @@ model EstimateItem {
 }
 
 model MilitaryOrganization {
-  id        String         @id @default(cuid())
-  omCode    Int            @unique @default(autoincrement())
-  sigla     String         @unique
-  name      String
-  cityName  String
-  stateUf   FederativeUnit
-  estimates Estimate[]
-  projects  Project[]
+  id                    String                 @id @default(cuid())
+  omCode                Int                    @unique @default(autoincrement())
+  sigla                 String                 @unique
+  name                  String
+  cityName              String
+  stateUf               FederativeUnit
+  estimates             Estimate[]
+  projects              Project[]
   discoveredCommitments DiscoveredCommitment[] @relation("DiscoveredCommitmentAttendedOm")
-  isActive  Boolean        @default(true)
-  archivedAt DateTime?
-  createdAt DateTime       @default(now())
-  updatedAt DateTime       @updatedAt
+  isActive              Boolean                @default(true)
+  archivedAt            DateTime?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
   @@index([archivedAt])
 }
@@ -1071,16 +1196,35 @@ model AuditLog {
 
 // Independent consultation archive. Never participates in project/ATA balances.
 model DiscoveredCommitment {
-  origin       String   @default("IMPORTED")
-  id           String   @id @default(cuid())
-  externalCode String   @unique
+  origin       String                @default("IMPORTED")
+  id           String                @id @default(cuid())
+  externalCode String                @unique
   snapshot     Json
   attendedOmId String?
   attendedOm   MilitaryOrganization? @relation("DiscoveredCommitmentAttendedOm", fields: [attendedOmId], references: [id], onDelete: SetNull)
   observation  String?
   importedById String
-  importedAt   DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  importedAt   DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
 
   @@index([attendedOmId])
+}
+
+model CommitmentImportRegistry {
+  externalCode   String                 @id
+  status         CommitmentImportStatus @default(AVAILABLE)
+  source         String                 @default("RADAR")
+  claimedById    String?
+  claimedAt      DateTime?
+  importedById   String?
+  importedAt     DateTime?
+  importedOrigin String?
+  targetId       String?
+  lastError      String?
+  discoveredAt   DateTime               @default(now())
+  lastSeenAt     DateTime               @default(now())
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([status, lastSeenAt])
 }

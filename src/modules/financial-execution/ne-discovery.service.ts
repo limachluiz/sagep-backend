@@ -7,6 +7,7 @@ import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { fetchPortalJson } from "./portal-transparencia.client.js";
+import { registerDiscoveredCommitments } from "./commitment-import-registry.service.js";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v, "Data inválida");
 export const discoveryPageSchema = z.object({
@@ -55,7 +56,10 @@ export async function discoveryPage(input: z.infer<typeof discoveryPageSchema>) 
   Object.entries({ codigoPessoa: input.cnpj, ug: input.ug, ano: input.year, fase: 1, pagina: input.page, ordenacaoResultado: 3 }).forEach(([k, v]) => url.searchParams.set(k, String(v)));
   const payload = await fetchPortalJson(url.toString(), token, "Portal não confirmou a página (resposta ausente ou HTTP 404); a consulta permanece incompleta", { allowEmptyArray: true });
   if (!Array.isArray(payload) || payload.some(v => !v || typeof v !== "object" || Array.isArray(v))) throw new AppError("Formato inesperado na busca de NEs", 502, "DISCOVERY_INVALID_RESPONSE");
-  return { ...filterDiscoveryRows(payload, input.startDate, input.endDate), exhausted: payload.length === 0,
+  const filtered = filterDiscoveryRows(payload, input.startDate, input.endDate);
+  const codes = filtered.items.map((item) => String(item.documento ?? "")).filter((code) => /^\d{15}NE\d{6}$/.test(code));
+  const importStatuses = codes.length ? await registerDiscoveredCommitments(codes) : {};
+  return { ...filtered, items: filtered.items.map((item) => ({ ...item, sagepImport: importStatuses[String(item.documento ?? "")] ?? null })), exhausted: payload.length === 0,
     fingerprint: createHash("sha256").update(JSON.stringify(payload)).digest("hex"), source: "Portal da Transparência", fetchedAt: new Date().toISOString() };
 }
 

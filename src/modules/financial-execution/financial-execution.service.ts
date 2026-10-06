@@ -5,6 +5,7 @@ import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
+import { claimCommitmentImport, completeCommitmentImport, failCommitmentImport } from "./commitment-import-registry.service.js";
 import { ProjectsService } from "../projects/projects.service.js";
 import type {
   CreateInvoiceInput,
@@ -53,7 +54,7 @@ export class FinancialExecutionService {
     management: string;
     number: string;
   }) {
-    const existing = await prisma.commitmentNote.findFirst({
+    const [existing, archived] = await Promise.all([prisma.commitmentNote.findFirst({
       where: {
         OR: [
           { externalCode: input.externalCode },
@@ -61,7 +62,8 @@ export class FinancialExecutionService {
         ],
       },
       select: { id: true, projectId: true, active: true, project: { select: { projectCode: true, title: true } } },
-    });
+    }), prisma.discoveredCommitment.findUnique({ where: { externalCode: input.externalCode }, select: { id: true, origin: true, importedAt: true } })]);
+    if (archived) throw new AppError("Esta Nota de Empenho já existe na carteira como importada ou avulsa.", 409, "COMMITMENT_NOTE_ALREADY_ARCHIVED", { externalCode: input.externalCode, targetId: archived.id, origin: archived.origin, importedAt: archived.importedAt });
     if (!existing) return;
     if (existing.projectId === input.projectId) {
       throw new AppError("Esta Nota de Empenho já está registrada neste projeto.", 409, "COMMITMENT_NOTE_ALREADY_REGISTERED", { commitmentNoteId: existing.id });
@@ -262,8 +264,9 @@ export class FinancialExecutionService {
       number: preview.snapshot.number,
     });
     await this.validateBalanceImpact(input, preview.snapshot.issuedAt);
-
-    const project = await projectsService.updateFlow(input.projectId, {
+    await claimCommitmentImport(preview.snapshot.externalCode, user.id);
+    let project: Awaited<ReturnType<typeof projectsService.updateFlow>>;
+    try { project = await projectsService.updateFlow(input.projectId, {
       stage: "AGUARDANDO_NOTA_EMPENHO",
       commitmentNoteNumber: preview.snapshot.number,
       commitmentNoteReceivedAt: input.receivedAt,
@@ -273,13 +276,18 @@ export class FinancialExecutionService {
       commitmentNoteDivergenceReason: preview.validation.divergences.join("; ") || null,
       commitmentNoteBalanceImpactMode: input.balanceImpactMode,
       commitmentNoteBalanceImpactReason: input.balanceImpactReason ?? null,
-    });
+    }); } catch (error) { await failCommitmentImport(preview.snapshot.externalCode, user.id, error); throw error; }
 
     const note = await prisma.commitmentNote.findUnique({
       where: { externalCode: preview.snapshot.externalCode },
       include: { documents: { orderBy: { issuedAt: "asc" } } },
     });
-    if (!note) throw new AppError("Falha ao persistir a Nota de Empenho validada", 500);
+    if (!note) {
+      const error = new AppError("Falha ao persistir a Nota de Empenho validada", 500);
+      await failCommitmentImport(preview.snapshot.externalCode, user.id, error);
+      throw error;
+    }
+    await completeCommitmentImport(note.externalCode, user.id, note.id, "PROJECT");
 
     await auditService.log({
       entityType: "COMMITMENT_NOTE",

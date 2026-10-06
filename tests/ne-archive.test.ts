@@ -1,11 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn(), deleteMany: vi.fn(), findOrganization: vi.fn(), source: vi.fn() }));
+const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), create: vi.fn(), update: vi.fn(), updateMany: vi.fn(), findUniqueOrThrow: vi.fn(), deleteMany: vi.fn(), findOrganization: vi.fn(), source: vi.fn(), claim: vi.fn(), complete: vi.fn(), fail: vi.fn(), projectNote: vi.fn(), projectNotes: vi.fn(), registryUpdateMany: vi.fn(), executeRaw: vi.fn() }));
 // Only the archive delegate is exposed: any write to project/ATA balances fails.
-vi.mock("../src/config/prisma.js", () => ({ prisma: { discoveredCommitment: mocks, militaryOrganization: { findFirst: mocks.findOrganization } } }));
+vi.mock("../src/config/prisma.js", () => ({ prisma: { discoveredCommitment: mocks, militaryOrganization: { findFirst: mocks.findOrganization }, $transaction: vi.fn(async (operation: unknown) => typeof operation === "function" ? operation({ discoveredCommitment: mocks, commitmentNote: { findUnique: mocks.projectNote, findMany: mocks.projectNotes }, commitmentImportRegistry: { updateMany: mocks.registryUpdateMany }, $executeRaw: mocks.executeRaw }) : operation) } }));
 vi.mock("../src/modules/financial-execution/ne-discovery.service.js", () => ({ discoveryDocuments: mocks.source }));
+vi.mock("../src/modules/financial-execution/commitment-import-registry.service.js", () => ({ claimCommitmentImport: mocks.claim, completeCommitmentImport: mocks.complete, failCommitmentImport: mocks.fail }));
 import { archiveImportSchema, archiveMetadataSchema, archiveQuerySchema, importDiscoveredNote, deleteArchivedNotes, refreshArchivedNote, updateArchivedNoteMetadata } from "../src/modules/financial-execution/ne-archive.service.js";
 const code = "160016000012026NE000534";
-beforeEach(() => { vi.resetAllMocks(); mocks.source.mockResolvedValue({ document: { valor: "33.698,40" }, related: [], fetchedAt: "2026-09-15T12:00:00Z" }); mocks.findUnique.mockResolvedValue(null); mocks.findOrganization.mockResolvedValue({ id: "om-1" }); });
+beforeEach(() => { vi.resetAllMocks(); mocks.source.mockResolvedValue({ document: { valor: "33.698,40" }, related: [], fetchedAt: "2026-09-15T12:00:00Z" }); mocks.findUnique.mockResolvedValue(null); mocks.findOrganization.mockResolvedValue({ id: "om-1" }); mocks.projectNote.mockResolvedValue(null); mocks.projectNotes.mockResolvedValue([]); mocks.create.mockResolvedValue({ id: "saved", externalCode: code, origin: "IMPORTED" }); mocks.findUniqueOrThrow.mockResolvedValue({ id: "one", externalCode: code, origin: "IMPORTED" }); });
 describe("NE archive and origin conflicts", () => {
   it("imports authoritative snapshots without writing balances", async () => {
     await importDiscoveredNote(code, "user");
@@ -70,6 +71,7 @@ describe("NE archive and origin conflicts", () => {
   it("deletes exactly the selected copies, never all rows implicitly", async () => {
     await deleteArchivedNotes([code]);
     expect(mocks.deleteMany).toHaveBeenCalledWith({ where: { externalCode: { in: [code] } } });
+    expect(mocks.registryUpdateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { externalCode: { in: [code] } }, data: expect.objectContaining({ status: "AVAILABLE" }) }));
     expect(mocks.source).not.toHaveBeenCalled();
   });
   it("defaults to 10 rows and accepts only the supported sizes", () => {

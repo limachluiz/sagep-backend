@@ -1,5 +1,6 @@
 import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
+import type { UserRole } from "../../generated/prisma/enums.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { type ProjectStageValue } from "../workflow/workflow.types.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
@@ -39,6 +40,11 @@ type AlertCategory =
   | "NE_AGUARDANDO_PAGAMENTO"
   | "PROJETO_CONCLUIDO_NAO_PAGO"
   | "NE_PAGA_PROJETO_ABERTO"
+  | "NE_NOVA_RADAR"
+  | "NE_LIQUIDADA_AUTOMACAO"
+  | "NE_PAGA_AUTOMACAO"
+  | "ATA_SALDO_ALTERADO"
+  | "AUTOMACAO_FALHOU"
   | "CERTIFICADO_HTTPS_VENCENDO"
   | "CERTIFICADO_HTTPS_VENCIDO"
   | "CERTIFICADO_RENOVACAO_FALHOU";
@@ -98,6 +104,11 @@ const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
   NE_AGUARDANDO_PAGAMENTO: [],
   PROJETO_CONCLUIDO_NAO_PAGO: [],
   NE_PAGA_PROJETO_ABERTO: [],
+  NE_NOVA_RADAR: [],
+  NE_LIQUIDADA_AUTOMACAO: [],
+  NE_PAGA_AUTOMACAO: [],
+  ATA_SALDO_ALTERADO: [],
+  AUTOMACAO_FALHOU: [],
   CERTIFICADO_HTTPS_VENCENDO: [],
   CERTIFICADO_HTTPS_VENCIDO: [],
   CERTIFICADO_RENOVACAO_FALHOU: [],
@@ -605,6 +616,27 @@ export class OperationalAlertsService {
       }
     }
 
+    const automationConfig = await prisma.notificationAutomationConfiguration.findUnique({ where: { id: "default" } });
+    if (automationConfig?.notifyRoles.includes(user.role as UserRole)) {
+      const automationEvents = await prisma.notificationAutomationEvent.findMany({
+        where: { occurredAt: { gte: new Date(now.getTime() - 90 * 24 * 60 * 60_000) } },
+        orderBy: { occurredAt: "desc" }, take: limit,
+      });
+      const categoryByType = {
+        NE_DISCOVERED: "NE_NOVA_RADAR", NE_LIQUIDATED: "NE_LIQUIDADA_AUTOMACAO", NE_PAID: "NE_PAGA_AUTOMACAO",
+        ATA_BALANCE_CHANGED: "ATA_SALDO_ALTERADO", AUTOMATION_FAILED: "AUTOMACAO_FALHOU",
+      } as const;
+      alerts.push(...automationEvents.map((event) => ({
+        id: `AUTOMATION:${event.id}`,
+        category: categoryByType[event.type],
+        severity: event.type === "AUTOMATION_FAILED" ? "CRITICAL" as const : event.type === "ATA_BALANCE_CHANGED" ? "WARNING" as const : "INFO" as const,
+        title: event.title,
+        description: event.description,
+        detailsPath: event.detailsPath ?? "/settings/notifications",
+        sourceUpdatedAt: event.updatedAt,
+      })));
+    }
+
     const projectUpdatedAt = new Map(projects.map((project) => [project.id, project.updatedAt]));
     const dismissals = await prisma.notificationDismissal.findMany({ where: { userId: user.id } });
     const dismissalByKey = new Map(dismissals.map((item) => [item.notificationKey, item]));
@@ -636,6 +668,11 @@ export class OperationalAlertsService {
       NE_AGUARDANDO_PAGAMENTO: [...emptyCategoryGroups.NE_AGUARDANDO_PAGAMENTO],
       PROJETO_CONCLUIDO_NAO_PAGO: [...emptyCategoryGroups.PROJETO_CONCLUIDO_NAO_PAGO],
       NE_PAGA_PROJETO_ABERTO: [...emptyCategoryGroups.NE_PAGA_PROJETO_ABERTO],
+      NE_NOVA_RADAR: [...emptyCategoryGroups.NE_NOVA_RADAR],
+      NE_LIQUIDADA_AUTOMACAO: [...emptyCategoryGroups.NE_LIQUIDADA_AUTOMACAO],
+      NE_PAGA_AUTOMACAO: [...emptyCategoryGroups.NE_PAGA_AUTOMACAO],
+      ATA_SALDO_ALTERADO: [...emptyCategoryGroups.ATA_SALDO_ALTERADO],
+      AUTOMACAO_FALHOU: [...emptyCategoryGroups.AUTOMACAO_FALHOU],
       CERTIFICADO_HTTPS_VENCENDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCENDO],
       CERTIFICADO_HTTPS_VENCIDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCIDO],
       CERTIFICADO_RENOVACAO_FALHOU: [...emptyCategoryGroups.CERTIFICADO_RENOVACAO_FALHOU],

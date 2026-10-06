@@ -22,6 +22,32 @@ export function secretEncryptionSource() {
   return env.SAGEP_SECRETS_ENCRYPTION_KEY ? "DEDICATED" as const : "DERIVED" as const;
 }
 
+function aadFor(purpose: string) {
+  return Buffer.from(`sagep:${purpose}:v1`, "utf8");
+}
+
+export function encryptSecret(value: string, purpose: string) {
+  const iv = randomBytes(12);
+  const aad = aadFor(purpose);
+  const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
+  cipher.setAAD(aad);
+  const encrypted = Buffer.concat([cipher.update(value, "utf8"), cipher.final()]);
+  return [VERSION, iv.toString("base64url"), cipher.getAuthTag().toString("base64url"), encrypted.toString("base64url")].join(":");
+}
+
+export function decryptSecret(envelope: string, purpose: string, errorCode = "PROTECTED_SECRET_DECRYPTION_FAILED") {
+  try {
+    const [version, ivValue, tagValue, encryptedValue, extra] = envelope.split(":");
+    if (version !== VERSION || !ivValue || !tagValue || !encryptedValue || extra) throw new Error("Envelope inválido");
+    const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(ivValue, "base64url"));
+    decipher.setAAD(aadFor(purpose));
+    decipher.setAuthTag(Buffer.from(tagValue, "base64url"));
+    return Buffer.concat([decipher.update(Buffer.from(encryptedValue, "base64url")), decipher.final()]).toString("utf8");
+  } catch {
+    throw new AppError("O segredo protegido não pôde ser descriptografado; substitua-o nas configurações", 503, errorCode);
+  }
+}
+
 export function encryptPortalApiToken(value: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", encryptionKey(), iv);
