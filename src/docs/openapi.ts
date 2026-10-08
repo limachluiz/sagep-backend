@@ -205,6 +205,7 @@ export const openApiDocument: OpenApiDocument = {
     "dashboard",
     "search",
     "operational-alerts",
+    "notifications",
     "financial-execution",
     "exports",
     "reports",
@@ -3279,6 +3280,10 @@ export const openApiDocument: OpenApiDocument = {
           databaseName: { type: "string" },
           format: { type: "string", enum: ["POSTGRES_CUSTOM"] },
           verified: { type: "boolean" },
+          manifestVersion: { type: "integer", minimum: 1 },
+          coverage: { type: "string", enum: ["FULL_DATABASE"] },
+          schemaVersion: { type: ["string", "null"] },
+          tableCount: { type: "integer", minimum: 1 },
         },
       },
       BackupsOverview: {
@@ -3287,6 +3292,7 @@ export const openApiDocument: OpenApiDocument = {
           items: { type: "array", items: { $ref: "#/components/schemas/DatabaseBackup" } },
           summary: { type: "object", additionalProperties: true },
           policy: { type: "object", additionalProperties: true },
+          coverage: { type: "object", additionalProperties: true },
           operationRunning: { type: "boolean" },
         },
       },
@@ -4952,6 +4958,27 @@ export const openApiDocument: OpenApiDocument = {
         responses: { "200": okJson("#/components/schemas/ArchiveResponse"), ...defaultErrorResponses },
       },
     },
+    "/notifications": {
+      get: {
+        tags: ["notifications"], summary: "Listar notificações pessoais", security: bearerSecurity,
+        parameters: [
+          queryParameter("status", "Estado da notificação.", { type: "string", enum: ["ALL", "UNREAD", "READ", "DISMISSED", "RESOLVED"] }),
+          queryParameter("category", "Categoria do evento.", { type: "string" }),
+          queryParameter("page", "Página.", { type: "integer", minimum: 1 }),
+          queryParameter("pageSize", "Itens por página.", { type: "integer", minimum: 10, maximum: 100 }),
+        ],
+        responses: { "200": { description: "Caixa de notificações do usuário." }, ...defaultErrorResponses },
+      },
+    },
+    "/notifications/read-all": {
+      post: { tags: ["notifications"], summary: "Marcar notificações ativas como lidas", security: bearerSecurity, responses: { "200": { description: "Quantidade atualizada." }, ...defaultErrorResponses } },
+    },
+    "/notifications/{id}/read": {
+      patch: { tags: ["notifications"], summary: "Marcar uma notificação como lida", security: bearerSecurity, parameters: [pathIdParameter("id", "Notificação")], responses: { "200": { description: "Notificação atualizada." }, ...defaultErrorResponses } },
+    },
+    "/notifications/{id}": {
+      delete: { tags: ["notifications"], summary: "Dispensar uma notificação", security: bearerSecurity, parameters: [pathIdParameter("id", "Notificação")], responses: { "200": { description: "Notificação dispensada." }, ...defaultErrorResponses } },
+    },
     "/system-settings": {
       get: { tags: ["settings"], summary: "Consultar integrações e parâmetros institucionais", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
       put: withStepUp({ tags: ["settings"], summary: "Atualizar integrações e parâmetros institucionais", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SystemSettings") }, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.manage"] }),
@@ -5003,6 +5030,9 @@ export const openApiDocument: OpenApiDocument = {
     },
     "/backups/export": {
       post: withStepUp({ tags: ["backups"], summary: "Exportar dados selecionados em SQL", security: bearerSecurity, requestBody: { required: true, content: jsonContent("#/components/schemas/SelectiveDatabaseExportRequest") }, responses: { "200": { description: "Arquivo SQL", content: binaryContent("application/sql") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/backups/evidence/export": {
+      post: withStepUp({ tags: ["backups"], summary: "Exportar arquivos físicos das evidências", security: bearerSecurity, responses: { "200": { description: "Arquivo TAR.GZ com as evidências", content: binaryContent("application/gzip") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
     },
     "/backups/{id}/download": {
       get: withStepUp({ tags: ["backups"], summary: "Baixar backup com verificação de integridade", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": { description: "Arquivo PostgreSQL custom", content: binaryContent("application/octet-stream") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),

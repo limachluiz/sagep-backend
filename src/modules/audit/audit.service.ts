@@ -8,6 +8,7 @@ import {
   type TimelineItem,
 } from "./audit.types.js";
 import type { ListAuditLogsQuery } from "./audit.schemas.js";
+import { notificationsService } from "../notifications/notifications.service.js";
 
 type JsonDbInput =
   | Prisma.InputJsonValue
@@ -108,7 +109,7 @@ export class AuditService {
   }
 
   async log(input: CreateAuditLogInput) {
-    return prisma.auditLog.create({
+    const log = await prisma.auditLog.create({
       data: {
         entityType: input.entityType as $Enums.AuditEntityType,
         entityId: input.entityId,
@@ -121,6 +122,22 @@ export class AuditService {
         metadata: normalizeSnapshot(input.metadata),
       },
     });
+    if (input.entityType === "PROJECT" && input.action === "STAGE_CHANGE") {
+      await notificationsService.publishToProject({
+        projectId: input.entityId,
+        eventKey: `PROJECT_STAGE:${input.entityId}:${log.id}`,
+        actorId: input.actor?.id,
+        category: "PROJECT_STAGE_CHANGED",
+        severity: "INFO",
+        title: "Etapa do projeto atualizada",
+        description: input.summary,
+        detailsPath: `/projects/${input.entityId}`,
+        entityType: "PROJECT",
+        entityId: input.entityId,
+        preference: "workflowUpdates",
+      });
+    }
+    return log;
   }
 
   async list(filters: ListAuditLogsQuery, path: string) {

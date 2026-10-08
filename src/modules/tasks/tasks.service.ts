@@ -5,6 +5,7 @@ import { withArchiveContext } from "../../shared/archive-context.js";
 import type { RestoreOptions } from "../../shared/restore.schemas.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
+import { notificationsService } from "../notifications/notifications.service.js";
 
 type CurrentUser = {
   id: string;
@@ -629,6 +630,22 @@ export class TasksService {
       include: taskInclude,
     });
 
+    if (task.assigneeId) {
+      await notificationsService.publish({
+        eventKey: `TASK_ASSIGNED:${task.id}:${task.assigneeId}`,
+        recipientIds: [task.assigneeId],
+        actorId: user.id,
+        category: "TASK_ASSIGNED",
+        severity: task.priority <= 2 ? "WARNING" : "INFO",
+        title: `Tarefa TSK-${task.taskCode} atribuída a você`,
+        description: `${task.title} · PRJ-${task.project.projectCode}`,
+        detailsPath: `/tasks/${task.id}`,
+        entityType: "TASK",
+        entityId: task.id,
+        preference: "taskAssignments",
+      });
+    }
+
     return task;
   }
 
@@ -819,6 +836,28 @@ export class TasksService {
       include: taskInclude,
     });
 
+    if (taskAccess.assigneeId !== task.assigneeId) {
+      await notificationsService.resolveByPrefix(`TASK_ASSIGNED:${taskId}:`);
+      if (task.assigneeId) {
+        await notificationsService.publish({
+          eventKey: `TASK_ASSIGNED:${task.id}:${task.assigneeId}`,
+          recipientIds: [task.assigneeId],
+          actorId: user.id,
+          category: "TASK_ASSIGNED",
+          severity: task.priority <= 2 ? "WARNING" : "INFO",
+          title: `Tarefa TSK-${task.taskCode} atribuída a você`,
+          description: `${task.title} · PRJ-${task.project.projectCode}`,
+          detailsPath: `/tasks/${task.id}`,
+          entityType: "TASK",
+          entityId: task.id,
+          preference: "taskAssignments",
+        });
+      }
+    }
+    if (data.dueDate !== undefined || data.clearDueDate === true) {
+      await notificationsService.resolveByPrefix(`TASK_DEADLINE:${taskId}:`);
+    }
+
     if (data.status !== undefined && data.status !== taskAccess.status) {
       return this.updateStatus(taskId, { status: data.status }, user);
     }
@@ -896,6 +935,24 @@ export class TasksService {
       after: { status: data.status },
     });
 
+    if (["CONCLUIDA", "CANCELADA"].includes(data.status)) {
+      await notificationsService.resolveByPrefix(`TASK_DEADLINE:${taskId}:`);
+      await notificationsService.resolveByPrefix(`TASK_ASSIGNED:${taskId}:`);
+    }
+    await notificationsService.publishToProject({
+      projectId: taskAccess.project.id,
+      eventKey: `TASK_STATUS:${taskId}:${data.status}:${now.toISOString()}`,
+      actorId: user.id,
+      category: data.status === "CONCLUIDA" ? "TASK_COMPLETED" : data.status === "PENDENTE" ? "TASK_REOPENED" : "TASK_UPDATED",
+      severity: "INFO",
+      title: `Tarefa TSK-${taskAccess.taskCode}: ${data.status.toLowerCase().replaceAll("_", " ")}`,
+      description: `${taskAccess.title} · PRJ-${taskAccess.project.projectCode}`,
+      detailsPath: `/tasks/${taskId}`,
+      entityType: "TASK",
+      entityId: taskId,
+      preference: "workflowUpdates",
+    });
+
     return this.findById(taskId, user);
   }
 
@@ -944,6 +1001,31 @@ export class TasksService {
       metadata: { activityId: activity.id },
     });
 
+    await notificationsService.publishMentions({
+      content: data.content,
+      eventKeyPrefix: `TASK_ACTIVITY:${activity.id}`,
+      actorId: user.id,
+      title: `Você foi mencionado na TSK-${taskAccess.taskCode}`,
+      description: data.content.length > 180 ? `${data.content.slice(0, 177)}...` : data.content,
+      detailsPath: `/tasks/${taskId}`,
+      entityType: "TASK",
+      entityId: taskId,
+    });
+
+    const activityRecipients = [taskAccess.assigneeId, taskAccess.project.ownerId].filter((id): id is string => Boolean(id));
+    await notificationsService.publish({
+      eventKey: `TASK_ACTIVITY:${activity.id}`,
+      recipientIds: activityRecipients,
+      actorId: user.id,
+      category: "TASK_ACTIVITY",
+      title: `Novo andamento na TSK-${taskAccess.taskCode}`,
+      description: data.content.length > 180 ? `${data.content.slice(0, 177)}...` : data.content,
+      detailsPath: `/tasks/${taskId}`,
+      entityType: "TASK",
+      entityId: taskId,
+      preference: "workflowUpdates",
+    });
+
     return this.findById(taskId, user);
   }
 
@@ -988,6 +1070,21 @@ export class TasksService {
       summary: `Tarefa TSK-${taskAccess.taskCode} concluída`,
       before: { status: taskAccess.status },
       after: { status: "CONCLUIDA", completedAt: now },
+    });
+
+    await notificationsService.resolveByPrefix(`TASK_DEADLINE:${taskId}:`);
+    await notificationsService.resolveByPrefix(`TASK_ASSIGNED:${taskId}:`);
+    await notificationsService.publishToProject({
+      projectId: taskAccess.project.id,
+      eventKey: `TASK_COMPLETED:${taskId}:${now.toISOString()}`,
+      actorId: user.id,
+      category: "TASK_COMPLETED",
+      title: `Tarefa TSK-${taskAccess.taskCode} concluída`,
+      description: `${taskAccess.title} · PRJ-${taskAccess.project.projectCode}`,
+      detailsPath: `/tasks/${taskId}`,
+      entityType: "TASK",
+      entityId: taskId,
+      preference: "workflowUpdates",
     });
 
     return this.findById(taskId, user);
@@ -1043,6 +1140,17 @@ export class TasksService {
       },
     });
 
+    await notificationsService.resolveByPrefix(`TASK_DEADLINE:${taskId}:`);
+    await notificationsService.resolveByPrefix(`TASK_ASSIGNED:${taskId}:`);
+    if (before.assigneeId) {
+      await notificationsService.publish({
+        eventKey: `TASK_ARCHIVED:${taskId}:${task.updatedAt.toISOString()}`,
+        recipientIds: [before.assigneeId], actorId: user.id, category: "TASK_ARCHIVED", severity: "WARNING",
+        title: `Tarefa TSK-${before.taskCode} arquivada`, description: `${before.title} · PRJ-${task.project.projectCode}`,
+        detailsPath: "/tasks", entityType: "TASK", entityId: taskId, preference: "workflowUpdates",
+      });
+    }
+
     return {
       message: "Tarefa arquivada com sucesso",
       permissionUsed: "tasks.archive" as const,
@@ -1081,6 +1189,17 @@ export class TasksService {
         softDelete: true,
       },
     });
+
+    await notificationsService.resolveByPrefix(`TASK_DEADLINE:${taskId}:`);
+    await notificationsService.resolveByPrefix(`TASK_ASSIGNED:${taskId}:`);
+    if (before.assigneeId) {
+      await notificationsService.publish({
+        eventKey: `TASK_DELETED:${taskId}:${deletedAt.toISOString()}`,
+        recipientIds: [before.assigneeId], actorId: user.id, category: "TASK_DELETED", severity: "WARNING",
+        title: `Tarefa TSK-${before.taskCode} excluída`, description: `${before.title} · PRJ-${task.project.projectCode}`,
+        detailsPath: "/tasks", entityType: "TASK", entityId: taskId, preference: "workflowUpdates",
+      });
+    }
 
     return {
       message: "Tarefa excluída com sucesso",

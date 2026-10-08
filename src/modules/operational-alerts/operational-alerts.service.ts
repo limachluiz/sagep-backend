@@ -27,8 +27,11 @@ type AlertSeverity = "CRITICAL" | "WARNING" | "INFO";
 type AlertCategory =
   | "AGUARDANDO_NOTA_CREDITO"
   | "AGUARDANDO_DIEX"
+  | "DIEX_EMISSAO_PENDENTE"
   | "AGUARDANDO_NOTA_EMPENHO"
   | "AGUARDANDO_ORDEM_SERVICO"
+  | "OS_EMISSAO_PENDENTE"
+  | "OS_PRAZO_VENCIDO"
   | "AGUARDANDO_OS_ASSINADA"
   | "SEM_AVANCO"
   | "AGUARDANDO_INICIO_EXECUCAO"
@@ -45,6 +48,9 @@ type AlertCategory =
   | "NE_PAGA_AUTOMACAO"
   | "ATA_SALDO_ALTERADO"
   | "AUTOMACAO_FALHOU"
+  | "TAREFA_PRAZO_PROXIMO"
+  | "TAREFA_ATRASADA"
+  | "ATA_VIGENCIA_ENCERRANDO"
   | "CERTIFICADO_HTTPS_VENCENDO"
   | "CERTIFICADO_HTTPS_VENCIDO"
   | "CERTIFICADO_RENOVACAO_FALHOU";
@@ -91,8 +97,11 @@ const emptyGroups = {
 const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
   AGUARDANDO_NOTA_CREDITO: [],
   AGUARDANDO_DIEX: [],
+  DIEX_EMISSAO_PENDENTE: [],
   AGUARDANDO_NOTA_EMPENHO: [],
   AGUARDANDO_ORDEM_SERVICO: [],
+  OS_EMISSAO_PENDENTE: [],
+  OS_PRAZO_VENCIDO: [],
   AGUARDANDO_OS_ASSINADA: [],
   SEM_AVANCO: [],
   AGUARDANDO_INICIO_EXECUCAO: [],
@@ -109,6 +118,9 @@ const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
   NE_PAGA_AUTOMACAO: [],
   ATA_SALDO_ALTERADO: [],
   AUTOMACAO_FALHOU: [],
+  TAREFA_PRAZO_PROXIMO: [],
+  TAREFA_ATRASADA: [],
+  ATA_VIGENCIA_ENCERRANDO: [],
   CERTIFICADO_HTTPS_VENCENDO: [],
   CERTIFICADO_HTTPS_VENCIDO: [],
   CERTIFICADO_RENOVACAO_FALHOU: [],
@@ -285,6 +297,9 @@ export class OperationalAlertsService {
             serviceOrderNumber: true,
             issuedAt: true,
             documentStatus: true,
+            plannedStartDate: true,
+            plannedEndDate: true,
+            updatedAt: true,
           },
           orderBy: {
             createdAt: "desc",
@@ -313,6 +328,8 @@ export class OperationalAlertsService {
       );
       const latestDiex = project.diexRequests[0];
       const latestServiceOrder = project.serviceOrders[0];
+      const hasIssuedDiex = Boolean(project.diexNumber && project.diexIssuedAt) || Boolean(latestDiex?.diexNumber && latestDiex.issuedAt);
+      const hasIssuedServiceOrder = Boolean(project.serviceOrderNumber && project.serviceOrderIssuedAt) || Boolean(latestServiceOrder?.serviceOrderNumber && latestServiceOrder.issuedAt);
       const daysSinceUpdate = this.daysBetween(project.updatedAt, now);
 
       if (project.stage === "AGUARDANDO_NOTA_CREDITO" && !hasCreditNote) {
@@ -331,7 +348,7 @@ export class OperationalAlertsService {
         });
       }
 
-      if (project.stage === "AGUARDANDO_NOTA_CREDITO" && hasCreditNote && !latestDiex) {
+      if (["AGUARDANDO_NOTA_CREDITO", "DIEX_REQUISITORIO"].includes(project.stage) && hasCreditNote && !latestDiex) {
         alerts.push({
           id: `${project.id}:AGUARDANDO_DIEX`,
           category: "AGUARDANDO_DIEX",
@@ -344,10 +361,25 @@ export class OperationalAlertsService {
         });
       }
 
+      if (latestDiex && !hasIssuedDiex) {
+        alerts.push({
+          id: `${project.id}:DIEX_EMISSAO_PENDENTE`,
+          category: "DIEX_EMISSAO_PENDENTE",
+          severity: daysSinceUpdate >= staleDays ? "CRITICAL" : "WARNING",
+          title: `PRJ-${project.projectCode} com DIEx ainda não emitido`,
+          description: "O DIEx existe em rascunho, mas ainda não possui número e data de emissão confirmados.",
+          project: projectSummary,
+          nextAction,
+          detailsPath: `/diex/${latestDiex.id}`,
+          daysSinceUpdate,
+          document: { type: "DIEX_REQUEST", id: latestDiex.id, code: `DIEX-${latestDiex.diexCode}`, number: latestDiex.diexNumber, status: latestDiex.documentStatus, issuedAt: latestDiex.issuedAt },
+        });
+      }
+
       if (
         (project.stage === "DIEX_REQUISITORIO" ||
           project.stage === "AGUARDANDO_NOTA_EMPENHO") &&
-        !hasCommitmentNote
+        !hasCommitmentNote && hasIssuedDiex
       ) {
         alerts.push({
           id: `${project.id}:AGUARDANDO_NOTA_EMPENHO`,
@@ -372,6 +404,35 @@ export class OperationalAlertsService {
         });
       }
 
+      if (latestServiceOrder && !hasIssuedServiceOrder) {
+        alerts.push({
+          id: `${project.id}:OS_EMISSAO_PENDENTE`,
+          category: "OS_EMISSAO_PENDENTE",
+          severity: daysSinceUpdate >= staleDays ? "CRITICAL" : "WARNING",
+          title: `PRJ-${project.projectCode} com OS ainda não emitida`,
+          description: "A Ordem de Serviço existe em rascunho, mas ainda não possui número e data de emissão confirmados.",
+          project: projectSummary,
+          nextAction,
+          detailsPath: `/service-orders/${latestServiceOrder.id}`,
+          daysSinceUpdate,
+          document: { type: "SERVICE_ORDER", id: latestServiceOrder.id, code: `OS-${latestServiceOrder.serviceOrderCode}`, number: latestServiceOrder.serviceOrderNumber, status: latestServiceOrder.documentStatus, issuedAt: latestServiceOrder.issuedAt },
+        });
+      }
+
+      if (latestServiceOrder?.plannedEndDate && latestServiceOrder.plannedEndDate < now && !project.serviceCompletedAt) {
+        alerts.push({
+          id: `${project.id}:OS_PRAZO_VENCIDO:${latestServiceOrder.plannedEndDate.toISOString()}`,
+          category: "OS_PRAZO_VENCIDO",
+          severity: "CRITICAL",
+          title: `OS do PRJ-${project.projectCode} com prazo vencido`,
+          description: `O término planejado foi ${latestServiceOrder.plannedEndDate.toLocaleDateString("pt-BR")} e o serviço ainda não foi concluído.`,
+          project: projectSummary,
+          nextAction,
+          detailsPath: `/service-orders/${latestServiceOrder.id}`,
+          sourceUpdatedAt: latestServiceOrder.updatedAt,
+        });
+      }
+
       if (
         (project.stage === "AGUARDANDO_NOTA_EMPENHO" || project.stage === "OS_LIBERADA") &&
         hasCommitmentNote &&
@@ -391,7 +452,7 @@ export class OperationalAlertsService {
 
       if (
         project.stage === "AGUARDANDO_OS_ASSINADA" &&
-        latestServiceOrder &&
+        latestServiceOrder && hasIssuedServiceOrder &&
         (!project.signedServiceOrderLink || !project.signedServiceOrderReceivedAt)
       ) {
         alerts.push({
@@ -484,6 +545,75 @@ export class OperationalAlertsService {
             lastProjectUpdateAt: project.updatedAt,
             staleDays,
           },
+        });
+      }
+    }
+
+    const preferences = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { notifyDeadlines: true },
+    });
+    if (preferences?.notifyDeadlines) {
+      const deadlineLimit = new Date(now.getTime() + 3 * 24 * 60 * 60_000);
+      const tasks = await prisma.task.findMany({
+        where: {
+          archivedAt: null,
+          deletedAt: null,
+          status: { notIn: ["CONCLUIDA", "CANCELADA"] },
+          dueDate: { not: null, lte: deadlineLimit },
+          project: { deletedAt: null },
+          ...(this.isPrivileged(user) ? {} : {
+            OR: [
+              { assigneeId: user.id },
+              { project: { ownerId: user.id } },
+              { project: { members: { some: { userId: user.id } } } },
+            ],
+          }),
+        },
+        select: {
+          id: true, taskCode: true, title: true, dueDate: true, updatedAt: true,
+          project: { select: { projectCode: true, title: true } },
+        },
+        orderBy: { dueDate: "asc" },
+        take: limit,
+      });
+      for (const task of tasks) {
+        if (!task.dueDate) continue;
+        const overdue = task.dueDate.getTime() < now.getTime();
+        const days = Math.ceil(Math.abs(task.dueDate.getTime() - now.getTime()) / (24 * 60 * 60_000));
+        alerts.push({
+          id: `TASK_DEADLINE:${task.id}:${task.dueDate.toISOString()}`,
+          category: overdue ? "TAREFA_ATRASADA" : "TAREFA_PRAZO_PROXIMO",
+          severity: overdue ? "CRITICAL" : "WARNING",
+          title: overdue ? `TSK-${task.taskCode} atrasada há ${days} dia(s)` : `TSK-${task.taskCode} vence em ${days} dia(s)`,
+          description: `${task.title} · PRJ-${task.project.projectCode} ${task.project.title}`,
+          detailsPath: `/tasks/${task.id}`,
+          sourceUpdatedAt: task.updatedAt,
+          metadata: { taskId: task.id, dueDate: task.dueDate, overdue },
+        });
+      }
+    }
+
+    if (permissionsService.hasPermission(user, "atas.manage")) {
+      const expiryLimit = new Date(now.getTime() + 90 * 24 * 60 * 60_000);
+      const expiringAtas = await prisma.ata.findMany({
+        where: { isActive: true, validUntil: { gte: now, lte: expiryLimit } },
+        select: { id: true, number: true, vendorName: true, validUntil: true, updatedAt: true, pregao: { select: { number: true, year: true } } },
+        orderBy: { validUntil: "asc" },
+        take: limit,
+      });
+      for (const ata of expiringAtas) {
+        if (!ata.validUntil) continue;
+        const days = Math.ceil((ata.validUntil.getTime() - now.getTime()) / (24 * 60 * 60_000));
+        alerts.push({
+          id: `ATA_EXPIRING:${ata.id}:${ata.validUntil.toISOString()}`,
+          category: "ATA_VIGENCIA_ENCERRANDO",
+          severity: days <= 30 ? "CRITICAL" : "WARNING",
+          title: `ATA ${ata.number} vence em ${days} dia(s)`,
+          description: `${ata.vendorName} · Pregão ${ata.pregao?.number ?? "não informado"}/${ata.pregao?.year ?? ""}`,
+          detailsPath: `/atas/${ata.id}`,
+          sourceUpdatedAt: ata.updatedAt,
+          metadata: { ataId: ata.id, validUntil: ata.validUntil, daysRemaining: days },
         });
       }
     }
@@ -619,7 +749,7 @@ export class OperationalAlertsService {
     const automationConfig = await prisma.notificationAutomationConfiguration.findUnique({ where: { id: "default" } });
     if (automationConfig?.notifyRoles.includes(user.role as UserRole)) {
       const automationEvents = await prisma.notificationAutomationEvent.findMany({
-        where: { occurredAt: { gte: new Date(now.getTime() - 90 * 24 * 60 * 60_000) } },
+        where: { resolvedAt: null, occurredAt: { gte: new Date(now.getTime() - 90 * 24 * 60 * 60_000) } },
         orderBy: { occurredAt: "desc" }, take: limit,
       });
       const categoryByType = {
@@ -655,8 +785,11 @@ export class OperationalAlertsService {
     const byCategory: Record<AlertCategory, AlertItem[]> = {
       AGUARDANDO_NOTA_CREDITO: [...emptyCategoryGroups.AGUARDANDO_NOTA_CREDITO],
       AGUARDANDO_DIEX: [...emptyCategoryGroups.AGUARDANDO_DIEX],
+      DIEX_EMISSAO_PENDENTE: [...emptyCategoryGroups.DIEX_EMISSAO_PENDENTE],
       AGUARDANDO_NOTA_EMPENHO: [...emptyCategoryGroups.AGUARDANDO_NOTA_EMPENHO],
       AGUARDANDO_ORDEM_SERVICO: [...emptyCategoryGroups.AGUARDANDO_ORDEM_SERVICO],
+      OS_EMISSAO_PENDENTE: [...emptyCategoryGroups.OS_EMISSAO_PENDENTE],
+      OS_PRAZO_VENCIDO: [...emptyCategoryGroups.OS_PRAZO_VENCIDO],
       AGUARDANDO_OS_ASSINADA: [...emptyCategoryGroups.AGUARDANDO_OS_ASSINADA],
       SEM_AVANCO: [...emptyCategoryGroups.SEM_AVANCO],
       AGUARDANDO_INICIO_EXECUCAO: [...emptyCategoryGroups.AGUARDANDO_INICIO_EXECUCAO],
@@ -673,6 +806,9 @@ export class OperationalAlertsService {
       NE_PAGA_AUTOMACAO: [...emptyCategoryGroups.NE_PAGA_AUTOMACAO],
       ATA_SALDO_ALTERADO: [...emptyCategoryGroups.ATA_SALDO_ALTERADO],
       AUTOMACAO_FALHOU: [...emptyCategoryGroups.AUTOMACAO_FALHOU],
+      TAREFA_PRAZO_PROXIMO: [...emptyCategoryGroups.TAREFA_PRAZO_PROXIMO],
+      TAREFA_ATRASADA: [...emptyCategoryGroups.TAREFA_ATRASADA],
+      ATA_VIGENCIA_ENCERRANDO: [...emptyCategoryGroups.ATA_VIGENCIA_ENCERRANDO],
       CERTIFICADO_HTTPS_VENCENDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCENDO],
       CERTIFICADO_HTTPS_VENCIDO: [...emptyCategoryGroups.CERTIFICADO_HTTPS_VENCIDO],
       CERTIFICADO_RENOVACAO_FALHOU: [...emptyCategoryGroups.CERTIFICADO_RENOVACAO_FALHOU],

@@ -1,6 +1,8 @@
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { permissionsService } from "../permissions/permissions.service.js";
+import { auditService } from "../audit/audit.service.js";
+import { notificationsService } from "../notifications/notifications.service.js";
 
 type CurrentUser = {
   id: string;
@@ -183,6 +185,27 @@ export class ProjectMembersService {
       },
     });
 
+    await notificationsService.publish({
+      eventKey: `PROJECT_MEMBER_ADDED:${projectId}:${user.id}:${member.id}`,
+      recipientIds: [user.id],
+      actorId: currentUser.id,
+      category: "PROJECT_MEMBER_ADDED",
+      title: `Você foi incluído no PRJ-${project.projectCode}`,
+      description: project.title,
+      detailsPath: `/projects/${projectId}`,
+      entityType: "PROJECT",
+      entityId: projectId,
+      preference: "workflowUpdates",
+    });
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: projectId,
+      action: "UPDATE",
+      actor: { id: currentUser.id, name: currentUser.email },
+      summary: `${user.name} incluído no projeto PRJ-${project.projectCode}`,
+      metadata: { memberId: member.id, userId: user.id, membershipAction: "ADD" },
+    });
+
     return member;
   }
 
@@ -270,6 +293,29 @@ export class ProjectMembersService {
 
     await prisma.projectMember.delete({
       where: { id: memberId },
+    });
+
+    await notificationsService.resolveByPrefix(`PROJECT_MEMBER_ADDED:${projectId}:${member.userId}:`);
+    await notificationsService.publish({
+      eventKey: `PROJECT_MEMBER_REMOVED:${projectId}:${member.userId}:${Date.now()}`,
+      recipientIds: [member.userId],
+      actorId: currentUser.id,
+      category: "PROJECT_MEMBER_REMOVED",
+      severity: "WARNING",
+      title: `Seu acesso ao PRJ-${project.projectCode} foi removido`,
+      description: `${project.title}. Procure o responsável pelo projeto caso necessite de esclarecimentos.`,
+      detailsPath: "/projects",
+      entityType: "PROJECT",
+      entityId: projectId,
+      includeActor: true,
+    });
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: projectId,
+      action: "UPDATE",
+      actor: { id: currentUser.id, name: currentUser.email },
+      summary: `${member.user.name} removido do projeto PRJ-${project.projectCode}`,
+      metadata: { memberId, userId: member.userId, membershipAction: "REMOVE" },
     });
 
     return {

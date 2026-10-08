@@ -50,7 +50,7 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(186);
+    expect(operationIds).toHaveLength(194);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
@@ -266,6 +266,19 @@ describe("contratos HTTP transversais", () => {
     const operation = (openApiDocument.paths as Record<string, any>)[
       "/backups/{id}/download"
     ].get;
+
+    expect(operation.parameters).toContainEqual({
+      $ref: "#/components/parameters/StepUpToken",
+    });
+    expect(operation.responses["428"]).toEqual({
+      $ref: "#/components/responses/StepUpRequired",
+    });
+  });
+
+  it("protege a exportação dos arquivos físicos de evidência", () => {
+    const operation = (openApiDocument.paths as Record<string, any>)[
+      "/backups/evidence/export"
+    ].post;
 
     expect(operation.parameters).toContainEqual({
       $ref: "#/components/parameters/StepUpToken",

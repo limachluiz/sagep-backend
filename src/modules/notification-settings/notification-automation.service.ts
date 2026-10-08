@@ -11,6 +11,7 @@ import { archivedFinancial } from "../financial-execution/portfolio-summary.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { notificationSettingsService } from "./notification-settings.service.js";
 import type { NotificationAutomationInput } from "./notification-settings.schemas.js";
+import { notificationsService } from "../notifications/notifications.service.js";
 
 type Actor = { id: string; name?: string; email?: string };
 type EventCandidate = {
@@ -189,11 +190,81 @@ export class NotificationAutomationService {
           const previous = before.get(item.ataItemId) ?? null;
           const current = item.managerAvailableQuantity == null ? null : String(item.managerAvailableQuantity);
           if (previous === current) continue;
-          events.push({ eventKey: `ATA_BALANCE_CHANGED:${item.ataItemId}:${previous ?? "null"}:${current ?? "null"}:${dateOnly(new Date(result.checkedAt))}`, type: "ATA_BALANCE_CHANGED", title: `Saldo oficial alterado na ATA ${ata.number}`, description: `Item ${item.referenceCode}: ${previous ?? "não informado"} → ${current ?? "não informado"}. Snapshot atualizado sem alterar o saldo operacional.`, detailsPath: `/atas/${ata.id}`, payload: { ataId: ata.id, ataNumber: ata.number, ataItemId: item.ataItemId, previous, current, checkedAt: result.checkedAt } });
+          const movement = await prisma.ataItemBalanceMovement.findFirst({
+            where: { ataItemId: item.ataItemId, movementType: "CONSUME" },
+            orderBy: { createdAt: "desc" },
+            select: { summary: true, project: { select: { projectCode: true, creditNoteNumber: true, commitmentNoteNumber: true } } },
+          });
+          const context = movement?.project
+            ? ` PRJ-${movement.project.projectCode}${movement.project.creditNoteNumber ? ` · NC ${movement.project.creditNoteNumber}` : ""}${movement.project.commitmentNoteNumber ? ` · NE ${movement.project.commitmentNoteNumber}` : ""}.`
+            : "";
+          events.push({ eventKey: `ATA_BALANCE_CHANGED:${item.ataItemId}:${previous ?? "null"}:${current ?? "null"}:${dateOnly(new Date(result.checkedAt))}`, type: "ATA_BALANCE_CHANGED", title: `Saldo oficial alterado na ATA ${ata.number}`, description: `Item ${item.referenceCode}: ${previous ?? "não informado"} → ${current ?? "não informado"}.${context} Snapshot atualizado sem alterar o saldo operacional.`, detailsPath: `/atas/${ata.id}`, payload: { ataId: ata.id, ataNumber: ata.number, ataItemId: item.ataItemId, previous, current, checkedAt: result.checkedAt, latestMovement: movement?.summary ?? null, projectCode: movement?.project?.projectCode ?? null, creditNoteNumber: movement?.project?.creditNoteNumber ?? null, commitmentNoteNumber: movement?.project?.commitmentNoteNumber ?? null } });
         }
       } catch (error) { failures.push(`ATA ${ata.number}: ${errorMessage(error)}`); }
     }
     return { events, summary: { atas: atas.length, changed: events.length, failed: failures.length }, failures };
+  }
+
+  private async generateOperationalReminders(config: Awaited<ReturnType<NotificationAutomationService["configuration"]>>) {
+    const now = new Date();
+    const taskLimit = new Date(now.getTime() + config.taskDueDays * 24 * 60 * 60_000);
+    const staleLimit = new Date(now.getTime() - config.projectStaleDays * 24 * 60 * 60_000);
+    const ataLimit = new Date(now.getTime() + config.ataExpiryDays * 24 * 60 * 60_000);
+    const [tasks, projects, atas] = await Promise.all([
+      prisma.task.findMany({ where: { archivedAt: null, deletedAt: null, status: { notIn: ["CONCLUIDA", "CANCELADA"] }, dueDate: { not: null, lte: taskLimit }, project: { deletedAt: null } }, select: { id: true, taskCode: true, title: true, dueDate: true, assigneeId: true, project: { select: { ownerId: true, projectCode: true } } }, take: 500 }),
+      prisma.project.findMany({ where: { archivedAt: null, deletedAt: null, stage: { notIn: ["SERVICO_CONCLUIDO", "CANCELADO"] }, updatedAt: { lte: staleLimit } }, select: { id: true, projectCode: true, title: true, stage: true, updatedAt: true, ownerId: true, members: { select: { userId: true } } }, take: 500 }),
+      prisma.ata.findMany({ where: { isActive: true, validUntil: { gte: now, lte: ataLimit } }, select: { id: true, number: true, vendorName: true, validUntil: true }, take: 500 }),
+    ]);
+    const [activeProjectReminders, activeAtaReminders] = await Promise.all([
+      prisma.userNotification.findMany({
+        where: { category: "PROJECT_STALE", resolvedAt: null },
+        distinct: ["entityId"],
+        select: { entityId: true },
+      }),
+      prisma.userNotification.findMany({
+        where: { category: "ATA_EXPIRING", resolvedAt: null },
+        distinct: ["entityId"],
+        select: { entityId: true },
+      }),
+    ]);
+    const staleProjectIds = new Set(projects.map((project) => project.id));
+    const expiringAtaIds = new Set(atas.map((ata) => ata.id));
+    const resolvedProjectIds = activeProjectReminders
+      .map((notification) => notification.entityId)
+      .filter((id): id is string => Boolean(id) && !staleProjectIds.has(id!));
+    const resolvedAtaIds = activeAtaReminders
+      .map((notification) => notification.entityId)
+      .filter((id): id is string => Boolean(id) && !expiringAtaIds.has(id!));
+    await Promise.all([
+      resolvedProjectIds.length
+        ? prisma.userNotification.updateMany({ where: { category: "PROJECT_STALE", entityId: { in: resolvedProjectIds }, resolvedAt: null }, data: { resolvedAt: now } })
+        : Promise.resolve({ count: 0 }),
+      resolvedAtaIds.length
+        ? prisma.userNotification.updateMany({ where: { category: "ATA_EXPIRING", entityId: { in: resolvedAtaIds }, resolvedAt: null }, data: { resolvedAt: now } })
+        : Promise.resolve({ count: 0 }),
+    ]);
+    let created = 0;
+    for (const task of tasks) {
+      if (!task.dueDate) continue;
+      const overdue = task.dueDate < now;
+      const eventKey = `TASK_DEADLINE:${task.id}:${task.dueDate.toISOString()}:${overdue ? "OVERDUE" : "UPCOMING"}`;
+      await prisma.userNotification.updateMany({ where: { entityType: "TASK", entityId: task.id, eventKey: { startsWith: `TASK_DEADLINE:${task.id}:`, not: eventKey }, resolvedAt: null }, data: { resolvedAt: now } });
+      const result = await notificationsService.publish({ eventKey, recipientIds: [task.assigneeId ?? task.project.ownerId], category: overdue ? "TASK_OVERDUE" : "TASK_DUE_SOON", severity: overdue ? "CRITICAL" : "WARNING", title: overdue ? `TSK-${task.taskCode} está atrasada` : `Prazo próximo na TSK-${task.taskCode}`, description: `${task.title} · PRJ-${task.project.projectCode} · prazo ${task.dueDate.toLocaleDateString("pt-BR")}`, detailsPath: `/tasks/${task.id}`, entityType: "TASK", entityId: task.id, preference: "deadlines" });
+      created += result.created;
+    }
+    for (const project of projects) {
+      const eventKey = `PROJECT_STALE:${project.id}:${project.updatedAt.toISOString()}`;
+      await prisma.userNotification.updateMany({ where: { entityType: "PROJECT", entityId: project.id, category: "PROJECT_STALE", eventKey: { not: eventKey }, resolvedAt: null }, data: { resolvedAt: now } });
+      const result = await notificationsService.publish({ eventKey, recipientIds: [project.ownerId, ...project.members.map((member) => member.userId)], category: "PROJECT_STALE", severity: project.updatedAt <= new Date(now.getTime() - config.projectStaleDays * 2 * 24 * 60 * 60_000) ? "CRITICAL" : "WARNING", title: `PRJ-${project.projectCode} sem avanço`, description: `${project.title} · etapa ${project.stage.toLowerCase().replaceAll("_", " ")} · última atualização ${project.updatedAt.toLocaleDateString("pt-BR")}`, detailsPath: `/projects/${project.id}`, entityType: "PROJECT", entityId: project.id, preference: "workflowUpdates" });
+      created += result.created;
+    }
+    const roles = await prisma.user.findMany({ where: { active: true, role: { in: config.notifyRoles as UserRole[] } }, select: { id: true } });
+    for (const ata of atas) {
+      if (!ata.validUntil) continue;
+      const result = await notificationsService.publish({ eventKey: `ATA_EXPIRING:${ata.id}:${ata.validUntil.toISOString()}`, recipientIds: roles.map((user) => user.id), category: "ATA_EXPIRING", severity: ata.validUntil <= new Date(now.getTime() + 30 * 24 * 60 * 60_000) ? "CRITICAL" : "WARNING", title: `Vigência da ATA ${ata.number} próxima do fim`, description: `${ata.vendorName} · válida até ${ata.validUntil.toLocaleDateString("pt-BR")}`, detailsPath: `/atas/${ata.id}`, entityType: "ATA", entityId: ata.id });
+      created += result.created;
+    }
+    return { created, tasks: tasks.length, projects: projects.length, atas: atas.length };
   }
 
   private async execute(run: { id: string; startedAt: Date }, config: Awaited<ReturnType<NotificationAutomationService["configuration"]>>) {
@@ -201,6 +272,7 @@ export class NotificationAutomationService {
     const failures: string[] = [];
     const summary: Record<string, unknown> = {};
     try {
+      summary.reminders = await this.generateOperationalReminders(config);
       if (config.syncTrackedCommitments) { const result = await this.trackedCommitments(); candidates.push(...result.events); failures.push(...result.failures); summary.commitments = result.summary; }
       if (config.discoverCommitments) { const result = await this.discoverCommitments(config); candidates.push(...result.events); failures.push(...result.failures); summary.discovery = result.summary; }
       if (config.syncAtaBalances) { const result = await this.synchronizeAtaBalances(); candidates.push(...result.events); failures.push(...result.failures); summary.atas = result.summary; }
@@ -212,8 +284,8 @@ export class NotificationAutomationService {
       summary.newEvents = events.length;
       const pendingSince = new Date(Date.now() - 30 * 24 * 60 * 60_000);
       const [pendingEmail, pendingTelegram] = await Promise.all([
-        config.emailEnabled ? prisma.notificationAutomationEvent.findMany({ where: { emailSentAt: null, occurredAt: { gte: pendingSince } }, orderBy: { occurredAt: "asc" }, take: 100 }) : Promise.resolve([]),
-        config.telegramEnabled ? prisma.notificationAutomationEvent.findMany({ where: { telegramSentAt: null, occurredAt: { gte: pendingSince } }, orderBy: { occurredAt: "asc" }, take: 100 }) : Promise.resolve([]),
+        config.emailEnabled ? prisma.notificationAutomationEvent.findMany({ where: { resolvedAt: null, emailSentAt: null, occurredAt: { gte: pendingSince } }, orderBy: { occurredAt: "asc" }, take: 100 }) : Promise.resolve([]),
+        config.telegramEnabled ? prisma.notificationAutomationEvent.findMany({ where: { resolvedAt: null, telegramSentAt: null, occurredAt: { gte: pendingSince } }, orderBy: { occurredAt: "asc" }, take: 100 }) : Promise.resolve([]),
       ]);
       const digest = (items: typeof events) => items.map((event) => `• ${event.title}\n  ${event.description}`).join("\n\n");
       const delivery: Record<string, unknown> = {};
@@ -226,6 +298,35 @@ export class NotificationAutomationService {
         const sent = await notificationSettingsService.deliverAutomationDigest({ subject: `SAGEP · ${pendingTelegram.length} alerta(s) financeiro(s)`, text: digest(pendingTelegram), emailEnabled: false, telegramEnabled: true, emailListIds: [], notifyRoles: [] });
         delivery.telegram = sent.telegram;
         await prisma.notificationAutomationEvent.updateMany({ where: { id: { in: pendingTelegram.map((event) => event.id) } }, data: sent.telegram.sent ? { telegramSentAt: new Date(), telegramError: null } : { telegramError: sent.telegram.error ?? null } });
+      }
+      const collaborationSince = new Date(Date.now() - 30 * 24 * 60 * 60_000);
+      if (config.emailEnabled) {
+        const pendingByRecipient = await prisma.userNotification.findMany({
+          where: { resolvedAt: null, dismissedAt: null, emailSentAt: null, occurredAt: { gte: collaborationSince }, recipient: { active: true, role: { in: config.notifyRoles as UserRole[] } } },
+          include: { recipient: { select: { email: true, name: true } } },
+          orderBy: { occurredAt: "asc" }, take: 200,
+        });
+        const grouped = new Map<string, typeof pendingByRecipient>();
+        for (const item of pendingByRecipient) grouped.set(item.recipient.email, [...(grouped.get(item.recipient.email) ?? []), item]);
+        let sentCount = 0;
+        for (const [email, items] of grouped) {
+          const sent = await notificationSettingsService.deliverAutomationDigest({ subject: `SAGEP · ${items.length} notificação(ões) para você`, text: items.map((item) => `• ${item.title}\n  ${item.description}`).join("\n\n"), emailEnabled: true, telegramEnabled: false, emailListIds: [], notifyRoles: [], directEmails: [email] });
+          await prisma.userNotification.updateMany({ where: { id: { in: items.map((item) => item.id) } }, data: sent.email.sent ? { emailSentAt: new Date(), emailError: null } : { emailError: sent.email.error ?? "Canal SMTP não enviou a mensagem" } });
+          if (sent.email.sent) sentCount += items.length;
+        }
+        if (pendingByRecipient.length) delivery.collaborationEmail = { pending: pendingByRecipient.length, sent: sentCount };
+      }
+      if (config.telegramEnabled) {
+        const publicCategories = ["PROJECT_STAGE_CHANGED", "TASK_COMPLETED"];
+        const pendingCollaboration = await prisma.userNotification.findMany({
+          where: { resolvedAt: null, dismissedAt: null, telegramSentAt: null, category: { in: publicCategories }, occurredAt: { gte: collaborationSince } },
+          distinct: ["eventKey"], orderBy: { occurredAt: "asc" }, take: 100,
+        });
+        if (pendingCollaboration.length) {
+          const sent = await notificationSettingsService.deliverAutomationDigest({ subject: `SAGEP · ${pendingCollaboration.length} atualização(ões) operacionais`, text: pendingCollaboration.map((item) => `• ${item.title}\n  ${item.description}`).join("\n\n"), emailEnabled: false, telegramEnabled: true, emailListIds: [], notifyRoles: [] });
+          await prisma.userNotification.updateMany({ where: { eventKey: { in: pendingCollaboration.map((item) => item.eventKey) } }, data: sent.telegram.sent ? { telegramSentAt: new Date(), telegramError: null } : { telegramError: sent.telegram.error ?? "Canal Telegram não enviou a mensagem" } });
+          delivery.collaborationTelegram = sent.telegram;
+        }
       }
       if (Object.keys(delivery).length) summary.delivery = delivery;
       const status = failures.length ? (Object.keys(summary).length ? "PARTIAL" : "FAILED") : "SUCCESS";

@@ -28,6 +28,7 @@ import { setupRoutes } from "./modules/setup/setup.routes.js";
 import { evidencesRoutes } from "./modules/evidences/evidences.routes.js";
 import { pregoesRoutes } from "./modules/pregoes/pregoes.routes.js";
 import { textCorrectionsRoutes } from "./modules/text-corrections/text-corrections.routes.js";
+import { notificationsRoutes } from "./modules/notifications/notifications.routes.js";
 
 export const routes = Router();
 
@@ -48,6 +49,7 @@ routes.use("/estimates", estimatesRoutes);
 routes.use("/dashboard", dashboardRoutes);
 routes.use("/search", globalSearchRoutes);
 routes.use("/operational-alerts", operationalAlertsRoutes);
+routes.use("/notifications", notificationsRoutes);
 routes.use("/exports", exportsRoutes);
 routes.use("/reports", reportsRoutes);
 routes.use("/diex", diexRoutes);

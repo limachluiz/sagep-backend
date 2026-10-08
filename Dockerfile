@@ -65,6 +65,7 @@ RUN apt-get update \
     libxss1 \
     libxtst6 \
     openssl \
+    tar \
     gosu \
     gnupg \
     wget \

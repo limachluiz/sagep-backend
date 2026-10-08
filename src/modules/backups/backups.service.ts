@@ -21,6 +21,7 @@ type BackupActor = {
 };
 
 export type BackupManifest = {
+  manifestVersion?: number;
   id: string;
   kind: BackupKind;
   filename: string;
@@ -32,19 +33,35 @@ export type BackupManifest = {
   databaseName: string;
   format: "POSTGRES_CUSTOM";
   verified: boolean;
+  coverage?: "FULL_DATABASE";
+  schemaVersion?: string | null;
+  tableCount?: number;
 };
 
 const exportTables: Record<SelectiveExportModule, string[]> = {
   PROJECTS: [
-    "Project", "ProjectMember", "Task", "TaskActivity", "Estimate", "EstimateItem",
+    "Project", "ProjectCreditNote", "ProjectMember", "Task", "TaskActivity", "ProjectEvidence", "Estimate", "EstimateItem",
     "DiexRequest", "DiexRequestItem", "CommitmentNote", "FinancialDocument", "Invoice", "ServiceOrder", "ServiceOrderItem",
-    "ServiceOrderScheduleItem", "ServiceOrderDeliveredDocument",
+    "ServiceOrderScheduleItem", "ServiceOrderDeliveredDocument", "DiscoveredCommitment", "CommitmentImportRegistry",
   ],
-  ATAS: ["Ata", "AtaCoverageGroup", "AtaCoverageLocality", "AtaItem", "AtaItemBalanceMovement"],
-  USERS: ["User", "Permission", "RolePermission", "UserPermissionOverride"],
-  SETTINGS: ["SystemConfiguration", "IntegrationConnectionCheck", "MilitaryOrganization"],
-  AUDIT: ["AuditLog", "NotificationDismissal"],
+  ATAS: ["Pregao", "Ata", "AtaCoverageGroup", "AtaCoverageLocality", "AtaItem", "AtaItemExternalBalanceSnapshot", "AtaItemBalanceMovement", "TextCorrectionRule"],
+  USERS: ["User", "RefreshToken", "Permission", "RolePermission", "UserPermissionOverride"],
+  SETTINGS: [
+    "SystemConfiguration", "IntegrationConnectionCheck", "MilitaryOrganization", "SystemHealthSample",
+    "NotificationChannelConfiguration", "NotificationEmailList", "NotificationEmailRecipient",
+    "NotificationAutomationConfiguration", "NotificationAutomationRun", "NotificationAutomationEvent",
+  ],
+  AUDIT: ["AuditLog", "NotificationDismissal", "UserNotification"],
 };
+
+const currentDatabaseTables = Array.from(new Set(Object.values(exportTables).flat()));
+
+function archiveTables(listing: string) {
+  return new Set(currentDatabaseTables.filter((table) => {
+    const escaped = table.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    return new RegExp(`(?:TABLE|TABLE DATA)\\s+(?:public\\s+)?${escaped}(?:\\s|$)`, "m").test(listing);
+  }));
+}
 
 function commandError(command: string, stderr: string) {
   const detail = stderr.trim().slice(-2000);
@@ -142,15 +159,24 @@ export class BackupsService {
     }
 
     const { stdout } = await runCommand("pg_restore", ["--list", filePath], this.commandEnv());
-    const requiredObjects = ["_prisma_migrations", "User", "Project"];
-    const missing = requiredObjects.filter((name) => !stdout.includes(name));
+    const tables = archiveTables(stdout);
+    const requiredObjects = ["_prisma_migrations", ...currentDatabaseTables];
+    const missing = requiredObjects.filter((name) => name === "_prisma_migrations" ? !stdout.includes(name) : !tables.has(name));
     if (missing.length > 0) {
       throw new AppError(
-        `O arquivo não parece pertencer ao SAGEP. Estruturas ausentes: ${missing.join(", ")}`,
+        `O backup não contém a estrutura completa da versão atual do SAGEP. Estruturas ausentes: ${missing.join(", ")}`,
         400,
-        "INVALID_SAGEP_BACKUP",
+        "INCOMPATIBLE_SAGEP_BACKUP",
       );
     }
+    return { tableCount: tables.size };
+  }
+
+  private async currentSchemaVersion() {
+    const rows = await prisma.$queryRawUnsafe<Array<{ migration_name: string }>>(
+      'SELECT migration_name FROM "_prisma_migrations" WHERE finished_at IS NOT NULL AND rolled_back_at IS NULL ORDER BY finished_at DESC LIMIT 1',
+    );
+    return rows[0]?.migration_name ?? null;
   }
 
   private displayFilename(kind: BackupKind, createdAt: Date) {
@@ -225,6 +251,7 @@ export class BackupsService {
 
     const fileStat = await stat(finalPath);
     const manifest: BackupManifest = {
+      manifestVersion: 2,
       id,
       kind,
       filename: this.displayFilename(kind, createdAt),
@@ -236,6 +263,9 @@ export class BackupsService {
       databaseName: this.databaseConnection().database,
       format: "POSTGRES_CUSTOM",
       verified: true,
+      coverage: "FULL_DATABASE",
+      schemaVersion: await this.currentSchemaVersion(),
+      tableCount: currentDatabaseTables.length,
     };
     await this.writeManifest(manifest);
     if (kind !== "SAFETY") await this.applyRetention();
@@ -263,6 +293,7 @@ export class BackupsService {
       const partialPath = `${finalPath}.partial`;
       const maxBytes = env.BACKUP_MAX_UPLOAD_MB * 1024 ** 2;
       let receivedBytes = 0;
+      let importedTableCount = 0;
       const limiter = new Transform({
         transform(chunk: Buffer, _encoding, callback) {
           receivedBytes += chunk.length;
@@ -276,7 +307,8 @@ export class BackupsService {
       try {
         await pipeline(stream, limiter, createWriteStream(partialPath, { mode: 0o600 }));
         if (receivedBytes === 0) throw new AppError("Arquivo de backup não informado", 400, "BACKUP_FILE_REQUIRED");
-        await this.validateArchive(partialPath);
+        const archive = await this.validateArchive(partialPath);
+        importedTableCount = archive.tableCount;
         await rename(partialPath, finalPath);
       } catch (error) {
         await rm(partialPath, { force: true });
@@ -285,6 +317,7 @@ export class BackupsService {
 
       const safeOriginalName = originalFilename?.replace(/[^a-zA-Z0-9._ -]/g, "_").slice(0, 180) || null;
       const manifest: BackupManifest = {
+        manifestVersion: 2,
         id,
         kind: "IMPORTED",
         filename: this.displayFilename("IMPORTED", createdAt),
@@ -296,6 +329,9 @@ export class BackupsService {
         databaseName: this.databaseConnection().database,
         format: "POSTGRES_CUSTOM",
         verified: true,
+        coverage: "FULL_DATABASE",
+        schemaVersion: null,
+        tableCount: importedTableCount,
       };
       await this.writeManifest(manifest);
       await this.applyRetention();
@@ -305,7 +341,7 @@ export class BackupsService {
         action: "CREATE",
         actor: { id: actor.id, name: manifest.createdBy },
         summary: "Arquivo de backup importado e validado",
-        metadata: { filename: manifest.filename, originalFilename: manifest.originalFilename, sizeBytes: manifest.sizeBytes },
+        metadata: { filename: manifest.filename, originalFilename: manifest.originalFilename, sizeBytes: manifest.sizeBytes, tableCount: manifest.tableCount ?? null },
       });
       return manifest;
     });
@@ -344,6 +380,26 @@ export class BackupsService {
         scheduleHours: env.BACKUP_SCHEDULE_HOURS,
         runOnStartup: env.BACKUP_RUN_ON_STARTUP,
         maxUploadMb: env.BACKUP_MAX_UPLOAD_MB,
+      },
+      coverage: {
+        database: {
+          included: true,
+          mode: "FULL_DATABASE" as const,
+          currentTableCount: currentDatabaseTables.length,
+          detail: "Estrutura, migrations e dados de todos os módulos persistidos no PostgreSQL.",
+        },
+        evidenceFiles: {
+          included: false,
+          detail: "Fotos, vídeos, KMZ/KML e documentos técnicos ficam no volume sagep_evidence_files.",
+        },
+        certificateAuthority: {
+          included: false,
+          detail: "A autoridade interna possui exportação criptografada própria nesta página.",
+        },
+        runtimeSecrets: {
+          included: false,
+          detail: "O arquivo .env e a chave SAGEP_SECRETS_ENCRYPTION_KEY devem permanecer sob custódia separada.",
+        },
       },
       operationRunning: this.operationRunning,
     };
@@ -496,6 +552,50 @@ export class BackupsService {
         filename: `sagep-export-${modules.map((module) => module.toLowerCase()).join("-")}-${new Date().toISOString().slice(0, 10)}.sql`,
         cleanup: () => rm(filePath, { force: true }),
       };
+    });
+  }
+
+  async createEvidenceExport(actor: BackupActor) {
+    return this.withOperationLock(async () => {
+      await this.ensureDirectory();
+      await mkdir(env.EVIDENCE_DIRECTORY, { recursive: true, mode: 0o700 });
+      const id = randomUUID();
+      const filePath = path.join(env.BACKUP_DIRECTORY, `${id}-evidences.tar.gz`);
+      const partialPath = `${filePath}.partial`;
+      try {
+        await runCommand("tar", [
+          "--create",
+          "--gzip",
+          "--file",
+          partialPath,
+          "--directory",
+          env.EVIDENCE_DIRECTORY,
+          ".",
+        ], process.env);
+        await chmod(partialPath, 0o600);
+        await rename(partialPath, filePath);
+        const fileStat = await stat(filePath);
+        const checksumSha256 = await this.checksum(filePath);
+        await auditService.log({
+          entityType: "SYSTEM_SETTINGS",
+          entityId: id,
+          action: "EXPORT",
+          actor: { id: actor.id, name: actor.name ?? actor.email },
+          summary: "Arquivos físicos de evidências exportados",
+          metadata: { sizeBytes: fileStat.size, checksumSha256 },
+        });
+        return {
+          filePath,
+          filename: `sagep-evidencias-${new Date().toISOString().slice(0, 10)}.tar.gz`,
+          sizeBytes: fileStat.size,
+          checksumSha256,
+          cleanup: () => rm(filePath, { force: true }),
+        };
+      } catch (error) {
+        await rm(partialPath, { force: true });
+        await rm(filePath, { force: true });
+        throw error;
+      }
     });
   }
 

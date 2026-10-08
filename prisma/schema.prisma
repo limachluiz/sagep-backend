@@ -277,6 +277,8 @@ model User {
   refreshTokens                 RefreshToken[]
   permissionOverrides           UserPermissionOverride[]
   notificationDismissals        NotificationDismissal[]
+  notificationsReceived         UserNotification[]           @relation("NotificationRecipient")
+  notificationsAuthored         UserNotification[]           @relation("NotificationActor")
   invoicesRegistered            Invoice[]                    @relation("InvoiceRegistrar")
   systemConfigurationsUpdated   SystemConfiguration[]        @relation("SystemConfigurationUpdater")
   portalApiTokensUpdated        SystemConfiguration[]        @relation("PortalApiTokenUpdater")
@@ -387,6 +389,9 @@ model NotificationAutomationConfiguration {
   emailListIds           String[]   @default([])
   notifyRoles            UserRole[] @default([ADMIN, GESTOR])
   maxDiscoveryPages      Int        @default(100)
+  taskDueDays            Int        @default(3)
+  projectStaleDays       Int        @default(15)
+  ataExpiryDays          Int        @default(90)
   lastScheduledKey       String?
   updatedById            String?
   createdAt              DateTime   @default(now())
@@ -421,11 +426,13 @@ model NotificationAutomationEvent {
   telegramSentAt DateTime?
   emailError     String?
   telegramError  String?
+  resolvedAt     DateTime?
   createdAt      DateTime                            @default(now())
   updatedAt      DateTime                            @updatedAt
 
   @@index([type, occurredAt])
   @@index([occurredAt])
+  @@index([resolvedAt, occurredAt])
 }
 
 model IntegrationConnectionCheck {
@@ -662,6 +669,40 @@ model NotificationDismissal {
 
   @@unique([userId, notificationKey])
   @@index([userId, dismissedAt])
+}
+
+model UserNotification {
+  id          String    @id @default(cuid())
+  eventKey    String
+  recipientId String
+  actorId     String?
+  category    String
+  severity    String    @default("INFO")
+  title       String
+  description String
+  detailsPath String
+  entityType  String?
+  entityId    String?
+  metadata    Json?
+  occurredAt  DateTime  @default(now())
+  readAt      DateTime?
+  dismissedAt DateTime?
+  resolvedAt  DateTime?
+  emailSentAt DateTime?
+  telegramSentAt DateTime?
+  emailError String?
+  telegramError String?
+  recipient   User      @relation("NotificationRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actor       User?     @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([recipientId, eventKey])
+  @@index([recipientId, resolvedAt, dismissedAt, readAt, occurredAt])
+  @@index([entityType, entityId])
+  @@index([category, occurredAt])
+  @@index([emailSentAt, occurredAt])
+  @@index([telegramSentAt, occurredAt])
 }
 
 model SystemHealthSample {

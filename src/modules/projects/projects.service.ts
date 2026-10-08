@@ -12,6 +12,7 @@ import { ServiceOrdersService } from "../service-orders/service-orders.service.j
 import { TasksService } from "../tasks/tasks.service.js";
 import { workflowService } from "../workflow/workflow.service.js";
 import { ataItemBalanceService } from "../ata-items/ata-item-balance.service.js";
+import { notificationsService } from "../notifications/notifications.service.js";
 import type { CommitmentNoteSnapshot } from "../financial-execution/portal-transparencia.client.js";
 import {
   buildContextualDeliverySections,
@@ -1145,6 +1146,19 @@ export class ProjectsService {
       }),
     });
 
+    if (data.description) {
+      await notificationsService.publishMentions({
+        content: data.description,
+        eventKeyPrefix: `PROJECT_DESCRIPTION:${project.id}:${project.updatedAt.toISOString()}`,
+        actorId: user.id,
+        title: `Você foi mencionado no PRJ-${project.projectCode}`,
+        description: data.description.length > 180 ? `${data.description.slice(0, 177)}...` : data.description,
+        detailsPath: `/projects/${project.id}`,
+        entityType: "PROJECT",
+        entityId: project.id,
+      });
+    }
+
     return project;
   }
 
@@ -1983,6 +1997,19 @@ export class ProjectsService {
         serviceCompletedAt: project.serviceCompletedAt,
       }),
     });
+
+    if (data.description && data.description !== before.description) {
+      await notificationsService.publishMentions({
+        content: data.description,
+        eventKeyPrefix: `PROJECT_DESCRIPTION:${project.id}:${project.updatedAt.toISOString()}`,
+        actorId: user.id,
+        title: `Você foi mencionado no PRJ-${project.projectCode}`,
+        description: data.description.length > 180 ? `${data.description.slice(0, 177)}...` : data.description,
+        detailsPath: `/projects/${project.id}`,
+        entityType: "PROJECT",
+        entityId: project.id,
+      });
+    }
 
     return project;
   }

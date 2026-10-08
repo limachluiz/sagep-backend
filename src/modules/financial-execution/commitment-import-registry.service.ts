@@ -63,7 +63,10 @@ export async function claimCommitmentImport(externalCode: string, userId: string
 }
 
 export async function completeCommitmentImport(externalCode: string, userId: string, targetId: string, origin: string) {
-  await prisma.commitmentImportRegistry.upsert({ where: { externalCode }, create: { externalCode, status: "IMPORTED", importedById: userId, importedAt: new Date(), targetId, importedOrigin: origin }, update: { status: "IMPORTED", importedById: userId, importedAt: new Date(), targetId, importedOrigin: origin, claimedById: null, claimedAt: null, lastError: null } });
+  const importedAt = new Date();
+  await prisma.commitmentImportRegistry.upsert({ where: { externalCode }, create: { externalCode, status: "IMPORTED", importedById: userId, importedAt, targetId, importedOrigin: origin }, update: { status: "IMPORTED", importedById: userId, importedAt, targetId, importedOrigin: origin, claimedById: null, claimedAt: null, lastError: null } });
+  await prisma.notificationAutomationEvent.updateMany({ where: { eventKey: `NE_DISCOVERED:${externalCode}`, resolvedAt: null }, data: { resolvedAt: importedAt } })
+    .catch((error) => console.error("NE importada, mas o alerta não pôde ser resolvido", { externalCode, error }));
 }
 
 export async function failCommitmentImport(externalCode: string, userId: string, error: unknown) {

@@ -48,6 +48,16 @@ export class BackupsController {
     return res.download(exported.filePath, exported.filename);
   }
 
+  async evidenceExport(req: Request, res: Response) {
+    const exported = await backupsService.createEvidenceExport(req.user!);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Content-Type", "application/gzip");
+    res.setHeader("X-Content-SHA256", exported.checksumSha256);
+    res.on("finish", () => void exported.cleanup());
+    res.on("close", () => void exported.cleanup());
+    return res.download(exported.filePath, exported.filename);
+  }
+
   uploadLimit() {
     return `${env.BACKUP_MAX_UPLOAD_MB}mb`;
   }

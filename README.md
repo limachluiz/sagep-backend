@@ -507,13 +507,19 @@ O módulo protegido por `backups.manage` e pela role `ADMIN` oferece:
 
 - criação imediata e rotina automática configurável;
 - armazenamento no volume Docker `sagep_backups`;
-- manifesto com metadados e checksum SHA-256;
-- download, importação e validação de backups PostgreSQL no formato custom;
-- exportação seletiva de módulos em SQL;
+- manifesto versionado com migration, quantidade de tabelas e checksum SHA-256;
+- download, importação e validação de backups PostgreSQL no formato custom, exigindo a estrutura completa da versão atual;
+- exportação seletiva atualizada de projetos, execução financeira, ATAs, usuários, configurações, notificações e auditoria;
+- exportação separada dos arquivos físicos de evidências em `.tar.gz`;
 - restauração integral mediante confirmação explícita;
 - backup de segurança automático imediatamente antes de cada restauração;
 - bloqueio de operações simultâneas e modo de manutenção durante o restore.
 - exportação e recuperação criptografadas da autoridade certificadora da OM.
+
+O `.dump` contém integralmente o banco PostgreSQL, mas não incorpora os volumes
+de evidências, PKI/TLS nem o arquivo `.env`. Para recuperação completa, custodie
+também a exportação de evidências, o backup criptografado da autoridade e a chave
+`SAGEP_SECRETS_ENCRYPTION_KEY` em local separado e protegido.
 
 As rotas estão documentadas no OpenAPI em `/api/docs` e os arquivos físicos não
 são expostos diretamente pelo servidor web.

@@ -40,6 +40,9 @@ export const notificationAutomationSchema = z.object({
   emailListIds: z.array(z.string().trim().min(1).max(64)).max(100).transform((items) => [...new Set(items)]),
   notifyRoles: roles,
   maxDiscoveryPages: z.coerce.number().int().min(1).max(1000).default(100),
+  taskDueDays: z.coerce.number().int().min(1).max(30).default(3),
+  projectStaleDays: z.coerce.number().int().min(1).max(365).default(15),
+  ataExpiryDays: z.coerce.number().int().min(1).max(365).default(90),
 }).refine((value) => value.syncTrackedCommitments || value.discoverCommitments || value.syncAtaBalances, {
   message: "Ative pelo menos uma rotina de verificação",
 });

@@ -80,6 +80,7 @@ export class NotificationSettingsService {
     telegramEnabled: boolean;
     emailListIds: string[];
     notifyRoles: UserRole[];
+    directEmails?: string[];
   }) {
     const configuration = await this.configuration();
     const result: { email: { sent: boolean; recipients: number; error?: string }; telegram: { sent: boolean; error?: string } } = {
@@ -99,6 +100,7 @@ export class NotificationSettingsService {
         const recipients = [...new Set([
           ...lists.flatMap((list) => list.recipients.map((recipient) => recipient.email)),
           ...users.map((user) => user.email),
+          ...(input.directEmails ?? []),
         ].map((email) => email.trim().toLowerCase()).filter(Boolean))];
         result.email.recipients = recipients.length;
         if (recipients.length) {
