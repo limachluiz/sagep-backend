@@ -11,6 +11,7 @@ import { DiexService } from "./diex.service.js";
 import { DiexDocumentService } from "./diex-document.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
 import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
+import { documentVersionsService } from "../document-versions/document-versions.service.js";
 
 const diexService = new DiexService();
 const diexDocumentService = new DiexDocumentService();
@@ -69,8 +70,11 @@ export class DiexController {
   async documentPdf(req: Request, res: Response) {
     const { id } = diexIdParamSchema.parse(req.params);
     const pdf = await diexDocumentService.generateDiexPdf(id, req.user!);
+    const version = await documentVersionsService.recordGenerated({ entityType: "DIEX_REQUEST", entityId: id, documentType: "DIEX_PDF", filename: `diex-${id}.pdf`, buffer: pdf, actor: req.user! });
 
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("X-Document-Version", String(version.version));
+    res.setHeader("X-Document-SHA256", version.checksumSha256);
     res.setHeader(
       "Content-Disposition",
       `inline; filename="diex-${id}.pdf"`

@@ -1,4 +1,6 @@
 import { performance } from "node:perf_hooks";
+import { statfs } from "node:fs/promises";
+import path from "node:path";
 import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import type {
@@ -9,6 +11,9 @@ import type {
   SystemHealthDetails,
   SystemHealthSnapshot,
 } from "./health.types.js";
+import { backupsService } from "../backups/backups.service.js";
+import { getDeploymentCertificateStatus } from "../deployment/deployment.service.js";
+import { requestMetricsService } from "./request-metrics.service.js";
 
 const MAX_MEMORY_HISTORY_POINTS = 10_080;
 const MAX_RESPONSE_HISTORY_POINTS = 420;
@@ -157,6 +162,44 @@ async function probePgAdmin(): Promise<HealthComponent> {
   }
 }
 
+async function probeStorage(): Promise<HealthComponent> {
+  try {
+    const stats = await statfs(path.dirname(path.resolve(env.EVIDENCE_DIRECTORY)));
+    const total = Number(stats.blocks) * Number(stats.bsize);
+    const available = Number(stats.bavail) * Number(stats.bsize);
+    const freePercent = total ? available / total * 100 : 0;
+    const status: HealthStatus = freePercent < 5 ? "unavailable" : freePercent < 15 ? "degraded" : "operational";
+    return { id: "storage", name: "Armazenamento", description: "Volumes de documentos, evidências e backups", status, latencyMs: null, critical: true, message: `${round(freePercent)}% do volume disponível` };
+  } catch {
+    return { id: "storage", name: "Armazenamento", description: "Volumes de documentos, evidências e backups", status: "unavailable", latencyMs: null, critical: true, message: "Volume de armazenamento não pôde ser inspecionado" };
+  }
+}
+
+async function probeBackups(): Promise<HealthComponent> {
+  if (env.BACKUP_SCHEDULE_HOURS <= 0) return { id: "backups", name: "Backups", description: "Cópia integral do banco de dados", status: "not_monitored", latencyMs: null, critical: false, message: "Rotina automática desativada" };
+  try {
+    const overview = await backupsService.overview();
+    const latest = overview.summary.latestAt ? Date.parse(overview.summary.latestAt) : 0;
+    const overdue = !latest || Date.now() - latest > Math.max(36, env.BACKUP_SCHEDULE_HOURS * 2) * 3_600_000;
+    return { id: "backups", name: "Backups", description: "Cópia integral do banco de dados", status: overdue ? "degraded" : "operational", latencyMs: null, critical: false, message: latest ? overdue ? "Último backup está fora da janela esperada" : `Último backup em ${new Date(latest).toISOString()}` : "Nenhum backup válido encontrado" };
+  } catch { return { id: "backups", name: "Backups", description: "Cópia integral do banco de dados", status: "unavailable", latencyMs: null, critical: false, message: "Repositório de backups indisponível" }; }
+}
+
+async function probeCertificate(): Promise<HealthComponent> {
+  const certificate = await getDeploymentCertificateStatus();
+  const status: HealthStatus = certificate.status === "EXPIRED" || certificate.status === "INVALID" ? "unavailable" : certificate.status === "EXPIRING" ? "degraded" : certificate.status === "VALID" ? "operational" : "not_monitored";
+  return { id: "certificate", name: "Certificado HTTPS", description: "Identidade e transporte seguro do SAGEP", status, latencyMs: null, critical: certificate.configured, message: certificate.configured && "daysRemaining" in certificate ? `${certificate.daysRemaining} dia(s) até o vencimento` : "Certificado interno não configurado" };
+}
+
+async function probeAutomations(): Promise<HealthComponent> {
+  try {
+    const [configuration, lastRun] = await Promise.all([prisma.notificationAutomationConfiguration.findUnique({ where: { id: "default" }, select: { enabled: true } }), prisma.notificationAutomationRun.findFirst({ orderBy: { startedAt: "desc" }, select: { status: true, startedAt: true, finishedAt: true } })]);
+    if (!configuration?.enabled) return { id: "automations", name: "Automações", description: "Varreduras financeiras e central de alertas", status: "not_monitored", latencyMs: null, critical: false, message: "Automação de alertas desativada" };
+    const failed = lastRun?.status === "FAILED" || !lastRun || Date.now() - lastRun.startedAt.getTime() > 72 * 3_600_000;
+    return { id: "automations", name: "Automações", description: "Varreduras financeiras e central de alertas", status: failed ? "degraded" : "operational", latencyMs: null, critical: false, message: lastRun ? `Última execução ${lastRun.status.toLowerCase()} em ${lastRun.startedAt.toISOString()}` : "Nenhuma execução registrada" };
+  } catch { return { id: "automations", name: "Automações", description: "Varreduras financeiras e central de alertas", status: "unavailable", latencyMs: null, critical: false, message: "Estado da automação indisponível" }; }
+}
+
 function overallStatus(components: HealthComponent[]): SystemHealthSnapshot["status"] {
   if (components.some((component) => component.critical && component.status === "unavailable")) {
     return "unavailable";
@@ -209,13 +252,14 @@ class SystemHealthService {
           heapUsedMb: round(memory.heapUsed / 1024 / 1024),
           heapTotalMb: round(memory.heapTotal / 1024 / 1024),
         },
+        requests: requestMetricsService.snapshot(),
         infrastructure: {
           monitoringMode: "service-probes",
           dockerSocketExposed: false,
           units: snapshot.components.map((component) => ({
             name: component.id === "api" ? "sagep_api" : component.id === "database" ? "sagep_postgres" : "sagep_pgadmin",
-            kind: "container-service" as const,
-            healthSource: component.id === "api" ? "process" as const : component.id === "database" ? "database-query" as const : "http-probe" as const,
+            kind: (["api", "database", "pgadmin"].includes(component.id) ? "container-service" : "system-check") as "container-service" | "system-check",
+            healthSource: component.id === "api" ? "process" as const : component.id === "database" ? "database-query" as const : component.id === "pgadmin" ? "http-probe" as const : component.id === "storage" || component.id === "backups" ? "filesystem" as const : component.id === "certificate" ? "certificate" as const : "database-state" as const,
             status: component.status,
           })),
         },
@@ -282,10 +326,14 @@ class SystemHealthService {
   }
 
   private async collectSnapshot(window: HealthWindow): Promise<SystemHealthSnapshot> {
-    const [apiLatencyMs, database, pgadmin] = await Promise.all([
+    const [apiLatencyMs, database, pgadmin, storage, backups, certificate, automations] = await Promise.all([
       probeEventLoop(),
       probeDatabase(),
       probePgAdmin(),
+      probeStorage(),
+      probeBackups(),
+      probeCertificate(),
+      probeAutomations(),
     ]);
     const api: HealthComponent = {
       id: "api",
@@ -296,7 +344,7 @@ class SystemHealthService {
       critical: true,
       message: apiLatencyMs >= 100 ? "Processamento sob atenção" : "Processo respondendo normalmente",
     };
-    const components = [api, database, pgadmin];
+    const components = [api, database, pgadmin, storage, backups, certificate, automations];
     const status = overallStatus(components);
     const point: HealthHistoryPoint = {
       timestamp: new Date().toISOString(),

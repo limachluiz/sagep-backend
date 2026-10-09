@@ -13,6 +13,7 @@ import { ServiceOrdersService } from "./service-orders.service.js";
 import { ServiceOrderDocumentService } from "./service-order-document.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
 import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
+import { documentVersionsService } from "../document-versions/document-versions.service.js";
 
 const serviceOrdersService = new ServiceOrdersService();
 const serviceOrderDocumentService = new ServiceOrderDocumentService();
@@ -109,8 +110,11 @@ export class ServiceOrdersController {
   async documentPdf(req: Request, res: Response) {
     const { id } = serviceOrderIdParamSchema.parse(req.params);
     const pdf = await serviceOrderDocumentService.generateServiceOrderPdf(id, req.user!);
+    const version = await documentVersionsService.recordGenerated({ entityType: "SERVICE_ORDER", entityId: id, documentType: "SERVICE_ORDER_PDF", filename: `ordem-servico-${id}.pdf`, buffer: pdf, actor: req.user! });
 
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("X-Document-Version", String(version.version));
+    res.setHeader("X-Document-SHA256", version.checksumSha256);
     res.setHeader(
       "Content-Disposition",
       `inline; filename="ordem-servico-${id}.pdf"`

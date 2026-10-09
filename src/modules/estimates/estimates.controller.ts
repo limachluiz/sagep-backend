@@ -12,6 +12,7 @@ import {
 import { EstimatesService } from "./estimates.service.js";
 import { buildListResponse } from "../../shared/pagination.js";
 import { restoreOptionsSchema } from "../../shared/restore.schemas.js";
+import { documentVersionsService } from "../document-versions/document-versions.service.js";
 
 const estimatesService = new EstimatesService();
 const estimateDocumentService = new EstimateDocumentService();
@@ -99,8 +100,11 @@ export class EstimatesController {
     const { id } = estimateIdParamSchema.parse(req.params);
 
     const pdf = await estimateDocumentService.generateEstimatePdf(id, req.user!);
+    const version = await documentVersionsService.recordGenerated({ entityType: "ESTIMATE", entityId: id, documentType: "ESTIMATE_PDF", filename: `estimativa-${id}.pdf`, buffer: pdf, actor: req.user! });
 
     res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("X-Document-Version", String(version.version));
+    res.setHeader("X-Document-SHA256", version.checksumSha256);
     res.setHeader(
       "Content-Disposition",
       `inline; filename="estimativa-${id}.pdf"`

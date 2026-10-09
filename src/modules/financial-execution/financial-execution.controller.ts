@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import {
   commitmentNoteIdSchema,
   createInvoiceSchema,
+  nfeXmlSchema,
   listCommitmentNotesSchema,
   previewCommitmentNoteSchema,
   registerCommitmentNoteSchema,
@@ -47,5 +48,13 @@ export class FinancialExecutionController {
 
   async createInvoice(req: Request, res: Response) {
     return res.status(201).json(await financialExecutionService.createInvoice(createInvoiceSchema.parse(req.body), req.user!));
+  }
+
+  async previewInvoiceXml(req: Request, res: Response) {
+    return res.status(200).json(await financialExecutionService.previewInvoiceXml(nfeXmlSchema.parse(req.body), req.user!));
+  }
+
+  async importInvoiceXml(req: Request, res: Response) {
+    return res.status(201).json(await financialExecutionService.importInvoiceXml(nfeXmlSchema.parse(req.body), req.user!));
   }
 }

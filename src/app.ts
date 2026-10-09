@@ -8,6 +8,7 @@ import { corsOptions } from "./config/cors.js";
 import { maintenanceMiddleware } from "./middlewares/maintenance.middleware.js";
 import { apiRateLimiter } from "./middlewares/rate-limit.middleware.js";
 import { env } from "./config/env.js";
+import { requestObservabilityMiddleware } from "./middlewares/request-observability.middleware.js";
 
 export const app = express();
 
@@ -15,6 +16,7 @@ app.disable("x-powered-by");
 if (env.TRUST_PROXY_HOPS > 0) app.set("trust proxy", env.TRUST_PROXY_HOPS);
 
 app.use(requestContextMiddleware);
+app.use(requestObservabilityMiddleware);
 app.use(
   helmet({
     contentSecurityPolicy: false,

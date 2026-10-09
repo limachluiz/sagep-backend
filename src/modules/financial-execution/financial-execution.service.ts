@@ -9,11 +9,13 @@ import { claimCommitmentImport, completeCommitmentImport, failCommitmentImport }
 import { ProjectsService } from "../projects/projects.service.js";
 import type {
   CreateInvoiceInput,
+  NfeXmlInput,
   ListCommitmentNotesInput,
   PreviewCommitmentNoteInput,
   RegisterCommitmentNoteInput,
   StandaloneCommitmentNoteLookupInput,
 } from "./financial-execution.schemas.js";
+import { parseNfeXmlBase64 } from "./nfe-xml.service.js";
 import {
   portalTransparenciaClient,
   type CommitmentNoteSnapshot,
@@ -611,7 +613,7 @@ export class FinancialExecutionService {
     if (note?.supplierCnpj && digits(note.supplierCnpj) !== digits(input.supplierCnpj)) warnings.push("CNPJ da NFe difere do favorecido da NE");
     if (note && input.grossAmount > Number(note.currentAmount) + 0.01) warnings.push("Valor da NFe supera o valor atual da NE");
     const invoice = await prisma.$transaction(async (tx) => {
-      const created = await tx.invoice.create({ data: { ...input, registeredById: user.id } });
+      const created = await tx.invoice.create({ data: { ...input, registeredById: user.id, source: "MANUAL", conferenceStatus: warnings.length ? "DIVERGENT" : "PENDING", conferenceDetails: { warnings, source: "MANUAL", checkedAt: new Date().toISOString() } } });
       if (input.attestedAt) await tx.project.update({ where: { id: input.projectId }, data: { invoiceAttestedAt: input.attestedAt } });
       return created;
     });
@@ -625,6 +627,38 @@ export class FinancialExecutionService {
       metadata: { warnings },
     });
     return { invoice: { ...invoice, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount) }, warnings };
+  }
+
+  async previewInvoiceXml(input: NfeXmlInput, user: CurrentUser) {
+    await projectsService.findById(input.projectId, user);
+    const note = await prisma.commitmentNote.findUnique({ where: { id: input.commitmentNoteId } });
+    if (!note || note.projectId !== input.projectId) throw new AppError("A NE informada não pertence ao projeto", 409, "INVOICE_COMMITMENT_MISMATCH");
+    const summary = parseNfeXmlBase64(input.xmlBase64);
+    const divergences: string[] = [];
+    const warnings: string[] = [];
+    if (note.supplierCnpj && digits(note.supplierCnpj) !== summary.supplierCnpj) divergences.push("CNPJ do emitente difere do favorecido da NE");
+    if (summary.grossAmount > Number(note.currentAmount) + 0.01) divergences.push("Valor da NF-e supera o valor atual da NE");
+    if (!summary.hasXmlSignature) divergences.push("Assinatura XML da NF-e não foi encontrada");
+    if (!summary.authorizationStatus || !["100", "150"].includes(summary.authorizationStatus)) divergences.push(`Protocolo de autorização não confirmado${summary.authorizationStatus ? ` (cStat ${summary.authorizationStatus})` : ""}`);
+    if (!summary.recipientCnpj) warnings.push("CNPJ do destinatário não informado no XML");
+    if (!summary.itemCount) warnings.push("XML sem itens de produto ou serviço");
+    const duplicate = await prisma.invoice.findFirst({ where: { OR: [{ accessKey: summary.accessKey }, { number: summary.number, series: summary.series, supplierCnpj: summary.supplierCnpj }] }, select: { id: true, invoiceCode: true, projectId: true, accessKey: true } });
+    return { summary: { ...summary, issuedAt: summary.issuedAt.toISOString() }, conferenceStatus: divergences.length ? "DIVERGENT" as const : "CONFERRED" as const, divergences, warnings, duplicate };
+  }
+
+  async importInvoiceXml(input: NfeXmlInput, user: CurrentUser) {
+    const preview = await this.previewInvoiceXml(input, user);
+    if (preview.duplicate) throw new AppError("Esta NF-e já está registrada no SAGEP", 409, "INVOICE_ALREADY_REGISTERED", preview.duplicate);
+    const summary = parseNfeXmlBase64(input.xmlBase64);
+    const project = await prisma.project.findUnique({ where: { id: input.projectId }, select: { projectCode: true } });
+    const conferenceDetails = { source: "XML", checkedAt: new Date().toISOString(), divergences: preview.divergences, warnings: preview.warnings, authorizationStatus: summary.authorizationStatus, authorizationProtocol: summary.authorizationProtocol, hasXmlSignature: summary.hasXmlSignature };
+    const invoice = await prisma.$transaction(async (tx) => {
+      const created = await tx.invoice.create({ data: { projectId: input.projectId, commitmentNoteId: input.commitmentNoteId, number: summary.number, series: summary.series, accessKey: summary.accessKey, supplierCnpj: summary.supplierCnpj, issuedAt: summary.issuedAt, grossAmount: summary.grossAmount, attestedAmount: input.attestedAt ? summary.grossAmount : undefined, attestedAt: input.attestedAt, documentLink: input.documentLink, notes: input.notes, source: "XML", conferenceStatus: preview.conferenceStatus, conferenceDetails, xmlChecksumSha256: summary.xmlChecksumSha256, issuerName: summary.issuerName, recipientCnpj: summary.recipientCnpj, itemCount: summary.itemCount, registeredById: user.id } });
+      if (input.attestedAt) await tx.project.update({ where: { id: input.projectId }, data: { invoiceAttestedAt: input.attestedAt } });
+      return created;
+    });
+    await auditService.log({ entityType: "INVOICE", entityId: invoice.id, action: "CREATE", actor: this.actor(user), summary: `NF-e ${invoice.number} importada por XML no projeto PRJ-${project?.projectCode ?? "?"}`, after: { number: invoice.number, accessKey: invoice.accessKey, grossAmount: Number(invoice.grossAmount), conferenceStatus: invoice.conferenceStatus, xmlChecksumSha256: invoice.xmlChecksumSha256 }, metadata: conferenceDetails });
+    return { invoice: { ...invoice, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount) }, ...preview };
   }
 }
 

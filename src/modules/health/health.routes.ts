@@ -13,3 +13,4 @@ healthRoutes.get(
   requirePermission("system_health.view_details"),
   healthController.details,
 );
+healthRoutes.get("/metrics", authMiddleware, requirePermission("system_health.view_details"), healthController.metrics);

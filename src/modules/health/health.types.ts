@@ -2,7 +2,7 @@ export type HealthStatus = "operational" | "degraded" | "unavailable" | "not_mon
 export type HealthWindow = "3h" | "6h" | "12h" | "24h" | "7d";
 
 export type HealthComponent = {
-  id: "api" | "database" | "pgadmin";
+  id: "api" | "database" | "pgadmin" | "storage" | "backups" | "certificate" | "automations";
   name: string;
   description: string;
   status: HealthStatus;
@@ -59,13 +59,22 @@ export type SystemHealthDetails = SystemHealthSnapshot & {
       heapUsedMb: number;
       heapTotalMb: number;
     };
+    requests: {
+      startedAt: string;
+      windowMinutes: number;
+      totalRequests: number;
+      countByStatus: { success: number; clientError: number; serverError: number };
+      averageDurationMs: number;
+      p95DurationMs: number;
+      recentServerErrors: Array<{ method: string; route: string; statusCode: number; durationMs: number; occurredAt: string; requestId: string }>;
+    };
     infrastructure: {
       monitoringMode: "service-probes";
       dockerSocketExposed: false;
       units: Array<{
         name: string;
-        kind: "container-service";
-        healthSource: "process" | "database-query" | "http-probe";
+        kind: "container-service" | "system-check";
+        healthSource: "process" | "database-query" | "http-probe" | "filesystem" | "database-state" | "certificate";
         status: HealthStatus;
       }>;
     };

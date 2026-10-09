@@ -35,3 +35,5 @@ financialExecutionRoutes.post("/commitment-notes", requirePermission("financial_
 financialExecutionRoutes.post("/commitment-notes/:id/sync", requirePermission("financial_execution.sync"), (req, res) => controller.syncOne(req, res));
 financialExecutionRoutes.post("/sync", requirePermission("financial_execution.sync"), (req, res) => controller.syncAll(req, res));
 financialExecutionRoutes.post("/invoices", requirePermission("financial_execution.manage"), (req, res) => controller.createInvoice(req, res));
+financialExecutionRoutes.post("/invoices/xml/preview", requirePermission("financial_execution.manage"), (req, res) => controller.previewInvoiceXml(req, res));
+financialExecutionRoutes.post("/invoices/xml/import", requirePermission("financial_execution.manage"), (req, res) => controller.importInvoiceXml(req, res));

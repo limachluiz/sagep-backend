@@ -79,8 +79,18 @@ export const createInvoiceSchema = z.object({
   notes: optionalString,
 });
 
+export const nfeXmlSchema = z.object({
+  projectId: z.string().trim().min(1),
+  commitmentNoteId: z.string().trim().min(1),
+  xmlBase64: z.string().min(32).max(12_000_000),
+  attestedAt: optionalDate,
+  documentLink: z.string().url().optional(),
+  notes: optionalString,
+});
+
 export type PreviewCommitmentNoteInput = z.infer<typeof previewCommitmentNoteSchema>;
 export type StandaloneCommitmentNoteLookupInput = z.infer<typeof standaloneCommitmentNoteLookupSchema>;
 export type RegisterCommitmentNoteInput = z.infer<typeof registerCommitmentNoteSchema>;
 export type ListCommitmentNotesInput = z.infer<typeof listCommitmentNotesSchema>;
 export type CreateInvoiceInput = z.infer<typeof createInvoiceSchema>;
+export type NfeXmlInput = z.infer<typeof nfeXmlSchema>;

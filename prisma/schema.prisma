@@ -147,6 +147,7 @@ enum AuditEntityType {
   INVOICE
   NOTIFICATION
   SYSTEM_SETTINGS
+  DOCUMENT_VERSION
 }
 
 enum AuditActionType {
@@ -247,6 +248,24 @@ enum CommitmentNoteBalanceImpactMode {
   ALREADY_INCLUDED
 }
 
+enum InvoiceSource {
+  MANUAL
+  XML
+}
+
+enum InvoiceConferenceStatus {
+  PENDING
+  CONFERRED
+  DIVERGENT
+}
+
+enum DocumentSignatureStatus {
+  NOT_SIGNED
+  PENDING_VALIDATION
+  VALID
+  INVALID
+}
+
 model User {
   id                            String                       @id @default(cuid())
   userCode                      Int                          @unique @default(autoincrement())
@@ -280,6 +299,7 @@ model User {
   notificationsReceived         UserNotification[]           @relation("NotificationRecipient")
   notificationsAuthored         UserNotification[]           @relation("NotificationActor")
   invoicesRegistered            Invoice[]                    @relation("InvoiceRegistrar")
+  documentVersionsGenerated     DocumentVersion[]            @relation("DocumentVersionGenerator")
   systemConfigurationsUpdated   SystemConfiguration[]        @relation("SystemConfigurationUpdater")
   portalApiTokensUpdated        SystemConfiguration[]        @relation("PortalApiTokenUpdater")
   integrationChecksPerformed    IntegrationConnectionCheck[] @relation("IntegrationCheckActor")
@@ -648,6 +668,13 @@ model Invoice {
   attestedAt       DateTime?
   documentLink     String?
   notes            String?
+  source           InvoiceSource           @default(MANUAL)
+  conferenceStatus InvoiceConferenceStatus @default(PENDING)
+  conferenceDetails Json?
+  xmlChecksumSha256 String?
+  issuerName        String?
+  recipientCnpj     String?
+  itemCount         Int?
   registeredById   String?
   project          Project         @relation(fields: [projectId], references: [id], onDelete: Restrict)
   commitmentNote   CommitmentNote? @relation(fields: [commitmentNoteId], references: [id], onDelete: SetNull)
@@ -657,6 +684,41 @@ model Invoice {
 
   @@index([projectId, issuedAt])
   @@index([commitmentNoteId])
+  @@index([conferenceStatus, issuedAt])
+}
+
+model DocumentVersion {
+  id                String                  @id @default(cuid())
+  entityType        String
+  entityId          String
+  documentType      String
+  version           Int
+  filename          String
+  mimeType          String                  @default("application/pdf")
+  storageKey        String
+  checksumSha256    String
+  sizeBytes         Int
+  reason            String?
+  generatedById     String?
+  generatedBy       User?                   @relation("DocumentVersionGenerator", fields: [generatedById], references: [id], onDelete: SetNull)
+  generatedAt       DateTime                @default(now())
+  originalVersionId String?
+  originalVersion   DocumentVersion?        @relation("SignedDocumentVersions", fields: [originalVersionId], references: [id], onDelete: Restrict)
+  signedVersions    DocumentVersion[]       @relation("SignedDocumentVersions")
+  signatureStatus   DocumentSignatureStatus @default(NOT_SIGNED)
+  signatureProvider String?
+  signerName        String?
+  signerDocument    String?
+  signedAt          DateTime?
+  validationDetails Json?
+  invalidatedAt     DateTime?
+  invalidationReason String?
+  createdAt         DateTime                @default(now())
+
+  @@unique([entityType, entityId, documentType, version])
+  @@index([entityType, entityId, documentType, generatedAt])
+  @@index([originalVersionId])
+  @@index([checksumSha256])
 }
 
 model NotificationDismissal {

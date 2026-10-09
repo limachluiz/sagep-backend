@@ -10,7 +10,8 @@ export type AuditEntityType =
   | "COMMITMENT_NOTE"
   | "INVOICE"
   | "NOTIFICATION"
-  | "SYSTEM_SETTINGS";
+  | "SYSTEM_SETTINGS"
+  | "DOCUMENT_VERSION";
 
 export type AuditActionType =
   | "CREATE"

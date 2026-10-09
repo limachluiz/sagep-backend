@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { systemHealthService } from "./health.service.js";
 import type { HealthWindow } from "./health.types.js";
+import { requestMetricsService } from "./request-metrics.service.js";
 
 function forceRequested(req: Request) {
   return req.query.refresh === "true";
@@ -30,5 +31,9 @@ export const healthController = {
   async details(req: Request, res: Response) {
     const snapshot = await systemHealthService.getDetails({ force: forceRequested(req), window: requestedWindow(req) });
     return res.status(200).json(snapshot);
+  },
+
+  metrics(_req: Request, res: Response) {
+    return res.status(200).type("text/plain; version=0.0.4; charset=utf-8").send(requestMetricsService.openMetrics());
   },
 };
