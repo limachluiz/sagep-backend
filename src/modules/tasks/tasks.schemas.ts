@@ -81,6 +81,7 @@ export const updateTaskStatusSchema = z.object({
 
 export const createTaskActivitySchema = z.object({
   content: z.string().trim().min(2, "Informe o andamento realizado").max(4000),
+  mentionedUserIds: z.array(z.string().min(1)).max(50).optional(),
 });
 
 export const completeTaskSchema = z.object({

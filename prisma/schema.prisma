@@ -248,6 +248,11 @@ enum CommitmentNoteBalanceImpactMode {
   ALREADY_INCLUDED
 }
 
+enum CommitmentReconciliationStatus {
+  CONFIRMED
+  REVERSED
+}
+
 enum InvoiceSource {
   MANUAL
   XML
@@ -412,6 +417,9 @@ model NotificationAutomationConfiguration {
   taskDueDays            Int        @default(3)
   projectStaleDays       Int        @default(15)
   ataExpiryDays          Int        @default(90)
+  mentionEscalationEnabled Boolean  @default(true)
+  mentionEscalationHours Int        @default(24)
+  mentionEscalationRoles UserRole[] @default([ADMIN, GESTOR])
   lastScheduledKey       String?
   updatedById            String?
   createdAt              DateTime   @default(now())
@@ -765,6 +773,27 @@ model UserNotification {
   @@index([category, occurredAt])
   @@index([emailSentAt, occurredAt])
   @@index([telegramSentAt, occurredAt])
+}
+
+model EntityMention {
+  id             String   @id @default(cuid())
+  eventKey       String   @unique
+  notificationId String?  @unique
+  recipientId    String
+  actorId        String?
+  projectId      String?
+  entityType     String
+  entityId       String
+  sourceText     String
+  readAt         DateTime?
+  resolvedAt     DateTime?
+  escalatedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([recipientId, resolvedAt, createdAt])
+  @@index([projectId, entityType, entityId])
+  @@index([escalatedAt, resolvedAt, createdAt])
 }
 
 model SystemHealthSample {
@@ -1311,6 +1340,44 @@ model DiscoveredCommitment {
   updatedAt    DateTime              @updatedAt
 
   @@index([attendedOmId])
+}
+
+model CommitmentReconciliation {
+  id                     String                         @id @default(cuid())
+  discoveredCommitmentId String
+  projectId              String
+  ataId                  String
+  status                 CommitmentReconciliationStatus @default(CONFIRMED)
+  confidenceScore        Int
+  evidence               Json
+  reason                 String?
+  applyToBalance         Boolean                        @default(true)
+  confirmedById          String
+  confirmedAt            DateTime                       @default(now())
+  reversedById           String?
+  reversedAt             DateTime?
+  reversalReason         String?
+  createdAt              DateTime                       @default(now())
+  updatedAt              DateTime                       @updatedAt
+  allocations            CommitmentReconciliationAllocation[]
+
+  @@index([discoveredCommitmentId, status])
+  @@index([projectId, status])
+  @@index([ataId, status])
+}
+
+model CommitmentReconciliationAllocation {
+  id               String                   @id @default(cuid())
+  reconciliationId String
+  ataItemId        String
+  quantity         Decimal                  @db.Decimal(18, 5)
+  unitPrice        Decimal                  @db.Decimal(14, 2)
+  totalAmount      Decimal                  @db.Decimal(14, 2)
+  reconciliation   CommitmentReconciliation @relation(fields: [reconciliationId], references: [id], onDelete: Cascade)
+  createdAt        DateTime                 @default(now())
+
+  @@unique([reconciliationId, ataItemId])
+  @@index([ataItemId])
 }
 
 model CommitmentImportRegistry {

@@ -82,6 +82,8 @@ export class NotificationsService {
 
   async publishMentions(input: {
     content: string;
+    mentionedUserIds?: string[];
+    projectId?: string | null;
     eventKeyPrefix: string;
     actorId?: string | null;
     title: string;
@@ -94,9 +96,10 @@ export class NotificationsService {
       const codes = [...input.content.matchAll(/@(?:USR-)?(\d+)/gi)]
         .map((match) => Number(match[1]))
         .filter(Number.isSafeInteger);
-      if (!codes.length) return { created: 0, mentioned: [] as number[] };
+      if (!codes.length && !input.mentionedUserIds?.length) return { created: 0, mentioned: [] as number[] };
+      const allowedIds = input.projectId ? await this.allowedMentionRecipientIds(input.projectId) : null;
       const users = await prisma.user.findMany({
-        where: { userCode: { in: [...new Set(codes)] }, active: true },
+        where: { OR: [{ userCode: { in: [...new Set(codes)] } }, { id: { in: input.mentionedUserIds ?? [] } }], active: true, ...(allowedIds ? { id: { in: allowedIds } } : {}) },
         select: { id: true, userCode: true },
       });
       let created = 0;
@@ -114,6 +117,13 @@ export class NotificationsService {
           entityId: input.entityId,
         });
         created += result.created;
+        const eventKey = `${input.eventKeyPrefix}:MENTION:${user.id}`;
+        const notification = await prisma.userNotification.findUnique({ where: { recipientId_eventKey: { recipientId: user.id, eventKey } }, select: { id: true } });
+        await prisma.entityMention.upsert({
+          where: { eventKey },
+          create: { eventKey, notificationId: notification?.id ?? null, recipientId: user.id, actorId: input.actorId ?? null, projectId: input.projectId ?? null, entityType: input.entityType, entityId: input.entityId, sourceText: input.content },
+          update: { sourceText: input.content, notificationId: notification?.id ?? undefined },
+        });
       }
       return { created, mentioned: users.map((user) => user.userCode) };
     } catch (error) {
@@ -122,11 +132,46 @@ export class NotificationsService {
     }
   }
 
+  private async allowedMentionRecipientIds(projectId: string) {
+    const [project, privileged] = await Promise.all([
+      prisma.project.findUnique({ where: { id: projectId }, select: { ownerId: true, members: { select: { userId: true } } } }),
+      prisma.user.findMany({ where: { active: true, role: { in: ["ADMIN", "GESTOR"] } }, select: { id: true } }),
+    ]);
+    if (!project) return [];
+    return [...new Set([project.ownerId, ...project.members.map((item) => item.userId), ...privileged.map((item) => item.id)])];
+  }
+
+  async mentionCandidates(projectId: string, search: string, requesterId: string) {
+    const ids = await this.allowedMentionRecipientIds(projectId);
+    if (!ids.length) return [];
+    if (!ids.includes(requesterId)) throw new AppError("Você não participa deste projeto", 403);
+    return prisma.user.findMany({ where: { id: { in: ids }, active: true, ...(search ? { OR: [{ name: { contains: search, mode: "insensitive" } }, { warName: { contains: search, mode: "insensitive" } }, { email: { contains: search, mode: "insensitive" } }, ...(/^\d+$/.test(search) ? [{ userCode: Number(search) }] : [])] } : {}) }, select: { id: true, userCode: true, name: true, warName: true, email: true, role: true }, orderBy: [{ warName: "asc" }, { name: "asc" }], take: 20 });
+  }
+
+  async escalatePendingMentions(hours: number, roles: Array<"ADMIN" | "GESTOR" | "PROJETISTA" | "CONSULTA">) {
+    const limit = new Date(Date.now() - hours * 60 * 60_000);
+    const [mentions, recipients] = await Promise.all([
+      prisma.entityMention.findMany({ where: { readAt: null, resolvedAt: null, escalatedAt: null, createdAt: { lte: limit } }, take: 200 }),
+      prisma.user.findMany({ where: { active: true, role: { in: roles } }, select: { id: true } }),
+    ]);
+    let created = 0;
+    for (const mention of mentions) {
+      const result = await this.publish({ eventKey: `MENTION_ESCALATION:${mention.id}`, recipientIds: recipients.map((item) => item.id), actorId: mention.actorId, category: "MENTION_ESCALATION", severity: "WARNING", title: "Menção sem leitura requer atenção", description: mention.sourceText.slice(0, 180), detailsPath: mention.entityType === "TASK" ? `/tasks/${mention.entityId}` : `/projects/${mention.entityId}`, entityType: mention.entityType, entityId: mention.entityId, metadata: { mentionId: mention.id, originalRecipientId: mention.recipientId } });
+      created += result.created;
+      await prisma.entityMention.update({ where: { id: mention.id }, data: { escalatedAt: new Date() } });
+    }
+    return { pending: mentions.length, created };
+  }
+
   async resolveByEventKey(eventKey: string) {
-    return prisma.userNotification.updateMany({
+    const now = new Date();
+    const notifications = await prisma.userNotification.findMany({ where: { eventKey, resolvedAt: null }, select: { id: true } });
+    const result = await prisma.userNotification.updateMany({
       where: { eventKey, resolvedAt: null },
-      data: { resolvedAt: new Date() },
+      data: { resolvedAt: now },
     }).catch((error) => { console.error("Falha ao resolver notificação", { eventKey, error }); return { count: 0 }; });
+    if (notifications.length) await prisma.entityMention.updateMany({ where: { notificationId: { in: notifications.map((item) => item.id) } }, data: { resolvedAt: now } });
+    return result;
   }
 
   async resolveByPrefix(eventKeyPrefix: string) {
@@ -179,20 +224,38 @@ export class NotificationsService {
 
   async markRead(id: string, userId: string) {
     await this.owned(id, userId);
-    return prisma.userNotification.update({ where: { id }, data: { readAt: new Date() } });
+    const now = new Date();
+    const notification = await prisma.userNotification.update({ where: { id }, data: { readAt: now } });
+    const mention = await prisma.entityMention.findUnique({ where: { notificationId: id }, select: { id: true } });
+    if (mention) {
+      await prisma.entityMention.update({ where: { id: mention.id }, data: { readAt: now, resolvedAt: now } });
+      await prisma.userNotification.updateMany({ where: { eventKey: `MENTION_ESCALATION:${mention.id}`, resolvedAt: null }, data: { resolvedAt: now } });
+    }
+    return notification;
   }
 
   async markAllRead(userId: string) {
+    const now = new Date();
+    const mentions = await prisma.entityMention.findMany({ where: { recipientId: userId, readAt: null, resolvedAt: null }, select: { id: true } });
     const result = await prisma.userNotification.updateMany({
       where: { recipientId: userId, readAt: null, dismissedAt: null, resolvedAt: null },
-      data: { readAt: new Date() },
+      data: { readAt: now },
     });
+    await prisma.entityMention.updateMany({ where: { id: { in: mentions.map((item) => item.id) } }, data: { readAt: now, resolvedAt: now } });
+    if (mentions.length) await prisma.userNotification.updateMany({ where: { eventKey: { in: mentions.map((item) => `MENTION_ESCALATION:${item.id}`) }, resolvedAt: null }, data: { resolvedAt: now } });
     return { updated: result.count };
   }
 
   async dismiss(id: string, userId: string) {
     await this.owned(id, userId);
-    return prisma.userNotification.update({ where: { id }, data: { dismissedAt: new Date(), readAt: new Date() } });
+    const now = new Date();
+    const notification = await prisma.userNotification.update({ where: { id }, data: { dismissedAt: now, readAt: now, resolvedAt: now } });
+    const mention = await prisma.entityMention.findUnique({ where: { notificationId: id }, select: { id: true } });
+    if (mention) {
+      await prisma.entityMention.update({ where: { id: mention.id }, data: { readAt: now, resolvedAt: now } });
+      await prisma.userNotification.updateMany({ where: { eventKey: `MENTION_ESCALATION:${mention.id}`, resolvedAt: null }, data: { resolvedAt: now } });
+    }
+    return notification;
   }
 }
 

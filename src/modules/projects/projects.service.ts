@@ -1149,6 +1149,7 @@ export class ProjectsService {
     if (data.description) {
       await notificationsService.publishMentions({
         content: data.description,
+        projectId: project.id,
         eventKeyPrefix: `PROJECT_DESCRIPTION:${project.id}:${project.updatedAt.toISOString()}`,
         actorId: user.id,
         title: `Você foi mencionado no PRJ-${project.projectCode}`,
@@ -2001,6 +2002,7 @@ export class ProjectsService {
     if (data.description && data.description !== before.description) {
       await notificationsService.publishMentions({
         content: data.description,
+        projectId: project.id,
         eventKeyPrefix: `PROJECT_DESCRIPTION:${project.id}:${project.updatedAt.toISOString()}`,
         actorId: user.id,
         title: `Você foi mencionado no PRJ-${project.projectCode}`,

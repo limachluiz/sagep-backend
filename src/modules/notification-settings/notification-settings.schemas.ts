@@ -43,6 +43,9 @@ export const notificationAutomationSchema = z.object({
   taskDueDays: z.coerce.number().int().min(1).max(30).default(3),
   projectStaleDays: z.coerce.number().int().min(1).max(365).default(15),
   ataExpiryDays: z.coerce.number().int().min(1).max(365).default(90),
+  mentionEscalationEnabled: z.boolean().default(true),
+  mentionEscalationHours: z.coerce.number().int().min(1).max(720).default(24),
+  mentionEscalationRoles: roles.default(["ADMIN", "GESTOR"]),
 }).refine((value) => value.syncTrackedCommitments || value.discoverCommitments || value.syncAtaBalances, {
   message: "Ative pelo menos uma rotina de verificação",
 });

@@ -42,7 +42,7 @@ const exportTables: Record<SelectiveExportModule, string[]> = {
   PROJECTS: [
     "Project", "ProjectCreditNote", "ProjectMember", "Task", "TaskActivity", "ProjectEvidence", "Estimate", "EstimateItem",
     "DiexRequest", "DiexRequestItem", "CommitmentNote", "FinancialDocument", "Invoice", "ServiceOrder", "ServiceOrderItem",
-    "ServiceOrderScheduleItem", "ServiceOrderDeliveredDocument", "DiscoveredCommitment", "CommitmentImportRegistry",
+    "ServiceOrderScheduleItem", "ServiceOrderDeliveredDocument", "DiscoveredCommitment", "CommitmentImportRegistry", "CommitmentReconciliation", "CommitmentReconciliationAllocation",
   ],
   ATAS: ["Pregao", "Ata", "AtaCoverageGroup", "AtaCoverageLocality", "AtaItem", "AtaItemExternalBalanceSnapshot", "AtaItemBalanceMovement", "TextCorrectionRule"],
   USERS: ["User", "RefreshToken", "Permission", "RolePermission", "UserPermissionOverride"],
@@ -51,7 +51,7 @@ const exportTables: Record<SelectiveExportModule, string[]> = {
     "NotificationChannelConfiguration", "NotificationEmailList", "NotificationEmailRecipient",
     "NotificationAutomationConfiguration", "NotificationAutomationRun", "NotificationAutomationEvent",
   ],
-  AUDIT: ["AuditLog", "NotificationDismissal", "UserNotification"],
+  AUDIT: ["AuditLog", "NotificationDismissal", "UserNotification", "EntityMention"],
 };
 
 const currentDatabaseTables = Array.from(new Set(Object.values(exportTables).flat()));

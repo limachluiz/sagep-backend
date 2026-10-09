@@ -273,6 +273,7 @@ export class NotificationAutomationService {
     const summary: Record<string, unknown> = {};
     try {
       summary.reminders = await this.generateOperationalReminders(config);
+      if (config.mentionEscalationEnabled) summary.mentionEscalation = await notificationsService.escalatePendingMentions(config.mentionEscalationHours, config.mentionEscalationRoles as UserRole[]);
       if (config.syncTrackedCommitments) { const result = await this.trackedCommitments(); candidates.push(...result.events); failures.push(...result.failures); summary.commitments = result.summary; }
       if (config.discoverCommitments) { const result = await this.discoverCommitments(config); candidates.push(...result.events); failures.push(...result.failures); summary.discovery = result.summary; }
       if (config.syncAtaBalances) { const result = await this.synchronizeAtaBalances(); candidates.push(...result.events); failures.push(...result.failures); summary.atas = result.summary; }

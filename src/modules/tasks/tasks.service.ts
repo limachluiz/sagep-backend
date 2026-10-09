@@ -43,6 +43,7 @@ type UpdateTaskStatusInput = {
 
 type CreateTaskActivityInput = {
   content: string;
+  mentionedUserIds?: string[];
 };
 
 type CompleteTaskInput = {
@@ -1003,6 +1004,8 @@ export class TasksService {
 
     await notificationsService.publishMentions({
       content: data.content,
+      mentionedUserIds: data.mentionedUserIds,
+      projectId: taskAccess.project.id,
       eventKeyPrefix: `TASK_ACTIVITY:${activity.id}`,
       actorId: user.id,
       title: `Você foi mencionado na TSK-${taskAccess.taskCode}`,
