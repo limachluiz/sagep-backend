@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { requireTrustedBrowserOrigin } from "../src/middlewares/csrf.middleware.js";
 import { requireStepUp } from "../src/middlewares/step-up.middleware.js";
 import { generateAccessToken, generateStepUpToken } from "../src/shared/auth-tokens.js";
+import { env } from "../src/config/env.js";
 
 function request(headers: Record<string, string>, userId = "user-1") {
   return {
@@ -28,8 +29,10 @@ describe("security middlewares", () => {
 
   it("aceita a origem configurada do frontend", () => {
     const next = vi.fn();
+    const configuredOrigin = env.CORS_ALLOWED_ORIGINS[0];
+    expect(configuredOrigin).toBeTruthy();
     requireTrustedBrowserOrigin(
-      request({ origin: "http://localhost:5173", "sec-fetch-site": "same-site" }),
+      request({ origin: configuredOrigin, "sec-fetch-site": "same-site" }),
       {} as any,
       next,
     );
