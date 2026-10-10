@@ -72,6 +72,9 @@ jobs:
       - name: Procurar segredos versionados
         run: npm run security:secrets
 
+      - name: Validar integridade UTF-8 das fontes e testes
+        run: npm run source:check
+
       - name: Validar utilitários de instalação
         run: |
           bash -n scripts/bootstrap-host.sh
@@ -118,6 +121,10 @@ jobs:
 
       - name: Construir imagem de produção
         run: docker build --tag sagep-backend:ci .
+
+      - name: Validar regras de monitoramento
+        run: |
+          docker run --rm --entrypoint promtool -v "$PWD/deploy/monitoring:/etc/prometheus:ro" prom/prometheus:v3.7.3 check rules /etc/prometheus/alerts.yml
 
       - name: Validar entrypoint e usuário da aplicação
         run: |

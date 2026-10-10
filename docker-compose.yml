@@ -104,12 +104,14 @@ services:
     entrypoint: ["/bin/sh", "-ec"]
     command:
       - |
-        sed "s|__HEALTH_METRICS_TOKEN__|$${HEALTH_METRICS_TOKEN}|g" /etc/prometheus/prometheus.template.yml > /tmp/prometheus.yml
+        test -n "$${HEALTH_METRICS_TOKEN}" || { echo 'Defina HEALTH_METRICS_TOKEN para ativar monitoring' >&2; exit 1; }
+        sed -e "s|__HEALTH_METRICS_TOKEN__|$${HEALTH_METRICS_TOKEN}|g" -e "s|__SAGEP_METRICS_TARGET__|api:${PORT:-3000}|g" /etc/prometheus/prometheus.template.yml > /tmp/prometheus.yml
         exec /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
     environment:
-      HEALTH_METRICS_TOKEN: ${HEALTH_METRICS_TOKEN:?Defina HEALTH_METRICS_TOKEN para ativar o perfil monitoring}
+      HEALTH_METRICS_TOKEN: ${HEALTH_METRICS_TOKEN:-}
     volumes:
       - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.template.yml:ro
+      - ./deploy/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
       - sagep_prometheus_data:/prometheus
     ports:
       - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"

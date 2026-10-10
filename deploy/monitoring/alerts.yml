@@ -1,0 +1,41 @@
+groups:
+  - name: sagep-operational
+    rules:
+      - alert: SagepApiUnavailable
+        expr: up{job="sagep-api"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "A API SAGEP não responde à coleta externa"
+          description: "Verifique host, rede, processo e credencial técnica; a falha da coleta também impede o diagnóstico."
+      - alert: SagepComponentUnavailable
+        expr: sagep_health_component_status{component=~"database|storage|certificate"} == 2
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Componente crítico do SAGEP indisponível"
+          description: "O componente {{ $labels.component }} precisa de intervenção."
+      - alert: SagepComponentDegraded
+        expr: sagep_health_component_status{component=~"database|storage|backups|certificate|automations"} > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Componente do SAGEP sob atenção"
+          description: "Verifique {{ $labels.component }} na página Saúde do Sistema."
+      - alert: SagepHttpServerErrors
+        expr: sum(rate(sagep_http_requests_total{status=~"5.."}[5m])) / clamp_min(sum(rate(sagep_http_requests_total[5m])), 0.001) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Mais de 5% das requisições SAGEP falham no servidor"
+      - alert: SagepHttpLatency
+        expr: histogram_quantile(0.95, sum by (le) (rate(sagep_http_request_duration_seconds_bucket{route!~"/api/health.*"}[5m]))) > 2.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latência p95 da API SAGEP acima de 2,5 segundos"

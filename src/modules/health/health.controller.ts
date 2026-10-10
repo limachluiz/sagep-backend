@@ -33,7 +33,20 @@ export const healthController = {
     return res.status(200).json(snapshot);
   },
 
-  metrics(_req: Request, res: Response) {
-    return res.status(200).type("text/plain; version=0.0.4; charset=utf-8").send(requestMetricsService.openMetrics());
+  async metrics(_req: Request, res: Response) {
+    const snapshot = await systemHealthService.getSnapshot();
+    const lines = [
+      requestMetricsService.openMetrics().trimEnd(),
+      "# HELP sagep_health_component_status Estado do componente: 0 normal, 1 degradado, 2 indisponível, -1 não monitorado.",
+      "# TYPE sagep_health_component_status gauge",
+      "# HELP sagep_health_component_latency_seconds Latência de diagnóstico do componente.",
+      "# TYPE sagep_health_component_latency_seconds gauge",
+    ];
+    const statuses = { operational: 0, degraded: 1, unavailable: 2, not_monitored: -1 };
+    for (const component of snapshot.components) {
+      lines.push(`sagep_health_component_status{component="${component.id}"} ${statuses[component.status]}`);
+      if (component.latencyMs !== null) lines.push(`sagep_health_component_latency_seconds{component="${component.id}"} ${component.latencyMs / 1000}`);
+    }
+    return res.status(200).type("text/plain; version=0.0.4; charset=utf-8").send(`${lines.join("\n")}\n`);
   },
 };

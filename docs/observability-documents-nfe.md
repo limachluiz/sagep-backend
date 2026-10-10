@@ -47,3 +47,13 @@ O XML integral não é persistido. O SAGEP guarda somente o hash SHA-256 e o res
 A consulta web pública do Portal da NF-e usa desafio humano. O Web Service oficial `NFeDistribuicaoDFe` exige uma integração com certificado digital e regras de distribuição; essa conexão pode ser acrescentada futuramente sem alterar o fluxo de conferência por XML.
 
 Referências oficiais: Portal Nacional da NF-e, relação de Web Services e Manual de Orientação do Contribuinte (`NFeDistribuicaoDFe`).
+
+### Métricas e alertas operacionais
+
+Os contadores HTTP são acumulados desde o início do processo, independentemente do limite de 5.000 amostras do diagnóstico recente. O histograma `sagep_http_request_duration_seconds` permite calcular p95 por `histogram_quantile`. Logs e métricas usam o modelo da rota (`/api/users/:id`), preservando o `requestId` sem expor valores de parâmetros ou URLs desconhecidas.
+
+A coleta protegida também expõe `sagep_health_component_status`: `0` operacional, `1` degradado, `2` indisponível e `-1` não monitorado. Ela cobre banco, armazenamento, backups, certificado e automações. Componentes desativados não disparam alertas. As regras em `deploy/monitoring/alerts.yml` detectam falha de coleta, componentes com problema, erros HTTP e latência elevada.
+
+O perfil local serve para histórico e diagnóstico. Para alertar sobre perda total do host, execute Prometheus em **outro host**, acessível ao endereço HTTPS do SAGEP. Use o exemplo `deploy/monitoring/prometheus-external.yml`, substitua `sagep.example.invalid` pelo endereço real e salve somente nesse host o token técnico em `/etc/prometheus/sagep-metrics-token` (modo `0600`). Monte também `alerts.yml` no caminho indicado. O arquivo externo utiliza validação TLS normal e nunca deve receber um token pessoal.
+
+Para entrega externa, configure um Alertmanager no host de monitoramento e seus receptores de acordo com o canal autorizado pela instituição. O exemplo aponta para `alertmanager:9093`. A entrega real e a simulação de queda do host fazem parte da homologação; somente regras carregadas no Prometheus não comprovam recebimento de alerta. Não coloque credenciais de SMTP, Telegram ou webhook no repositório.

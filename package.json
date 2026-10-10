@@ -24,6 +24,7 @@
     "repair:mojibake": "tsx src/scripts/repair-mojibake.ts",
     "security:audit": "node scripts/check-dependency-audit.mjs",
     "security:secrets": "node scripts/check-secrets.mjs",
+    "source:check": "node scripts/check-source-encoding.mjs",
     "deployment:preflight": "node scripts/check-deployment-preflight.mjs",
     "deployment:install": "node scripts/install-sagep.mjs",
     "deployment:update": "node scripts/update-sagep.mjs --check",
