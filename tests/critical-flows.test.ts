@@ -40,38 +40,23 @@ type TestUser = {
 };
 
 async function resetDatabase() {
-  // Keep reset sequential to avoid lock/ordering issues with the pg adapter.
-  await prisma.auditLog.deleteMany();
-  await prisma.refreshToken.deleteMany();
-  await prisma.userPermissionOverride.deleteMany();
-  await prisma.notificationDismissal.deleteMany();
-  await prisma.invoice.deleteMany();
-  await prisma.financialDocument.deleteMany();
-  await prisma.commitmentNote.deleteMany();
-  await prisma.ataItemBalanceMovement.deleteMany();
-  await prisma.serviceOrderDeliveredDocument.deleteMany();
-  await prisma.serviceOrderScheduleItem.deleteMany();
-  await prisma.serviceOrderItem.deleteMany();
-  await prisma.serviceOrder.deleteMany();
-  await prisma.diexRequestItem.deleteMany();
-  await prisma.diexRequest.deleteMany();
-  await prisma.estimateItem.deleteMany();
-  await prisma.estimate.deleteMany();
-  await prisma.taskActivity.deleteMany();
-  await prisma.task.deleteMany();
-  await prisma.projectMember.deleteMany();
-  await prisma.project.deleteMany();
-  await prisma.rolePermission.deleteMany();
-  await prisma.ataItem.deleteMany();
-  await prisma.ataCoverageLocality.deleteMany();
-  await prisma.ataCoverageGroup.deleteMany();
-  await prisma.ata.deleteMany();
-  await prisma.pregao.deleteMany();
-  await prisma.militaryOrganization.deleteMany();
-  await prisma.integrationConnectionCheck.deleteMany();
-  await prisma.systemConfiguration.deleteMany();
-  await prisma.user.deleteMany();
-  await prisma.permission.deleteMany();
+  // Keep the integration database deterministic even when new relational
+  // models are added. Prisma's migration history must survive the reset.
+  await prisma.$executeRawUnsafe(`
+    DO $$
+    DECLARE table_list text;
+    BEGIN
+      SELECT string_agg(format('%I.%I', schemaname, tablename), ', ')
+        INTO table_list
+        FROM pg_tables
+       WHERE schemaname = 'public'
+         AND tablename <> '_prisma_migrations';
+
+      IF table_list IS NOT NULL THEN
+        EXECUTE 'TRUNCATE TABLE ' || table_list || ' RESTART IDENTITY CASCADE';
+      END IF;
+    END $$;
+  `);
 }
 
 async function seedPermissionsMatrix() {

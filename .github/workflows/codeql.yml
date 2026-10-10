@@ -1,14 +1,17 @@
 name: Análise de segurança CodeQL
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
       - upgrade-security
+      - upgrade-implantação
   pull_request:
     branches:
       - main
       - upgrade-security
+      - upgrade-implantação
   schedule:
     - cron: "17 9 * * 1"
 

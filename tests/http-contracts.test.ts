@@ -50,7 +50,7 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(194);
+    expect(operationIds).toHaveLength(197);
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });
@@ -306,7 +306,7 @@ describe("contratos HTTP transversais", () => {
     const response = { locals: {}, setHeader } as unknown as Response;
     const next = vi.fn();
 
-    requestContextMiddleware({} as Request, response, next);
+    requestContextMiddleware({ header: vi.fn(() => undefined) } as unknown as Request, response, next);
 
     expect(response.locals.requestId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,

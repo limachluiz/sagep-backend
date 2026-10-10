@@ -8,6 +8,8 @@ export const restoreBackupSchema = z.object({
   confirmation: z.literal("RESTAURAR BANCO"),
 });
 
+export const restoreEvidenceSchema = z.object({ confirmation: z.literal("RESTAURAR EVIDÊNCIAS") });
+
 export const selectiveExportSchema = z.object({
   modules: z
     .array(z.enum(["PROJECTS", "ATAS", "USERS", "SETTINGS", "AUDIT"]))

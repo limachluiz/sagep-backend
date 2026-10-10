@@ -1,5 +1,6 @@
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 import { AppError } from "../../shared/app-error.js";
+import { reportGovernmentIntegrationFailure, resilientGovernmentFetch } from "../../shared/government-integration.js";
 import { collectPaymentEvidence } from "./ne-payment-evidence.js";
 
 export type FinancialPhase = "EMPENHO" | "LIQUIDACAO" | "PAGAMENTO" | "ANULACAO" | "OUTRO";
@@ -140,11 +141,10 @@ function recordsFromPayload(payload: unknown) {
 }
 
 export async function fetchPortalJson(url: string, token: string, notFoundMessage: string, options: { allowEmptyArray?: boolean } = {}) {
-  const response = await fetch(url, {
+  const response = await resilientGovernmentFetch("PORTAL_TRANSPARENCIA", url, {
     headers: { "chave-api-dados": token, Accept: "application/json" },
     redirect: "manual",
-    signal: AbortSignal.timeout(15_000),
-  }).catch((error) => {
+  }, 15_000).catch((error) => {
     throw new AppError("Portal da Transparência indisponível", 502, "PORTAL_TRANSPARENCIA_UNAVAILABLE", { cause: error instanceof Error ? error.message : String(error) });
   });
 
@@ -159,6 +159,7 @@ export async function fetchPortalJson(url: string, token: string, notFoundMessag
   try {
     payload = JSON.parse(body);
   } catch {
+    await reportGovernmentIntegrationFailure("PORTAL_TRANSPARENCIA", "O Portal da Transparência alterou ou corrompeu o formato da resposta", response.status, { url });
     throw new AppError(
       "O Portal da Transparência retornou uma resposta inválida",
       502,

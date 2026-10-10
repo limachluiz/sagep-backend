@@ -287,6 +287,9 @@ model User {
   notifyTaskAssignments         Boolean                      @default(true)
   notifyDeadlines               Boolean                      @default(true)
   notifyWorkflowUpdates         Boolean                      @default(true)
+  notifyMentions                Boolean                      @default(true)
+  notifyFinancial               Boolean                      @default(true)
+  notifyIntegrations            Boolean                      @default(true)
   active                        Boolean                      @default(true)
   failedLoginAttempts           Int                          @default(0)
   lockedUntil                   DateTime?

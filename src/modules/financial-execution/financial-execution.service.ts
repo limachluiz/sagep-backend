@@ -1,11 +1,20 @@
-import { archivedFinancial, creditNotesFrom, financialPosition, consolidatePortfolio } from "./portfolio-summary.js";
+import {
+  archivedFinancial,
+  creditNotesFrom,
+  financialPosition,
+  consolidatePortfolio,
+} from "./portfolio-summary.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { auditService } from "../audit/audit.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
-import { claimCommitmentImport, completeCommitmentImport, failCommitmentImport } from "./commitment-import-registry.service.js";
+import {
+  claimCommitmentImport,
+  completeCommitmentImport,
+  failCommitmentImport,
+} from "./commitment-import-registry.service.js";
 import { ProjectsService } from "../projects/projects.service.js";
 import type {
   CreateInvoiceInput,
@@ -36,16 +45,26 @@ function digits(value?: string | null) {
   return value?.replace(/\D/g, "") ?? "";
 }
 
-function numberValue(value: Prisma.Decimal | number | string | null | undefined) {
+function numberValue(
+  value: Prisma.Decimal | number | string | null | undefined,
+) {
   return value == null ? 0 : Number(value);
 }
 
 function serializeNote<T extends Record<string, unknown>>(note: T) {
-  const decimalKeys = ["originalAmount", "currentAmount", "liquidatedAmount", "paidAmount", "cancelledAmount"];
-  return Object.fromEntries(Object.entries(note).map(([key, value]) => [
-    key,
-    decimalKeys.includes(key) && value != null ? Number(value) : value,
-  ]));
+  const decimalKeys = [
+    "originalAmount",
+    "currentAmount",
+    "liquidatedAmount",
+    "paidAmount",
+    "cancelledAmount",
+  ];
+  return Object.fromEntries(
+    Object.entries(note).map(([key, value]) => [
+      key,
+      decimalKeys.includes(key) && value != null ? Number(value) : value,
+    ]),
+  );
 }
 
 export class FinancialExecutionService {
@@ -56,25 +75,60 @@ export class FinancialExecutionService {
     management: string;
     number: string;
   }) {
-    const [existing, archived] = await Promise.all([prisma.commitmentNote.findFirst({
-      where: {
-        OR: [
-          { externalCode: input.externalCode },
-          { managementUnit: input.managementUnit, management: input.management, number: input.number },
-        ],
-      },
-      select: { id: true, projectId: true, active: true, project: { select: { projectCode: true, title: true } } },
-    }), prisma.discoveredCommitment.findUnique({ where: { externalCode: input.externalCode }, select: { id: true, origin: true, importedAt: true } })]);
-    if (archived) throw new AppError("Esta Nota de Empenho já existe na carteira como importada ou avulsa.", 409, "COMMITMENT_NOTE_ALREADY_ARCHIVED", { externalCode: input.externalCode, targetId: archived.id, origin: archived.origin, importedAt: archived.importedAt });
+    const [existing, archived] = await Promise.all([
+      prisma.commitmentNote.findFirst({
+        where: {
+          OR: [
+            { externalCode: input.externalCode },
+            {
+              managementUnit: input.managementUnit,
+              management: input.management,
+              number: input.number,
+            },
+          ],
+        },
+        select: {
+          id: true,
+          projectId: true,
+          active: true,
+          project: { select: { projectCode: true, title: true } },
+        },
+      }),
+      prisma.discoveredCommitment.findUnique({
+        where: { externalCode: input.externalCode },
+        select: { id: true, origin: true, importedAt: true },
+      }),
+    ]);
+    if (archived)
+      throw new AppError(
+        "Esta Nota de Empenho já existe na carteira como importada ou avulsa.",
+        409,
+        "COMMITMENT_NOTE_ALREADY_ARCHIVED",
+        {
+          externalCode: input.externalCode,
+          targetId: archived.id,
+          origin: archived.origin,
+          importedAt: archived.importedAt,
+        },
+      );
     if (!existing) return;
     if (existing.projectId === input.projectId) {
-      throw new AppError("Esta Nota de Empenho já está registrada neste projeto.", 409, "COMMITMENT_NOTE_ALREADY_REGISTERED", { commitmentNoteId: existing.id });
+      throw new AppError(
+        "Esta Nota de Empenho já está registrada neste projeto.",
+        409,
+        "COMMITMENT_NOTE_ALREADY_REGISTERED",
+        { commitmentNoteId: existing.id },
+      );
     }
     throw new AppError(
       `Esta Nota de Empenho já está vinculada ao projeto PRJ-${existing.project.projectCode}.`,
       409,
       "COMMITMENT_NOTE_REGISTERED_TO_ANOTHER_PROJECT",
-      { commitmentNoteId: existing.id, projectId: existing.projectId, projectCode: existing.project.projectCode },
+      {
+        commitmentNoteId: existing.id,
+        projectId: existing.projectId,
+        projectCode: existing.project.projectCode,
+      },
     );
   }
 
@@ -85,21 +139,43 @@ export class FinancialExecutionService {
     if (input.balanceImpactMode !== "ALREADY_INCLUDED") return;
     const settings = await systemSettingsService.getEffective();
     if (!settings.implantationModeActive || !settings.implantationCutoffAt) {
-      throw new AppError("O registro sem novo consumo só está disponível no modo de implantação.", 409, "IMPLANTATION_MODE_REQUIRED");
+      throw new AppError(
+        "O registro sem novo consumo só está disponível no modo de implantação.",
+        409,
+        "IMPLANTATION_MODE_REQUIRED",
+      );
     }
-    if (issuedAt && issuedAt.getTime() > settings.implantationCutoffAt.getTime() + 86_399_999) {
-      throw new AppError("A NE foi emitida após a data de corte da implantação e deve consumir saldo normalmente.", 409, "COMMITMENT_NOTE_AFTER_IMPLANTATION_CUTOFF");
+    if (
+      issuedAt &&
+      issuedAt.getTime() > settings.implantationCutoffAt.getTime() + 86_399_999
+    ) {
+      throw new AppError(
+        "A NE foi emitida após a data de corte da implantação e deve consumir saldo normalmente.",
+        409,
+        "COMMITMENT_NOTE_AFTER_IMPLANTATION_CUTOFF",
+      );
     }
     const activeDiex = await prisma.diexRequest.findFirst({
       where: { projectId: input.projectId, archivedAt: null, deletedAt: null },
       orderBy: { createdAt: "desc" },
       select: {
-        items: { select: { estimateItem: { select: { ataItem: { select: { id: true, openingBalanceAppliedAt: true } } } } } },
+        items: {
+          select: {
+            estimateItem: {
+              select: {
+                ataItem: {
+                  select: { id: true, openingBalanceAppliedAt: true },
+                },
+              },
+            },
+          },
+        },
       },
     });
-    const missingOpeningBalance = activeDiex?.items
-      .map((item) => item.estimateItem.ataItem)
-      .filter((item) => !item.openingBalanceAppliedAt) ?? [];
+    const missingOpeningBalance =
+      activeDiex?.items
+        .map((item) => item.estimateItem.ataItem)
+        .filter((item) => !item.openingBalanceAppliedAt) ?? [];
     if (!activeDiex || missingOpeningBalance.length) {
       throw new AppError(
         "Todos os itens da NE histórica precisam possuir saldo de abertura aplicado.",
@@ -110,7 +186,10 @@ export class FinancialExecutionService {
     }
   }
 
-  private async portalCoordinates(input: { managementUnit?: string; management?: string }) {
+  private async portalCoordinates(input: {
+    managementUnit?: string;
+    management?: string;
+  }) {
     const settings = await systemSettingsService.getEffective();
     return {
       managementUnit: input.managementUnit ?? settings.uasg,
@@ -125,10 +204,7 @@ export class FinancialExecutionService {
   private projectAccessWhere(user: CurrentUser): Prisma.ProjectWhereInput {
     if (permissionsService.hasPermission(user, "projects.view_all")) return {};
     return {
-      OR: [
-        { ownerId: user.id },
-        { members: { some: { userId: user.id } } },
-      ],
+      OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }],
     };
   }
 
@@ -142,7 +218,11 @@ export class FinancialExecutionService {
         stage: true,
         serviceOrders: {
           where: { archivedAt: null, deletedAt: null },
-          select: { contractorName: true, contractorCnpj: true, totalAmount: true },
+          select: {
+            contractorName: true,
+            contractorCnpj: true,
+            totalAmount: true,
+          },
           orderBy: { createdAt: "desc" },
           take: 1,
         },
@@ -167,7 +247,11 @@ export class FinancialExecutionService {
       project,
       supplierName: serviceOrder?.contractorName ?? diex?.supplierName ?? null,
       supplierCnpj: serviceOrder?.contractorCnpj ?? diex?.supplierCnpj ?? null,
-      expectedAmount: numberValue(serviceOrder?.totalAmount ?? diex?.totalAmount ?? project.estimates[0]?.totalAmount),
+      expectedAmount: numberValue(
+        serviceOrder?.totalAmount ??
+          diex?.totalAmount ??
+          project.estimates[0]?.totalAmount,
+      ),
     };
   }
 
@@ -189,7 +273,15 @@ export class FinancialExecutionService {
         financialStatus: true,
         syncStatus: true,
         lastSyncAt: true,
-        project: { select: { id: true, projectCode: true, title: true, stage: true, status: true } },
+        project: {
+          select: {
+            id: true,
+            projectCode: true,
+            title: true,
+            stage: true,
+            status: true,
+          },
+        },
       },
     });
 
@@ -206,17 +298,37 @@ export class FinancialExecutionService {
       },
     });
 
-    const archived = await prisma.discoveredCommitment.findUnique({ where: { externalCode: snapshot.externalCode }, select: { origin: true, updatedAt: true } });
+    const archived = await prisma.discoveredCommitment.findUnique({
+      where: { externalCode: snapshot.externalCode },
+      select: { origin: true, updatedAt: true },
+    });
     return { snapshot, registered, archived };
   }
 
-  private compare(snapshot: PortalCommitmentSnapshot, expected: Awaited<ReturnType<FinancialExecutionService["expectedProjectFinancials"]>>) {
+  private compare(
+    snapshot: PortalCommitmentSnapshot,
+    expected: Awaited<
+      ReturnType<FinancialExecutionService["expectedProjectFinancials"]>
+    >,
+  ) {
     const divergences: string[] = [];
-    if (snapshot.supplierCnpj && expected.supplierCnpj && digits(snapshot.supplierCnpj) !== digits(expected.supplierCnpj)) {
-      divergences.push(`CNPJ da NE (${snapshot.supplierCnpj}) difere do fornecedor do projeto (${expected.supplierCnpj})`);
+    if (
+      snapshot.supplierCnpj &&
+      expected.supplierCnpj &&
+      digits(snapshot.supplierCnpj) !== digits(expected.supplierCnpj)
+    ) {
+      divergences.push(
+        `CNPJ da NE (${snapshot.supplierCnpj}) difere do fornecedor do projeto (${expected.supplierCnpj})`,
+      );
     }
-    if (snapshot.currentAmount > 0 && expected.expectedAmount > 0 && Math.abs(snapshot.currentAmount - expected.expectedAmount) > 0.01) {
-      divergences.push(`Valor atual da NE (R$ ${snapshot.currentAmount.toFixed(2)}) difere do valor do projeto (R$ ${expected.expectedAmount.toFixed(2)})`);
+    if (
+      snapshot.currentAmount > 0 &&
+      expected.expectedAmount > 0 &&
+      Math.abs(snapshot.currentAmount - expected.expectedAmount) > 0.01
+    ) {
+      divergences.push(
+        `Valor atual da NE (R$ ${snapshot.currentAmount.toFixed(2)}) difere do valor do projeto (R$ ${expected.expectedAmount.toFixed(2)})`,
+      );
     }
     return divergences;
   }
@@ -225,7 +337,11 @@ export class FinancialExecutionService {
     await projectsService.findById(input.projectId, user);
     const coordinates = await this.portalCoordinates(input);
     const [snapshot, expected] = await Promise.all([
-      portalTransparenciaClient.fetchCommitmentNote(coordinates.managementUnit, coordinates.management, input.number),
+      portalTransparenciaClient.fetchCommitmentNote(
+        coordinates.managementUnit,
+        coordinates.management,
+        input.number,
+      ),
       this.expectedProjectFinancials(input.projectId),
     ]);
     const divergences = this.compare(snapshot, expected);
@@ -256,7 +372,12 @@ export class FinancialExecutionService {
 
     const preview = await this.preview(input, user);
     if (preview.validation.divergences.length && !input.acceptDivergence) {
-      throw new AppError("A Nota de Empenho possui divergências que precisam ser confirmadas", 409, "COMMITMENT_NOTE_DIVERGENCE", preview.validation);
+      throw new AppError(
+        "A Nota de Empenho possui divergências que precisam ser confirmadas",
+        409,
+        "COMMITMENT_NOTE_DIVERGENCE",
+        preview.validation,
+      );
     }
     await this.assertCommitmentNoteAvailable({
       projectId: input.projectId,
@@ -268,28 +389,49 @@ export class FinancialExecutionService {
     await this.validateBalanceImpact(input, preview.snapshot.issuedAt);
     await claimCommitmentImport(preview.snapshot.externalCode, user.id);
     let project: Awaited<ReturnType<typeof projectsService.updateFlow>>;
-    try { project = await projectsService.updateFlow(input.projectId, {
-      stage: "AGUARDANDO_NOTA_EMPENHO",
-      commitmentNoteNumber: preview.snapshot.number,
-      commitmentNoteReceivedAt: input.receivedAt,
-    }, user, {
-      commitmentNoteSnapshot: preview.snapshot,
-      commitmentNoteSyncStatus: preview.validation.divergences.length ? "DIVERGENTE" : "VALIDADO",
-      commitmentNoteDivergenceReason: preview.validation.divergences.join("; ") || null,
-      commitmentNoteBalanceImpactMode: input.balanceImpactMode,
-      commitmentNoteBalanceImpactReason: input.balanceImpactReason ?? null,
-    }); } catch (error) { await failCommitmentImport(preview.snapshot.externalCode, user.id, error); throw error; }
+    try {
+      project = await projectsService.updateFlow(
+        input.projectId,
+        {
+          stage: "AGUARDANDO_NOTA_EMPENHO",
+          commitmentNoteNumber: preview.snapshot.number,
+          commitmentNoteReceivedAt: input.receivedAt,
+        },
+        user,
+        {
+          commitmentNoteSnapshot: preview.snapshot,
+          commitmentNoteSyncStatus: preview.validation.divergences.length
+            ? "DIVERGENTE"
+            : "VALIDADO",
+          commitmentNoteDivergenceReason:
+            preview.validation.divergences.join("; ") || null,
+          commitmentNoteBalanceImpactMode: input.balanceImpactMode,
+          commitmentNoteBalanceImpactReason: input.balanceImpactReason ?? null,
+        },
+      );
+    } catch (error) {
+      await failCommitmentImport(preview.snapshot.externalCode, user.id, error);
+      throw error;
+    }
 
     const note = await prisma.commitmentNote.findUnique({
       where: { externalCode: preview.snapshot.externalCode },
       include: { documents: { orderBy: { issuedAt: "asc" } } },
     });
     if (!note) {
-      const error = new AppError("Falha ao persistir a Nota de Empenho validada", 500);
+      const error = new AppError(
+        "Falha ao persistir a Nota de Empenho validada",
+        500,
+      );
       await failCommitmentImport(preview.snapshot.externalCode, user.id, error);
       throw error;
     }
-    await completeCommitmentImport(note.externalCode, user.id, note.id, "PROJECT");
+    await completeCommitmentImport(
+      note.externalCode,
+      user.id,
+      note.id,
+      "PROJECT",
+    );
 
     await auditService.log({
       entityType: "COMMITMENT_NOTE",
@@ -307,10 +449,17 @@ export class FinancialExecutionService {
       metadata: { divergences: preview.validation.divergences },
     });
 
-    return { project, commitmentNote: serializeNote(note), validation: preview.validation };
+    return {
+      project,
+      commitmentNote: serializeNote(note),
+      validation: preview.validation,
+    };
   }
 
-  private async registerManual(input: RegisterCommitmentNoteInput, user: CurrentUser) {
+  private async registerManual(
+    input: RegisterCommitmentNoteInput,
+    user: CurrentUser,
+  ) {
     await projectsService.findById(input.projectId, user);
     const [coordinates, expected] = await Promise.all([
       this.portalCoordinates(input),
@@ -351,23 +500,29 @@ export class FinancialExecutionService {
     });
     await this.validateBalanceImpact(input, snapshot.issuedAt);
 
-    const project = await projectsService.updateFlow(input.projectId, {
-      stage: "AGUARDANDO_NOTA_EMPENHO",
-      commitmentNoteNumber: input.number,
-      commitmentNoteReceivedAt: input.receivedAt,
-    }, user, {
-      commitmentNoteSnapshot: snapshot,
-      commitmentNoteSyncStatus: "NAO_VALIDADO",
-      commitmentNoteDivergenceReason: `Registro manual: ${input.manualReason}`,
-      commitmentNoteBalanceImpactMode: input.balanceImpactMode,
-      commitmentNoteBalanceImpactReason: input.balanceImpactReason ?? null,
-    });
+    const project = await projectsService.updateFlow(
+      input.projectId,
+      {
+        stage: "AGUARDANDO_NOTA_EMPENHO",
+        commitmentNoteNumber: input.number,
+        commitmentNoteReceivedAt: input.receivedAt,
+      },
+      user,
+      {
+        commitmentNoteSnapshot: snapshot,
+        commitmentNoteSyncStatus: "NAO_VALIDADO",
+        commitmentNoteDivergenceReason: `Registro manual: ${input.manualReason}`,
+        commitmentNoteBalanceImpactMode: input.balanceImpactMode,
+        commitmentNoteBalanceImpactReason: input.balanceImpactReason ?? null,
+      },
+    );
 
     const note = await prisma.commitmentNote.findUnique({
       where: { externalCode: snapshot.externalCode },
       include: { documents: { orderBy: { issuedAt: "asc" } } },
     });
-    if (!note) throw new AppError("Falha ao persistir a Nota de Empenho manual", 500);
+    if (!note)
+      throw new AppError("Falha ao persistir a Nota de Empenho manual", 500);
 
     await auditService.log({
       entityType: "COMMITMENT_NOTE",
@@ -405,31 +560,194 @@ export class FinancialExecutionService {
   }
 
   async portfolio(user: CurrentUser) {
-    const [notes, archived, activeKeys] = await Promise.all([
-      prisma.commitmentNote.findMany({ where: { active: true, project: this.projectAccessWhere(user) }, include: { project: { select: { id: true, projectCode: true, title: true, om: { select: { id: true, sigla: true, name: true, cityName: true, stateUf: true, isActive: true } }, creditNotes: { where: { status: { not: "CANCELLED" } }, select: { number: true } } } }, documents: { select: { phase: true, issuedAt: true, species: true, amount: true } } } }),
+    const [notes, archived, activeKeys, reconciliations] = await Promise.all([
+      prisma.commitmentNote.findMany({
+        where: { active: true, project: this.projectAccessWhere(user) },
+        include: {
+          project: {
+            select: {
+              id: true,
+              projectCode: true,
+              title: true,
+              om: {
+                select: {
+                  id: true,
+                  sigla: true,
+                  name: true,
+                  cityName: true,
+                  stateUf: true,
+                  isActive: true,
+                },
+              },
+              creditNotes: {
+                where: { status: { not: "CANCELLED" } },
+                select: { number: true },
+              },
+            },
+          },
+          documents: {
+            select: {
+              phase: true,
+              issuedAt: true,
+              species: true,
+              amount: true,
+            },
+          },
+        },
+      }),
       prisma.discoveredCommitment.findMany({
-        include: { attendedOm: { select: { id: true, sigla: true, name: true, cityName: true, stateUf: true, isActive: true } } },
+        include: {
+          attendedOm: {
+            select: {
+              id: true,
+              sigla: true,
+              name: true,
+              cityName: true,
+              stateUf: true,
+              isActive: true,
+            },
+          },
+        },
         orderBy: { updatedAt: "desc" },
       }),
-      prisma.commitmentNote.findMany({ where: { active: true }, select: { externalCode: true } }),
+      prisma.commitmentNote.findMany({
+        where: { active: true },
+        select: { externalCode: true },
+      }),
+      prisma.commitmentReconciliation.findMany({
+        where: { status: "CONFIRMED" },
+        include: { allocations: true },
+        orderBy: { confirmedAt: "desc" },
+      }),
     ]);
+    const [reconciliationProjects, reconciliationAtas, reconciliationItems] =
+      await Promise.all([
+        prisma.project.findMany({
+          where: { id: { in: reconciliations.map((item) => item.projectId) } },
+          select: { id: true, projectCode: true, title: true },
+        }),
+        prisma.ata.findMany({
+          where: { id: { in: reconciliations.map((item) => item.ataId) } },
+          select: { id: true, number: true, vendorName: true, type: true },
+        }),
+        prisma.ataItem.findMany({
+          where: {
+            id: {
+              in: reconciliations.flatMap((item) =>
+                item.allocations.map((line) => line.ataItemId),
+              ),
+            },
+          },
+          select: { id: true, referenceCode: true, description: true },
+        }),
+      ]);
+    const projectsById = new Map(
+      reconciliationProjects.map((item) => [item.id, item]),
+    );
+    const atasById = new Map(reconciliationAtas.map((item) => [item.id, item]));
+    const itemsById = new Map(
+      reconciliationItems.map((item) => [item.id, item]),
+    );
+    const reconciliationByNote = new Map(
+      reconciliations.map((item) => {
+        const allocations = item.allocations.map((line) => ({
+          ...itemsById.get(line.ataItemId),
+          ataItemId: line.ataItemId,
+          quantity: Number(line.quantity),
+          unitPrice: Number(line.unitPrice),
+          totalAmount: Number(line.totalAmount),
+        }));
+        return [
+          item.discoveredCommitmentId,
+          {
+            id: item.id,
+            confidenceScore: item.confidenceScore,
+            applyToBalance: item.applyToBalance,
+            confirmedAt: item.confirmedAt,
+            project: projectsById.get(item.projectId) ?? null,
+            ata: atasById.get(item.ataId) ?? null,
+            allocations,
+            totalAmount:
+              Math.round(
+                allocations.reduce((sum, line) => sum + line.totalAmount, 0) *
+                  100,
+              ) / 100,
+          },
+        ];
+      }),
+    );
     return consolidatePortfolio(
-      notes.map(n => {
-        const amounts = financialPosition(Number(n.currentAmount), Number(n.liquidatedAmount), Number(n.paidAmount), n.supplierName ?? "Não informado");
+      notes.map((n) => {
+        const amounts = financialPosition(
+          Number(n.currentAmount),
+          Number(n.liquidatedAmount),
+          Number(n.paidAmount),
+          n.supplierName ?? "Não informado",
+        );
         const { om, creditNotes: projectCreditNotes, ...project } = n.project;
-        const creditNotes = [...new Set([...projectCreditNotes.map((creditNote) => creditNote.number), ...creditNotesFrom(n.rawSnapshot)])].sort((a, b) => a.localeCompare(b, "pt-BR"));
-        const latestPhaseDate = (phase: "LIQUIDACAO" | "PAGAMENTO") => n.documents.reduce<Date | null>((latest, document) => {
-          const species = (document.species ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
-          if (document.phase !== phase || !document.issuedAt || species.includes("estorno") || species.includes("cancelamento") || Number(document.amount) < 0) return latest;
-          return !latest || document.issuedAt > latest ? document.issuedAt : latest;
-        }, null);
-        return { noteId: n.id, managementUnit: n.managementUnit, externalCode: n.externalCode, number: n.number, origin: "PROJECT", updatedAt: n.lastSyncAt, issuedAt: n.issuedAt, liquidatedAt: latestPhaseDate("LIQUIDACAO"), paidAt: latestPhaseDate("PAGAMENTO"), creditNotes, attendedOm: om, observation: null, supplierCnpj: n.supplierCnpj, project, ...amounts,
-          status: amounts.inconsistent ? amounts.status : n.syncStatus !== "VALIDADO" ? "A_CONFERIR" : n.financialStatus,
+        const creditNotes = [
+          ...new Set([
+            ...projectCreditNotes.map((creditNote) => creditNote.number),
+            ...creditNotesFrom(n.rawSnapshot),
+          ]),
+        ].sort((a, b) => a.localeCompare(b, "pt-BR"));
+        const latestPhaseDate = (phase: "LIQUIDACAO" | "PAGAMENTO") =>
+          n.documents.reduce<Date | null>((latest, document) => {
+            const species = (document.species ?? "")
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .toLowerCase();
+            if (
+              document.phase !== phase ||
+              !document.issuedAt ||
+              species.includes("estorno") ||
+              species.includes("cancelamento") ||
+              Number(document.amount) < 0
+            )
+              return latest;
+            return !latest || document.issuedAt > latest
+              ? document.issuedAt
+              : latest;
+          }, null);
+        return {
+          noteId: n.id,
+          managementUnit: n.managementUnit,
+          externalCode: n.externalCode,
+          number: n.number,
+          origin: "PROJECT",
+          updatedAt: n.lastSyncAt,
+          issuedAt: n.issuedAt,
+          liquidatedAt: latestPhaseDate("LIQUIDACAO"),
+          paidAt: latestPhaseDate("PAGAMENTO"),
+          creditNotes,
+          attendedOm: om,
+          observation: null,
+          supplierCnpj: n.supplierCnpj,
+          project,
+          reconciliation: null,
+          ...amounts,
+          status: amounts.inconsistent
+            ? amounts.status
+            : n.syncStatus !== "VALIDADO"
+              ? "A_CONFERIR"
+              : n.financialStatus,
           incomplete: amounts.incomplete || n.syncStatus !== "VALIDADO",
         };
       }),
-      archived.map(n => ({ noteId: null, managementUnit: n.externalCode.slice(0, 6), externalCode: n.externalCode, number: n.externalCode.slice(11), origin: n.origin, updatedAt: n.updatedAt, attendedOm: n.attendedOm, observation: n.observation, project: null, ...archivedFinancial(n.snapshot, n.externalCode) })),
-      activeKeys.map(n => n.externalCode),
+      archived.map((n) => ({
+        noteId: null,
+        managementUnit: n.externalCode.slice(0, 6),
+        externalCode: n.externalCode,
+        number: n.externalCode.slice(11),
+        origin: n.origin,
+        updatedAt: n.updatedAt,
+        attendedOm: n.attendedOm,
+        observation: n.observation,
+        project: null,
+        reconciliation: reconciliationByNote.get(n.id) ?? null,
+        ...archivedFinancial(n.snapshot, n.externalCode),
+      })),
+      activeKeys.map((n) => n.externalCode),
     );
   }
 
@@ -438,14 +756,20 @@ export class FinancialExecutionService {
       active: true,
       project: this.projectAccessWhere(user),
       ...(filters.projectId && { projectId: filters.projectId }),
-      ...(filters.financialStatus && { financialStatus: filters.financialStatus }),
+      ...(filters.financialStatus && {
+        financialStatus: filters.financialStatus,
+      }),
       ...(filters.syncStatus && { syncStatus: filters.syncStatus }),
       ...(filters.search && {
         OR: [
           { number: { contains: filters.search, mode: "insensitive" } },
           { supplierName: { contains: filters.search, mode: "insensitive" } },
           { supplierCnpj: { contains: filters.search.replace(/\D/g, "") } },
-          { project: { title: { contains: filters.search, mode: "insensitive" } } },
+          {
+            project: {
+              title: { contains: filters.search, mode: "insensitive" },
+            },
+          },
         ],
       }),
     };
@@ -454,8 +778,26 @@ export class FinancialExecutionService {
       prisma.commitmentNote.findMany({
         where,
         include: {
-          project: { select: { id: true, projectCode: true, title: true, stage: true, status: true, om: { select: { sigla: true, stateUf: true } } } },
-          invoices: { select: { id: true, invoiceCode: true, number: true, grossAmount: true, attestedAmount: true, attestedAt: true } },
+          project: {
+            select: {
+              id: true,
+              projectCode: true,
+              title: true,
+              stage: true,
+              status: true,
+              om: { select: { sigla: true, stateUf: true } },
+            },
+          },
+          invoices: {
+            select: {
+              id: true,
+              invoiceCode: true,
+              number: true,
+              grossAmount: true,
+              attestedAmount: true,
+              attestedAt: true,
+            },
+          },
           _count: { select: { documents: true, invoices: true } },
         },
         orderBy: [{ updatedAt: "desc" }, { commitmentNoteCode: "desc" }],
@@ -467,7 +809,14 @@ export class FinancialExecutionService {
     return {
       items: items.map((item) => ({
         ...serializeNote(item),
-        invoices: item.invoices.map((invoice) => ({ ...invoice, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount) })),
+        invoices: item.invoices.map((invoice) => ({
+          ...invoice,
+          grossAmount: Number(invoice.grossAmount),
+          attestedAmount:
+            invoice.attestedAmount == null
+              ? null
+              : Number(invoice.attestedAmount),
+        })),
       })),
       summary,
       meta: {
@@ -483,7 +832,15 @@ export class FinancialExecutionService {
     const note = await prisma.commitmentNote.findFirst({
       where: { id, project: this.projectAccessWhere(user) },
       include: {
-        project: { include: { om: true, creditNotes: { where: { status: { not: "CANCELLED" } }, select: { number: true } } } },
+        project: {
+          include: {
+            om: true,
+            creditNotes: {
+              where: { status: { not: "CANCELLED" } },
+              select: { number: true },
+            },
+          },
+        },
         documents: { orderBy: [{ issuedAt: "asc" }, { createdAt: "asc" }] },
         invoices: { orderBy: { issuedAt: "asc" } },
       },
@@ -491,34 +848,66 @@ export class FinancialExecutionService {
     if (!note) throw new AppError("Nota de Empenho não encontrada", 404);
     return {
       ...serializeNote(note),
-      creditNotes: [...new Set([...note.project.creditNotes.map((creditNote) => creditNote.number), ...creditNotesFrom(note.rawSnapshot)])].sort((a, b) => a.localeCompare(b, "pt-BR")),
-      documents: note.documents.map((document) => ({ ...document, amount: Number(document.amount) })),
-      invoices: note.invoices.map((invoice) => ({ ...invoice, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount) })),
+      creditNotes: [
+        ...new Set([
+          ...note.project.creditNotes.map((creditNote) => creditNote.number),
+          ...creditNotesFrom(note.rawSnapshot),
+        ]),
+      ].sort((a, b) => a.localeCompare(b, "pt-BR")),
+      documents: note.documents.map((document) => ({
+        ...document,
+        amount: Number(document.amount),
+      })),
+      invoices: note.invoices.map((invoice) => ({
+        ...invoice,
+        grossAmount: Number(invoice.grossAmount),
+        attestedAmount:
+          invoice.attestedAmount == null
+            ? null
+            : Number(invoice.attestedAmount),
+      })),
     };
   }
 
   async summary(where: Prisma.CommitmentNoteWhereInput = { active: true }) {
-    const notes = await prisma.commitmentNote.findMany({ where, select: { currentAmount: true, liquidatedAmount: true, paidAmount: true, financialStatus: true, syncStatus: true } });
+    const notes = await prisma.commitmentNote.findMany({
+      where,
+      select: {
+        currentAmount: true,
+        liquidatedAmount: true,
+        paidAmount: true,
+        financialStatus: true,
+        syncStatus: true,
+      },
+    });
     const byStatus: Record<string, number> = {};
     const bySyncStatus: Record<string, number> = {};
-    const totals = notes.reduce((result, note) => {
-      const current = Number(note.currentAmount);
-      const liquidated = Number(note.liquidatedAmount);
-      const paid = Number(note.paidAmount);
-      result.committed += current;
-      result.liquidated += liquidated;
-      result.paid += paid;
-      result.toLiquidate += Math.max(0, current - liquidated);
-      result.toPay += Math.max(0, liquidated - paid);
-      byStatus[note.financialStatus] = (byStatus[note.financialStatus] ?? 0) + 1;
-      bySyncStatus[note.syncStatus] = (bySyncStatus[note.syncStatus] ?? 0) + 1;
-      return result;
-    }, { committed: 0, liquidated: 0, paid: 0, toLiquidate: 0, toPay: 0 });
+    const totals = notes.reduce(
+      (result, note) => {
+        const current = Number(note.currentAmount);
+        const liquidated = Number(note.liquidatedAmount);
+        const paid = Number(note.paidAmount);
+        result.committed += current;
+        result.liquidated += liquidated;
+        result.paid += paid;
+        result.toLiquidate += Math.max(0, current - liquidated);
+        result.toPay += Math.max(0, liquidated - paid);
+        byStatus[note.financialStatus] =
+          (byStatus[note.financialStatus] ?? 0) + 1;
+        bySyncStatus[note.syncStatus] =
+          (bySyncStatus[note.syncStatus] ?? 0) + 1;
+        return result;
+      },
+      { committed: 0, liquidated: 0, paid: 0, toLiquidate: 0, toPay: 0 },
+    );
     return { total: notes.length, totals, byStatus, bySyncStatus };
   }
 
   async summaryForUser(user: CurrentUser) {
-    return this.summary({ active: true, project: this.projectAccessWhere(user) });
+    return this.summary({
+      active: true,
+      project: this.projectAccessWhere(user),
+    });
   }
 
   async syncOne(id: string, user?: CurrentUser) {
@@ -528,7 +917,11 @@ export class FinancialExecutionService {
     });
     if (!current) throw new AppError("Nota de Empenho não encontrada", 404);
     try {
-      const snapshot = await portalTransparenciaClient.fetchCommitmentNote(current.managementUnit, current.management, current.number);
+      const snapshot = await portalTransparenciaClient.fetchCommitmentNote(
+        current.managementUnit,
+        current.management,
+        current.number,
+      );
       const expected = await this.expectedProjectFinancials(current.projectId);
       const divergences = this.compare(snapshot, expected);
       const updated = await prisma.$transaction(async (tx) => {
@@ -552,20 +945,24 @@ export class FinancialExecutionService {
             lastSyncError: null,
           },
         });
-        await tx.financialDocument.deleteMany({ where: { commitmentNoteId: id } });
+        await tx.financialDocument.deleteMany({
+          where: { commitmentNoteId: id },
+        });
         if (snapshot.documents.length) {
-          await tx.financialDocument.createMany({ data: snapshot.documents.map((document) => ({
-            commitmentNoteId: id,
-            externalCode: document.externalCode,
-            number: document.number,
-            phase: document.phase,
-            species: document.species,
-            issuedAt: document.issuedAt,
-            amount: document.amount,
-            supplierName: document.supplierName,
-            supplierCnpj: document.supplierCnpj,
-            rawSnapshot: document.rawSnapshot as Prisma.InputJsonValue,
-          })) });
+          await tx.financialDocument.createMany({
+            data: snapshot.documents.map((document) => ({
+              commitmentNoteId: id,
+              externalCode: document.externalCode,
+              number: document.number,
+              phase: document.phase,
+              species: document.species,
+              issuedAt: document.issuedAt,
+              amount: document.amount,
+              supplierName: document.supplierName,
+              supplierCnpj: document.supplierCnpj,
+              rawSnapshot: document.rawSnapshot as Prisma.InputJsonValue,
+            })),
+          });
         }
         return note;
       });
@@ -575,29 +972,55 @@ export class FinancialExecutionService {
         action: "SYNC",
         actor: this.actor(user),
         summary: `NE ${current.number} sincronizada com o Portal da Transparência`,
-        before: { financialStatus: current.financialStatus, liquidatedAmount: Number(current.liquidatedAmount), paidAmount: Number(current.paidAmount) },
-        after: { financialStatus: updated.financialStatus, liquidatedAmount: Number(updated.liquidatedAmount), paidAmount: Number(updated.paidAmount), syncStatus: updated.syncStatus },
+        before: {
+          financialStatus: current.financialStatus,
+          liquidatedAmount: Number(current.liquidatedAmount),
+          paidAmount: Number(current.paidAmount),
+        },
+        after: {
+          financialStatus: updated.financialStatus,
+          liquidatedAmount: Number(updated.liquidatedAmount),
+          paidAmount: Number(updated.paidAmount),
+          syncStatus: updated.syncStatus,
+        },
       });
       return serializeNote(updated);
     } catch (error) {
-      await prisma.commitmentNote.update({ where: { id }, data: { syncStatus: "ERRO", lastSyncError: error instanceof Error ? error.message : String(error) } });
+      await prisma.commitmentNote.update({
+        where: { id },
+        data: {
+          syncStatus: "ERRO",
+          lastSyncError: error instanceof Error ? error.message : String(error),
+        },
+      });
       throw error;
     }
   }
 
   async syncAll(user?: CurrentUser) {
     const notes = await prisma.commitmentNote.findMany({
-      where: { active: true, ...(user && { project: this.projectAccessWhere(user) }) },
+      where: {
+        active: true,
+        ...(user && { project: this.projectAccessWhere(user) }),
+      },
       select: { id: true },
     });
-    const result = { total: notes.length, synchronized: 0, failed: 0, errors: [] as Array<{ id: string; message: string }> };
+    const result = {
+      total: notes.length,
+      synchronized: 0,
+      failed: 0,
+      errors: [] as Array<{ id: string; message: string }>,
+    };
     for (const note of notes) {
       try {
         await this.syncOne(note.id, user);
         result.synchronized += 1;
       } catch (error) {
         result.failed += 1;
-        result.errors.push({ id: note.id, message: error instanceof Error ? error.message : String(error) });
+        result.errors.push({
+          id: note.id,
+          message: error instanceof Error ? error.message : String(error),
+        });
       }
     }
     return result;
@@ -605,16 +1028,45 @@ export class FinancialExecutionService {
 
   async createInvoice(input: CreateInvoiceInput, user: CurrentUser) {
     await projectsService.findById(input.projectId, user);
-    const project = await prisma.project.findUnique({ where: { id: input.projectId }, select: { id: true, projectCode: true, invoiceAttestedAt: true } });
+    const project = await prisma.project.findUnique({
+      where: { id: input.projectId },
+      select: { id: true, projectCode: true, invoiceAttestedAt: true },
+    });
     if (!project) throw new AppError("Projeto não encontrado", 404);
-    const note = input.commitmentNoteId ? await prisma.commitmentNote.findUnique({ where: { id: input.commitmentNoteId } }) : null;
-    if (input.commitmentNoteId && (!note || note.projectId !== input.projectId)) throw new AppError("A NE informada não pertence ao projeto", 409);
+    const note = input.commitmentNoteId
+      ? await prisma.commitmentNote.findUnique({
+          where: { id: input.commitmentNoteId },
+        })
+      : null;
+    if (input.commitmentNoteId && (!note || note.projectId !== input.projectId))
+      throw new AppError("A NE informada não pertence ao projeto", 409);
     const warnings: string[] = [];
-    if (note?.supplierCnpj && digits(note.supplierCnpj) !== digits(input.supplierCnpj)) warnings.push("CNPJ da NFe difere do favorecido da NE");
-    if (note && input.grossAmount > Number(note.currentAmount) + 0.01) warnings.push("Valor da NFe supera o valor atual da NE");
+    if (
+      note?.supplierCnpj &&
+      digits(note.supplierCnpj) !== digits(input.supplierCnpj)
+    )
+      warnings.push("CNPJ da NFe difere do favorecido da NE");
+    if (note && input.grossAmount > Number(note.currentAmount) + 0.01)
+      warnings.push("Valor da NFe supera o valor atual da NE");
     const invoice = await prisma.$transaction(async (tx) => {
-      const created = await tx.invoice.create({ data: { ...input, registeredById: user.id, source: "MANUAL", conferenceStatus: warnings.length ? "DIVERGENT" : "PENDING", conferenceDetails: { warnings, source: "MANUAL", checkedAt: new Date().toISOString() } } });
-      if (input.attestedAt) await tx.project.update({ where: { id: input.projectId }, data: { invoiceAttestedAt: input.attestedAt } });
+      const created = await tx.invoice.create({
+        data: {
+          ...input,
+          registeredById: user.id,
+          source: "MANUAL",
+          conferenceStatus: warnings.length ? "DIVERGENT" : "PENDING",
+          conferenceDetails: {
+            warnings,
+            source: "MANUAL",
+            checkedAt: new Date().toISOString(),
+          },
+        },
+      });
+      if (input.attestedAt)
+        await tx.project.update({
+          where: { id: input.projectId },
+          data: { invoiceAttestedAt: input.attestedAt },
+        });
       return created;
     });
     await auditService.log({
@@ -623,42 +1075,167 @@ export class FinancialExecutionService {
       action: "CREATE",
       actor: this.actor(user),
       summary: `NFe ${invoice.number} registrada no projeto PRJ-${project.projectCode}`,
-      after: { number: invoice.number, supplierCnpj: invoice.supplierCnpj, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount), attestedAt: invoice.attestedAt },
+      after: {
+        number: invoice.number,
+        supplierCnpj: invoice.supplierCnpj,
+        grossAmount: Number(invoice.grossAmount),
+        attestedAmount:
+          invoice.attestedAmount == null
+            ? null
+            : Number(invoice.attestedAmount),
+        attestedAt: invoice.attestedAt,
+      },
       metadata: { warnings },
     });
-    return { invoice: { ...invoice, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount) }, warnings };
+    return {
+      invoice: {
+        ...invoice,
+        grossAmount: Number(invoice.grossAmount),
+        attestedAmount:
+          invoice.attestedAmount == null
+            ? null
+            : Number(invoice.attestedAmount),
+      },
+      warnings,
+    };
   }
 
   async previewInvoiceXml(input: NfeXmlInput, user: CurrentUser) {
     await projectsService.findById(input.projectId, user);
-    const note = await prisma.commitmentNote.findUnique({ where: { id: input.commitmentNoteId } });
-    if (!note || note.projectId !== input.projectId) throw new AppError("A NE informada não pertence ao projeto", 409, "INVOICE_COMMITMENT_MISMATCH");
+    const note = await prisma.commitmentNote.findUnique({
+      where: { id: input.commitmentNoteId },
+    });
+    if (!note || note.projectId !== input.projectId)
+      throw new AppError(
+        "A NE informada não pertence ao projeto",
+        409,
+        "INVOICE_COMMITMENT_MISMATCH",
+      );
     const summary = parseNfeXmlBase64(input.xmlBase64);
     const divergences: string[] = [];
     const warnings: string[] = [];
-    if (note.supplierCnpj && digits(note.supplierCnpj) !== summary.supplierCnpj) divergences.push("CNPJ do emitente difere do favorecido da NE");
-    if (summary.grossAmount > Number(note.currentAmount) + 0.01) divergences.push("Valor da NF-e supera o valor atual da NE");
-    if (!summary.hasXmlSignature) divergences.push("Assinatura XML da NF-e não foi encontrada");
-    if (!summary.authorizationStatus || !["100", "150"].includes(summary.authorizationStatus)) divergences.push(`Protocolo de autorização não confirmado${summary.authorizationStatus ? ` (cStat ${summary.authorizationStatus})` : ""}`);
-    if (!summary.recipientCnpj) warnings.push("CNPJ do destinatário não informado no XML");
-    if (!summary.itemCount) warnings.push("XML sem itens de produto ou serviço");
-    const duplicate = await prisma.invoice.findFirst({ where: { OR: [{ accessKey: summary.accessKey }, { number: summary.number, series: summary.series, supplierCnpj: summary.supplierCnpj }] }, select: { id: true, invoiceCode: true, projectId: true, accessKey: true } });
-    return { summary: { ...summary, issuedAt: summary.issuedAt.toISOString() }, conferenceStatus: divergences.length ? "DIVERGENT" as const : "CONFERRED" as const, divergences, warnings, duplicate };
+    if (note.supplierCnpj && digits(note.supplierCnpj) !== summary.supplierCnpj)
+      divergences.push("CNPJ do emitente difere do favorecido da NE");
+    if (summary.grossAmount > Number(note.currentAmount) + 0.01)
+      divergences.push("Valor da NF-e supera o valor atual da NE");
+    if (!summary.hasXmlSignature)
+      divergences.push("Assinatura XML da NF-e não foi encontrada");
+    if (
+      !summary.authorizationStatus ||
+      !["100", "150"].includes(summary.authorizationStatus)
+    )
+      divergences.push(
+        `Protocolo de autorização não confirmado${summary.authorizationStatus ? ` (cStat ${summary.authorizationStatus})` : ""}`,
+      );
+    if (!summary.recipientCnpj)
+      warnings.push("CNPJ do destinatário não informado no XML");
+    if (!summary.itemCount)
+      warnings.push("XML sem itens de produto ou serviço");
+    const duplicate = await prisma.invoice.findFirst({
+      where: {
+        OR: [
+          { accessKey: summary.accessKey },
+          {
+            number: summary.number,
+            series: summary.series,
+            supplierCnpj: summary.supplierCnpj,
+          },
+        ],
+      },
+      select: { id: true, invoiceCode: true, projectId: true, accessKey: true },
+    });
+    return {
+      summary: { ...summary, issuedAt: summary.issuedAt.toISOString() },
+      conferenceStatus: divergences.length
+        ? ("DIVERGENT" as const)
+        : ("CONFERRED" as const),
+      divergences,
+      warnings,
+      duplicate,
+    };
   }
 
   async importInvoiceXml(input: NfeXmlInput, user: CurrentUser) {
     const preview = await this.previewInvoiceXml(input, user);
-    if (preview.duplicate) throw new AppError("Esta NF-e já está registrada no SAGEP", 409, "INVOICE_ALREADY_REGISTERED", preview.duplicate);
+    if (preview.duplicate)
+      throw new AppError(
+        "Esta NF-e já está registrada no SAGEP",
+        409,
+        "INVOICE_ALREADY_REGISTERED",
+        preview.duplicate,
+      );
     const summary = parseNfeXmlBase64(input.xmlBase64);
-    const project = await prisma.project.findUnique({ where: { id: input.projectId }, select: { projectCode: true } });
-    const conferenceDetails = { source: "XML", checkedAt: new Date().toISOString(), divergences: preview.divergences, warnings: preview.warnings, authorizationStatus: summary.authorizationStatus, authorizationProtocol: summary.authorizationProtocol, hasXmlSignature: summary.hasXmlSignature };
+    const project = await prisma.project.findUnique({
+      where: { id: input.projectId },
+      select: { projectCode: true },
+    });
+    const conferenceDetails = {
+      source: "XML",
+      checkedAt: new Date().toISOString(),
+      divergences: preview.divergences,
+      warnings: preview.warnings,
+      authorizationStatus: summary.authorizationStatus,
+      authorizationProtocol: summary.authorizationProtocol,
+      hasXmlSignature: summary.hasXmlSignature,
+    };
     const invoice = await prisma.$transaction(async (tx) => {
-      const created = await tx.invoice.create({ data: { projectId: input.projectId, commitmentNoteId: input.commitmentNoteId, number: summary.number, series: summary.series, accessKey: summary.accessKey, supplierCnpj: summary.supplierCnpj, issuedAt: summary.issuedAt, grossAmount: summary.grossAmount, attestedAmount: input.attestedAt ? summary.grossAmount : undefined, attestedAt: input.attestedAt, documentLink: input.documentLink, notes: input.notes, source: "XML", conferenceStatus: preview.conferenceStatus, conferenceDetails, xmlChecksumSha256: summary.xmlChecksumSha256, issuerName: summary.issuerName, recipientCnpj: summary.recipientCnpj, itemCount: summary.itemCount, registeredById: user.id } });
-      if (input.attestedAt) await tx.project.update({ where: { id: input.projectId }, data: { invoiceAttestedAt: input.attestedAt } });
+      const created = await tx.invoice.create({
+        data: {
+          projectId: input.projectId,
+          commitmentNoteId: input.commitmentNoteId,
+          number: summary.number,
+          series: summary.series,
+          accessKey: summary.accessKey,
+          supplierCnpj: summary.supplierCnpj,
+          issuedAt: summary.issuedAt,
+          grossAmount: summary.grossAmount,
+          attestedAmount: input.attestedAt ? summary.grossAmount : undefined,
+          attestedAt: input.attestedAt,
+          documentLink: input.documentLink,
+          notes: input.notes,
+          source: "XML",
+          conferenceStatus: preview.conferenceStatus,
+          conferenceDetails,
+          xmlChecksumSha256: summary.xmlChecksumSha256,
+          issuerName: summary.issuerName,
+          recipientCnpj: summary.recipientCnpj,
+          itemCount: summary.itemCount,
+          registeredById: user.id,
+        },
+      });
+      if (input.attestedAt)
+        await tx.project.update({
+          where: { id: input.projectId },
+          data: { invoiceAttestedAt: input.attestedAt },
+        });
       return created;
     });
-    await auditService.log({ entityType: "INVOICE", entityId: invoice.id, action: "CREATE", actor: this.actor(user), summary: `NF-e ${invoice.number} importada por XML no projeto PRJ-${project?.projectCode ?? "?"}`, after: { number: invoice.number, accessKey: invoice.accessKey, grossAmount: Number(invoice.grossAmount), conferenceStatus: invoice.conferenceStatus, xmlChecksumSha256: invoice.xmlChecksumSha256 }, metadata: conferenceDetails });
-    return { invoice: { ...invoice, grossAmount: Number(invoice.grossAmount), attestedAmount: invoice.attestedAmount == null ? null : Number(invoice.attestedAmount) }, ...preview };
+    await auditService.log({
+      entityType: "INVOICE",
+      entityId: invoice.id,
+      action: "CREATE",
+      actor: this.actor(user),
+      summary: `NF-e ${invoice.number} importada por XML no projeto PRJ-${project?.projectCode ?? "?"}`,
+      after: {
+        number: invoice.number,
+        accessKey: invoice.accessKey,
+        grossAmount: Number(invoice.grossAmount),
+        conferenceStatus: invoice.conferenceStatus,
+        xmlChecksumSha256: invoice.xmlChecksumSha256,
+      },
+      metadata: conferenceDetails,
+    });
+    return {
+      invoice: {
+        ...invoice,
+        grossAmount: Number(invoice.grossAmount),
+        attestedAmount:
+          invoice.attestedAmount == null
+            ? null
+            : Number(invoice.attestedAmount),
+      },
+      ...preview,
+    };
   }
 }
 

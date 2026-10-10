@@ -1,0 +1,4 @@
+ALTER TABLE "User"
+  ADD COLUMN "notifyMentions" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "notifyFinancial" BOOLEAN NOT NULL DEFAULT true,
+  ADD COLUMN "notifyIntegrations" BOOLEAN NOT NULL DEFAULT true;

@@ -56,6 +56,7 @@ type CreateProjectInput = {
   omId?: string;
   startDate?: Date;
   endDate?: Date;
+  mentionedUserIds?: string[];
 };
 
 type UpdateProjectInput = {
@@ -65,6 +66,7 @@ type UpdateProjectInput = {
   omId?: string;
   startDate?: Date;
   endDate?: Date;
+  mentionedUserIds?: string[];
 };
 
 type UpdateProjectFlowInput = {
@@ -115,7 +117,10 @@ type RegisterSignedServiceOrderInput = {
   signedServiceOrderNotes?: string;
 };
 
-type RegisterDeliveryReportSignatureInput = { signedAt: Date; signedLink?: string };
+type RegisterDeliveryReportSignatureInput = {
+  signedAt: Date;
+  signedLink?: string;
+};
 
 type CancelCommitmentNoteInput = {
   reason: string;
@@ -123,7 +128,8 @@ type CancelCommitmentNoteInput = {
 
 type ListProjectsFilters = {
   code?: number;
-  status?: "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
+  status?:
+    "PLANEJAMENTO" | "EM_ANDAMENTO" | "PAUSADO" | "CONCLUIDO" | "CANCELADO";
   stage?: ProjectStageValue;
   search?: string;
   includeArchived?: boolean;
@@ -192,7 +198,10 @@ const diexService = new DiexService();
 const serviceOrdersService = new ServiceOrdersService();
 
 export class ProjectsService {
-  private async validateProjectClassification(projectType?: ProjectTypeValue | null, omId?: string | null) {
+  private async validateProjectClassification(
+    projectType?: ProjectTypeValue | null,
+    omId?: string | null,
+  ) {
     if (!projectType && !omId) return null;
 
     if (!projectType || !omId) {
@@ -215,11 +224,21 @@ export class ProjectsService {
     }
 
     if (!om.isActive) {
-      throw new AppError("Não é possível vincular uma OM inativa ao projeto", 409);
+      throw new AppError(
+        "Não é possível vincular uma OM inativa ao projeto",
+        409,
+      );
     }
 
-    if (projectType === "CFTV" && (om.stateUf !== "AM" || om.cityName.trim().toLocaleLowerCase("pt-BR") !== "manaus")) {
-      throw new AppError("Projetos de CFTV estão restritos às OMs de Manaus/AM", 400);
+    if (
+      projectType === "CFTV" &&
+      (om.stateUf !== "AM" ||
+        om.cityName.trim().toLocaleLowerCase("pt-BR") !== "manaus")
+    ) {
+      throw new AppError(
+        "Projetos de CFTV estão restritos às OMs de Manaus/AM",
+        400,
+      );
     }
 
     return om;
@@ -260,8 +279,12 @@ export class ProjectsService {
       where,
       orderBy: [{ stage: "asc" }, { updatedAt: "desc" }],
       include: {
-        owner: { select: { id: true, name: true, avatarDataUrl: true, email: true } },
-        om: { select: { id: true, sigla: true, cityName: true, stateUf: true } },
+        owner: {
+          select: { id: true, name: true, avatarDataUrl: true, email: true },
+        },
+        om: {
+          select: { id: true, sigla: true, cityName: true, stateUf: true },
+        },
         serviceOrders: {
           where: { archivedAt: null, deletedAt: null },
           orderBy: { createdAt: "desc" },
@@ -271,29 +294,41 @@ export class ProjectsService {
       },
     });
     const labels: Record<ProjectStageValue, string> = {
-      ESTIMATIVA_PRECO: "Estimativa de preço", AGUARDANDO_NOTA_CREDITO: "Aguardando nota de crédito",
-      DIEX_REQUISITORIO: "DIEx requisitório", AGUARDANDO_NOTA_EMPENHO: "Aguardando nota de empenho",
+      ESTIMATIVA_PRECO: "Estimativa de preço",
+      AGUARDANDO_NOTA_CREDITO: "Aguardando nota de crédito",
+      DIEX_REQUISITORIO: "DIEx requisitório",
+      AGUARDANDO_NOTA_EMPENHO: "Aguardando nota de empenho",
       OS_LIBERADA: "OS liberada",
       AGUARDANDO_OS_ASSINADA: "Aguardando OS assinada",
       AGUARDANDO_INICIO_EXECUCAO: "Aguardando início da execução",
       SERVICO_EM_EXECUCAO: "Serviço em execução",
-      ANALISANDO_AS_BUILT: "Analisando As-Built", ATESTAR_NF: "Atestar NF",
+      ANALISANDO_AS_BUILT: "Analisando As-Built",
+      ATESTAR_NF: "Atestar NF",
       ENTREGA_TECNICA: "Entrega técnica",
-      SERVICO_CONCLUIDO: "Serviço concluído", CANCELADO: "Cancelado",
+      SERVICO_CONCLUIDO: "Serviço concluído",
+      CANCELADO: "Cancelado",
     };
     return {
       generatedAt: new Date().toISOString(),
       columns: (Object.keys(labels) as ProjectStageValue[]).map((stage) => {
-        const cards = projects.filter((project) => project.stage === stage).map((project) => {
-          const os = project.serviceOrders[0];
-          return {
-            id: project.id, projectCode: project.projectCode, title: project.title,
-            status: project.status, stage: project.stage, projectType: project.projectType,
-            om: project.om, owner: project.owner,
-            updatedAt: project.updatedAt, plannedEndDate: os?.plannedEndDate ?? project.endDate,
-            serviceOrder: os ?? null,
-          };
-        });
+        const cards = projects
+          .filter((project) => project.stage === stage)
+          .map((project) => {
+            const os = project.serviceOrders[0];
+            return {
+              id: project.id,
+              projectCode: project.projectCode,
+              title: project.title,
+              status: project.status,
+              stage: project.stage,
+              projectType: project.projectType,
+              om: project.om,
+              owner: project.owner,
+              updatedAt: project.updatedAt,
+              plannedEndDate: os?.plannedEndDate ?? project.endDate,
+              serviceOrder: os ?? null,
+            };
+          });
         return { stage, label: labels[stage], count: cards.length, cards };
       }),
     };
@@ -352,10 +387,15 @@ export class ProjectsService {
       filters.archivedFrom ||
       filters.archivedUntil,
     );
-    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+    const requestsDeleted = Boolean(
+      filters.includeDeleted || filters.onlyDeleted,
+    );
 
     if (requestsArchived && !canAccessArchived) {
-      throw new AppError("Você não tem permissão para consultar projetos arquivados", 403);
+      throw new AppError(
+        "Você não tem permissão para consultar projetos arquivados",
+        403,
+      );
     }
 
     if (requestsDeleted && !this.isAdmin(user.role)) {
@@ -369,7 +409,9 @@ export class ProjectsService {
     return {
       includeArchived: Boolean(filters.includeArchived && canAccessArchived),
       onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
-      includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
+      includeDeleted: Boolean(
+        filters.includeDeleted && this.isAdmin(user.role),
+      ),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
   }
@@ -378,7 +420,10 @@ export class ProjectsService {
     return permissionsService.hasPermission(user, "projects.view_all");
   }
 
-  private async getProjectAccessData(projectId: string, includeArchived = false) {
+  private async getProjectAccessData(
+    projectId: string,
+    includeArchived = false,
+  ) {
     const project = await prisma.project.findUnique({
       where: { id: projectId },
       select: {
@@ -411,14 +456,21 @@ export class ProjectsService {
       },
     });
 
-    if (!project || project.deletedAt || (!includeArchived && project.archivedAt)) {
+    if (
+      !project ||
+      project.deletedAt ||
+      (!includeArchived && project.archivedAt)
+    ) {
       throw new AppError("Projeto não encontrado", 404);
     }
 
     return project;
   }
 
-  private async getProjectAccessDataByCode(projectCode: number, includeArchived = false) {
+  private async getProjectAccessDataByCode(
+    projectCode: number,
+    includeArchived = false,
+  ) {
     const project = await prisma.project.findUnique({
       where: { projectCode },
       select: {
@@ -443,14 +495,22 @@ export class ProjectsService {
       },
     });
 
-    if (!project || project.deletedAt || (!includeArchived && project.archivedAt)) {
+    if (
+      !project ||
+      project.deletedAt ||
+      (!includeArchived && project.archivedAt)
+    ) {
       throw new AppError("Projeto não encontrado", 404);
     }
 
     return project;
   }
 
-  private async ensureCanView(projectId: string, user: CurrentUser, includeArchived = false) {
+  private async ensureCanView(
+    projectId: string,
+    user: CurrentUser,
+    includeArchived = false,
+  ) {
     const project = await this.getProjectAccessData(projectId, includeArchived);
 
     if (this.isPrivileged(user)) {
@@ -458,7 +518,9 @@ export class ProjectsService {
     }
 
     const isOwner = project.ownerId === user.id;
-    const isMember = project.members.some((member) => member.userId === user.id);
+    const isMember = project.members.some(
+      (member) => member.userId === user.id,
+    );
 
     if (!isOwner && !isMember) {
       throw new AppError("Você não tem acesso a este projeto", 403);
@@ -467,15 +529,24 @@ export class ProjectsService {
     return project;
   }
 
-  private async ensureCanViewByCode(projectCode: number, user: CurrentUser, includeArchived = false) {
-    const project = await this.getProjectAccessDataByCode(projectCode, includeArchived);
+  private async ensureCanViewByCode(
+    projectCode: number,
+    user: CurrentUser,
+    includeArchived = false,
+  ) {
+    const project = await this.getProjectAccessDataByCode(
+      projectCode,
+      includeArchived,
+    );
 
     if (this.isPrivileged(user)) {
       return project;
     }
 
     const isOwner = project.ownerId === user.id;
-    const isMember = project.members.some((member) => member.userId === user.id);
+    const isMember = project.members.some(
+      (member) => member.userId === user.id,
+    );
 
     if (!isOwner && !isMember) {
       throw new AppError("Você não tem acesso a este projeto", 403);
@@ -484,7 +555,11 @@ export class ProjectsService {
     return project;
   }
 
-  private async ensureCanManage(projectId: string, user: CurrentUser, includeArchived = false) {
+  private async ensureCanManage(
+    projectId: string,
+    user: CurrentUser,
+    includeArchived = false,
+  ) {
     const project = await this.getProjectAccessData(projectId, includeArchived);
 
     if (permissionsService.hasPermission(user, "projects.edit_all")) {
@@ -565,9 +640,11 @@ export class ProjectsService {
       commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
       serviceOrderNumber: project.serviceOrderNumber ?? null,
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
-      serviceOrderSignatureRequired: project.serviceOrderSignatureRequired ?? false,
+      serviceOrderSignatureRequired:
+        project.serviceOrderSignatureRequired ?? false,
       signedServiceOrderLink: project.signedServiceOrderLink ?? null,
-      signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt ?? null,
+      signedServiceOrderReceivedAt:
+        project.signedServiceOrderReceivedAt ?? null,
       signedServiceOrderNotes: project.signedServiceOrderNotes ?? null,
       signedServiceOrderRegisteredById:
         project.signedServiceOrderRegisteredById ?? null,
@@ -624,9 +701,11 @@ export class ProjectsService {
       commitmentNoteReceivedAt: project.commitmentNoteReceivedAt ?? null,
       serviceOrderNumber: project.serviceOrderNumber ?? null,
       serviceOrderIssuedAt: project.serviceOrderIssuedAt ?? null,
-      serviceOrderSignatureRequired: project.serviceOrderSignatureRequired ?? false,
+      serviceOrderSignatureRequired:
+        project.serviceOrderSignatureRequired ?? false,
       signedServiceOrderLink: project.signedServiceOrderLink ?? null,
-      signedServiceOrderReceivedAt: project.signedServiceOrderReceivedAt ?? null,
+      signedServiceOrderReceivedAt:
+        project.signedServiceOrderReceivedAt ?? null,
       executionStartedAt: project.executionStartedAt ?? null,
       asBuiltReceivedAt: project.asBuiltReceivedAt ?? null,
       asBuiltReviewedAt: project.asBuiltReviewedAt ?? null,
@@ -641,7 +720,9 @@ export class ProjectsService {
     };
   }
 
-  private amountToNumber(value: { toString(): string } | string | number | null | undefined) {
+  private amountToNumber(
+    value: { toString(): string } | string | number | null | undefined,
+  ) {
     if (value === null || value === undefined) {
       return 0;
     }
@@ -654,7 +735,9 @@ export class ProjectsService {
     return (project as { asBuiltLink?: string | null }).asBuiltLink ?? null;
   }
 
-  private sumAmounts(items: { totalAmount: { toString(): string } | string | number }[]) {
+  private sumAmounts(
+    items: { totalAmount: { toString(): string } | string | number }[],
+  ) {
     return items
       .reduce((sum, item) => sum + this.amountToNumber(item.totalAmount), 0)
       .toFixed(2);
@@ -709,27 +792,35 @@ export class ProjectsService {
     }
 
     if (
-      workflowService.isStageAtOrBeyond(project.stage, "AGUARDANDO_NOTA_CREDITO") &&
+      workflowService.isStageAtOrBeyond(
+        project.stage,
+        "AGUARDANDO_NOTA_CREDITO",
+      ) &&
       !project.creditNoteNumber &&
       !project.creditNoteReceivedAt
     ) {
       pendingActions.push({
         code: "INFORMAR_NOTA_CREDITO",
         label: "Informar Nota de Crédito",
-        severity: project.stage === "AGUARDANDO_NOTA_CREDITO" ? "BLOCKER" : "WARNING",
+        severity:
+          project.stage === "AGUARDANDO_NOTA_CREDITO" ? "BLOCKER" : "WARNING",
         targetStage: "DIEX_REQUISITORIO",
       });
     }
 
     if (
-      workflowService.isStageAtOrBeyond(project.stage, "AGUARDANDO_NOTA_CREDITO") &&
+      workflowService.isStageAtOrBeyond(
+        project.stage,
+        "AGUARDANDO_NOTA_CREDITO",
+      ) &&
       hasFinalizedEstimate &&
       project.diexRequests.length === 0
     ) {
       pendingActions.push({
         code: "EMITIR_DIEX",
         label: "Emitir DIEx requisitório",
-        severity: project.stage === "AGUARDANDO_NOTA_CREDITO" ? "BLOCKER" : "WARNING",
+        severity:
+          project.stage === "AGUARDANDO_NOTA_CREDITO" ? "BLOCKER" : "WARNING",
         targetStage: "DIEX_REQUISITORIO",
       });
     }
@@ -762,13 +853,17 @@ export class ProjectsService {
     }
 
     if (
-      workflowService.isStageAtOrBeyond(project.stage, "AGUARDANDO_NOTA_EMPENHO") &&
+      workflowService.isStageAtOrBeyond(
+        project.stage,
+        "AGUARDANDO_NOTA_EMPENHO",
+      ) &&
       project.serviceOrders.length === 0
     ) {
       pendingActions.push({
         code: "EMITIR_OS",
         label: "Emitir Ordem de Serviço",
-        severity: project.stage === "AGUARDANDO_NOTA_EMPENHO" ? "BLOCKER" : "WARNING",
+        severity:
+          project.stage === "AGUARDANDO_NOTA_EMPENHO" ? "BLOCKER" : "WARNING",
         targetStage: "OS_LIBERADA",
       });
     }
@@ -854,9 +949,19 @@ export class ProjectsService {
 
     if (project.stage === "ENTREGA_TECNICA") {
       if (!project.deliveryReportGeneratedAt) {
-        pendingActions.push({ code: "GERAR_RELATORIO_ENTREGA", label: "Gerar relatório técnico de entrega", severity: "BLOCKER", targetStage: "ENTREGA_TECNICA" });
+        pendingActions.push({
+          code: "GERAR_RELATORIO_ENTREGA",
+          label: "Gerar relatório técnico de entrega",
+          severity: "BLOCKER",
+          targetStage: "ENTREGA_TECNICA",
+        });
       } else if (!project.deliveryReportSignedAt) {
-        pendingActions.push({ code: "REGISTRAR_RELATORIO_ASSINADO", label: "Confirmar revisão e assinatura do relatório", severity: "BLOCKER", targetStage: "ENTREGA_TECNICA" });
+        pendingActions.push({
+          code: "REGISTRAR_RELATORIO_ASSINADO",
+          label: "Confirmar revisão e assinatura do relatório",
+          severity: "BLOCKER",
+          targetStage: "ENTREGA_TECNICA",
+        });
       }
     }
 
@@ -904,7 +1009,11 @@ export class ProjectsService {
       documentStatus?: string;
       totalAmount?: unknown;
       estimate?: { id: string; estimateCode: number } | null;
-      diexRequest?: { id: string; diexCode: number; diexNumber?: string | null } | null;
+      diexRequest?: {
+        id: string;
+        diexCode: number;
+        diexNumber?: string | null;
+      } | null;
     }>;
     tasks?: Array<{
       id: string;
@@ -944,9 +1053,10 @@ export class ProjectsService {
           resourceLabel: `Estimativa EST-${estimate.estimateCode}`,
           status: estimate.status ?? null,
           totalAmount: estimate.totalAmount?.toString() ?? null,
-          destination: estimate.destinationCityName && estimate.destinationStateUf
-            ? `${estimate.destinationCityName}/${estimate.destinationStateUf}`
-            : null,
+          destination:
+            estimate.destinationCityName && estimate.destinationStateUf
+              ? `${estimate.destinationCityName}/${estimate.destinationStateUf}`
+              : null,
         },
       });
     }
@@ -963,7 +1073,9 @@ export class ProjectsService {
           documentStatus: diex.documentStatus ?? null,
           totalAmount: diex.totalAmount?.toString() ?? null,
           estimateId: diex.estimate?.id ?? null,
-          estimateCode: diex.estimate ? `EST-${diex.estimate.estimateCode}` : null,
+          estimateCode: diex.estimate
+            ? `EST-${diex.estimate.estimateCode}`
+            : null,
         },
       });
     }
@@ -975,7 +1087,9 @@ export class ProjectsService {
         context: {
           ...baseProjectContext,
           resourceType: "SERVICE_ORDER",
-          resourceCode: serviceOrder.serviceOrderNumber ?? `OS-${serviceOrder.serviceOrderCode}`,
+          resourceCode:
+            serviceOrder.serviceOrderNumber ??
+            `OS-${serviceOrder.serviceOrderCode}`,
           resourceLabel: `OS ${serviceOrder.serviceOrderNumber ?? `#${serviceOrder.serviceOrderCode}`}`,
           documentStatus: serviceOrder.documentStatus ?? null,
           totalAmount: serviceOrder.totalAmount?.toString() ?? null,
@@ -985,8 +1099,8 @@ export class ProjectsService {
             : null,
           diexRequestId: serviceOrder.diexRequest?.id ?? null,
           diexCode: serviceOrder.diexRequest
-            ? serviceOrder.diexRequest.diexNumber ??
-              `DIEX-${serviceOrder.diexRequest.diexCode}`
+            ? (serviceOrder.diexRequest.diexNumber ??
+              `DIEX-${serviceOrder.diexRequest.diexCode}`)
             : null,
         },
       });
@@ -1092,7 +1206,11 @@ export class ProjectsService {
     );
   }
 
-  private toPublicTimelineItem(item: Awaited<ReturnType<typeof auditService.listTimelineForEntities>>[number]) {
+  private toPublicTimelineItem(
+    item: Awaited<
+      ReturnType<typeof auditService.listTimelineForEntities>
+    >[number],
+  ) {
     return {
       id: item.id,
       at: item.at,
@@ -1149,11 +1267,15 @@ export class ProjectsService {
     if (data.description) {
       await notificationsService.publishMentions({
         content: data.description,
+        mentionedUserIds: data.mentionedUserIds,
         projectId: project.id,
         eventKeyPrefix: `PROJECT_DESCRIPTION:${project.id}:${project.updatedAt.toISOString()}`,
         actorId: user.id,
         title: `Você foi mencionado no PRJ-${project.projectCode}`,
-        description: data.description.length > 180 ? `${data.description.slice(0, 177)}...` : data.description,
+        description:
+          data.description.length > 180
+            ? `${data.description.slice(0, 177)}...`
+            : data.description,
         detailsPath: `/projects/${project.id}`,
         entityType: "PROJECT",
         entityId: project.id,
@@ -1167,7 +1289,9 @@ export class ProjectsService {
     const { includeArchived, onlyArchived, includeDeleted, onlyDeleted } =
       this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.ProjectWhereInput[] = [];
-    const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
+    const hasArchivedPeriod = Boolean(
+      filters.archivedFrom || filters.archivedUntil,
+    );
 
     andConditions.push(
       onlyDeleted
@@ -1177,23 +1301,20 @@ export class ProjectsService {
             },
           }
         : onlyArchived || hasArchivedPeriod
-        ? {
-            archivedAt: {
-              not: null,
-              ...(filters.archivedFrom && { gte: filters.archivedFrom }),
-              ...(filters.archivedUntil && { lte: filters.archivedUntil }),
-            },
-            deletedAt: null,
-          }
-        : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
+          ? {
+              archivedAt: {
+                not: null,
+                ...(filters.archivedFrom && { gte: filters.archivedFrom }),
+                ...(filters.archivedUntil && { lte: filters.archivedUntil }),
+              },
+              deletedAt: null,
+            }
+          : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     );
 
     if (!this.isPrivileged(user)) {
       andConditions.push({
-        OR: [
-          { ownerId: user.id },
-          { members: { some: { userId: user.id } } },
-        ],
+        OR: [{ ownerId: user.id }, { members: { some: { userId: user.id } } }],
       });
     }
 
@@ -1599,7 +1720,11 @@ export class ProjectsService {
                     number: true,
                     vendorName: true,
                     pregao: {
-                      select: { number: true, year: true, managingAgency: true },
+                      select: {
+                        number: true,
+                        year: true,
+                        managingAgency: true,
+                      },
                     },
                   },
                 },
@@ -1680,10 +1805,14 @@ export class ProjectsService {
     }
 
     const workflowSnapshot = this.buildWorkflowSnapshot(project);
-    const validDeliveryReportSignedAt = workflowService.isDeliveryReportSignatureValid(workflowSnapshot)
-      ? project.deliveryReportSignedAt
-      : null;
-    const effectiveWorkflowSnapshot = { ...workflowSnapshot, deliveryReportSignedAt: validDeliveryReportSignedAt };
+    const validDeliveryReportSignedAt =
+      workflowService.isDeliveryReportSignatureValid(workflowSnapshot)
+        ? project.deliveryReportSignedAt
+        : null;
+    const effectiveWorkflowSnapshot = {
+      ...workflowSnapshot,
+      deliveryReportSignedAt: validDeliveryReportSignedAt,
+    };
     const nextAction = workflowService.getNextAction(effectiveWorkflowSnapshot);
     const auditTrail = await this.buildUnifiedTimeline(project);
     const canViewAudit = permissionsService.hasPermission(user, "audit.view");
@@ -1745,10 +1874,13 @@ export class ProjectsService {
           mode: project.creditNoteMode,
           notes: project.creditNotes,
           requiredAmount: this.sumAmounts(finalizedEstimates),
-          receivedAmount: project.creditNotes.reduce(
-            (total, note) => total + Number(note.amount) - Number(note.cancelledAmount),
-            0,
-          ).toFixed(2),
+          receivedAmount: project.creditNotes
+            .reduce(
+              (total, note) =>
+                total + Number(note.amount) - Number(note.cancelledAmount),
+              0,
+            )
+            .toFixed(2),
           overflowJustification: project.creditNoteOverflowJustification,
         },
         serviceOrderSignature: {
@@ -1759,7 +1891,10 @@ export class ProjectsService {
           registeredBy: project.signedServiceOrderRegisteredBy,
         },
       },
-      pendingActions: this.buildPendingActions({ ...project, deliveryReportSignedAt: validDeliveryReportSignedAt }),
+      pendingActions: this.buildPendingActions({
+        ...project,
+        deliveryReportSignedAt: validDeliveryReportSignedAt,
+      }),
       timeline,
       auditTrail: canViewAudit ? auditTrail : null,
       tasks: project.tasks,
@@ -1952,8 +2087,12 @@ export class ProjectsService {
       where: { id: projectId },
       data: {
         ...(data.title !== undefined && { title: data.title }),
-        ...(data.description !== undefined && { description: data.description }),
-        ...(data.projectType !== undefined && { projectType: data.projectType }),
+        ...(data.description !== undefined && {
+          description: data.description,
+        }),
+        ...(data.projectType !== undefined && {
+          projectType: data.projectType,
+        }),
         ...(data.omId !== undefined && { omId: data.omId }),
         ...(data.startDate !== undefined && { startDate: data.startDate }),
         ...(data.endDate !== undefined && { endDate: data.endDate }),
@@ -2002,11 +2141,15 @@ export class ProjectsService {
     if (data.description && data.description !== before.description) {
       await notificationsService.publishMentions({
         content: data.description,
+        mentionedUserIds: data.mentionedUserIds,
         projectId: project.id,
         eventKeyPrefix: `PROJECT_DESCRIPTION:${project.id}:${project.updatedAt.toISOString()}`,
         actorId: user.id,
         title: `Você foi mencionado no PRJ-${project.projectCode}`,
-        description: data.description.length > 180 ? `${data.description.slice(0, 177)}...` : data.description,
+        description:
+          data.description.length > 180
+            ? `${data.description.slice(0, 177)}...`
+            : data.description,
         detailsPath: `/projects/${project.id}`,
         entityType: "PROJECT",
         entityId: project.id,
@@ -2015,7 +2158,7 @@ export class ProjectsService {
 
     return project;
   }
-  
+
   async updateFlow(
     projectId: string,
     data: UpdateProjectFlowInput,
@@ -2112,7 +2255,9 @@ export class ProjectsService {
       _sum: { totalAmount: true },
     });
     const finalizedEstimateCount = finalizedEstimateSummary._count._all;
-    const requiredCreditAmount = Number(finalizedEstimateSummary._sum.totalAmount ?? 0);
+    const requiredCreditAmount = Number(
+      finalizedEstimateSummary._sum.totalAmount ?? 0,
+    );
     const requiredCreditCents = Math.round(requiredCreditAmount * 100);
     let effectiveCreditNotes = data.creditNotes;
     if (effectiveCreditNotes) {
@@ -2122,12 +2267,20 @@ export class ProjectsService {
           409,
         );
       }
-      const normalizedNumbers = effectiveCreditNotes.map((note) => note.number.trim().toUpperCase());
+      const normalizedNumbers = effectiveCreditNotes.map((note) =>
+        note.number.trim().toUpperCase(),
+      );
       if (new Set(normalizedNumbers).size !== normalizedNumbers.length) {
-        throw new AppError("Não é possível registrar a mesma Nota de Crédito duas vezes", 409);
+        throw new AppError(
+          "Não é possível registrar a mesma Nota de Crédito duas vezes",
+          409,
+        );
       }
       if (data.creditNoteMode === "SINGLE" && effectiveCreditNotes.length > 1) {
-        throw new AppError("Selecione múltiplas Notas de Crédito para cadastrar mais de uma NC", 409);
+        throw new AppError(
+          "Selecione múltiplas Notas de Crédito para cadastrar mais de uma NC",
+          409,
+        );
       }
       effectiveCreditNotes = effectiveCreditNotes.map((note, index) => ({
         ...note,
@@ -2143,38 +2296,58 @@ export class ProjectsService {
       receivedCreditCents > requiredCreditCents &&
       !data.creditNoteOverflowJustification?.trim()
     ) {
-      throw new AppError("Justifique o valor de crédito superior ao total das estimativas finalizadas", 409);
+      throw new AppError(
+        "Justifique o valor de crédito superior ao total das estimativas finalizadas",
+        409,
+      );
     }
     const creditCoverageComplete =
-      receivedCreditCents === undefined || receivedCreditCents >= requiredCreditCents;
+      receivedCreditCents === undefined ||
+      receivedCreditCents >= requiredCreditCents;
 
     const nextSnapshot = {
-      creditNoteNumber: effectiveCreditNotes?.map((note) => note.number).join(" + ") ?? data.creditNoteNumber ?? currentProject.creditNoteNumber,
-      creditNoteReceivedAt: effectiveCreditNotes?.reduce(
-        (latest, note) => note.receivedAt > latest ? note.receivedAt : latest,
-        effectiveCreditNotes[0]?.receivedAt ?? currentProject.creditNoteReceivedAt ?? new Date(0),
-      ) ?? data.creditNoteReceivedAt ?? currentProject.creditNoteReceivedAt,
+      creditNoteNumber:
+        effectiveCreditNotes?.map((note) => note.number).join(" + ") ??
+        data.creditNoteNumber ??
+        currentProject.creditNoteNumber,
+      creditNoteReceivedAt:
+        effectiveCreditNotes?.reduce(
+          (latest, note) =>
+            note.receivedAt > latest ? note.receivedAt : latest,
+          effectiveCreditNotes[0]?.receivedAt ??
+            currentProject.creditNoteReceivedAt ??
+            new Date(0),
+        ) ??
+        data.creditNoteReceivedAt ??
+        currentProject.creditNoteReceivedAt,
       diexNumber: data.diexNumber ?? currentProject.diexNumber,
       diexIssuedAt: data.diexIssuedAt ?? currentProject.diexIssuedAt,
       commitmentNoteNumber:
         data.commitmentNoteNumber ?? currentProject.commitmentNoteNumber,
       commitmentNoteReceivedAt:
-        data.commitmentNoteReceivedAt ?? currentProject.commitmentNoteReceivedAt,
-      serviceOrderNumber: data.serviceOrderNumber ?? currentProject.serviceOrderNumber,
+        data.commitmentNoteReceivedAt ??
+        currentProject.commitmentNoteReceivedAt,
+      serviceOrderNumber:
+        data.serviceOrderNumber ?? currentProject.serviceOrderNumber,
       serviceOrderIssuedAt:
         data.serviceOrderIssuedAt ?? currentProject.serviceOrderIssuedAt,
-      serviceOrderSignatureRequired: currentProject.serviceOrderSignatureRequired,
+      serviceOrderSignatureRequired:
+        currentProject.serviceOrderSignatureRequired,
       signedServiceOrderLink: currentProject.signedServiceOrderLink,
       signedServiceOrderReceivedAt: currentProject.signedServiceOrderReceivedAt,
-      executionStartedAt: data.executionStartedAt ?? currentProject.executionStartedAt,
-      asBuiltReceivedAt: data.asBuiltReceivedAt ?? currentProject.asBuiltReceivedAt,
+      executionStartedAt:
+        data.executionStartedAt ?? currentProject.executionStartedAt,
+      asBuiltReceivedAt:
+        data.asBuiltReceivedAt ?? currentProject.asBuiltReceivedAt,
       asBuiltReviewedAt: currentProject.asBuiltReviewedAt,
       asBuiltApprovedAt: currentProject.asBuiltApprovedAt,
       asBuiltLink: this.getAsBuiltLink(currentProject),
       asBuiltRejectedAt: currentProject.asBuiltRejectedAt,
       asBuiltRejectionReason: currentProject.asBuiltRejectionReason,
-      invoiceAttestedAt: data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
-      serviceCompletedAt: data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
+      invoiceAttestedAt:
+        data.invoiceAttestedAt ?? currentProject.invoiceAttestedAt,
+      serviceCompletedAt:
+        data.serviceCompletedAt ?? currentProject.serviceCompletedAt,
       deliveryReportGeneratedAt: currentProject.deliveryReportGeneratedAt,
       deliveryReportSignedAt: currentProject.deliveryReportSignedAt,
     };
@@ -2184,7 +2357,8 @@ export class ProjectsService {
         ? "AGUARDANDO_NOTA_EMPENHO"
         : currentProject.stage;
     const hasCommitmentNote =
-      !!nextSnapshot.commitmentNoteNumber || !!nextSnapshot.commitmentNoteReceivedAt;
+      !!nextSnapshot.commitmentNoteNumber ||
+      !!nextSnapshot.commitmentNoteReceivedAt;
     let targetStage =
       effectiveCurrentStage === "AGUARDANDO_NOTA_EMPENHO" &&
       data.stage === "AGUARDANDO_NOTA_EMPENHO" &&
@@ -2201,7 +2375,8 @@ export class ProjectsService {
     const isFirstCommitmentNoteRegistration =
       !currentProject.commitmentNoteNumber &&
       !currentProject.commitmentNoteReceivedAt &&
-      (!!nextSnapshot.commitmentNoteNumber || !!nextSnapshot.commitmentNoteReceivedAt);
+      (!!nextSnapshot.commitmentNoteNumber ||
+        !!nextSnapshot.commitmentNoteReceivedAt);
 
     if (effectiveCurrentStage !== targetStage) {
       workflowService.assertStageTransition(effectiveCurrentStage, targetStage);
@@ -2230,8 +2405,11 @@ export class ProjectsService {
             creditNoteReceivedAt: data.creditNoteReceivedAt,
           }),
           ...(effectiveCreditNotes !== undefined && {
-            creditNoteMode: data.creditNoteMode ?? (effectiveCreditNotes.length > 1 ? "MULTIPLE" : "SINGLE"),
-            creditNoteOverflowJustification: data.creditNoteOverflowJustification?.trim() || null,
+            creditNoteMode:
+              data.creditNoteMode ??
+              (effectiveCreditNotes.length > 1 ? "MULTIPLE" : "SINGLE"),
+            creditNoteOverflowJustification:
+              data.creditNoteOverflowJustification?.trim() || null,
             // Os campos legados continuam sendo a trava usada pelo fluxo do DIEx.
             // Só são preenchidos quando a soma das NCs cobre integralmente o projeto.
             creditNoteNumber: creditCoverageComplete
@@ -2239,7 +2417,8 @@ export class ProjectsService {
               : null,
             creditNoteReceivedAt: creditCoverageComplete
               ? effectiveCreditNotes.reduce(
-                  (latest, note) => note.receivedAt > latest ? note.receivedAt : latest,
+                  (latest, note) =>
+                    note.receivedAt > latest ? note.receivedAt : latest,
                   effectiveCreditNotes[0].receivedAt,
                 )
               : null,
@@ -2299,7 +2478,8 @@ export class ProjectsService {
             projectId,
             this.getAuditActor(user),
             updatedProject.commitmentNoteNumber ?? "sem-numero",
-            options.commitmentNoteBalanceImpactReason ?? "Consumo contemplado no saldo de abertura",
+            options.commitmentNoteBalanceImpactReason ??
+              "Consumo contemplado no saldo de abertura",
             tx,
           );
         } else {
@@ -2346,7 +2526,8 @@ export class ProjectsService {
             rawSnapshot: snapshot.rawSnapshot as Prisma.InputJsonValue,
             lastSyncAt: snapshot.fetchedAt,
             active: true,
-            balanceImpactMode: options.commitmentNoteBalanceImpactMode ?? "CONSUME",
+            balanceImpactMode:
+              options.commitmentNoteBalanceImpactMode ?? "CONSUME",
             balanceImpactReason: options.commitmentNoteBalanceImpactReason,
             balanceImpactDecidedAt: new Date(),
             balanceImpactDecidedById: user.id,
@@ -2369,14 +2550,17 @@ export class ProjectsService {
             lastSyncAt: snapshot.fetchedAt,
             lastSyncError: null,
             active: true,
-            balanceImpactMode: options.commitmentNoteBalanceImpactMode ?? "CONSUME",
+            balanceImpactMode:
+              options.commitmentNoteBalanceImpactMode ?? "CONSUME",
             balanceImpactReason: options.commitmentNoteBalanceImpactReason,
             balanceImpactDecidedAt: new Date(),
             balanceImpactDecidedById: user.id,
           },
         });
 
-        await tx.financialDocument.deleteMany({ where: { commitmentNoteId: commitmentNote.id } });
+        await tx.financialDocument.deleteMany({
+          where: { commitmentNoteId: commitmentNote.id },
+        });
         if (snapshot.documents.length) {
           await tx.financialDocument.createMany({
             data: snapshot.documents.map((document) => ({
@@ -2431,7 +2615,8 @@ export class ProjectsService {
     await auditService.log({
       entityType: "PROJECT",
       entityId: project.id,
-      action: currentProject.stage !== project.stage ? "STAGE_CHANGE" : "UPDATE",
+      action:
+        currentProject.stage !== project.stage ? "STAGE_CHANGE" : "UPDATE",
       actor: this.getAuditActor(user),
       summary:
         currentProject.stage !== project.stage
@@ -2444,7 +2629,8 @@ export class ProjectsService {
         newStage: project.stage,
         ...(effectiveCreditNotes && {
           creditNoteMode:
-            data.creditNoteMode ?? (effectiveCreditNotes.length > 1 ? "MULTIPLE" : "SINGLE"),
+            data.creditNoteMode ??
+            (effectiveCreditNotes.length > 1 ? "MULTIPLE" : "SINGLE"),
           creditNoteNumbers: effectiveCreditNotes.map((note) => note.number),
           requiredCreditAmount: requiredCreditAmount.toFixed(2),
           receivedCreditAmount: ((receivedCreditCents ?? 0) / 100).toFixed(2),
@@ -2634,16 +2820,60 @@ export class ProjectsService {
     return project;
   }
 
-  async registerDeliveryReportSignature(projectId: string, data: RegisterDeliveryReportSignatureInput, user: CurrentUser) {
+  async registerDeliveryReportSignature(
+    projectId: string,
+    data: RegisterDeliveryReportSignatureInput,
+    user: CurrentUser,
+  ) {
     await this.ensureCanManage(projectId, user);
-    const current = await prisma.project.findUnique({ where: { id: projectId } });
+    const current = await prisma.project.findUnique({
+      where: { id: projectId },
+    });
     if (!current) throw new AppError("Projeto não encontrado", 404);
-    if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A assinatura do relatório só pode ser registrada na etapa de Entrega Técnica", 409);
-    if (!current.deliveryReportGeneratedAt) throw new AppError("Gere o relatório antes de registrar sua assinatura", 409);
-    if (workflowService.isDeliveryReportSignatureInFuture(data.signedAt)) throw new AppError("A data da assinatura não pode estar no futuro", 400);
-    if (!workflowService.isDeliveryReportSignatureValid({ deliveryReportGeneratedAt: current.deliveryReportGeneratedAt, deliveryReportSignedAt: data.signedAt })) throw new AppError("A assinatura não pode ser anterior à geração do relatório", 400);
-    const project = await prisma.project.update({ where: { id: projectId }, data: { deliveryReportSignedAt: data.signedAt, deliveryReportSignedLink: data.signedLink?.trim() || null }, include: projectInclude });
-    await auditService.log({ entityType: "PROJECT", entityId: projectId, action: "UPDATE", actor: this.getAuditActor(user), summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`, before: this.buildProjectAuditSnapshot(current), after: this.buildProjectAuditSnapshot(project), metadata: { source: "project.delivery-report.signature", signedAt: data.signedAt, signedLink: data.signedLink ?? null } });
+    if (current.stage !== "ENTREGA_TECNICA")
+      throw new AppError(
+        "A assinatura do relatório só pode ser registrada na etapa de Entrega Técnica",
+        409,
+      );
+    if (!current.deliveryReportGeneratedAt)
+      throw new AppError(
+        "Gere o relatório antes de registrar sua assinatura",
+        409,
+      );
+    if (workflowService.isDeliveryReportSignatureInFuture(data.signedAt))
+      throw new AppError("A data da assinatura não pode estar no futuro", 400);
+    if (
+      !workflowService.isDeliveryReportSignatureValid({
+        deliveryReportGeneratedAt: current.deliveryReportGeneratedAt,
+        deliveryReportSignedAt: data.signedAt,
+      })
+    )
+      throw new AppError(
+        "A assinatura não pode ser anterior à geração do relatório",
+        400,
+      );
+    const project = await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        deliveryReportSignedAt: data.signedAt,
+        deliveryReportSignedLink: data.signedLink?.trim() || null,
+      },
+      include: projectInclude,
+    });
+    await auditService.log({
+      entityType: "PROJECT",
+      entityId: projectId,
+      action: "UPDATE",
+      actor: this.getAuditActor(user),
+      summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`,
+      before: this.buildProjectAuditSnapshot(current),
+      after: this.buildProjectAuditSnapshot(project),
+      metadata: {
+        source: "project.delivery-report.signature",
+        signedAt: data.signedAt,
+        signedLink: data.signedLink ?? null,
+      },
+    });
     return project;
   }
 
@@ -2663,19 +2893,58 @@ export class ProjectsService {
           where: { status: "FINALIZADA", archivedAt: null, deletedAt: null },
           orderBy: { updatedAt: "desc" },
           take: 1,
-          select: { id: true, estimateCode: true, totalAmount: true, ata: { select: { number: true, vendorName: true } }, items: { orderBy: { referenceCode: "asc" }, select: { id: true, referenceCode: true, description: true, unit: true, quantity: true, subtotal: true } } },
+          select: {
+            id: true,
+            estimateCode: true,
+            totalAmount: true,
+            ata: { select: { number: true, vendorName: true } },
+            items: {
+              orderBy: { referenceCode: "asc" },
+              select: {
+                id: true,
+                referenceCode: true,
+                description: true,
+                unit: true,
+                quantity: true,
+                subtotal: true,
+              },
+            },
+          },
         },
         diexRequests: {
           where: { archivedAt: null, deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { id: true, diexCode: true, diexNumber: true, issuedAt: true, totalAmount: true },
+          select: {
+            id: true,
+            diexCode: true,
+            diexNumber: true,
+            issuedAt: true,
+            totalAmount: true,
+          },
         },
         serviceOrders: {
           where: { archivedAt: null, deletedAt: null },
           orderBy: { createdAt: "desc" },
           take: 1,
-          select: { id: true, serviceOrderCode: true, serviceOrderNumber: true, issuedAt: true, totalAmount: true, items: { orderBy: { itemCode: "asc" }, select: { estimateItemId: true, itemCode: true, description: true, supplyUnit: true, quantityOrdered: true, totalPrice: true } } },
+          select: {
+            id: true,
+            serviceOrderCode: true,
+            serviceOrderNumber: true,
+            issuedAt: true,
+            totalAmount: true,
+            items: {
+              orderBy: { itemCode: "asc" },
+              select: {
+                estimateItemId: true,
+                itemCode: true,
+                description: true,
+                supplyUnit: true,
+                quantityOrdered: true,
+                totalPrice: true,
+              },
+            },
+          },
         },
       },
     });
@@ -2683,22 +2952,25 @@ export class ProjectsService {
 
     const sourceItems = project.serviceOrders[0]?.items.length
       ? project.serviceOrders[0].items.map((item) => ({
-        itemId: item.estimateItemId,
-        itemCode: item.itemCode,
-        description: item.description,
-        sourceUnit: item.supplyUnit,
-        sourceQuantity: item.quantityOrdered.toString(),
-        totalPrice: item.totalPrice.toString(),
-      }))
+          itemId: item.estimateItemId,
+          itemCode: item.itemCode,
+          description: item.description,
+          sourceUnit: item.supplyUnit,
+          sourceQuantity: item.quantityOrdered.toString(),
+          totalPrice: item.totalPrice.toString(),
+        }))
       : (project.estimates[0]?.items ?? []).map((item) => ({
-        itemId: item.id,
-        itemCode: item.referenceCode,
-        description: item.description,
-        sourceUnit: item.unit,
-        sourceQuantity: item.quantity.toString(),
-        totalPrice: item.subtotal.toString(),
-      }));
-    const draft = parseDeliveryReportDraft(project.deliveryReportDraft, project.projectType);
+          itemId: item.id,
+          itemCode: item.referenceCode,
+          description: item.description,
+          sourceUnit: item.unit,
+          sourceQuantity: item.quantity.toString(),
+          totalPrice: item.subtotal.toString(),
+        }));
+    const draft = parseDeliveryReportDraft(
+      project.deliveryReportDraft,
+      project.projectType,
+    );
     if (!project.deliveryReportDraft) {
       const contextual = buildContextualDeliverySections(sourceItems, {
         projectCode: project.projectCode,
@@ -2709,45 +2981,117 @@ export class ProjectsService {
         omAcronym: project.om?.sigla,
         estimateCode: project.estimates[0]?.estimateCode,
         ataNumber: project.estimates[0]?.ata.number,
-        diexNumber: project.diexRequests[0]?.diexNumber || (project.diexRequests[0] ? `DIEX-${project.diexRequests[0].diexCode}` : null),
-        serviceOrderNumber: project.serviceOrders[0]?.serviceOrderNumber || (project.serviceOrders[0] ? `OS-${project.serviceOrders[0].serviceOrderCode}` : null),
+        diexNumber:
+          project.diexRequests[0]?.diexNumber ||
+          (project.diexRequests[0]
+            ? `DIEX-${project.diexRequests[0].diexCode}`
+            : null),
+        serviceOrderNumber:
+          project.serviceOrders[0]?.serviceOrderNumber ||
+          (project.serviceOrders[0]
+            ? `OS-${project.serviceOrders[0].serviceOrderCode}`
+            : null),
       });
-      draft.sections = draft.sections.map((section) => ({ ...section, content: contextual[section.key] || section.content }));
+      draft.sections = draft.sections.map((section) => ({
+        ...section,
+        content: contextual[section.key] || section.content,
+      }));
     }
-    const details = new Map(draft.itemDetails.map((item) => [item.itemId, item]));
-    const itemDetails = sourceItems.map((item) => details.get(item.itemId) ?? {
-      itemId: item.itemId,
-      unit: inferDeliveryUnit(item.description, item.sourceUnit),
-      quantity: item.sourceQuantity,
-      technicalDescription: project.deliveryReportDraft ? "" : suggestDeliveryItemText(item),
-    });
+    const details = new Map(
+      draft.itemDetails.map((item) => [item.itemId, item]),
+    );
+    const itemDetails = sourceItems.map(
+      (item) =>
+        details.get(item.itemId) ?? {
+          itemId: item.itemId,
+          unit: inferDeliveryUnit(item.description, item.sourceUnit),
+          quantity: item.sourceQuantity,
+          technicalDescription: project.deliveryReportDraft
+            ? ""
+            : suggestDeliveryItemText(item),
+        },
+    );
     if (!project.deliveryReportDraft && project.description) {
-      const purpose = draft.sections.find((section) => section.key === "purpose-scope");
+      const purpose = draft.sections.find(
+        (section) => section.key === "purpose-scope",
+      );
       if (purpose) purpose.content = project.description;
     }
     return {
-      project: { id: project.id, projectCode: project.projectCode, title: project.title, projectType: project.projectType },
+      project: {
+        id: project.id,
+        projectCode: project.projectCode,
+        title: project.title,
+        projectType: project.projectType,
+      },
       draft: { ...draft, itemDetails },
-      items: sourceItems.map((item) => ({ ...item, suggestedTechnicalDescription: suggestDeliveryItemText(item) })),
+      items: sourceItems.map((item) => ({
+        ...item,
+        suggestedTechnicalDescription: suggestDeliveryItemText(item),
+      })),
       documents: {
-        estimate: project.estimates[0] ? { id: project.estimates[0].id, code: `EST-${project.estimates[0].estimateCode}`, ataNumber: project.estimates[0].ata.number, supplierName: project.estimates[0].ata.vendorName, totalAmount: project.estimates[0].totalAmount.toString() } : null,
-        diex: project.diexRequests[0] ? { id: project.diexRequests[0].id, code: project.diexRequests[0].diexNumber || `DIEX-${project.diexRequests[0].diexCode}`, issuedAt: project.diexRequests[0].issuedAt, totalAmount: project.diexRequests[0].totalAmount.toString() } : null,
-        serviceOrder: project.serviceOrders[0] ? { id: project.serviceOrders[0].id, code: project.serviceOrders[0].serviceOrderNumber || `OS-${project.serviceOrders[0].serviceOrderCode}`, issuedAt: project.serviceOrders[0].issuedAt, totalAmount: project.serviceOrders[0].totalAmount.toString() } : null,
+        estimate: project.estimates[0]
+          ? {
+              id: project.estimates[0].id,
+              code: `EST-${project.estimates[0].estimateCode}`,
+              ataNumber: project.estimates[0].ata.number,
+              supplierName: project.estimates[0].ata.vendorName,
+              totalAmount: project.estimates[0].totalAmount.toString(),
+            }
+          : null,
+        diex: project.diexRequests[0]
+          ? {
+              id: project.diexRequests[0].id,
+              code:
+                project.diexRequests[0].diexNumber ||
+                `DIEX-${project.diexRequests[0].diexCode}`,
+              issuedAt: project.diexRequests[0].issuedAt,
+              totalAmount: project.diexRequests[0].totalAmount.toString(),
+            }
+          : null,
+        serviceOrder: project.serviceOrders[0]
+          ? {
+              id: project.serviceOrders[0].id,
+              code:
+                project.serviceOrders[0].serviceOrderNumber ||
+                `OS-${project.serviceOrders[0].serviceOrderCode}`,
+              issuedAt: project.serviceOrders[0].issuedAt,
+              totalAmount: project.serviceOrders[0].totalAmount.toString(),
+            }
+          : null,
       },
       readiness: {
-        sectionsIncluded: draft.sections.filter((section) => section.included).length,
-        sectionsReviewed: draft.sections.filter((section) => section.included && section.reviewed && section.content.trim()).length,
-        itemsDocumented: itemDetails.filter((item) => item.technicalDescription.trim()).length,
+        sectionsIncluded: draft.sections.filter((section) => section.included)
+          .length,
+        sectionsReviewed: draft.sections.filter(
+          (section) =>
+            section.included && section.reviewed && section.content.trim(),
+        ).length,
+        itemsDocumented: itemDetails.filter((item) =>
+          item.technicalDescription.trim(),
+        ).length,
         totalItems: itemDetails.length,
       },
     };
   }
 
-  async updateDeliveryReportDraft(projectId: string, draft: DeliveryReportDraft, user: CurrentUser) {
+  async updateDeliveryReportDraft(
+    projectId: string,
+    draft: DeliveryReportDraft,
+    user: CurrentUser,
+  ) {
     await this.ensureCanManage(projectId, user);
-    const current = await prisma.project.findUnique({ where: { id: projectId }, select: { projectCode: true, stage: true, deliveryReportDraft: true } });
+    const current = await prisma.project.findUnique({
+      where: { id: projectId },
+      select: { projectCode: true, stage: true, deliveryReportDraft: true },
+    });
     if (!current) throw new AppError("Projeto não encontrado", 404);
-    if (current.stage !== "ENTREGA_TECNICA") throw new AppError("A memória técnica só pode ser alterada durante a etapa de Entrega Técnica", 409, "DELIVERY_REPORT_DRAFT_LOCKED");
+    if (current.stage !== "ENTREGA_TECNICA")
+      throw new AppError(
+        "A memória técnica só pode ser alterada durante a etapa de Entrega Técnica",
+        409,
+        "DELIVERY_REPORT_DRAFT_LOCKED",
+      );
     const updated = await prisma.project.update({
       where: { id: projectId },
       data: {
@@ -2764,14 +3108,29 @@ export class ProjectsService {
       action: "UPDATE",
       actor: this.getAuditActor(user),
       summary: `Memória técnica do relatório PRJ-${current.projectCode} atualizada`,
-      before: { deliveryReportDraft: current.deliveryReportDraft ? JSON.stringify(current.deliveryReportDraft) : null },
-      after: { deliveryReportDraft: updated.deliveryReportDraft ? JSON.stringify(updated.deliveryReportDraft) : null },
-      metadata: { source: "project.delivery-report.draft", generatedReportInvalidated: true },
+      before: {
+        deliveryReportDraft: current.deliveryReportDraft
+          ? JSON.stringify(current.deliveryReportDraft)
+          : null,
+      },
+      after: {
+        deliveryReportDraft: updated.deliveryReportDraft
+          ? JSON.stringify(updated.deliveryReportDraft)
+          : null,
+      },
+      metadata: {
+        source: "project.delivery-report.draft",
+        generatedReportInvalidated: true,
+      },
     });
     return this.getDeliveryReportDraft(projectId, user);
   }
 
-  async reviewAsBuilt(projectId: string, data: ReviewAsBuiltInput, user: CurrentUser) {
+  async reviewAsBuilt(
+    projectId: string,
+    data: ReviewAsBuiltInput,
+    user: CurrentUser,
+  ) {
     await this.ensureCanManage(projectId, user);
 
     const currentProject = await prisma.project.findUnique({
@@ -2846,7 +3205,9 @@ export class ProjectsService {
       serviceOrderNumber: currentProject.serviceOrderNumber,
       serviceOrderIssuedAt: currentProject.serviceOrderIssuedAt,
       executionStartedAt: currentProject.executionStartedAt,
-      asBuiltReceivedAt: data.approved ? currentProject.asBuiltReceivedAt : null,
+      asBuiltReceivedAt: data.approved
+        ? currentProject.asBuiltReceivedAt
+        : null,
       asBuiltReviewedAt: reviewedAt,
       asBuiltApprovedAt: data.approved ? reviewedAt : null,
       asBuiltLink: data.approved ? data.asBuiltLink : null,
@@ -2878,7 +3239,9 @@ export class ProjectsService {
         asBuiltLink: data.approved ? data.asBuiltLink : null,
         asBuiltRejectedAt: data.approved ? null : reviewedAt,
         asBuiltRejectionReason: rejectionReason,
-        ...(data.approved ? {} : { asBuiltReceivedAt: null, asBuiltLink: null }),
+        ...(data.approved
+          ? {}
+          : { asBuiltReceivedAt: null, asBuiltLink: null }),
       },
       include: projectInclude,
     });
@@ -2980,7 +3343,11 @@ export class ProjectsService {
     return project;
   }
 
-  async cancelCommitmentNote(projectId: string, data: CancelCommitmentNoteInput, user: CurrentUser) {
+  async cancelCommitmentNote(
+    projectId: string,
+    data: CancelCommitmentNoteInput,
+    user: CurrentUser,
+  ) {
     await this.ensureCanManage(projectId, user);
 
     const currentProject = await prisma.project.findUnique({
@@ -3014,8 +3381,14 @@ export class ProjectsService {
       throw new AppError("Projeto não encontrado", 404);
     }
 
-    if (!currentProject.commitmentNoteNumber && !currentProject.commitmentNoteReceivedAt) {
-      throw new AppError("O projeto não possui Nota de Empenho ativa para cancelamento", 409);
+    if (
+      !currentProject.commitmentNoteNumber &&
+      !currentProject.commitmentNoteReceivedAt
+    ) {
+      throw new AppError(
+        "O projeto não possui Nota de Empenho ativa para cancelamento",
+        409,
+      );
     }
 
     const reason = data.reason.trim();
@@ -3044,7 +3417,10 @@ export class ProjectsService {
       });
 
       if (!diex) {
-        throw new AppError("Nenhum DIEx ativo foi encontrado para rollback da NE", 409);
+        throw new AppError(
+          "Nenhum DIEx ativo foi encontrado para rollback da NE",
+          409,
+        );
       }
 
       const estimate = await tx.estimate.findUnique({
@@ -3060,7 +3436,10 @@ export class ProjectsService {
       });
 
       if (!estimate || estimate.deletedAt || estimate.archivedAt) {
-        throw new AppError("Nenhuma estimativa ativa foi encontrada para rollback da NE", 409);
+        throw new AppError(
+          "Nenhuma estimativa ativa foi encontrada para rollback da NE",
+          409,
+        );
       }
 
       const serviceOrder = await tx.serviceOrder.findFirst({
@@ -3367,11 +3746,16 @@ export class ProjectsService {
 
   async softDelete(projectId: string, user: CurrentUser) {
     if (!permissionsService.hasPermission(user, "projects.delete")) {
-      throw new AppError("Você não tem permissão para excluir este projeto", 403);
+      throw new AppError(
+        "Você não tem permissão para excluir este projeto",
+        403,
+      );
     }
 
     const projectAccess = await this.ensureCanManage(projectId, user, true);
-    workflowService.assertCanDeleteProject(this.buildWorkflowSnapshot(projectAccess));
+    workflowService.assertCanDeleteProject(
+      this.buildWorkflowSnapshot(projectAccess),
+    );
 
     const before = await prisma.project.findUnique({
       where: { id: projectId },
@@ -3396,24 +3780,26 @@ export class ProjectsService {
 
     const deletedAt = new Date();
     const deleted = await prisma.$transaction(async (tx) => {
-      const [tasks, estimates, diexRequests, serviceOrders] = await Promise.all([
-        tx.task.updateMany({
-          where: { projectId, deletedAt: null },
-          data: { deletedAt },
-        }),
-        tx.estimate.updateMany({
-          where: { projectId, deletedAt: null },
-          data: { deletedAt },
-        }),
-        tx.diexRequest.updateMany({
-          where: { projectId, deletedAt: null },
-          data: { deletedAt },
-        }),
-        tx.serviceOrder.updateMany({
-          where: { projectId, deletedAt: null },
-          data: { deletedAt },
-        }),
-      ]);
+      const [tasks, estimates, diexRequests, serviceOrders] = await Promise.all(
+        [
+          tx.task.updateMany({
+            where: { projectId, deletedAt: null },
+            data: { deletedAt },
+          }),
+          tx.estimate.updateMany({
+            where: { projectId, deletedAt: null },
+            data: { deletedAt },
+          }),
+          tx.diexRequest.updateMany({
+            where: { projectId, deletedAt: null },
+            data: { deletedAt },
+          }),
+          tx.serviceOrder.updateMany({
+            where: { projectId, deletedAt: null },
+            data: { deletedAt },
+          }),
+        ],
+      );
 
       const project = await tx.project.update({
         where: { id: projectId },
@@ -3468,9 +3854,16 @@ export class ProjectsService {
     };
   }
 
-  async restore(projectId: string, user: CurrentUser, options: RestoreOptions = {}) {
+  async restore(
+    projectId: string,
+    user: CurrentUser,
+    options: RestoreOptions = {},
+  ) {
     if (!permissionsService.hasPermission(user, "projects.restore")) {
-      throw new AppError("Você não tem permissão para restaurar este projeto", 403);
+      throw new AppError(
+        "Você não tem permissão para restaurar este projeto",
+        403,
+      );
     }
 
     const before = await prisma.project.findUnique({
@@ -3557,86 +3950,92 @@ export class ProjectsService {
     };
 
     if (options.cascade) {
-      const [archivedTasks, archivedEstimates, archivedDiex, archivedServiceOrders] =
-        await Promise.all([
-          prisma.task.findMany({
-            where: {
-              projectId,
-              archivedAt: {
-                not: null,
+      const [
+        archivedTasks,
+        archivedEstimates,
+        archivedDiex,
+        archivedServiceOrders,
+      ] = await Promise.all([
+        prisma.task.findMany({
+          where: {
+            projectId,
+            archivedAt: {
+              not: null,
+            },
+          },
+          select: {
+            id: true,
+            deletedAt: true,
+          },
+          orderBy: {
+            taskCode: "asc",
+          },
+        }),
+        prisma.estimate.findMany({
+          where: {
+            projectId,
+            archivedAt: {
+              not: null,
+            },
+          },
+          select: {
+            id: true,
+            deletedAt: true,
+          },
+          orderBy: {
+            estimateCode: "asc",
+          },
+        }),
+        prisma.diexRequest.findMany({
+          where: {
+            projectId,
+            archivedAt: {
+              not: null,
+            },
+          },
+          select: {
+            id: true,
+            deletedAt: true,
+            estimate: {
+              select: {
+                deletedAt: true,
               },
             },
-            select: {
-              id: true,
-              deletedAt: true,
+          },
+          orderBy: {
+            diexCode: "asc",
+          },
+        }),
+        prisma.serviceOrder.findMany({
+          where: {
+            projectId,
+            archivedAt: {
+              not: null,
             },
-            orderBy: {
-              taskCode: "asc",
-            },
-          }),
-          prisma.estimate.findMany({
-            where: {
-              projectId,
-              archivedAt: {
-                not: null,
+          },
+          select: {
+            id: true,
+            deletedAt: true,
+            estimate: {
+              select: {
+                deletedAt: true,
               },
             },
-            select: {
-              id: true,
-              deletedAt: true,
-            },
-            orderBy: {
-              estimateCode: "asc",
-            },
-          }),
-          prisma.diexRequest.findMany({
-            where: {
-              projectId,
-              archivedAt: {
-                not: null,
+            diexRequest: {
+              select: {
+                deletedAt: true,
               },
             },
-            select: {
-              id: true,
-              deletedAt: true,
-              estimate: {
-                select: {
-                  deletedAt: true,
-                },
-              },
-            },
-            orderBy: {
-              diexCode: "asc",
-            },
-          }),
-          prisma.serviceOrder.findMany({
-            where: {
-              projectId,
-              archivedAt: {
-                not: null,
-              },
-            },
-            select: {
-              id: true,
-              deletedAt: true,
-              estimate: {
-                select: {
-                  deletedAt: true,
-                },
-              },
-              diexRequest: {
-                select: {
-                  deletedAt: true,
-                },
-              },
-            },
-            orderBy: {
-              serviceOrderCode: "asc",
-            },
-          }),
-        ]);
+          },
+          orderBy: {
+            serviceOrderCode: "asc",
+          },
+        }),
+      ]);
 
-      const taskIds = archivedTasks.filter((item) => !item.deletedAt).map((item) => item.id);
+      const taskIds = archivedTasks
+        .filter((item) => !item.deletedAt)
+        .map((item) => item.id);
       const estimateIds = archivedEstimates
         .filter((item) => !item.deletedAt)
         .map((item) => item.id);
@@ -3653,9 +4052,9 @@ export class ProjectsService {
         .map((item) => item.id);
 
       cascade.skipped.tasksDeleted = archivedTasks.length - taskIds.length;
-      cascade.skipped.estimatesDeleted = archivedEstimates.length - estimateIds.length;
-      cascade.skipped.diexDeleted =
-        archivedDiex.length - diexIds.length;
+      cascade.skipped.estimatesDeleted =
+        archivedEstimates.length - estimateIds.length;
+      cascade.skipped.diexDeleted = archivedDiex.length - diexIds.length;
       cascade.skipped.serviceOrdersDeleted =
         archivedServiceOrders.length - serviceOrderIds.length;
 

@@ -3,7 +3,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const { queryRaw } = vi.hoisted(() => ({ queryRaw: vi.fn() }));
 
 vi.mock("../src/config/prisma.js", () => ({
-  prisma: { $queryRaw: queryRaw },
+  prisma: {
+    $queryRaw: queryRaw,
+    notificationAutomationConfiguration: { findUnique: vi.fn(async () => ({ enabled: false })) },
+    notificationAutomationRun: { findFirst: vi.fn(async () => null) },
+    systemHealthSample: {
+      createMany: vi.fn(async () => ({ count: 1 })),
+      deleteMany: vi.fn(async () => ({ count: 0 })),
+      findMany: vi.fn(async () => []),
+    },
+  },
+}));
+
+vi.mock("../src/modules/deployment/deployment.service.js", () => ({
+  getDeploymentCertificateStatus: vi.fn(async () => ({ configured: false, status: "NOT_CONFIGURED" })),
 }));
 
 vi.mock("../src/config/env.js", () => ({
@@ -11,6 +24,10 @@ vi.mock("../src/config/env.js", () => ({
     NODE_ENV: "test",
     HEALTH_PGADMIN_URL: undefined,
     HEALTH_PROBE_TIMEOUT_MS: 500,
+    EVIDENCE_DIRECTORY: ".",
+    BACKUP_SCHEDULE_HOURS: 0,
+    DEPLOYMENT_PKI_DIRECTORY: "./pki",
+    DEPLOYMENT_TLS_DIRECTORY: "./tls",
   },
 }));
 
@@ -53,6 +70,10 @@ describe("monitoramento de saude do sistema", () => {
       "sagep_api",
       "sagep_postgres",
       "sagep_pgadmin",
+      "sagep_storage",
+      "sagep_backups",
+      "sagep_certificate",
+      "sagep_automations",
     ]);
   });
 });

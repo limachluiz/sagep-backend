@@ -390,7 +390,7 @@ export class BackupsService {
         },
         evidenceFiles: {
           included: false,
-          detail: "Fotos, vídeos, KMZ/KML e documentos técnicos ficam no volume sagep_evidence_files.",
+          detail: "Fotos, vídeos, KMZ/KML e documentos técnicos ficam no volume sagep_evidence_files, com exportação e restauração segura próprias.",
         },
         certificateAuthority: {
           included: false,

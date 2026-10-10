@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
+import { reportGovernmentIntegrationFailure, resilientGovernmentFetch, responseFingerprint } from "../../shared/government-integration.js";
 import { normalizeMojibakeText } from "../../shared/text-normalization.js";
 import { correctImportedDescription } from "../../shared/description-correction.js";
 import { inferCoverageFromDescription, type InferredCoverage } from "./coverage-inference.js";
@@ -455,11 +456,10 @@ export class ComprasGovService {
     this.requestDebug.push(debugEntry);
 
     try {
-      response = await fetch(url, {
+      response = await resilientGovernmentFetch("COMPRAS_GOV", url, {
         headers: { accept: "application/json" },
         redirect: "manual",
-        signal: AbortSignal.timeout(env.COMPRAS_GOV_REQUEST_TIMEOUT_MS),
-      });
+      }, env.COMPRAS_GOV_REQUEST_TIMEOUT_MS);
     } catch {
       debugEntry.errorBody = "Falha de rede ou timeout ao consultar API do Compras.gov.br";
       throw new ComprasGovApiError("Falha ao consultar API do Compras.gov.br", [
@@ -516,8 +516,18 @@ export class ComprasGovService {
       tamanhoPagina: DEFAULT_PAGE_SIZE,
     });
 
-    const results = [...(firstPage.resultado ?? [])];
-    const totalPages = Math.min(firstPage.totalPaginas ?? 1, MAX_PAGES);
+    if (!Array.isArray(firstPage.resultado) || (firstPage.totalPaginas !== undefined && !Number.isInteger(firstPage.totalPaginas))) {
+      await reportGovernmentIntegrationFailure("COMPRAS_GOV", "Compras.gov alterou o formato esperado da resposta", 200, { path });
+      throw new AppError("Compras.gov alterou o formato esperado da resposta", 502, "COMPRAS_GOV_SCHEMA_CHANGED");
+    }
+    const results = [...firstPage.resultado];
+    const informedPages = firstPage.totalPaginas ?? 1;
+    if (informedPages > MAX_PAGES) {
+      await reportGovernmentIntegrationFailure("COMPRAS_GOV", "A consulta excedeu o limite de cobertura verificável", 200, { path, informedPages, maxPages: MAX_PAGES });
+      throw new AppError(`Consulta incompleta: Compras.gov informou ${informedPages} páginas, acima do limite verificável de ${MAX_PAGES}`, 502, "COMPRAS_GOV_COVERAGE_INCOMPLETE", { informedPages, maxPages: MAX_PAGES });
+    }
+    const totalPages = informedPages;
+    const pageFingerprints = new Set([responseFingerprint(firstPage.resultado)]);
     const externalTotal = firstPage.resultado?.length ?? 0;
 
     this.debug("Registros externos recebidos", {
@@ -534,7 +544,17 @@ export class ComprasGovService {
         pagina: page,
         tamanhoPagina: DEFAULT_PAGE_SIZE,
       });
-      results.push(...(response.resultado ?? []));
+      if (!Array.isArray(response.resultado)) {
+        await reportGovernmentIntegrationFailure("COMPRAS_GOV", "Compras.gov alterou o formato esperado da paginação", 200, { path, page });
+        throw new AppError("Compras.gov alterou o formato esperado da paginação", 502, "COMPRAS_GOV_SCHEMA_CHANGED");
+      }
+      const fingerprint = responseFingerprint(response.resultado);
+      if (pageFingerprints.has(fingerprint) && response.resultado.length > 0) {
+        await reportGovernmentIntegrationFailure("COMPRAS_GOV", "Compras.gov repetiu uma página; a cobertura não pode ser confirmada", 200, { path, page });
+        throw new AppError(`Compras.gov repetiu a página ${page}; a cobertura da consulta não pode ser confirmada`, 502, "COMPRAS_GOV_REPEATED_PAGE", { page });
+      }
+      pageFingerprints.add(fingerprint);
+      results.push(...response.resultado);
       this.debug("Registros externos recebidos", {
         path,
         page,

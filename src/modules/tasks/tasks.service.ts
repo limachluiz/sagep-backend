@@ -23,6 +23,7 @@ type CreateTaskInput = {
   assigneeId?: string;
   assigneeUserCode?: number;
   dueDate?: Date;
+  mentionedUserIds?: string[];
 };
 
 type UpdateTaskInput = {
@@ -35,6 +36,7 @@ type UpdateTaskInput = {
   clearAssignee?: boolean;
   dueDate?: Date;
   clearDueDate?: boolean;
+  mentionedUserIds?: string[];
 };
 
 type UpdateTaskStatusInput = {
@@ -173,10 +175,15 @@ export class TasksService {
       filters.archivedFrom ||
       filters.archivedUntil,
     );
-    const requestsDeleted = Boolean(filters.includeDeleted || filters.onlyDeleted);
+    const requestsDeleted = Boolean(
+      filters.includeDeleted || filters.onlyDeleted,
+    );
 
     if (requestsArchived && !canAccessArchived) {
-      throw new AppError("Você não tem permissão para consultar tarefas arquivadas", 403);
+      throw new AppError(
+        "Você não tem permissão para consultar tarefas arquivadas",
+        403,
+      );
     }
 
     if (requestsDeleted && !this.isAdmin(user.role)) {
@@ -190,7 +197,9 @@ export class TasksService {
     return {
       includeArchived: Boolean(filters.includeArchived && canAccessArchived),
       onlyArchived: Boolean(filters.onlyArchived && canAccessArchived),
-      includeDeleted: Boolean(filters.includeDeleted && this.isAdmin(user.role)),
+      includeDeleted: Boolean(
+        filters.includeDeleted && this.isAdmin(user.role),
+      ),
       onlyDeleted: Boolean(filters.onlyDeleted && this.isAdmin(user.role)),
     };
   }
@@ -269,8 +278,16 @@ export class TasksService {
         },
       });
 
-      if (!project || project.deletedAt || project.archivedAt || project.projectCode !== projectCode) {
-        throw new AppError("ProjectId e projectCode não correspondem ao mesmo projeto", 400);
+      if (
+        !project ||
+        project.deletedAt ||
+        project.archivedAt ||
+        project.projectCode !== projectCode
+      ) {
+        throw new AppError(
+          "ProjectId e projectCode não correspondem ao mesmo projeto",
+          400,
+        );
       }
 
       return project;
@@ -329,7 +346,10 @@ export class TasksService {
     throw new AppError("Projeto não informado", 400);
   }
 
-  private async resolveAssignee(assigneeId?: string, assigneeUserCode?: number) {
+  private async resolveAssignee(
+    assigneeId?: string,
+    assigneeUserCode?: number,
+  ) {
     if (!assigneeId && !assigneeUserCode) {
       return null;
     }
@@ -345,11 +365,17 @@ export class TasksService {
       });
 
       if (!user || user.userCode !== assigneeUserCode) {
-        throw new AppError("assigneeId e assigneeUserCode não correspondem ao mesmo usuário", 400);
+        throw new AppError(
+          "assigneeId e assigneeUserCode não correspondem ao mesmo usuário",
+          400,
+        );
       }
 
       if (!user.active) {
-        throw new AppError("Não é possível atribuir tarefa a um usuário inativo", 409);
+        throw new AppError(
+          "Não é possível atribuir tarefa a um usuário inativo",
+          409,
+        );
       }
 
       return user;
@@ -370,7 +396,10 @@ export class TasksService {
       }
 
       if (!user.active) {
-        throw new AppError("Não é possível atribuir tarefa a um usuário inativo", 409);
+        throw new AppError(
+          "Não é possível atribuir tarefa a um usuário inativo",
+          409,
+        );
       }
 
       return user;
@@ -391,7 +420,10 @@ export class TasksService {
       }
 
       if (!user.active) {
-        throw new AppError("Não é possível atribuir tarefa a um usuário inativo", 409);
+        throw new AppError(
+          "Não é possível atribuir tarefa a um usuário inativo",
+          409,
+        );
       }
 
       return user;
@@ -400,7 +432,10 @@ export class TasksService {
     return null;
   }
 
-  private canManageProject(project: { ownerId: string; members: { userId: string }[] }, user: CurrentUser) {
+  private canManageProject(
+    project: { ownerId: string; members: { userId: string }[] },
+    user: CurrentUser,
+  ) {
     if (permissionsService.hasPermission(user, "tasks.edit_all")) {
       return true;
     }
@@ -412,7 +447,9 @@ export class TasksService {
       return true;
     }
 
-    const isMember = project.members.some((member) => member.userId === user.id);
+    const isMember = project.members.some(
+      (member) => member.userId === user.id,
+    );
 
     if (isMember && permissionsService.hasPermission(user, "tasks.edit_own")) {
       return true;
@@ -423,15 +460,17 @@ export class TasksService {
 
   private ensureAssigneeBelongsToProject(
     project: { ownerId: string; members: { userId: string }[] },
-    assigneeId: string
+    assigneeId: string,
   ) {
     const isOwner = project.ownerId === assigneeId;
-    const isMember = project.members.some((member) => member.userId === assigneeId);
+    const isMember = project.members.some(
+      (member) => member.userId === assigneeId,
+    );
 
     if (!isOwner && !isMember) {
       throw new AppError(
         "O responsável da tarefa precisa ser o dono do projeto ou um membro vinculado a ele",
-        409
+        409,
       );
     }
   }
@@ -443,6 +482,7 @@ export class TasksService {
         id: true,
         taskCode: true,
         title: true,
+        description: true,
         status: true,
         assigneeId: true,
         completedAt: true,
@@ -508,7 +548,11 @@ export class TasksService {
     return task;
   }
 
-  private async ensureCanView(taskId: string, user: CurrentUser, includeArchived = false) {
+  private async ensureCanView(
+    taskId: string,
+    user: CurrentUser,
+    includeArchived = false,
+  ) {
     const task = await this.getTaskAccessData(taskId);
 
     if (!includeArchived && task.archivedAt) {
@@ -520,7 +564,9 @@ export class TasksService {
     }
 
     const isOwner = task.project.ownerId === user.id;
-    const isMember = task.project.members.some((member) => member.userId === user.id);
+    const isMember = task.project.members.some(
+      (member) => member.userId === user.id,
+    );
     const isAssignee = task.assigneeId === user.id;
 
     if (!isOwner && !isMember && !isAssignee) {
@@ -530,7 +576,11 @@ export class TasksService {
     return task;
   }
 
-  private async ensureCanViewByCode(taskCode: number, user: CurrentUser, includeArchived = false) {
+  private async ensureCanViewByCode(
+    taskCode: number,
+    user: CurrentUser,
+    includeArchived = false,
+  ) {
     const task = await this.getTaskAccessDataByCode(taskCode);
 
     if (!includeArchived && task.archivedAt) {
@@ -542,7 +592,9 @@ export class TasksService {
     }
 
     const isOwner = task.project.ownerId === user.id;
-    const isMember = task.project.members.some((member) => member.userId === user.id);
+    const isMember = task.project.members.some(
+      (member) => member.userId === user.id,
+    );
     const isAssignee = task.assigneeId === user.id;
 
     if (!isOwner && !isMember && !isAssignee) {
@@ -552,7 +604,11 @@ export class TasksService {
     return task;
   }
 
-  private async ensureCanManage(taskId: string, user: CurrentUser, includeArchived = false) {
+  private async ensureCanManage(
+    taskId: string,
+    user: CurrentUser,
+    includeArchived = false,
+  ) {
     const task = await this.getTaskAccessData(taskId);
 
     if (!includeArchived && task.archivedAt) {
@@ -570,14 +626,22 @@ export class TasksService {
       return task;
     }
 
-    const isMember = task.project.members.some((member) => member.userId === user.id);
+    const isMember = task.project.members.some(
+      (member) => member.userId === user.id,
+    );
     const isAssignee = task.assigneeId === user.id;
 
-    if ((isMember || isAssignee) && permissionsService.hasPermission(user, "tasks.edit_own")) {
+    if (
+      (isMember || isAssignee) &&
+      permissionsService.hasPermission(user, "tasks.edit_own")
+    ) {
       return task;
     }
 
-    throw new AppError("Você não tem permissão para gerenciar esta tarefa", 403);
+    throw new AppError(
+      "Você não tem permissão para gerenciar esta tarefa",
+      403,
+    );
   }
 
   private ensureCanRegisterWork(
@@ -594,10 +658,14 @@ export class TasksService {
         (task.project.ownerId === user.id ||
           task.project.members.some((member) => member.userId === user.id)));
     const canWorkOnOwn =
-      task.assigneeId === user.id && permissionsService.hasPermission(user, "tasks.complete");
+      task.assigneeId === user.id &&
+      permissionsService.hasPermission(user, "tasks.complete");
 
     if (!canManage && !canWorkOnOwn) {
-      throw new AppError("Você não tem permissão para registrar andamento nesta tarefa", 403);
+      throw new AppError(
+        "Você não tem permissão para registrar andamento nesta tarefa",
+        403,
+      );
     }
   }
 
@@ -605,10 +673,16 @@ export class TasksService {
     const project = await this.resolveProject(data.projectId, data.projectCode);
 
     if (!this.canManageProject(project, user)) {
-      throw new AppError("Você não tem permissão para criar tarefas neste projeto", 403);
+      throw new AppError(
+        "Você não tem permissão para criar tarefas neste projeto",
+        403,
+      );
     }
 
-    const assignee = await this.resolveAssignee(data.assigneeId, data.assigneeUserCode);
+    const assignee = await this.resolveAssignee(
+      data.assigneeId,
+      data.assigneeUserCode,
+    );
 
     if (assignee && !permissionsService.hasPermission(user, "tasks.assign")) {
       throw new AppError("Você não tem permissão para atribuir tarefas", 403);
@@ -647,6 +721,20 @@ export class TasksService {
       });
     }
 
+    if (data.description)
+      await notificationsService.publishMentions({
+        content: data.description,
+        mentionedUserIds: data.mentionedUserIds,
+        projectId: project.id,
+        eventKeyPrefix: `TASK_DESCRIPTION:${task.id}:${task.updatedAt.toISOString()}`,
+        actorId: user.id,
+        title: `Você foi mencionado na TSK-${task.taskCode}`,
+        description: data.description.slice(0, 180),
+        detailsPath: `/tasks/${task.id}`,
+        entityType: "TASK",
+        entityId: task.id,
+      });
+
     return task;
   }
 
@@ -654,7 +742,9 @@ export class TasksService {
     const { includeArchived, onlyArchived, includeDeleted, onlyDeleted } =
       this.resolveArchivedAccess(user, filters);
     const andConditions: Prisma.TaskWhereInput[] = [];
-    const hasArchivedPeriod = Boolean(filters.archivedFrom || filters.archivedUntil);
+    const hasArchivedPeriod = Boolean(
+      filters.archivedFrom || filters.archivedUntil,
+    );
 
     andConditions.push(
       onlyDeleted
@@ -664,15 +754,15 @@ export class TasksService {
             },
           }
         : onlyArchived || hasArchivedPeriod
-        ? {
-            archivedAt: {
-              not: null,
-              ...(filters.archivedFrom && { gte: filters.archivedFrom }),
-              ...(filters.archivedUntil && { lte: filters.archivedUntil }),
-            },
-            deletedAt: null,
-          }
-        : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
+          ? {
+              archivedAt: {
+                not: null,
+                ...(filters.archivedFrom && { gte: filters.archivedFrom }),
+                ...(filters.archivedUntil && { lte: filters.archivedUntil }),
+              },
+              deletedAt: null,
+            }
+          : this.buildLifecycleVisibilityWhere(includeArchived, includeDeleted),
     );
 
     if (!onlyDeleted) {
@@ -746,9 +836,7 @@ export class TasksService {
     const tasks = await prisma.task.findMany({
       where,
       include: taskInclude,
-      orderBy: [
-        { taskCode: "asc" },
-      ],
+      orderBy: [{ taskCode: "asc" }],
     });
 
     if (includeArchived || onlyArchived || hasArchivedPeriod) {
@@ -805,16 +893,25 @@ export class TasksService {
 
     if (data.clearAssignee) {
       if (!permissionsService.hasPermission(user, "tasks.assign")) {
-        throw new AppError("Você não tem permissão para alterar atribuição de tarefas", 403);
+        throw new AppError(
+          "Você não tem permissão para alterar atribuição de tarefas",
+          403,
+        );
       }
 
       resolvedAssigneeId = undefined;
     } else if (data.assigneeId || data.assigneeUserCode) {
       if (!permissionsService.hasPermission(user, "tasks.assign")) {
-        throw new AppError("Você não tem permissão para alterar atribuição de tarefas", 403);
+        throw new AppError(
+          "Você não tem permissão para alterar atribuição de tarefas",
+          403,
+        );
       }
 
-      const assignee = await this.resolveAssignee(data.assigneeId, data.assigneeUserCode);
+      const assignee = await this.resolveAssignee(
+        data.assigneeId,
+        data.assigneeUserCode,
+      );
 
       if (assignee) {
         this.ensureAssigneeBelongsToProject(taskAccess.project, assignee.id);
@@ -826,13 +923,17 @@ export class TasksService {
       where: { id: taskId },
       data: {
         ...(data.title !== undefined && { title: data.title }),
-        ...(data.description !== undefined && { description: data.description }),
+        ...(data.description !== undefined && {
+          description: data.description,
+        }),
         ...(data.priority !== undefined && { priority: data.priority }),
         ...(data.dueDate !== undefined && { dueDate: data.dueDate }),
         ...(data.clearDueDate === true && { dueDate: null }),
         ...(data.clearAssignee === true && { assigneeId: null }),
         ...(data.clearAssignee !== true &&
-          resolvedAssigneeId !== undefined && { assigneeId: resolvedAssigneeId }),
+          resolvedAssigneeId !== undefined && {
+            assigneeId: resolvedAssigneeId,
+          }),
       },
       include: taskInclude,
     });
@@ -859,6 +960,20 @@ export class TasksService {
       await notificationsService.resolveByPrefix(`TASK_DEADLINE:${taskId}:`);
     }
 
+    if (data.description && data.description !== taskAccess.description)
+      await notificationsService.publishMentions({
+        content: data.description,
+        mentionedUserIds: data.mentionedUserIds,
+        projectId: task.project.id,
+        eventKeyPrefix: `TASK_DESCRIPTION:${task.id}:${task.updatedAt.toISOString()}`,
+        actorId: user.id,
+        title: `Você foi mencionado na TSK-${task.taskCode}`,
+        description: data.description.slice(0, 180),
+        detailsPath: `/tasks/${task.id}`,
+        entityType: "TASK",
+        entityId: task.id,
+      });
+
     if (data.status !== undefined && data.status !== taskAccess.status) {
       return this.updateStatus(taskId, { status: data.status }, user);
     }
@@ -866,7 +981,11 @@ export class TasksService {
     return task;
   }
 
-  async updateStatus(taskId: string, data: UpdateTaskStatusInput, user: CurrentUser) {
+  async updateStatus(
+    taskId: string,
+    data: UpdateTaskStatusInput,
+    user: CurrentUser,
+  ) {
     const taskAccess = await this.getTaskAccessData(taskId);
 
     if (taskAccess.archivedAt) {
@@ -879,18 +998,26 @@ export class TasksService {
         taskAccess.project.ownerId === user.id) ||
       taskAccess.project.members.some(
         (member) =>
-          member.userId === user.id && permissionsService.hasPermission(user, "tasks.edit_own"),
+          member.userId === user.id &&
+          permissionsService.hasPermission(user, "tasks.edit_own"),
       );
 
     const canCompleteOwn =
-      taskAccess.assigneeId === user.id && permissionsService.hasPermission(user, "tasks.complete");
+      taskAccess.assigneeId === user.id &&
+      permissionsService.hasPermission(user, "tasks.complete");
 
     if (data.status === "CONCLUIDA" && !canManage && !canCompleteOwn) {
-      throw new AppError("Você não tem permissão para concluir esta tarefa", 403);
+      throw new AppError(
+        "Você não tem permissão para concluir esta tarefa",
+        403,
+      );
     }
 
     if (data.status !== "CONCLUIDA" && !canManage && !canCompleteOwn) {
-      throw new AppError("Você não tem permissão para alterar o status desta tarefa", 403);
+      throw new AppError(
+        "Você não tem permissão para alterar o status desta tarefa",
+        403,
+      );
     }
 
     if (taskAccess.status === data.status) {
@@ -908,12 +1035,18 @@ export class TasksService {
         },
       });
 
-      const reopened = taskAccess.status === "CONCLUIDA" && data.status !== "CONCLUIDA";
+      const reopened =
+        taskAccess.status === "CONCLUIDA" && data.status !== "CONCLUIDA";
       await tx.taskActivity.create({
         data: {
           taskId,
           authorId: user.id,
-          type: data.status === "CONCLUIDA" ? "COMPLETION" : reopened ? "REOPENED" : "STATUS_CHANGE",
+          type:
+            data.status === "CONCLUIDA"
+              ? "COMPLETION"
+              : reopened
+                ? "REOPENED"
+                : "STATUS_CHANGE",
           content:
             data.status === "CONCLUIDA"
               ? "Tarefa concluída"
@@ -944,7 +1077,12 @@ export class TasksService {
       projectId: taskAccess.project.id,
       eventKey: `TASK_STATUS:${taskId}:${data.status}:${now.toISOString()}`,
       actorId: user.id,
-      category: data.status === "CONCLUIDA" ? "TASK_COMPLETED" : data.status === "PENDENTE" ? "TASK_REOPENED" : "TASK_UPDATED",
+      category:
+        data.status === "CONCLUIDA"
+          ? "TASK_COMPLETED"
+          : data.status === "PENDENTE"
+            ? "TASK_REOPENED"
+            : "TASK_UPDATED",
       severity: "INFO",
       title: `Tarefa TSK-${taskAccess.taskCode}: ${data.status.toLowerCase().replaceAll("_", " ")}`,
       description: `${taskAccess.title} · PRJ-${taskAccess.project.projectCode}`,
@@ -957,12 +1095,22 @@ export class TasksService {
     return this.findById(taskId, user);
   }
 
-  async addActivity(taskId: string, data: CreateTaskActivityInput, user: CurrentUser) {
+  async addActivity(
+    taskId: string,
+    data: CreateTaskActivityInput,
+    user: CurrentUser,
+  ) {
     const taskAccess = await this.getTaskAccessData(taskId);
     this.ensureCanRegisterWork(taskAccess, user);
 
-    if (taskAccess.status === "CONCLUIDA" || taskAccess.status === "CANCELADA") {
-      throw new AppError("Reabra a tarefa antes de registrar um novo andamento", 409);
+    if (
+      taskAccess.status === "CONCLUIDA" ||
+      taskAccess.status === "CANCELADA"
+    ) {
+      throw new AppError(
+        "Reabra a tarefa antes de registrar um novo andamento",
+        409,
+      );
     }
 
     const activity = await prisma.$transaction(async (tx) => {
@@ -1009,20 +1157,29 @@ export class TasksService {
       eventKeyPrefix: `TASK_ACTIVITY:${activity.id}`,
       actorId: user.id,
       title: `Você foi mencionado na TSK-${taskAccess.taskCode}`,
-      description: data.content.length > 180 ? `${data.content.slice(0, 177)}...` : data.content,
+      description:
+        data.content.length > 180
+          ? `${data.content.slice(0, 177)}...`
+          : data.content,
       detailsPath: `/tasks/${taskId}`,
       entityType: "TASK",
       entityId: taskId,
     });
 
-    const activityRecipients = [taskAccess.assigneeId, taskAccess.project.ownerId].filter((id): id is string => Boolean(id));
+    const activityRecipients = [
+      taskAccess.assigneeId,
+      taskAccess.project.ownerId,
+    ].filter((id): id is string => Boolean(id));
     await notificationsService.publish({
       eventKey: `TASK_ACTIVITY:${activity.id}`,
       recipientIds: activityRecipients,
       actorId: user.id,
       category: "TASK_ACTIVITY",
       title: `Novo andamento na TSK-${taskAccess.taskCode}`,
-      description: data.content.length > 180 ? `${data.content.slice(0, 177)}...` : data.content,
+      description:
+        data.content.length > 180
+          ? `${data.content.slice(0, 177)}...`
+          : data.content,
       detailsPath: `/tasks/${taskId}`,
       entityType: "TASK",
       entityId: taskId,
@@ -1095,7 +1252,10 @@ export class TasksService {
 
   async remove(taskId: string, user: CurrentUser) {
     if (!permissionsService.hasPermission(user, "tasks.archive")) {
-      throw new AppError("Você não tem permissão para arquivar esta tarefa", 403);
+      throw new AppError(
+        "Você não tem permissão para arquivar esta tarefa",
+        403,
+      );
     }
 
     const before = await prisma.task.findUnique({
@@ -1148,9 +1308,16 @@ export class TasksService {
     if (before.assigneeId) {
       await notificationsService.publish({
         eventKey: `TASK_ARCHIVED:${taskId}:${task.updatedAt.toISOString()}`,
-        recipientIds: [before.assigneeId], actorId: user.id, category: "TASK_ARCHIVED", severity: "WARNING",
-        title: `Tarefa TSK-${before.taskCode} arquivada`, description: `${before.title} · PRJ-${task.project.projectCode}`,
-        detailsPath: "/tasks", entityType: "TASK", entityId: taskId, preference: "workflowUpdates",
+        recipientIds: [before.assigneeId],
+        actorId: user.id,
+        category: "TASK_ARCHIVED",
+        severity: "WARNING",
+        title: `Tarefa TSK-${before.taskCode} arquivada`,
+        description: `${before.title} · PRJ-${task.project.projectCode}`,
+        detailsPath: "/tasks",
+        entityType: "TASK",
+        entityId: taskId,
+        preference: "workflowUpdates",
       });
     }
 
@@ -1163,13 +1330,19 @@ export class TasksService {
 
   async softDelete(taskId: string, user: CurrentUser) {
     if (!permissionsService.hasPermission(user, "tasks.delete")) {
-      throw new AppError("Você não tem permissão para excluir esta tarefa", 403);
+      throw new AppError(
+        "Você não tem permissão para excluir esta tarefa",
+        403,
+      );
     }
 
     const before = await this.ensureCanManage(taskId, user, true);
 
     if (!before.archivedAt) {
-      throw new AppError("A tarefa precisa estar arquivada antes da exclusão", 409);
+      throw new AppError(
+        "A tarefa precisa estar arquivada antes da exclusão",
+        409,
+      );
     }
 
     const deletedAt = new Date();
@@ -1198,9 +1371,16 @@ export class TasksService {
     if (before.assigneeId) {
       await notificationsService.publish({
         eventKey: `TASK_DELETED:${taskId}:${deletedAt.toISOString()}`,
-        recipientIds: [before.assigneeId], actorId: user.id, category: "TASK_DELETED", severity: "WARNING",
-        title: `Tarefa TSK-${before.taskCode} excluída`, description: `${before.title} · PRJ-${task.project.projectCode}`,
-        detailsPath: "/tasks", entityType: "TASK", entityId: taskId, preference: "workflowUpdates",
+        recipientIds: [before.assigneeId],
+        actorId: user.id,
+        category: "TASK_DELETED",
+        severity: "WARNING",
+        title: `Tarefa TSK-${before.taskCode} excluída`,
+        description: `${before.title} · PRJ-${task.project.projectCode}`,
+        detailsPath: "/tasks",
+        entityType: "TASK",
+        entityId: taskId,
+        preference: "workflowUpdates",
       });
     }
 
@@ -1211,9 +1391,16 @@ export class TasksService {
     };
   }
 
-  async restore(taskId: string, user: CurrentUser, options: RestoreOptions = {}) {
+  async restore(
+    taskId: string,
+    user: CurrentUser,
+    options: RestoreOptions = {},
+  ) {
     if (!permissionsService.hasPermission(user, "tasks.restore")) {
-      throw new AppError("Você não tem permissão para restaurar esta tarefa", 403);
+      throw new AppError(
+        "Você não tem permissão para restaurar esta tarefa",
+        403,
+      );
     }
 
     let before = await prisma.task.findUnique({
@@ -1247,11 +1434,15 @@ export class TasksService {
     }
 
     if (before.project.deletedAt) {
-      throw new AppError("Não é possível restaurar tarefa de projeto removido logicamente", 409);
+      throw new AppError(
+        "Não é possível restaurar tarefa de projeto removido logicamente",
+        409,
+      );
     }
 
     if (before.project.archivedAt && options.cascade) {
-      const { ProjectsService } = await import("../projects/projects.service.js");
+      const { ProjectsService } =
+        await import("../projects/projects.service.js");
       const projectsService = new ProjectsService();
 
       await projectsService.restore(before.projectId, user);
@@ -1281,7 +1472,10 @@ export class TasksService {
     }
 
     if (!before || before.project.deletedAt || before.project.archivedAt) {
-      throw new AppError("Não é possível restaurar tarefa de projeto arquivado", 409);
+      throw new AppError(
+        "Não é possível restaurar tarefa de projeto arquivado",
+        409,
+      );
     }
 
     const task = await prisma.task.update({

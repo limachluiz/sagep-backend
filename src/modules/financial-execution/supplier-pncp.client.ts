@@ -1,4 +1,5 @@
 import { AppError } from "../../shared/app-error.js";
+import { resilientGovernmentFetch } from "../../shared/government-integration.js";
 
 type Result = { niFornecedor?: string; nomeRazaoSocialFornecedor?: string; tipoPessoa?: string; dataCancelamento?: string | null; situacaoCompraItemResultadoId?: number };
 const cache = new Map<string, { expires: number; value: Promise<Result[]> }>();
@@ -11,7 +12,7 @@ export function uniqueSupplier(results: Result[], name: string) {
   return matches.size === 1 ? [...matches][0]! : null;
 }
 
-async function itemResults(url: string, signal: AbortSignal): Promise<Result[]> {
+async function itemResults(url: string): Promise<Result[]> {
   const now = Date.now();
   const existing = cache.get(url);
   if (existing && existing.expires > now) return existing.value;
@@ -19,7 +20,7 @@ async function itemResults(url: string, signal: AbortSignal): Promise<Result[]> 
   if (cache.size >= 500) cache.delete(cache.keys().next().value!);
   const entry = { expires: now + 5 * 60_000, value: Promise.resolve([] as Result[]) };
   entry.value = (async () => {
-    const response = await fetch(url, { headers: { Accept: "application/json" }, redirect: "error", signal });
+    const response = await resilientGovernmentFetch("PNCP", url, { headers: { Accept: "application/json" }, redirect: "error" }, 20_000);
     if (!response.ok) throw new AppError(`PNCP respondeu HTTP ${response.status} ao consultar fornecedor`, 502);
     const data: unknown = await response.json();
     if (!Array.isArray(data) || data.some(r => !r || typeof r !== "object")) throw new AppError("Resposta de fornecedores PNCP inválida", 502);
@@ -46,7 +47,7 @@ export async function resolvePncpSupplier(base: string, control: string, items: 
     for (const number of numbers) {
       signal.throwIfAborted();
       const url = `${prefix}/${number}/resultados`;
-      cnpj = uniqueSupplier(await itemResults(url, signal), name);
+      cnpj = uniqueSupplier(await itemResults(url), name);
       if (cnpj) { sourceUrl = url; break; }
     }
   } catch (error) {

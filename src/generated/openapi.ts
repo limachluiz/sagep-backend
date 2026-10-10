@@ -1361,6 +1361,91 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/notifications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar notificações pessoais */
+        get: operations["notifications_get_collection"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/mention-candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Listar destinatários elegíveis para menção no projeto */
+        get: operations["notifications_get_mentionCandidates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/read-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Marcar notificações ativas como lidas */
+        post: operations["notifications_post_readAll"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/notifications/{id}/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** Marcar uma notificação como lida */
+        patch: operations["notifications_patch_byId_read"];
+        trace?: never;
+    };
+    "/notifications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Dispensar uma notificação */
+        delete: operations["notifications_delete_byId"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/system-settings": {
         parameters: {
             query?: never;
@@ -1637,6 +1722,57 @@ export interface paths {
         put?: never;
         /** Exportar dados selecionados em SQL */
         post: operations["backups_post_export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/evidence/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Exportar arquivos físicos das evidências */
+        post: operations["backups_post_evidence_export"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/evidence/analyze": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Analisar pacote de evidências antes da restauração */
+        post: operations["backups_post_evidence_analyze"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backups/evidence/{id}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restaurar evidências fisicamente com troca atômica e rollback */
+        post: operations["backups_post_evidence_byId_restore"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3771,6 +3907,54 @@ export interface components {
                 [key: string]: unknown;
             };
         };
+        UserNotification: {
+            id: string;
+            eventKey: string;
+            category: string;
+            /** @enum {string} */
+            severity: "CRITICAL" | "WARNING" | "INFO";
+            title: string;
+            description: string;
+            detailsPath: string;
+            entityType?: string | null;
+            entityId?: string | null;
+            /** Format: date-time */
+            occurredAt: string;
+            /** Format: date-time */
+            readAt?: string | null;
+            /** Format: date-time */
+            dismissedAt?: string | null;
+            /** Format: date-time */
+            resolvedAt?: string | null;
+            actor?: {
+                [key: string]: unknown;
+            } | null;
+            metadata?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        UserNotificationList: {
+            items: components["schemas"]["UserNotification"][];
+            pagination: {
+                [key: string]: unknown;
+            };
+            summary: {
+                [key: string]: unknown;
+            };
+        };
+        NotificationUpdateCount: {
+            updated: number;
+        };
+        MentionCandidate: {
+            id: string;
+            userCode: number;
+            name: string;
+            warName?: string | null;
+            /** Format: email */
+            email: string;
+            role: string;
+        };
+        MentionCandidateList: components["schemas"]["MentionCandidate"][];
         RestoreRequest: {
             /** @description Quando true, restaura dependencias pai ou filhos elegiveis em cascata, sem incluir registros com deletedAt. */
             cascade?: boolean;
@@ -4861,6 +5045,11 @@ export interface components {
             /** @enum {string} */
             format: "POSTGRES_CUSTOM";
             verified: boolean;
+            manifestVersion?: number;
+            /** @enum {string} */
+            coverage?: "FULL_DATABASE";
+            schemaVersion?: string | null;
+            tableCount?: number;
         };
         BackupsOverview: {
             items?: components["schemas"]["DatabaseBackup"][];
@@ -4868,6 +5057,9 @@ export interface components {
                 [key: string]: unknown;
             };
             policy?: {
+                [key: string]: unknown;
+            };
+            coverage?: {
                 [key: string]: unknown;
             };
             operationRunning?: boolean;
@@ -4882,6 +5074,32 @@ export interface components {
             restoredAt: string;
             restoredBackup: components["schemas"]["DatabaseBackup"];
             safetyBackup: components["schemas"]["DatabaseBackup"];
+        };
+        EvidenceRestoreAnalysis: {
+            /** Format: uuid */
+            id: string;
+            checksumSha256: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            fileCount: number;
+            totalBytes: number;
+            missing: string[];
+            orphaned: string[];
+            conflicts: string[];
+            restorable: boolean;
+        };
+        RestoreEvidenceRequest: {
+            /** @enum {string} */
+            confirmation: "RESTAURAR EVIDÊNCIAS";
+        };
+        RestoreEvidenceResponse: {
+            message: string;
+            /** Format: date-time */
+            restoredAt: string;
+            fileCount: number;
+            checksumSha256: string;
         };
         SelectiveDatabaseExportRequest: {
             modules: ("PROJECTS" | "ATAS" | "USERS" | "SETTINGS" | "AUDIT")[];
@@ -8210,6 +8428,156 @@ export interface operations {
             500: components["responses"]["InternalServerError"];
         };
     };
+    notifications_get_collection: {
+        parameters: {
+            query?: {
+                /** @description Estado da notificação. */
+                status?: "ALL" | "UNREAD" | "READ" | "DISMISSED" | "RESOLVED";
+                /** @description Categoria do evento. */
+                category?: string;
+                /** @description Página. */
+                page?: number;
+                /** @description Itens por página. */
+                pageSize?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Caixa de notificações do usuário. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserNotificationList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    notifications_get_mentionCandidates: {
+        parameters: {
+            query: {
+                /** @description Projeto da menção. */
+                projectId: string;
+                /** @description Nome, nome de guerra, e-mail ou código. */
+                search?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MentionCandidateList"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    notifications_post_readAll: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Quantidade atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["NotificationUpdateCount"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    notifications_patch_byId_read: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Notificação */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notificação atualizada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserNotification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    notifications_delete_byId: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Notificação */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Notificação dispensada. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserNotification"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
     settings_get_systemSettings: {
         parameters: {
             query?: never;
@@ -8821,6 +9189,107 @@ export interface operations {
                 };
                 content: {
                     "application/sql": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_evidence_export: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Arquivo TAR.GZ com as evidências */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/gzip": string;
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_evidence_analyze: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/octet-stream": string;
+            };
+        };
+        responses: {
+            /** @description Criado com sucesso */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvidenceRestoreAnalysis"];
+                };
+            };
+            400: components["responses"]["BadRequest"];
+            401: components["responses"]["Unauthorized"];
+            403: components["responses"]["Forbidden"];
+            404: components["responses"]["NotFound"];
+            409: components["responses"]["Conflict"];
+            428: components["responses"]["StepUpRequired"];
+            500: components["responses"]["InternalServerError"];
+        };
+    };
+    backups_post_evidence_byId_restore: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Token temporario retornado por POST /auth/reauthenticate. Obrigatorio quando o login por senha nao e recente. */
+                "X-SAGEP-Reauth"?: components["parameters"]["StepUpToken"];
+            };
+            path: {
+                /** @description UUID da análise */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RestoreEvidenceRequest"];
+            };
+        };
+        responses: {
+            /** @description OK */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RestoreEvidenceResponse"];
                 };
             };
             400: components["responses"]["BadRequest"];

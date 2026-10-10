@@ -1,56 +1,203 @@
 import { describe, expect, it } from "vitest";
-import { archivedFinancial, creditNotesFrom, financialPosition, consolidatePortfolio, moneyFrom } from "../src/modules/financial-execution/portfolio-summary.js";
+import {
+  archivedFinancial,
+  creditNotesFrom,
+  financialPosition,
+  consolidatePortfolio,
+  moneyFrom,
+} from "../src/modules/financial-execution/portfolio-summary.js";
 describe("consolidated portfolio", () => {
   it("keeps missing liquidation/payment unknown even if related documents are absent", () => {
-    expect(archivedFinancial({ document: { valor: "R$ 1.234,56", nomeFavorecido: "Fornecedor" }, related: [] })).toMatchObject({ current: 1234.56, liquidated: null, paid: null, status: "A_CONFERIR", incomplete: true, supplierName: "Fornecedor" });
+    expect(
+      archivedFinancial({
+        document: { valor: "R$ 1.234,56", nomeFavorecido: "Fornecedor" },
+        related: [],
+      }),
+    ).toMatchObject({
+      current: 1234.56,
+      liquidated: null,
+      paid: null,
+      status: "A_CONFERIR",
+      incomplete: true,
+      supplierName: "Fornecedor",
+    });
   });
   it("extracts the issue date and only NC references present in the saved official data", () => {
-    const snapshot = { document: { data: "21/01/2026", observacao: "Crédito recebido pela 2026NC400044/DCT", codigoDocumento: "160016000012026NC400044" } };
-    expect(archivedFinancial(snapshot)).toMatchObject({ issuedAt: "21/01/2026", creditNotes: ["2026NC400044"] });
-    expect(creditNotesFrom({ observacao: "Sem nota de crédito referenciada" })).toEqual([]);
+    const snapshot = {
+      document: {
+        data: "21/01/2026",
+        observacao: "Crédito recebido pela 2026NC400044/DCT",
+        codigoDocumento: "160016000012026NC400044",
+      },
+    };
+    expect(archivedFinancial(snapshot)).toMatchObject({
+      issuedAt: "21/01/2026",
+      creditNotes: ["2026NC400044"],
+    });
+    expect(
+      creditNotesFrom({ observacao: "Sem nota de crédito referenciada" }),
+    ).toEqual([]);
   });
   it("extracts the latest liquidation and payment dates from the official lifecycle", () => {
-    const result = archivedFinancial({ document: { data: "21/01/2026" }, related: [
-      { documento: "160016000012026NS003912", data: "24/06/2026" },
-      { documento: "160016000012026NS003913", data: "25/06/2026" },
-      { documento: "160016000012026OB001763", data: "01/07/2026" },
-      { documento: "160016000012026DR800149", data: "02/07/2026" },
-      { documento: "160016000012026DF800881", data: "13/07/2026", valor: "- 555,75", especie: "Estorno / Cancelamento" },
-    ] });
-    expect(result).toMatchObject({ issuedAt: "21/01/2026", liquidatedAt: "2026-06-25T12:00:00.000Z", paidAt: "2026-07-02T12:00:00.000Z" });
+    const result = archivedFinancial({
+      document: { data: "21/01/2026" },
+      related: [
+        { documento: "160016000012026NS003912", data: "24/06/2026" },
+        { documento: "160016000012026NS003913", data: "25/06/2026" },
+        { documento: "160016000012026OB001763", data: "01/07/2026" },
+        { documento: "160016000012026DR800149", data: "02/07/2026" },
+        {
+          documento: "160016000012026DF800881",
+          data: "13/07/2026",
+          valor: "- 555,75",
+          especie: "Estorno / Cancelamento",
+        },
+      ],
+    });
+    expect(result).toMatchObject({
+      issuedAt: "21/01/2026",
+      liquidatedAt: "2026-06-25T12:00:00.000Z",
+      paidAt: "2026-07-02T12:00:00.000Z",
+    });
   });
   it("does not sum whole related payments that may cover multiple NEs", () => {
-    expect(archivedFinancial({ document: { valor: 100 }, related: [{ fase: "Pagamento", valor: 200 }] }).paid).toBeNull();
+    expect(
+      archivedFinancial({
+        document: { valor: 100 },
+        related: [{ fase: "Pagamento", valor: 200 }],
+      }).paid,
+    ).toBeNull();
   });
   it("preserves explicit zero and rejects malformed amounts", () => {
-    expect(archivedFinancial({ document: { valorAtualDoEmpenho: 0, valor: 500, valorLiquidado: 0, valorPago: 0 } }).current).toBe(0);
-    expect(moneyFrom("não informado")).toBeNull(); expect(moneyFrom("")).toBeNull(); expect(moneyFrom("0,00")).toBe(0);
+    expect(
+      archivedFinancial({
+        document: {
+          valorAtualDoEmpenho: 0,
+          valor: 500,
+          valorLiquidado: 0,
+          valorPago: 0,
+        },
+      }).current,
+    ).toBe(0);
+    expect(moneyFrom("não informado")).toBeNull();
+    expect(moneyFrom("")).toBeNull();
+    expect(moneyFrom("0,00")).toBe(0);
   });
   it("flags paid above committed/liquidated instead of capping amounts", () => {
-    expect(financialPosition(17233.86, 0, 36096.34, "Fornecedor")).toMatchObject({ status: "DIVERGENTE", paid: 36096.34, inconsistent: true });
+    expect(
+      financialPosition(17233.86, 0, 36096.34, "Fornecedor"),
+    ).toMatchObject({
+      status: "DIVERGENTE",
+      paid: 36096.34,
+      inconsistent: true,
+    });
   });
   it("reads totals explicitly provided by the source", () => {
-    expect(archivedFinancial({ document: { valorAtual: 100, valorLiquidado: 100, valorPago: 100, favorecido: { nome: "Fornecedor" } } })).toMatchObject({ status: "PAGA", supplierName: "Fornecedor" });
+    expect(
+      archivedFinancial({
+        document: {
+          valorAtual: 100,
+          valorLiquidado: 100,
+          valorPago: 100,
+          favorecido: { nome: "Fornecedor" },
+        },
+      }),
+    ).toMatchObject({ status: "PAGA", supplierName: "Fornecedor" });
   });
   it("uses the documentary lifecycle instead of comparing a net OB with the gross NS", () => {
-    expect(financialPosition(28_800, 28_800, 28_800, "Fornecedor", { liquidationCompleted: true, paymentCompleted: true, paidNet: 27_936, deductions: 864 }))
-      .toMatchObject({ status: "PAGA", incomplete: false, paid: 28_800, paidNet: 27_936, deductions: 864 });
-    expect(financialPosition(28_800, 28_800, null, "Fornecedor", { liquidationCompleted: true, paymentCompleted: false }))
-      .toMatchObject({ status: "LIQUIDADA", incomplete: false });
+    expect(
+      financialPosition(28_800, 28_800, 28_800, "Fornecedor", {
+        liquidationCompleted: true,
+        paymentCompleted: true,
+        paidNet: 27_936,
+        deductions: 864,
+      }),
+    ).toMatchObject({
+      status: "PAGA",
+      incomplete: false,
+      paid: 28_800,
+      paidNet: 27_936,
+      deductions: 864,
+    });
+    expect(
+      financialPosition(28_800, 28_800, null, "Fornecedor", {
+        liquidationCompleted: true,
+        paymentCompleted: false,
+      }),
+    ).toMatchObject({ status: "LIQUIDADA", incomplete: false });
   });
   it("deduplicates by official code and does not expose a project outside access scope via archive", () => {
-    const row = (externalCode: string, amount: number) => ({ externalCode, ...financialPosition(amount, 0, 0, "Fornecedor") });
-    const result = consolidatePortfolio([row("project", 100)], [row("project", 200), row("private-project", 300), row("imported", 50), row("imported", 50)], ["project", "private-project"]);
-    expect(result.total).toBe(2); expect(result.totals.committed).toBe(150);
+    const row = (externalCode: string, amount: number) => ({
+      externalCode,
+      ...financialPosition(amount, 0, 0, "Fornecedor"),
+    });
+    const result = consolidatePortfolio(
+      [row("project", 100)],
+      [
+        row("project", 200),
+        row("private-project", 300),
+        row("imported", 50),
+        row("imported", 50),
+      ],
+      ["project", "private-project"],
+    );
+    expect(result.total).toBe(2);
+    expect(result.totals.committed).toBe(150);
   });
   it("excludes inconsistent rows from financial totals and counts incomplete rows as pending", () => {
-    const result = consolidatePortfolio([], [{ externalCode: "a", ...financialPosition(10, 0, 20, "A") }, { externalCode: "b", ...financialPosition(50, null, null, "B") }], []);
-    expect(result.totals).toEqual({ committed: 50, liquidated: 0, paid: 0, pending: 2 });
+    const result = consolidatePortfolio(
+      [],
+      [
+        { externalCode: "a", ...financialPosition(10, 0, 20, "A") },
+        { externalCode: "b", ...financialPosition(50, null, null, "B") },
+      ],
+      [],
+    );
+    expect(result.totals).toEqual({
+      committed: 50,
+      liquidated: 0,
+      paid: 0,
+      pending: 2,
+    });
   });
   it("reports every NE with partially confirmed financial evidence", () => {
-    const partial = { externalCode: "a", ...financialPosition(100, 100, 75, "A", { paymentIncomplete: true, unresolvedPayments: 1 }) };
+    const partial = {
+      externalCode: "a",
+      ...financialPosition(100, 100, 75, "A", {
+        paymentIncomplete: true,
+        unresolvedPayments: 1,
+      }),
+    };
     const result = consolidatePortfolio([], [partial], []);
     expect(result.totals).toMatchObject({ paid: 75, pending: 1 });
-    expect(result.diagnostics).toEqual({ partialLiquidations: 0, partialPayments: 1 });
+    expect(result.diagnostics).toEqual({
+      partialLiquidations: 0,
+      partialPayments: 1,
+    });
+  });
+  it("consolidates confirmed reconciliation links and only counts balance impacts explicitly applied", () => {
+    const rows = [
+      {
+        externalCode: "a",
+        ...financialPosition(100, 0, 0, "A"),
+        reconciliation: { applyToBalance: true, totalAmount: 70 },
+      },
+      {
+        externalCode: "b",
+        ...financialPosition(50, 0, 0, "B"),
+        reconciliation: { applyToBalance: false, totalAmount: 30 },
+      },
+      {
+        externalCode: "c",
+        ...financialPosition(20, 0, 0, "C"),
+        reconciliation: null,
+      },
+    ];
+    const result = consolidatePortfolio([], rows, []);
+    expect(result.reconciliation).toEqual({
+      confirmed: 2,
+      appliedToBalance: 1,
+      allocatedAmount: 100,
+    });
   });
 });

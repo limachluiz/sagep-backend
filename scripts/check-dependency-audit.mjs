@@ -3,8 +3,11 @@ import { spawnSync } from "node:child_process";
 const allowedFindings = new Map([
   ["deepmerge-ts", { severity: "high", sources: new Set([1145093]) }],
   ["esbuild", { severity: "low", sources: new Set([1120680]) }],
+  // Prisma bundles mysql2 for optional MySQL workflows. SAGEP uses only
+  // PostgreSQL; keep the exact advisories pinned until Prisma updates it.
+  ["mysql2", { severity: "high", sources: new Set([1153173, 1158532]) }],
   ["@prisma/config", { severity: "high", dependencies: new Set(["deepmerge-ts"]) }],
-  ["prisma", { severity: "high", dependencies: new Set(["@prisma/config"]) }],
+  ["prisma", { severity: "high", dependencies: new Set(["@prisma/config", "mysql2"]) }],
 ]);
 
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";

@@ -89,11 +89,12 @@ function queryParameter(
   name: string,
   description: string,
   schema: Record<string, unknown>,
+  required = false,
 ) {
   return {
     name,
     in: "query",
-    required: false,
+    required,
     description,
     schema,
   };
@@ -1958,6 +1959,35 @@ export const openApiDocument: OpenApiDocument = {
           },
         },
       },
+      UserNotification: {
+        type: "object",
+        required: ["id", "eventKey", "category", "severity", "title", "description", "detailsPath", "occurredAt"],
+        properties: {
+          id: { type: "string" }, eventKey: { type: "string" }, category: { type: "string" },
+          severity: { type: "string", enum: ["CRITICAL", "WARNING", "INFO"] },
+          title: { type: "string" }, description: { type: "string" }, detailsPath: { type: "string" },
+          entityType: { type: "string", nullable: true }, entityId: { type: "string", nullable: true },
+          occurredAt: { type: "string", format: "date-time" }, readAt: { type: "string", format: "date-time", nullable: true },
+          dismissedAt: { type: "string", format: "date-time", nullable: true }, resolvedAt: { type: "string", format: "date-time", nullable: true },
+          actor: { type: "object", nullable: true, additionalProperties: true }, metadata: { type: "object", nullable: true, additionalProperties: true },
+        },
+      },
+      UserNotificationList: {
+        type: "object", required: ["items", "pagination", "summary"],
+        properties: {
+          items: { type: "array", items: { $ref: "#/components/schemas/UserNotification" } },
+          pagination: { type: "object", additionalProperties: true }, summary: { type: "object", additionalProperties: true },
+        },
+      },
+      NotificationUpdateCount: { type: "object", required: ["updated"], properties: { updated: { type: "integer", minimum: 0 } } },
+      MentionCandidate: {
+        type: "object", required: ["id", "userCode", "name", "email", "role"],
+        properties: {
+          id: { type: "string" }, userCode: { type: "integer" }, name: { type: "string" }, warName: { type: "string", nullable: true },
+          email: { type: "string", format: "email" }, role: { type: "string" },
+        },
+      },
+      MentionCandidateList: { type: "array", items: { $ref: "#/components/schemas/MentionCandidate" } },
       RestoreRequest: {
         type: "object",
         properties: {
@@ -3309,6 +3339,37 @@ export const openApiDocument: OpenApiDocument = {
           restoredAt: { type: "string", format: "date-time" },
           restoredBackup: { $ref: "#/components/schemas/DatabaseBackup" },
           safetyBackup: { $ref: "#/components/schemas/DatabaseBackup" },
+        },
+      },
+      EvidenceRestoreAnalysis: {
+        type: "object",
+        required: ["id", "checksumSha256", "createdAt", "expiresAt", "fileCount", "totalBytes", "missing", "orphaned", "conflicts", "restorable"],
+        properties: {
+          id: { type: "string", format: "uuid" },
+          checksumSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
+          createdAt: { type: "string", format: "date-time" },
+          expiresAt: { type: "string", format: "date-time" },
+          fileCount: { type: "integer", minimum: 0 },
+          totalBytes: { type: "integer", minimum: 0 },
+          missing: { type: "array", items: { type: "string" } },
+          orphaned: { type: "array", items: { type: "string" } },
+          conflicts: { type: "array", items: { type: "string" } },
+          restorable: { type: "boolean" },
+        },
+      },
+      RestoreEvidenceRequest: {
+        type: "object",
+        required: ["confirmation"],
+        properties: { confirmation: { type: "string", enum: ["RESTAURAR EVIDÊNCIAS"] } },
+      },
+      RestoreEvidenceResponse: {
+        type: "object",
+        required: ["message", "restoredAt", "fileCount", "checksumSha256"],
+        properties: {
+          message: { type: "string" },
+          restoredAt: { type: "string", format: "date-time" },
+          fileCount: { type: "integer", minimum: 0 },
+          checksumSha256: { type: "string", pattern: "^[a-f0-9]{64}$" },
         },
       },
       SelectiveDatabaseExportRequest: {
@@ -4967,17 +5028,27 @@ export const openApiDocument: OpenApiDocument = {
           queryParameter("page", "Página.", { type: "integer", minimum: 1 }),
           queryParameter("pageSize", "Itens por página.", { type: "integer", minimum: 10, maximum: 100 }),
         ],
-        responses: { "200": { description: "Caixa de notificações do usuário." }, ...defaultErrorResponses },
+        responses: { "200": okJson("#/components/schemas/UserNotificationList", "Caixa de notificações do usuário."), ...defaultErrorResponses },
+      },
+    },
+    "/notifications/mention-candidates": {
+      get: {
+        tags: ["notifications"], summary: "Listar destinatários elegíveis para menção no projeto", security: bearerSecurity,
+        parameters: [
+          queryParameter("projectId", "Projeto da menção.", { type: "string" }, true),
+          queryParameter("search", "Nome, nome de guerra, e-mail ou código.", { type: "string", maxLength: 100 }),
+        ],
+        responses: { "200": okJson("#/components/schemas/MentionCandidateList"), ...defaultErrorResponses },
       },
     },
     "/notifications/read-all": {
-      post: { tags: ["notifications"], summary: "Marcar notificações ativas como lidas", security: bearerSecurity, responses: { "200": { description: "Quantidade atualizada." }, ...defaultErrorResponses } },
+      post: { tags: ["notifications"], summary: "Marcar notificações ativas como lidas", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/NotificationUpdateCount", "Quantidade atualizada."), ...defaultErrorResponses } },
     },
     "/notifications/{id}/read": {
-      patch: { tags: ["notifications"], summary: "Marcar uma notificação como lida", security: bearerSecurity, parameters: [pathIdParameter("id", "Notificação")], responses: { "200": { description: "Notificação atualizada." }, ...defaultErrorResponses } },
+      patch: { tags: ["notifications"], summary: "Marcar uma notificação como lida", security: bearerSecurity, parameters: [pathIdParameter("id", "Notificação")], responses: { "200": okJson("#/components/schemas/UserNotification", "Notificação atualizada."), ...defaultErrorResponses } },
     },
     "/notifications/{id}": {
-      delete: { tags: ["notifications"], summary: "Dispensar uma notificação", security: bearerSecurity, parameters: [pathIdParameter("id", "Notificação")], responses: { "200": { description: "Notificação dispensada." }, ...defaultErrorResponses } },
+      delete: { tags: ["notifications"], summary: "Dispensar uma notificação", security: bearerSecurity, parameters: [pathIdParameter("id", "Notificação")], responses: { "200": okJson("#/components/schemas/UserNotification", "Notificação dispensada."), ...defaultErrorResponses } },
     },
     "/system-settings": {
       get: { tags: ["settings"], summary: "Consultar integrações e parâmetros institucionais", security: bearerSecurity, responses: { "200": okJson("#/components/schemas/SystemSettings"), ...defaultErrorResponses }, "x-permissions": ["settings.view"] },
@@ -5033,6 +5104,12 @@ export const openApiDocument: OpenApiDocument = {
     },
     "/backups/evidence/export": {
       post: withStepUp({ tags: ["backups"], summary: "Exportar arquivos físicos das evidências", security: bearerSecurity, responses: { "200": { description: "Arquivo TAR.GZ com as evidências", content: binaryContent("application/gzip") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/backups/evidence/analyze": {
+      post: withStepUp({ tags: ["backups"], summary: "Analisar pacote de evidências antes da restauração", security: bearerSecurity, requestBody: { required: true, content: binaryContent("application/octet-stream") }, responses: { "201": createdJson("#/components/schemas/EvidenceRestoreAnalysis"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
+    },
+    "/backups/evidence/{id}/restore": {
+      post: withStepUp({ tags: ["backups"], summary: "Restaurar evidências fisicamente com troca atômica e rollback", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID da análise", { type: "string", format: "uuid" })], requestBody: { required: true, content: jsonContent("#/components/schemas/RestoreEvidenceRequest") }, responses: { "200": okJson("#/components/schemas/RestoreEvidenceResponse"), ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),
     },
     "/backups/{id}/download": {
       get: withStepUp({ tags: ["backups"], summary: "Baixar backup com verificação de integridade", security: bearerSecurity, parameters: [pathIdParameter("id", "UUID do backup", { type: "string", format: "uuid" })], responses: { "200": { description: "Arquivo PostgreSQL custom", content: binaryContent("application/octet-stream") }, ...defaultErrorResponses }, "x-permissions": ["backups.manage"], "x-roles": ["ADMIN"] }),

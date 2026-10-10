@@ -257,7 +257,15 @@ class SystemHealthService {
           monitoringMode: "service-probes",
           dockerSocketExposed: false,
           units: snapshot.components.map((component) => ({
-            name: component.id === "api" ? "sagep_api" : component.id === "database" ? "sagep_postgres" : "sagep_pgadmin",
+            name: ({
+              api: "sagep_api",
+              database: "sagep_postgres",
+              pgadmin: "sagep_pgadmin",
+              storage: "sagep_storage",
+              backups: "sagep_backups",
+              certificate: "sagep_certificate",
+              automations: "sagep_automations",
+            } as Record<string, string>)[component.id] ?? `sagep_${component.id}`,
             kind: (["api", "database", "pgadmin"].includes(component.id) ? "container-service" : "system-check") as "container-service" | "system-check",
             healthSource: component.id === "api" ? "process" as const : component.id === "database" ? "database-query" as const : component.id === "pgadmin" ? "http-probe" as const : component.id === "storage" || component.id === "backups" ? "filesystem" as const : component.id === "certificate" ? "certificate" as const : "database-state" as const,
             status: component.status,

@@ -3,6 +3,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/app-error.js";
+import { assertObjectPayload, reportGovernmentIntegrationFailure, resilientGovernmentFetch } from "../../shared/government-integration.js";
 
 type PncpAtaResponse = Record<string, unknown> & {
   numeroControlePNCP?: string;
@@ -72,11 +73,10 @@ export class PncpService {
   private async request<T>(url: URL) {
     let response: Response;
     try {
-      response = await fetch(url, {
+      response = await resilientGovernmentFetch("PNCP", url, {
         headers: { Accept: "application/json" },
         redirect: "manual",
-        signal: AbortSignal.timeout(env.PNCP_REQUEST_TIMEOUT_MS),
-      });
+      }, env.PNCP_REQUEST_TIMEOUT_MS);
     } catch {
       throw new PncpRequestError("PNCP não respondeu à consulta", null, url.toString());
     }
@@ -89,7 +89,16 @@ export class PncpService {
       );
     }
 
-    return (await response.json()) as T;
+    const payload = await response.json().catch(async () => {
+      await reportGovernmentIntegrationFailure("PNCP", "O PNCP retornou JSON inválido", response.status, { url: url.toString() });
+      throw new PncpRequestError("PNCP alterou o formato da resposta", response.status, url.toString());
+    });
+    try { assertObjectPayload(payload, "PNCP"); }
+    catch {
+      await reportGovernmentIntegrationFailure("PNCP", "O PNCP alterou o formato esperado da resposta", response.status, { url: url.toString() });
+      throw new PncpRequestError("PNCP alterou o formato da resposta", response.status, url.toString());
+    }
+    return payload as T;
   }
 
   async fetchAtaSnapshot(controlNumber: string): Promise<PncpAtaSnapshot> {

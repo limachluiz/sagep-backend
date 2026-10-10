@@ -4,45 +4,204 @@ import { filterCommitmentNoteReportRows } from "../src/modules/reports/commitmen
 import { renderCommitmentNoteReportHtml } from "../src/modules/reports/commitment-note-report.template.js";
 
 const rows = [
-  { externalCode: "160016000012026NE000021", number: "2026NE000021", managementUnit: "160016", origin: "IMPORTED", supplierName: "FORNECEDOR ALFA LTDA", supplierCnpj: "00000000000000", creditNotes: ["2026NC400044", "2026NC400045"], attendedOm: { id: "om-1", sigla: "2ª Cia Sup", name: "Segunda Companhia de Suprimento", cityName: "Manaus", stateUf: "AM", isActive: true }, observation: "Enlace principal", issuedAt: "2026-01-21", updatedAt: new Date(), current: 100, liquidated: 100, paid: 100, status: "PAGA", inconsistent: false, incomplete: false, project: null },
-  { externalCode: "160016000012026NE000572", number: "2026NE000572", managementUnit: "160016", origin: "IMPORTED", supplierName: "FORNECEDOR BETA LTDA", supplierCnpj: "", attendedOm: null, observation: null, issuedAt: "04/05/2026", updatedAt: new Date(), current: 200, liquidated: 200, paid: 200, status: "PAGA", inconsistent: false, incomplete: false, project: null },
+  {
+    externalCode: "160016000012026NE000021",
+    number: "2026NE000021",
+    managementUnit: "160016",
+    origin: "IMPORTED",
+    supplierName: "FORNECEDOR ALFA LTDA",
+    supplierCnpj: "00000000000000",
+    creditNotes: ["2026NC400044", "2026NC400045"],
+    attendedOm: {
+      id: "om-1",
+      sigla: "2ª Cia Sup",
+      name: "Segunda Companhia de Suprimento",
+      cityName: "Manaus",
+      stateUf: "AM",
+      isActive: true,
+    },
+    observation: "Enlace principal",
+    issuedAt: "2026-01-21",
+    updatedAt: new Date(),
+    current: 100,
+    liquidated: 100,
+    paid: 100,
+    status: "PAGA",
+    inconsistent: false,
+    incomplete: false,
+    project: null,
+  },
+  {
+    externalCode: "160016000012026NE000572",
+    number: "2026NE000572",
+    managementUnit: "160016",
+    origin: "IMPORTED",
+    supplierName: "FORNECEDOR BETA LTDA",
+    supplierCnpj: "",
+    attendedOm: null,
+    observation: null,
+    issuedAt: "04/05/2026",
+    updatedAt: new Date(),
+    current: 200,
+    liquidated: 200,
+    paid: 200,
+    status: "PAGA",
+    inconsistent: false,
+    incomplete: false,
+    project: null,
+  },
 ] as never[];
 
 describe("relatório financeiro de Notas de Empenho", () => {
   it("filtra dinamicamente por fornecedor, situação e período", () => {
-    const filters = commitmentNoteReportQuerySchema.parse({ supplier: "FORNECEDOR ALFA LTDA", status: "PAGA", issuedFrom: "2026-01-01", issuedTo: "2026-02-01" });
-    expect(filterCommitmentNoteReportRows(rows, filters).map((row) => row.number)).toEqual(["2026NE000021"]);
+    const filters = commitmentNoteReportQuerySchema.parse({
+      supplier: "FORNECEDOR ALFA LTDA",
+      status: "PAGA",
+      issuedFrom: "2026-01-01",
+      issuedTo: "2026-02-01",
+    });
+    expect(
+      filterCommitmentNoteReportRows(rows, filters).map((row) => row.number),
+    ).toEqual(["2026NE000021"]);
   });
 
   it("inclui a OM atendida e a observação na busca textual", () => {
-    const filters = commitmentNoteReportQuerySchema.parse({ search: "2ª cia sup" });
-    expect(filterCommitmentNoteReportRows(rows, filters).map((row) => row.number)).toEqual(["2026NE000021"]);
-    expect(filterCommitmentNoteReportRows(rows, commitmentNoteReportQuerySchema.parse({ search: "enlace principal" })).map((row) => row.number)).toEqual(["2026NE000021"]);
-    expect(filterCommitmentNoteReportRows(rows, commitmentNoteReportQuerySchema.parse({ search: "2026NC400045" })).map((row) => row.number)).toEqual(["2026NE000021"]);
+    const filters = commitmentNoteReportQuerySchema.parse({
+      search: "2ª cia sup",
+    });
+    expect(
+      filterCommitmentNoteReportRows(rows, filters).map((row) => row.number),
+    ).toEqual(["2026NE000021"]);
+    expect(
+      filterCommitmentNoteReportRows(
+        rows,
+        commitmentNoteReportQuerySchema.parse({ search: "enlace principal" }),
+      ).map((row) => row.number),
+    ).toEqual(["2026NE000021"]);
+    expect(
+      filterCommitmentNoteReportRows(
+        rows,
+        commitmentNoteReportQuerySchema.parse({ search: "2026NC400045" }),
+      ).map((row) => row.number),
+    ).toEqual(["2026NE000021"]);
   });
 
   it("exibe NCs e OM atendida nos relatórios consolidado e individual", () => {
-    const report = (codes: string[]) => ({
-      generatedAt: new Date("2026-09-28T16:00:00Z"), generatedBy: "Administrador", scopeLabel: "Carteira completa",
-      filters: { codes }, summary: { total: 1, committed: 100, liquidated: 100, paid: 100, pending: 0, coverage: { committed: 1, liquidated: 1, paid: 1 } },
-      charts: { byStatus: [], bySupplier: [], byOrigin: [] }, branding: { ctaLogo: "" },
-      rows: [{ ...rows[0], liquidatedAt: "2026-06-24", paidAt: "2026-07-01", documents: [] }],
-    }) as never;
+    const report = (codes: string[]) =>
+      ({
+        generatedAt: new Date("2026-09-28T16:00:00Z"),
+        generatedBy: "Administrador",
+        scopeLabel: "Carteira completa",
+        filters: { codes },
+        summary: {
+          total: 1,
+          committed: 100,
+          liquidated: 100,
+          paid: 100,
+          pending: 0,
+          coverage: { committed: 1, liquidated: 1, paid: 1 },
+        },
+        charts: { byStatus: [], bySupplier: [], byOrigin: [] },
+        branding: { ctaLogo: "" },
+        rows: [
+          {
+            ...rows[0],
+            liquidatedAt: "2026-06-24",
+            paidAt: "2026-07-01",
+            documents: [],
+          },
+        ],
+      }) as never;
     const consolidated = renderCommitmentNoteReportHtml(report([]));
-    const individual = renderCommitmentNoteReportHtml(report([rows[0].externalCode]));
+    const individual = renderCommitmentNoteReportHtml(
+      report([rows[0].externalCode]),
+    );
     expect(consolidated).toContain("NC: 2026NC400044, 2026NC400045");
     expect(consolidated).toContain("OM: 2ª Cia Sup · Manaus/AM");
     expect(individual).toContain("Nota(s) de Crédito");
     expect(individual).toContain("Segunda Companhia de Suprimento · Manaus/AM");
   });
 
+  it("expõe o vínculo conciliado no consolidado e na ficha individual", () => {
+    const reconciled = {
+      ...rows[0],
+      reconciliation: {
+        id: "rec-1",
+        confidenceScore: 96,
+        applyToBalance: true,
+        confirmedAt: new Date("2026-09-28T12:00:00Z"),
+        project: { id: "project-1", projectCode: 17, title: "Enlace Norte" },
+        ata: {
+          id: "ata-1",
+          number: "ARP 00093/2025",
+          vendorName: "FORNECEDOR ALFA LTDA",
+          type: "FIBRA_OPTICA",
+        },
+        allocations: [
+          {
+            ataItemId: "item-1",
+            referenceCode: "00001",
+            description: "Ponto lógico",
+            quantity: 2,
+            unitPrice: 50,
+            totalAmount: 100,
+          },
+        ],
+        totalAmount: 100,
+      },
+    };
+    const report = {
+      generatedAt: new Date("2026-09-28T16:00:00Z"),
+      generatedBy: "Administrador",
+      scopeLabel: "Carteira completa",
+      filters: { codes: [] },
+      summary: {
+        total: 1,
+        committed: 100,
+        liquidated: 100,
+        paid: 100,
+        pending: 0,
+        reconciled: 1,
+        reconciledAmount: 100,
+        coverage: { committed: 1, liquidated: 1, paid: 1 },
+      },
+      charts: { byStatus: [], bySupplier: [], byOrigin: [] },
+      branding: { ctaLogo: "" },
+      rows: [{ ...reconciled, documents: [] }],
+    } as never;
+    expect(renderCommitmentNoteReportHtml(report)).toContain("Conciliada:");
+    const individual = {
+      ...(report as object),
+      filters: { codes: [rows[0].externalCode] },
+    } as never;
+    expect(renderCommitmentNoteReportHtml(individual)).toContain(
+      "ARP 00093/2025",
+    );
+    expect(renderCommitmentNoteReportHtml(individual)).toContain(
+      "consumo aplicado",
+    );
+  });
+
   it("aceita datas brasileiras salvas nos snapshots e seleção explícita", () => {
-    const filters = commitmentNoteReportQuerySchema.parse({ issuedFrom: "2026-05-01", issuedTo: "2026-05-31", codes: "160016000012026NE000572" });
-    expect(filterCommitmentNoteReportRows(rows, filters).map((row) => row.number)).toEqual(["2026NE000572"]);
+    const filters = commitmentNoteReportQuerySchema.parse({
+      issuedFrom: "2026-05-01",
+      issuedTo: "2026-05-31",
+      codes: "160016000012026NE000572",
+    });
+    expect(
+      filterCommitmentNoteReportRows(rows, filters).map((row) => row.number),
+    ).toEqual(["2026NE000572"]);
   });
 
   it("rejeita intervalo invertido e códigos inválidos", () => {
-    expect(() => commitmentNoteReportQuerySchema.parse({ issuedFrom: "2026-05-02", issuedTo: "2026-05-01" })).toThrow();
-    expect(() => commitmentNoteReportQuerySchema.parse({ codes: "NE000001" })).toThrow();
+    expect(() =>
+      commitmentNoteReportQuerySchema.parse({
+        issuedFrom: "2026-05-02",
+        issuedTo: "2026-05-01",
+      }),
+    ).toThrow();
+    expect(() =>
+      commitmentNoteReportQuerySchema.parse({ codes: "NE000001" }),
+    ).toThrow();
   });
 });

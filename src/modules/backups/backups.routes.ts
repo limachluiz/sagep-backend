@@ -22,6 +22,8 @@ backupsRoutes.post(
 );
 backupsRoutes.post("/export", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.selectiveExport(req, res));
 backupsRoutes.post("/evidence/export", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.evidenceExport(req, res));
+backupsRoutes.post("/evidence/analyze", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.evidenceAnalyze(req, res));
+backupsRoutes.post("/evidence/:id/restore", sensitiveRateLimiter, ...adminOnly, requireStepUp, (req, res) => controller.evidenceRestore(req, res));
 backupsRoutes.get(
   "/:id/download",
   sensitiveRateLimiter,

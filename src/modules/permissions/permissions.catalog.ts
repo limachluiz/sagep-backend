@@ -236,7 +236,7 @@ export const permissionDescriptions: Record<Permission, string> = {
   "system_health.view_details": "Permite consultar diagnosticos tecnicos do ambiente",
   "settings.view": "Permite consultar parametros institucionais e integracoes",
   "settings.manage": "Permite alterar parametros e testar integracoes externas",
-  "backups.manage": "Permite criar, baixar, importar, excluir e restaurar backups do banco",
+  "backups.manage": "Permite criar, baixar, importar, excluir e restaurar backups do banco e evidências físicas",
 };
 
 export const allPermissions = Object.keys(permissionDescriptions) as Permission[];

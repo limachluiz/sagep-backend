@@ -1,6 +1,10 @@
 import { z } from "zod";
 import { paginationQuerySchema } from "../../shared/pagination.js";
-import { optionalBoolean, optionalDate, optionalString } from "../../shared/zod-helpers.js";
+import {
+  optionalBoolean,
+  optionalDate,
+  optionalString,
+} from "../../shared/zod-helpers.js";
 
 const taskStatusEnum = z.enum([
   "PENDENTE",
@@ -37,6 +41,7 @@ export const createTaskSchema = z
     assigneeId: optionalTaskAssigneeId,
     assigneeUserCode: optionalTaskAssigneeUserCode,
     dueDate: optionalDate,
+    mentionedUserIds: z.array(z.string().min(1)).max(50).optional(),
   })
   .refine((data) => data.projectId || data.projectCode, {
     message: "Informe projectId ou projectCode",
@@ -49,7 +54,11 @@ export const createTaskSchema = z
 
 export const updateTaskSchema = z
   .object({
-    title: z.string().trim().min(3, "Título deve ter pelo menos 3 caracteres").optional(),
+    title: z
+      .string()
+      .trim()
+      .min(3, "Título deve ter pelo menos 3 caracteres")
+      .optional(),
     description: optionalString,
     status: taskStatusEnum.optional(),
     priority: z.coerce.number().int().min(1).max(5).optional(),
@@ -58,6 +67,7 @@ export const updateTaskSchema = z
     clearAssignee: optionalBoolean,
     dueDate: optionalDate,
     clearDueDate: optionalBoolean,
+    mentionedUserIds: z.array(z.string().min(1)).max(50).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "Informe pelo menos um campo para atualizar",
@@ -66,10 +76,14 @@ export const updateTaskSchema = z
     message: "Informe assigneeId ou assigneeUserCode, não ambos",
     path: ["assigneeId"],
   })
-  .refine((data) => !(data.clearAssignee && (data.assigneeId || data.assigneeUserCode)), {
-    message: "Use clearAssignee ou informe um responsável, não ambos",
-    path: ["clearAssignee"],
-  })
+  .refine(
+    (data) =>
+      !(data.clearAssignee && (data.assigneeId || data.assigneeUserCode)),
+    {
+      message: "Use clearAssignee ou informe um responsável, não ambos",
+      path: ["clearAssignee"],
+    },
+  )
   .refine((data) => !(data.clearDueDate && data.dueDate), {
     message: "Use clearDueDate ou informe uma data de prazo, não ambos",
     path: ["clearDueDate"],

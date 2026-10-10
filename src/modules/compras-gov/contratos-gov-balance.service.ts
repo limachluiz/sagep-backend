@@ -3,6 +3,7 @@ import { env } from "../../config/env.js";
 import { prisma } from "../../config/prisma.js";
 import { Prisma } from "../../generated/prisma/client.js";
 import { AppError } from "../../shared/app-error.js";
+import { resilientGovernmentFetch } from "../../shared/government-integration.js";
 import { auditService } from "../audit/audit.service.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
 
@@ -306,17 +307,16 @@ async function requestWithSession(url: string, init: RequestInit, session: Publi
   let currentUrl = url;
   let currentInit = init;
   for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect += 1) {
-    const response = await fetch(currentUrl, {
+    const response = await resilientGovernmentFetch("COMPRAS_GOV", currentUrl, {
       ...currentInit,
       redirect: "manual",
-      signal: AbortSignal.timeout(env.CONTRATOS_GOV_REQUEST_TIMEOUT_MS),
       headers: {
         Accept: "text/html,application/json",
         "User-Agent": "SAGEP/1.0 public-balance",
         ...sessionHeaders(session),
         ...currentInit.headers,
       },
-    });
+    }, env.CONTRATOS_GOV_REQUEST_TIMEOUT_MS);
     updateSessionCookies(session, response);
     if (![301, 302, 303, 307, 308].includes(response.status)) return response;
     const location = response.headers.get("location");

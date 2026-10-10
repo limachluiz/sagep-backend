@@ -13,7 +13,10 @@ const projectStatusEnum = z.enum([
 const projectTypeEnum = z.enum(["CFTV", "FIBRA_OPTICA_PONTO_LOGICO"]);
 const federativeUnitEnum = z.enum(["AM", "RO", "RR", "AC"]);
 
-function hasCompleteClassification(data: { projectType?: string; omId?: string }) {
+function hasCompleteClassification(data: {
+  projectType?: string;
+  omId?: string;
+}) {
   return Boolean(data.projectType) === Boolean(data.omId);
 }
 
@@ -41,6 +44,7 @@ export const createProjectSchema = z
     omId: optionalString,
     startDate: optionalDate,
     endDate: optionalDate,
+    mentionedUserIds: z.array(z.string().min(1)).max(50).optional(),
   })
   .refine(hasCompleteClassification, {
     message: "Informe o tipo do projeto e a OM de destino",
@@ -57,17 +61,22 @@ export const createProjectSchema = z
     {
       message: "A data de término não pode ser menor que a data de início",
       path: ["endDate"],
-    }
+    },
   );
 
 export const updateProjectSchema = z
   .object({
-    title: z.string().trim().min(3, "Título deve ter pelo menos 3 caracteres").optional(),
+    title: z
+      .string()
+      .trim()
+      .min(3, "Título deve ter pelo menos 3 caracteres")
+      .optional(),
     description: optionalString,
     projectType: projectTypeEnum.optional(),
     omId: optionalString,
     startDate: optionalDate,
     endDate: optionalDate,
+    mentionedUserIds: z.array(z.string().min(1)).max(50).optional(),
   })
   .refine((data) => Object.keys(data).length > 0, {
     message: "Informe pelo menos um campo para atualizar",
@@ -83,24 +92,36 @@ export const updateProjectSchema = z
     {
       message: "A data de término não pode ser menor que a data de início",
       path: ["endDate"],
-    }
+    },
   );
 
 export const updateProjectFlowSchema = z.object({
   stage: projectStageEnum,
   creditNoteMode: z.enum(["SINGLE", "MULTIPLE"]).optional(),
-  creditNotes: z.array(z.object({
-    number: z.string().trim().min(3, "Número da NC inválido"),
-    receivedAt: z.coerce.date(),
-    amount: z.coerce.number().positive("O valor da NC deve ser maior que zero"),
-    issuingManagementUnit: optionalString,
-    fundingSource: optionalString,
-    ptres: optionalString,
-    expenseNature: optionalString,
-    internalPlan: optionalString,
-    documentLink: z.string().trim().url("Link do documento inválido").optional().or(z.literal("")),
-    notes: optionalString,
-  })).min(1, "Informe ao menos uma Nota de Crédito").optional(),
+  creditNotes: z
+    .array(
+      z.object({
+        number: z.string().trim().min(3, "Número da NC inválido"),
+        receivedAt: z.coerce.date(),
+        amount: z.coerce
+          .number()
+          .positive("O valor da NC deve ser maior que zero"),
+        issuingManagementUnit: optionalString,
+        fundingSource: optionalString,
+        ptres: optionalString,
+        expenseNature: optionalString,
+        internalPlan: optionalString,
+        documentLink: z
+          .string()
+          .trim()
+          .url("Link do documento inválido")
+          .optional()
+          .or(z.literal("")),
+        notes: optionalString,
+      }),
+    )
+    .min(1, "Informe ao menos uma Nota de Crédito")
+    .optional(),
   creditNoteOverflowJustification: optionalString,
   creditNoteNumber: optionalString,
   creditNoteReceivedAt: optionalDate,
@@ -157,7 +178,10 @@ export const issueServiceOrderSchema = z.object({
 });
 
 export const cancelCommitmentNoteSchema = z.object({
-  reason: z.string().trim().min(3, "Motivo do cancelamento da NE é obrigatório"),
+  reason: z
+    .string()
+    .trim()
+    .min(3, "Motivo do cancelamento da NE é obrigatório"),
 });
 
 export const reviewAsBuiltSchema = z.discriminatedUnion("approved", [
@@ -201,19 +225,33 @@ export const registerDeliveryReportSignatureSchema = z.object({
 
 export const deliveryReportDraftSchema = z.object({
   version: z.literal(2),
-  sections: z.array(z.object({
-    key: z.string().trim().min(2).max(60).regex(/^[a-z0-9-]+$/),
-    title: z.string().trim().min(3).max(160),
-    content: z.string().trim().max(20_000),
-    included: z.boolean(),
-    reviewed: z.boolean(),
-  })).min(1).max(20),
-  itemDetails: z.array(z.object({
-    itemId: z.string().trim().min(1).max(128),
-    unit: z.string().trim().min(1).max(20),
-    quantity: z.string().trim().min(1).max(40),
-    technicalDescription: z.string().trim().max(12_000),
-  })).max(250),
+  sections: z
+    .array(
+      z.object({
+        key: z
+          .string()
+          .trim()
+          .min(2)
+          .max(60)
+          .regex(/^[a-z0-9-]+$/),
+        title: z.string().trim().min(3).max(160),
+        content: z.string().trim().max(20_000),
+        included: z.boolean(),
+        reviewed: z.boolean(),
+      }),
+    )
+    .min(1)
+    .max(20),
+  itemDetails: z
+    .array(
+      z.object({
+        itemId: z.string().trim().min(1).max(128),
+        unit: z.string().trim().min(1).max(20),
+        quantity: z.string().trim().min(1).max(40),
+        technicalDescription: z.string().trim().max(12_000),
+      }),
+    )
+    .max(250),
   formalization: z.object({
     requiresOmAcknowledgement: z.boolean(),
     recipientName: z.string().trim().max(160),

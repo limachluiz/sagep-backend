@@ -25,7 +25,8 @@ type LoginInput = {
   rememberSession: boolean;
 };
 
-const INVALID_PASSWORD_HASH = "$2b$10$Lx3lp4kt24mZhtVil15pC.6vCRniynaavrqTXszcQK.AB44fqNlNy";
+const INVALID_PASSWORD_HASH =
+  "$2b$10$Lx3lp4kt24mZhtVil15pC.6vCRniynaavrqTXszcQK.AB44fqNlNy";
 
 type ReauthenticateInput = {
   password: string;
@@ -43,6 +44,9 @@ type UpdateOwnProfileInput = {
     taskAssignments: boolean;
     deadlines: boolean;
     workflowUpdates: boolean;
+    mentions: boolean;
+    financial: boolean;
+    integrations: boolean;
   };
 };
 
@@ -92,7 +96,8 @@ type SessionRecord = {
   createdUserAgent: string | null;
   lastUsedAt: Date | null;
   revokedAt: Date | null;
-  revokedReason: "LOGOUT" | "ROTATED" | "EXPIRED" | "ADMIN_REVOKED" | "SECURITY" | null;
+  revokedReason:
+    "LOGOUT" | "ROTATED" | "EXPIRED" | "ADMIN_REVOKED" | "SECURITY" | null;
   revokedByUserId: string | null;
   createdAt: Date;
   updatedAt: Date;
@@ -166,7 +171,10 @@ export class AuthService {
     };
   }
 
-  private getSessionStatus(token: Pick<SessionRecord, "expiresAt" | "revokedAt">, now = new Date()) {
+  private getSessionStatus(
+    token: Pick<SessionRecord, "expiresAt" | "revokedAt">,
+    now = new Date(),
+  ) {
     if (token.revokedAt) {
       return "REVOKED" as const;
     }
@@ -178,8 +186,14 @@ export class AuthService {
     return "ACTIVE" as const;
   }
 
-  private getSessionStatusDetail(status: SessionStatus, revokedReason: SessionRecord["revokedReason"]) {
-    const reasonLabels: Record<NonNullable<SessionRecord["revokedReason"]>, string> = {
+  private getSessionStatusDetail(
+    status: SessionStatus,
+    revokedReason: SessionRecord["revokedReason"],
+  ) {
+    const reasonLabels: Record<
+      NonNullable<SessionRecord["revokedReason"]>,
+      string
+    > = {
       LOGOUT: "Logout do usuario",
       ROTATED: "Token renovado",
       EXPIRED: "Expiracao registrada",
@@ -201,7 +215,10 @@ export class AuthService {
     };
   }
 
-  private serializeSession(token: SessionRecord, now = new Date()): SerializedSession {
+  private serializeSession(
+    token: SessionRecord,
+    now = new Date(),
+  ): SerializedSession {
     const status = this.getSessionStatus(token, now);
 
     return {
@@ -253,7 +270,9 @@ export class AuthService {
     }
 
     const userAgentMatch = context?.userAgent
-      ? activeSessions.find((session) => session.createdUserAgent === context.userAgent)
+      ? activeSessions.find(
+          (session) => session.createdUserAgent === context.userAgent,
+        )
       : null;
 
     if (userAgentMatch) {
@@ -285,17 +304,25 @@ export class AuthService {
 
   private assertOwnSessionPermission(user: CurrentUser) {
     if (!permissionsService.hasPermission(user, "sessions.manage_own")) {
-      throw new AppError("Você não tem permissão para gerenciar suas sessões", 403);
+      throw new AppError(
+        "Você não tem permissão para gerenciar suas sessões",
+        403,
+      );
     }
   }
 
   private assertAdminSessionPermission(user: CurrentUser) {
     if (!permissionsService.hasPermission(user, "sessions.manage_all")) {
-      throw new AppError("Você não tem permissão para administrar sessões de outros usuários", 403);
+      throw new AppError(
+        "Você não tem permissão para administrar sessões de outros usuários",
+        403,
+      );
     }
   }
 
-  private async getSessionTargetUser(userId: string): Promise<SessionTargetUser> {
+  private async getSessionTargetUser(
+    userId: string,
+  ): Promise<SessionTargetUser> {
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -376,8 +403,14 @@ export class AuthService {
       },
     });
 
-    const serializedSessions = tokens.map((token) => this.serializeSession(token, now));
-    const currentSession = this.resolveCurrentSession(serializedSessions, scope, context);
+    const serializedSessions = tokens.map((token) =>
+      this.serializeSession(token, now),
+    );
+    const currentSession = this.resolveCurrentSession(
+      serializedSessions,
+      scope,
+      context,
+    );
     const sessionsWithCurrent = serializedSessions.map((session) => ({
       ...session,
       currentSession: session.id === currentSession.currentSessionId,
@@ -385,7 +418,8 @@ export class AuthService {
     const summary = serializedSessions.reduce(
       (acc, session) => {
         acc.total += 1;
-        acc[session.status.toLowerCase() as "active" | "revoked" | "expired"] += 1;
+        acc[session.status.toLowerCase() as "active" | "revoked" | "expired"] +=
+          1;
         return acc;
       },
       {
@@ -409,7 +443,9 @@ export class AuthService {
     const sessions =
       filters.status === "ALL"
         ? sessionsWithCurrent
-        : sessionsWithCurrent.filter((session) => session.status === filters.status);
+        : sessionsWithCurrent.filter(
+            (session) => session.status === filters.status,
+          );
 
     return {
       scope,
@@ -424,7 +460,11 @@ export class AuthService {
 
   private async logFailedLogin(
     email: string,
-    reason: "USER_NOT_FOUND" | "INVALID_PASSWORD" | "USER_INACTIVE" | "ACCOUNT_LOCKED",
+    reason:
+      | "USER_NOT_FOUND"
+      | "INVALID_PASSWORD"
+      | "USER_INACTIVE"
+      | "ACCOUNT_LOCKED",
     context?: AuthRequestContext,
     user?: { id: string; name: string | null },
     security?: { failedLoginAttempts?: number; lockedUntil?: Date | null },
@@ -509,9 +549,10 @@ export class AuthService {
     if (!passwordMatches) {
       const previousAttempts = user.lockedUntil ? 0 : user.failedLoginAttempts;
       const failedLoginAttempts = previousAttempts + 1;
-      const lockedUntil = failedLoginAttempts >= env.LOGIN_MAX_FAILED_ATTEMPTS
-        ? new Date(now.getTime() + env.LOGIN_LOCKOUT_MINUTES * 60_000)
-        : null;
+      const lockedUntil =
+        failedLoginAttempts >= env.LOGIN_MAX_FAILED_ATTEMPTS
+          ? new Date(now.getTime() + env.LOGIN_LOCKOUT_MINUTES * 60_000)
+          : null;
 
       await prisma.user.update({
         where: { id: user.id },
@@ -551,7 +592,11 @@ export class AuthService {
     const storedRefreshToken = await prisma.$transaction(async (tx) => {
       await tx.user.update({
         where: { id: user.id },
-        data: { lastLoginAt: loginAt, failedLoginAttempts: 0, lockedUntil: null },
+        data: {
+          lastLoginAt: loginAt,
+          failedLoginAttempts: 0,
+          lockedUntil: null,
+        },
       });
 
       return tx.refreshToken.create({
@@ -565,10 +610,11 @@ export class AuthService {
       });
     });
 
-    const effectivePermissions = await permissionsService.getEffectivePermissionsForUser(
-      user.id,
-      user.role,
-    );
+    const effectivePermissions =
+      await permissionsService.getEffectivePermissionsForUser(
+        user.id,
+        user.role,
+      );
 
     await auditService.log({
       entityType: "AUTH",
@@ -608,6 +654,9 @@ export class AuthService {
           taskAssignments: user.notifyTaskAssignments,
           deadlines: user.notifyDeadlines,
           workflowUpdates: user.notifyWorkflowUpdates,
+          mentions: user.notifyMentions,
+          financial: user.notifyFinancial,
+          integrations: user.notifyIntegrations,
         },
         active: user.active,
         createdAt: user.createdAt,
@@ -626,7 +675,13 @@ export class AuthService {
   ) {
     const user = await prisma.user.findUnique({
       where: { id: currentUser.id },
-      select: { id: true, name: true, email: true, active: true, passwordHash: true },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        active: true,
+        passwordHash: true,
+      },
     });
     const passwordMatches = user
       ? await bcrypt.compare(data.password, user.passwordHash)
@@ -637,7 +692,10 @@ export class AuthService {
         entityType: "AUTH",
         entityId: currentUser.id,
         action: "REAUTHENTICATION_FAILED",
-        actor: { id: currentUser.id, name: currentUser.name ?? currentUser.email },
+        actor: {
+          id: currentUser.id,
+          name: currentUser.name ?? currentUser.email,
+        },
         summary: `Falha na confirmação de senha para ${currentUser.email}`,
         metadata: {
           ipAddress: context?.ipAddress ?? null,
@@ -689,16 +747,28 @@ export class AuthService {
     });
 
     if (!storedToken) {
-      throw new AppError("Refresh token inv\u00e1lido", 401, "AUTH_REFRESH_TOKEN_INVALID");
+      throw new AppError(
+        "Refresh token inv\u00e1lido",
+        401,
+        "AUTH_REFRESH_TOKEN_INVALID",
+      );
     }
 
     if (storedToken.revokedAt) {
-      throw new AppError("Refresh token revogado", 401, "AUTH_REFRESH_TOKEN_REVOKED");
+      throw new AppError(
+        "Refresh token revogado",
+        401,
+        "AUTH_REFRESH_TOKEN_REVOKED",
+      );
     }
 
     if (storedToken.expiresAt < new Date()) {
       await this.markSessionAsExpired(storedToken, context);
-      throw new AppError("Refresh token expirado", 401, "AUTH_REFRESH_TOKEN_EXPIRED");
+      throw new AppError(
+        "Refresh token expirado",
+        401,
+        "AUTH_REFRESH_TOKEN_EXPIRED",
+      );
     }
 
     if (!storedToken.user.active) {
@@ -718,7 +788,9 @@ export class AuthService {
       {
         email: storedToken.user.email,
         role: storedToken.user.role,
-        persistentSession: verifiedRefreshToken.persistentSession ?? env.AUTH_REFRESH_COOKIE_PERSISTENT,
+        persistentSession:
+          verifiedRefreshToken.persistentSession ??
+          env.AUTH_REFRESH_COOKIE_PERSISTENT,
       },
       storedToken.user.id,
     );
@@ -769,14 +841,18 @@ export class AuthService {
         newRefreshTokenId: newStoredRefreshToken.id,
         ipAddress: context?.ipAddress ?? null,
         userAgent: context?.userAgent ?? null,
-        persistentSession: verifiedRefreshToken.persistentSession ?? env.AUTH_REFRESH_COOKIE_PERSISTENT,
+        persistentSession:
+          verifiedRefreshToken.persistentSession ??
+          env.AUTH_REFRESH_COOKIE_PERSISTENT,
       },
     });
 
     return {
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
-      persistentSession: verifiedRefreshToken.persistentSession ?? env.AUTH_REFRESH_COOKIE_PERSISTENT,
+      persistentSession:
+        verifiedRefreshToken.persistentSession ??
+        env.AUTH_REFRESH_COOKIE_PERSISTENT,
     };
   }
 
@@ -849,6 +925,9 @@ export class AuthService {
         notifyTaskAssignments: true,
         notifyDeadlines: true,
         notifyWorkflowUpdates: true,
+        notifyMentions: true,
+        notifyFinancial: true,
+        notifyIntegrations: true,
         active: true,
         createdAt: true,
         lastLoginAt: true,
@@ -860,14 +939,18 @@ export class AuthService {
       throw new AppError("Usu\u00e1rio n\u00e3o encontrado", 404);
     }
 
-    const effectivePermissions = await permissionsService.getEffectivePermissionsForUser(
-      user.id,
-      user.role,
-    );
+    const effectivePermissions =
+      await permissionsService.getEffectivePermissionsForUser(
+        user.id,
+        user.role,
+      );
     const {
       notifyTaskAssignments,
       notifyDeadlines,
       notifyWorkflowUpdates,
+      notifyMentions,
+      notifyFinancial,
+      notifyIntegrations,
       ...profile
     } = user;
 
@@ -877,6 +960,9 @@ export class AuthService {
         taskAssignments: notifyTaskAssignments,
         deadlines: notifyDeadlines,
         workflowUpdates: notifyWorkflowUpdates,
+        mentions: notifyMentions,
+        financial: notifyFinancial,
+        integrations: notifyIntegrations,
       },
       permissions: effectivePermissions,
       access: this.buildAccessProfile(user.role, effectivePermissions),
@@ -902,6 +988,9 @@ export class AuthService {
         notifyTaskAssignments: true,
         notifyDeadlines: true,
         notifyWorkflowUpdates: true,
+        notifyMentions: true,
+        notifyFinancial: true,
+        notifyIntegrations: true,
       },
     });
 
@@ -913,11 +1002,15 @@ export class AuthService {
       where: { id: currentUser.id },
       data: {
         ...(data.name !== undefined && { name: data.name.trim() }),
-        ...(data.warName !== undefined && { warName: data.warName?.trim() || null }),
+        ...(data.warName !== undefined && {
+          warName: data.warName?.trim() || null,
+        }),
         ...(data.rank !== undefined && { rank: data.rank?.trim() || null }),
         ...(data.cpf !== undefined && { cpf: data.cpf }),
         ...(data.phone !== undefined && { phone: data.phone }),
-        ...(data.avatarDataUrl !== undefined && { avatarDataUrl: data.avatarDataUrl }),
+        ...(data.avatarDataUrl !== undefined && {
+          avatarDataUrl: data.avatarDataUrl,
+        }),
         ...(data.themePreference !== undefined && {
           themePreference: data.themePreference,
         }),
@@ -925,6 +1018,9 @@ export class AuthService {
           notifyTaskAssignments: data.notifications.taskAssignments,
           notifyDeadlines: data.notifications.deadlines,
           notifyWorkflowUpdates: data.notifications.workflowUpdates,
+          notifyMentions: data.notifications.mentions,
+          notifyFinancial: data.notifications.financial,
+          notifyIntegrations: data.notifications.integrations,
         }),
       },
     });
@@ -949,6 +1045,9 @@ export class AuthService {
           taskAssignments: before.notifyTaskAssignments,
           deadlines: before.notifyDeadlines,
           workflowUpdates: before.notifyWorkflowUpdates,
+          mentions: before.notifyMentions,
+          financial: before.notifyFinancial,
+          integrations: before.notifyIntegrations,
         },
       },
       after: {
@@ -995,7 +1094,11 @@ export class AuthService {
       user.passwordHash,
     );
     if (!currentPasswordMatches) {
-      throw new AppError("A senha atual está incorreta", 401, "AUTH_CURRENT_PASSWORD_INVALID");
+      throw new AppError(
+        "A senha atual está incorreta",
+        401,
+        "AUTH_CURRENT_PASSWORD_INVALID",
+      );
     }
 
     const newPasswordMatchesCurrent = await bcrypt.compare(
@@ -1047,12 +1150,22 @@ export class AuthService {
     };
   }
 
-  async listOwnSessions(user: CurrentUser, filters: ListSessionsInput, context?: AuthRequestContext) {
+  async listOwnSessions(
+    user: CurrentUser,
+    filters: ListSessionsInput,
+    context?: AuthRequestContext,
+  ) {
     this.assertOwnSessionPermission(user);
 
     const targetUser = await this.getSessionTargetUser(user.id);
 
-    return this.listSessionsForUser(targetUser, filters, "sessions.manage_own", "OWN", context);
+    return this.listSessionsForUser(
+      targetUser,
+      filters,
+      "sessions.manage_own",
+      "OWN",
+      context,
+    );
   }
 
   async listUserSessions(
@@ -1111,7 +1224,10 @@ export class AuthService {
     });
   }
 
-  async revokeAllOwnSessions(currentUser: CurrentUser, context?: AuthRequestContext) {
+  async revokeAllOwnSessions(
+    currentUser: CurrentUser,
+    context?: AuthRequestContext,
+  ) {
     this.assertOwnSessionPermission(currentUser);
 
     return this.revokeAllSessions({
@@ -1149,8 +1265,12 @@ export class AuthService {
     this.assertAdminSessionPermission(currentUser);
 
     const now = new Date();
-    const refreshTokenCutoff = new Date(now.getTime() - data.refreshTokenRetentionDays * 86400000);
-    const auditCutoff = new Date(now.getTime() - data.auditRetentionDays * 86400000);
+    const refreshTokenCutoff = new Date(
+      now.getTime() - data.refreshTokenRetentionDays * 86400000,
+    );
+    const auditCutoff = new Date(
+      now.getTime() - data.auditRetentionDays * 86400000,
+    );
 
     const [deletedRefreshTokens, deletedAuditLogs] = await prisma.$transaction([
       prisma.refreshToken.deleteMany({
@@ -1291,7 +1411,9 @@ export class AuthService {
         previousStatus: currentStatus,
         resultingStatus: this.getSessionStatus(updatedToken, now),
         alreadyInactive,
-        revokedReason: alreadyInactive ? token.revokedReason : input.revokedReason,
+        revokedReason: alreadyInactive
+          ? token.revokedReason
+          : input.revokedReason,
         ipAddress: input.context?.ipAddress ?? null,
         userAgent: input.context?.userAgent ?? null,
       },

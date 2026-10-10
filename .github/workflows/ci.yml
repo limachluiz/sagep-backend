@@ -1,14 +1,17 @@
 name: Backend CI
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
       - upgrade-security
+      - upgrade-implantação
   pull_request:
     branches:
       - main
       - upgrade-security
+      - upgrade-implantação
 
 permissions:
   contents: read
@@ -83,6 +86,9 @@ jobs:
 
       - name: Aplicar migrations no banco de teste
         run: npx prisma migrate deploy
+
+      - name: Confirmar estado das migrations
+        run: npx prisma migrate status
 
       - name: Compilar TypeScript
         run: npm run build

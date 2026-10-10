@@ -5,7 +5,10 @@ import { MILITARY_RANKS } from "../../shared/military-ranks.js";
 export const registerSchema = z.object({
   name: z.string().trim().min(3, "Nome inválido"),
   email: z.string().trim().toLowerCase().email("Email inválido"),
-  password: z.string().min(8, "Senha deve ter pelo menos 8 caracteres").max(128),
+  password: z
+    .string()
+    .min(8, "Senha deve ter pelo menos 8 caracteres")
+    .max(128),
 });
 
 export const loginSchema = z.object({
@@ -34,13 +37,20 @@ const avatarDataUrlSchema = z
     "Use uma imagem PNG, JPEG ou WebP válida",
   )
   .refine(
-    (value) => Buffer.byteLength(value.slice(value.indexOf(",") + 1), "base64") <= 256 * 1024,
+    (value) =>
+      Buffer.byteLength(value.slice(value.indexOf(",") + 1), "base64") <=
+      256 * 1024,
     "A imagem do avatar deve ter no máximo 256 KB",
   );
 
 export const updateOwnProfileSchema = z
   .object({
-    name: z.string().trim().min(3, "Nome deve ter pelo menos 3 caracteres").max(120).optional(),
+    name: z
+      .string()
+      .trim()
+      .min(3, "Nome deve ter pelo menos 3 caracteres")
+      .max(120)
+      .optional(),
     warName: z.string().trim().max(80).nullable().optional(),
     rank: z.enum(MILITARY_RANKS).nullable().optional(),
     cpf: z
@@ -62,6 +72,9 @@ export const updateOwnProfileSchema = z
         taskAssignments: z.boolean(),
         deadlines: z.boolean(),
         workflowUpdates: z.boolean(),
+        mentions: z.boolean(),
+        financial: z.boolean(),
+        integrations: z.boolean(),
       })
       .optional(),
   })
@@ -72,14 +85,22 @@ export const updateOwnProfileSchema = z
 export const changeOwnPasswordSchema = z
   .object({
     currentPassword: z.string().min(1, "Informe a senha atual"),
-    newPassword: z.string().min(8, "A nova senha deve ter pelo menos 8 caracteres").max(128),
+    newPassword: z
+      .string()
+      .min(8, "A nova senha deve ter pelo menos 8 caracteres")
+      .max(128),
   })
   .refine((data) => data.currentPassword !== data.newPassword, {
     message: "A nova senha deve ser diferente da senha atual",
     path: ["newPassword"],
   });
 
-export const sessionStatusSchema = z.enum(["ACTIVE", "REVOKED", "EXPIRED", "ALL"]);
+export const sessionStatusSchema = z.enum([
+  "ACTIVE",
+  "REVOKED",
+  "EXPIRED",
+  "ALL",
+]);
 
 export const listSessionsQuerySchema = paginationQuerySchema.extend({
   status: sessionStatusSchema.default("ACTIVE"),

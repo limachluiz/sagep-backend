@@ -1,7 +1,8 @@
 import { Request, Response } from "express";
 import { env } from "../../config/env.js";
-import { backupIdParamSchema, restoreBackupSchema, selectiveExportSchema } from "./backups.schemas.js";
+import { backupIdParamSchema, restoreBackupSchema, restoreEvidenceSchema, selectiveExportSchema } from "./backups.schemas.js";
 import { backupsService } from "./backups.service.js";
+import { evidenceRestoreService } from "./evidence-restore.service.js";
 
 export class BackupsController {
   async list(_req: Request, res: Response) {
@@ -56,6 +57,16 @@ export class BackupsController {
     res.on("finish", () => void exported.cleanup());
     res.on("close", () => void exported.cleanup());
     return res.download(exported.filePath, exported.filename);
+  }
+
+  async evidenceAnalyze(req: Request, res: Response) {
+    const filename = typeof req.headers["x-backup-filename"] === "string" ? decodeURIComponent(req.headers["x-backup-filename"]) : undefined;
+    return res.status(201).json(await evidenceRestoreService.analyze(req, filename));
+  }
+
+  async evidenceRestore(req: Request, res: Response) {
+    restoreEvidenceSchema.parse(req.body);
+    return res.status(200).json(await evidenceRestoreService.restore(backupIdParamSchema.parse(req.params).id, req.user!));
   }
 
   uploadLimit() {
