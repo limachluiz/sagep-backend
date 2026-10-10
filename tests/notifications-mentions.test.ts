@@ -3,20 +3,26 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   userFindMany: vi.fn(),
   notificationFindMany: vi.fn(),
+  notificationFindUnique: vi.fn(),
   mentionFindMany: vi.fn(),
   mentionCount: vi.fn(),
   mentionUpdate: vi.fn(),
+  mentionUpsert: vi.fn(),
   auditLog: vi.fn(),
 }));
 
 vi.mock("../src/config/prisma.js", () => ({
   prisma: {
     user: { findMany: mocks.userFindMany },
-    userNotification: { findMany: mocks.notificationFindMany },
+    userNotification: {
+      findMany: mocks.notificationFindMany,
+      findUnique: mocks.notificationFindUnique,
+    },
     entityMention: {
       findMany: mocks.mentionFindMany,
       count: mocks.mentionCount,
       update: mocks.mentionUpdate,
+      upsert: mocks.mentionUpsert,
     },
   },
 }));
@@ -134,6 +140,32 @@ describe("acompanhamento e escalonamento de menções", () => {
         }),
       }),
     );
+  });
+
+  it("gera somente uma menção quando o mesmo usuário aparece no texto e na seleção", async () => {
+    mocks.userFindMany.mockResolvedValue([
+      { id: "user-2", userCode: 2 },
+    ]);
+    mocks.notificationFindUnique.mockResolvedValue({ id: "notification-2" });
+    mocks.mentionUpsert.mockResolvedValue({ id: "mention-2" });
+    const service = new NotificationsService();
+    const publish = vi.spyOn(service, "publish").mockResolvedValue({ created: 1 });
+
+    const result = await service.publishMentions({
+      content: "@USR-2 @2 revise esta tarefa",
+      mentionedUserIds: ["user-2", "user-2"],
+      eventKeyPrefix: "TASK:task-1:UPDATE:1",
+      actorId: "actor-1",
+      title: "Menção em tarefa",
+      description: "Revisão solicitada",
+      detailsPath: "/tasks/task-1",
+      entityType: "TASK",
+      entityId: "task-1",
+    });
+
+    expect(publish).toHaveBeenCalledTimes(1);
+    expect(mocks.mentionUpsert).toHaveBeenCalledTimes(1);
+    expect(result).toEqual({ created: 1, mentioned: [2] });
   });
 
   it("escalona somente menções vencidas e registra a ação em auditoria", async () => {

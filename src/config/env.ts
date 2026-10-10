@@ -50,6 +50,10 @@ const envSchema = z
     .transform((value) => value === "true"),
   HEALTH_PGADMIN_URL: z.string().url().optional(),
   HEALTH_PROBE_TIMEOUT_MS: z.coerce.number().int().min(250).max(10000).default(2000),
+  HEALTH_METRICS_TOKEN: z.preprocess(
+    (value) => typeof value === "string" && value.trim() === "" ? undefined : value,
+    z.string().min(32).max(256).regex(/^[A-Za-z0-9_-]+$/).optional(),
+  ),
   INTEGRATION_PROBE_TIMEOUT_MS: z.coerce.number().int().min(2000).max(60000).default(15000),
   COMPRAS_GOV_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(5000).max(120000).default(30000),
   CONTRATOS_GOV_REQUEST_TIMEOUT_MS: z.coerce.number().int().min(30000).max(180000).default(70000),

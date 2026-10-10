@@ -58,6 +58,7 @@ services:
       STEP_UP_EXPIRES_IN_SECONDS: ${STEP_UP_EXPIRES_IN_SECONDS:-300}
       HEALTH_PGADMIN_URL: ${HEALTH_PGADMIN_URL:-http://pgadmin/misc/ping}
       HEALTH_PROBE_TIMEOUT_MS: ${HEALTH_PROBE_TIMEOUT_MS:-2000}
+      HEALTH_METRICS_TOKEN: ${HEALTH_METRICS_TOKEN:-}
       BACKUP_DIRECTORY: /app/backups
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
       BACKUP_MAX_FILES: ${BACKUP_MAX_FILES:-30}
@@ -85,6 +86,33 @@ services:
       - sagep_tls:/app/tls
       - sagep_evidence_files:/app/evidence-files
       - sagep_bootstrap:/app/bootstrap
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: ${DOCKER_LOG_MAX_SIZE:-10m}
+        max-file: ${DOCKER_LOG_MAX_FILES:-5}
+
+  prometheus:
+    profiles: ["monitoring"]
+    image: prom/prometheus:v3.7.3
+    container_name: ${SAGEP_CONTAINER_PREFIX:-sagep}_prometheus
+    restart: unless-stopped
+    depends_on:
+      - api
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        sed "s|__HEALTH_METRICS_TOKEN__|$${HEALTH_METRICS_TOKEN}|g" /etc/prometheus/prometheus.template.yml > /tmp/prometheus.yml
+        exec /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
+    environment:
+      HEALTH_METRICS_TOKEN: ${HEALTH_METRICS_TOKEN:?Defina HEALTH_METRICS_TOKEN para ativar o perfil monitoring}
+    volumes:
+      - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.template.yml:ro
+      - sagep_prometheus_data:/prometheus
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     security_opt:
       - no-new-privileges:true
 
@@ -154,3 +182,5 @@ volumes:
     name: ${SAGEP_VOLUME_PREFIX:-sagep}_caddy_data
   sagep_caddy_config:
     name: ${SAGEP_VOLUME_PREFIX:-sagep}_caddy_config
+  sagep_prometheus_data:
+    name: ${SAGEP_VOLUME_PREFIX:-sagep}_prometheus_data

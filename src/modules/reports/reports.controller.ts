@@ -7,6 +7,7 @@ import { DeliveryReportService } from "./delivery-report.service.js";
 import { ataBalanceReportService } from "./ata-balance-report.service.js";
 import { commitmentNoteReportQuerySchema } from "./commitment-note-report.schemas.js";
 import { commitmentNoteReportService } from "./commitment-note-report.service.js";
+import { documentVersionsService } from "../document-versions/document-versions.service.js";
 
 const reportsService = new ReportsService();
 const deliveryReportService = new DeliveryReportService();
@@ -59,6 +60,15 @@ export class ReportsController {
   async deliveryReportPdf(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
     const result = await deliveryReportService.generate(id, req.user!);
+    await documentVersionsService.recordGenerated({
+      entityType: "PROJECT",
+      entityId: id,
+      documentType: "DELIVERY_REPORT_PDF",
+      filename: `relatorio-entrega-PRJ-${result.projectCode}.pdf`,
+      buffer: result.pdf,
+      actor: req.user!,
+      reason: "Emissão do relatório técnico de conclusão e entrega",
+    });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="relatorio-entrega-PRJ-${result.projectCode}.pdf"`);
     return res.status(200).send(result.pdf);

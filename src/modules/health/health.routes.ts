@@ -2,6 +2,7 @@ import { Router } from "express";
 import { authMiddleware } from "../../middlewares/auth.middleware.js";
 import { requirePermission } from "../../middlewares/permission.middleware.js";
 import { healthController } from "./health.controller.js";
+import { requireMetricsAccess } from "../../middlewares/metrics-access.middleware.js";
 
 export const healthRoutes = Router();
 
@@ -13,4 +14,4 @@ healthRoutes.get(
   requirePermission("system_health.view_details"),
   healthController.details,
 );
-healthRoutes.get("/metrics", authMiddleware, requirePermission("system_health.view_details"), healthController.metrics);
+healthRoutes.get("/metrics", requireMetricsAccess, healthController.metrics);

@@ -1,0 +1,12 @@
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: sagep-api
+    metrics_path: /api/health/metrics
+    authorization:
+      type: Bearer
+      credentials: __HEALTH_METRICS_TOKEN__
+    static_configs:
+      - targets: ["api:3000"]

@@ -4,9 +4,17 @@
 
 - `GET /api/health/status` permanece público e sanitizado para monitores externos de disponibilidade.
 - `GET /api/health/details` exige `system_health.view_details` e inclui runtime, memória, requisições dos últimos 15 minutos, armazenamento, backups, certificado e automações.
-- `GET /api/health/metrics` exige a mesma permissão e expõe métricas no formato OpenMetrics/Prometheus.
+- `GET /api/health/metrics` aceita usuário com `system_health.view_details` ou o token técnico `HEALTH_METRICS_TOKEN` e expõe métricas no formato OpenMetrics/Prometheus.
 - Toda resposta recebe `X-Request-Id`. Um identificador recebido nesse cabeçalho é preservado quando respeita o formato seguro, permitindo rastrear proxy, API e logs.
-- Os logs HTTP são JSON e não registram query strings, tokens, corpos nem credenciais. A retenção e rotação devem ser configuradas no runtime de containers.
+- Os logs HTTP são JSON e não registram query strings, tokens, corpos nem credenciais. O Compose limita cada arquivo a `DOCKER_LOG_MAX_SIZE` e mantém `DOCKER_LOG_MAX_FILES` arquivos.
+
+O perfil opcional `monitoring` inicia o Prometheus já configurado para coletar as métricas com o token técnico, sem reutilizar credenciais pessoais:
+
+```bash
+docker compose --profile monitoring up -d
+```
+
+Defina `HEALTH_METRICS_TOKEN` com um segredo aleatório de pelo menos 32 caracteres. O Prometheus fica restrito ao loopback por padrão e mantém 30 dias de histórico, ajustáveis por `PROMETHEUS_RETENTION`.
 
 Para detectar indisponibilidade total, configure uma sonda externa contra `/api/health/status`; um processo executado dentro do próprio SAGEP não consegue alertar quando todo o host está fora do ar.
 
