@@ -37,6 +37,16 @@ const prismaHttpErrors: Record<string, { status: number; code: string; message: 
 };
 
 const safeServerErrorMessages: Record<string, string> = {
+  NFE_NOT_CONFIGURED: "Configure o certificado A1 institucional, arquivo de senha, CNPJ e UF no servidor",
+  NFE_CONFIGURATION_INVALID: "A configuração de CNPJ e UF da consulta fiscal é inválida",
+  NFE_CERTIFICATE_UNAVAILABLE: "Verifique o certificado fiscal e o arquivo de senha no servidor",
+  NFE_SERVICE_UNAVAILABLE: "Não foi possível consultar a SEFAZ. Verifique certificado, autorização e conectividade",
+  NFE_RESPONSE_INVALID: "A SEFAZ retornou uma resposta incompatível ou acima do limite permitido",
+  NFE_RESPONSE_KEY_MISMATCH: "A resposta fiscal não corresponde à chave consultada",
+  PDF_VALIDATION_TIMEOUT: "A validação criptográfica excedeu o tempo permitido",
+  PDF_VALIDATOR_UNAVAILABLE: "O validador local de assinaturas não está disponível no servidor",
+  PDF_VALIDATION_FAILED: "Não foi possível concluir a análise local do PDF",
+
   BACKUP_COMMAND_FAILED: "Falha ao processar a operação de backup",
   BACKUP_RESTORE_FAILED:
     "A restauração falhou. O backup de segurança foi preservado",

@@ -256,6 +256,7 @@ enum CommitmentReconciliationStatus {
 enum InvoiceSource {
   MANUAL
   XML
+  SEFAZ
 }
 
 enum InvoiceConferenceStatus {
@@ -1400,4 +1401,24 @@ model CommitmentImportRegistry {
   updatedAt      DateTime               @updatedAt
 
   @@index([status, lastSeenAt])
+}
+
+model NfeOfficialConsultation {
+  id                String   @id @default(cuid())
+  projectId         String
+  commitmentNoteId  String
+  accessKey         String
+  environment       String
+  interestedCnpj    String
+  requestedById     String
+  queriedAt         DateTime @default(now())
+  result            Json
+  @@index([projectId, accessKey, queriedAt])
+}
+
+model NfeDistributionState {
+  id           String @id
+  busyUntil    DateTime?
+  blockedUntil DateTime?
+  updatedAt    DateTime @updatedAt
 }

@@ -1,0 +1,10 @@
+# Use together with docker-compose.yml. Secrets stay only on the host.
+services:
+  api:
+    environment:
+      NFE_PFX_PATH: /app/fiscal-secrets/certificate.pfx
+      NFE_PFX_PASSWORD_FILE: /app/fiscal-secrets/password
+      PDF_VALIDATION_TRUST_DIRECTORY: /app/signature-trust
+    volumes:
+      - ./runtime-secrets/nfe:/app/fiscal-secrets:ro
+      - ./signature-trust:/app/signature-trust:ro

@@ -50,7 +50,8 @@ describe("contratos HTTP transversais", () => {
       }
     }
 
-    expect(operationIds).toHaveLength(197);
+    expect(operationIds).toHaveLength(201);
+    expect(operationIds).toEqual(expect.arrayContaining(["getOfficialNfeConfiguration", "previewOfficialNfe", "importOfficialNfe", "validateDocumentSignatures"]));
     expect(operationIds.every(Boolean)).toBe(true);
     expect(new Set(operationIds).size).toBe(operationIds.length);
   });

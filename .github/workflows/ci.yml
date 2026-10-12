@@ -107,6 +107,16 @@ jobs:
       - name: Verificar tipos TypeScript do OpenAPI
         run: npm run openapi:check-client
 
+      - name: Configurar Python para testes de assinatura
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+
+      - name: Instalar validador e testar PDFs assinados reais de teste
+        run: |
+          python -m pip install -r scripts/signature-validation/requirements.txt
+          python scripts/signature-validation/test_validation.py
+
       - name: Executar testes
         run: npm test
 

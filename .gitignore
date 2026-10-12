@@ -17,3 +17,9 @@ coverage
 /tls/
 /deployment-output/
 /.deployment-updates/
+
+node_modules
+__pycache__/
+*.pyc
+/runtime-secrets/
+/signature-trust/

@@ -65,6 +65,8 @@ RUN apt-get update \
     libxss1 \
     libxtst6 \
     openssl \
+    python3 \
+    python3-venv \
     tar \
     gosu \
     gnupg \
@@ -77,6 +79,12 @@ RUN apt-get update \
   && apt-get update \
   && apt-get install -y --no-install-recommends postgresql-client-16 \
   && rm -rf /var/lib/apt/lists/*
+
+COPY scripts/signature-validation/requirements.txt /app/scripts/signature-validation/requirements.txt
+RUN python3 -m venv /opt/sagep-validator \
+  && /opt/sagep-validator/bin/pip install --no-cache-dir -r /app/scripts/signature-validation/requirements.txt
+ENV PDF_VALIDATION_PYTHON=/opt/sagep-validator/bin/python
+COPY scripts/signature-validation/validate_pdf.py /app/scripts/signature-validation/validate_pdf.py
 
 COPY package.json package-lock.json .npmrc ./
 COPY --from=build /app/node_modules ./node_modules

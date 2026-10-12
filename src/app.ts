@@ -39,7 +39,11 @@ app.use((req, res, next) => {
 });
 app.use(cors(corsOptions));
 app.use(maintenanceMiddleware);
-app.use(express.json({ limit: "1mb", strict: true }));
+app.use((req, res, next) => {
+  const documentUpload = /^\/api\/document-versions\/[^/]+\/signed$/.test(req.path);
+  const fiscalXml = /^\/api\/financial-execution\/invoices\/xml\/(preview|import)$/.test(req.path);
+  return express.json({ limit: documentUpload ? "36mb" : fiscalXml ? "12mb" : "1mb", strict: true })(req, res, next);
+});
 
 app.get("/", (_req, res) => {
   return res.status(200).json({

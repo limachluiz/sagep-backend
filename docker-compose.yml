@@ -59,6 +59,14 @@ services:
       HEALTH_PGADMIN_URL: ${HEALTH_PGADMIN_URL:-http://pgadmin/misc/ping}
       HEALTH_PROBE_TIMEOUT_MS: ${HEALTH_PROBE_TIMEOUT_MS:-2000}
       HEALTH_METRICS_TOKEN: ${HEALTH_METRICS_TOKEN:-}
+      NFE_ENVIRONMENT: ${NFE_ENVIRONMENT:-PRODUCTION}
+      NFE_INTERESTED_CNPJ: ${NFE_INTERESTED_CNPJ:-}
+      NFE_UF_CODE: ${NFE_UF_CODE:-13}
+      NFE_PFX_PATH: ${NFE_PFX_PATH:-}
+      NFE_PFX_PASSWORD_FILE: ${NFE_PFX_PASSWORD_FILE:-}
+      NFE_TIMEOUT_MS: ${NFE_TIMEOUT_MS:-20000}
+      PDF_VALIDATION_TRUST_DIRECTORY: ${PDF_VALIDATION_TRUST_DIRECTORY:-}
+      PDF_VALIDATION_TIMEOUT_MS: ${PDF_VALIDATION_TIMEOUT_MS:-60000}
       BACKUP_DIRECTORY: /app/backups
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-30}
       BACKUP_MAX_FILES: ${BACKUP_MAX_FILES:-30}
@@ -109,6 +117,14 @@ services:
         exec /bin/prometheus --config.file=/tmp/prometheus.yml --storage.tsdb.path=/prometheus --storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}
     environment:
       HEALTH_METRICS_TOKEN: ${HEALTH_METRICS_TOKEN:-}
+      NFE_ENVIRONMENT: ${NFE_ENVIRONMENT:-PRODUCTION}
+      NFE_INTERESTED_CNPJ: ${NFE_INTERESTED_CNPJ:-}
+      NFE_UF_CODE: ${NFE_UF_CODE:-13}
+      NFE_PFX_PATH: ${NFE_PFX_PATH:-}
+      NFE_PFX_PASSWORD_FILE: ${NFE_PFX_PASSWORD_FILE:-}
+      NFE_TIMEOUT_MS: ${NFE_TIMEOUT_MS:-20000}
+      PDF_VALIDATION_TRUST_DIRECTORY: ${PDF_VALIDATION_TRUST_DIRECTORY:-}
+      PDF_VALIDATION_TIMEOUT_MS: ${PDF_VALIDATION_TIMEOUT_MS:-60000}
     volumes:
       - ./deploy/monitoring/prometheus.yml:/etc/prometheus/prometheus.template.yml:ro
       - ./deploy/monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro

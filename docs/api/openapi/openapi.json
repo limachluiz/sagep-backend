@@ -7580,6 +7580,52 @@
             }
           }
         ]
+      },
+      "OfficialNfeLookupRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "projectId",
+          "commitmentNoteId",
+          "accessKey"
+        ],
+        "properties": {
+          "projectId": {
+            "type": "string"
+          },
+          "commitmentNoteId": {
+            "type": "string"
+          },
+          "accessKey": {
+            "type": "string",
+            "pattern": "^[0-9]{44}$"
+          }
+        }
+      },
+      "OfficialNfeImportRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "consultationId",
+          "confirmed"
+        ],
+        "properties": {
+          "consultationId": {
+            "type": "string"
+          },
+          "confirmed": {
+            "type": "boolean",
+            "const": true
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          },
+          "documentLink": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
       }
     }
   },
@@ -20451,6 +20497,221 @@
           "military_organizations.manage"
         ],
         "operationId": "militaryOrganizations_delete_byId"
+      }
+    },
+    "/financial-execution/invoices/official/configuration": {
+      "get": {
+        "operationId": "getOfficialNfeConfiguration",
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Verificar configuração da consulta oficial sem expor credenciais",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-permissions": [
+          "financial_execution.manage"
+        ],
+        "responses": {
+          "200": {
+            "description": "Estado da configuração",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "configured": {
+                      "type": "boolean"
+                    },
+                    "environment": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/financial-execution/invoices/official/preview": {
+      "post": {
+        "operationId": "previewOfficialNfe",
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Consultar a chave no NFeDistribuicaoDFe com certificado institucional",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-permissions": [
+          "financial_execution.manage"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfficialNfeLookupRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Prévia com fonte, data, resumo disponível e divergências",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Janela de espera obrigatória da SEFAZ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Certificado ou configuração indisponíveis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/financial-execution/invoices/official/import": {
+      "post": {
+        "operationId": "importOfficialNfe",
+        "tags": [
+          "financial-execution"
+        ],
+        "summary": "Importar uma consulta revisada, sem atesto automático",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-permissions": [
+          "financial_execution.manage"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OfficialNfeImportRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "NF-e registrada com origem SEFAZ",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Prévia expirada, duplicidade ou importação não permitida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/document-versions/{id}/validate": {
+      "post": {
+        "operationId": "validateDocumentSignatures",
+        "tags": [
+          "reports"
+        ],
+        "summary": "Validar integridade, certificado e revogação de um PDF assinado localmente",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-permissions": [
+          "reports.export"
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Versão com resultado VALID, INVALID ou PENDING_VALIDATION e diagnóstico estruturado",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "PDF ou configuração incompatíveis",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Validador ausente ou tempo excedido",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
       }
     }
   }

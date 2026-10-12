@@ -6,10 +6,10 @@ import { documentVersionIdSchema, documentVersionListSchema, invalidateDocumentV
 
 export const documentVersionsRoutes = Router();
 documentVersionsRoutes.use(authMiddleware);
-documentVersionsRoutes.get("/", requirePermission("reports.export"), async (req, res) => res.json(await documentVersionsService.list(documentVersionListSchema.parse(req.query))));
+documentVersionsRoutes.get("/", requirePermission("reports.export"), async (req, res) => res.json(await documentVersionsService.list(documentVersionListSchema.parse(req.query), req.user!)));
 documentVersionsRoutes.get("/:id/download", requirePermission("reports.export"), async (req, res) => {
   const { id } = documentVersionIdSchema.parse(req.params);
-  const { version, buffer } = await documentVersionsService.download(id);
+  const { version, buffer } = await documentVersionsService.download(id, req.user!);
   res.setHeader("Content-Type", version.mimeType);
   res.setHeader("Content-Disposition", `attachment; filename="${version.filename.replace(/[\r\n\"]/g, "-")}"`);
   res.setHeader("X-Document-SHA256", version.checksumSha256);
@@ -18,3 +18,5 @@ documentVersionsRoutes.get("/:id/download", requirePermission("reports.export"),
 documentVersionsRoutes.post("/:id/signed", requirePermission("reports.export"), async (req, res) => { const { id } = documentVersionIdSchema.parse(req.params); return res.status(201).json(await documentVersionsService.registerSigned(id, signedDocumentSchema.parse(req.body), req.user!)); });
 documentVersionsRoutes.patch("/:id/signature-validation", requirePermission("settings.manage"), async (req, res) => { const { id } = documentVersionIdSchema.parse(req.params); return res.json(await documentVersionsService.recordValidation(id, signatureValidationSchema.parse(req.body), req.user!)); });
 documentVersionsRoutes.patch("/:id/invalidate", requirePermission("settings.manage"), async (req, res) => { const { id } = documentVersionIdSchema.parse(req.params); return res.json(await documentVersionsService.invalidate(id, invalidateDocumentVersionSchema.parse(req.body).reason, req.user!)); });
+
+documentVersionsRoutes.post("/:id/validate", requirePermission("reports.export"), async (req, res) => { const { id } = documentVersionIdSchema.parse(req.params); return res.json(await documentVersionsService.validateAutomatically(id, req.user!)); });

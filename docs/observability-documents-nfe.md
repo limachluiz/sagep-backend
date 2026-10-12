@@ -30,21 +30,21 @@ Rotas principais:
 - `PATCH /api/document-versions/:id/signature-validation`
 - `PATCH /api/document-versions/:id/invalidate`
 
-O SAGEP detecta a presença estrutural de assinatura embarcada no PDF, mas não declara validade criptográfica automaticamente. A validação feita no GOV.BR, ICP-Brasil ou outra fonte autorizada é registrada separadamente, sem custodiar certificado ou chave privada pessoal.
+O SAGEP preserva o PDF e permite validação criptográfica local com pyHanko. Integridade, confiança e revogação são apresentadas separadamente; falta de dados mantém o resultado inconclusivo. A validação oficial externa pode ser registrada adicionalmente, sem custodiar chave privada pessoal. Consulte [o guia de configuração](official-nfe-and-signature-validation.md).
 
 ## NF-e
 
 O cadastro manual foi mantido. A opção recomendada é importar o XML autorizado, que confere:
 
 - estrutura NF-e, chave de 44 dígitos e dígito verificador;
-- assinatura XML e protocolo de autorização;
+- presença de assinatura XML e protocolo informado no documento (sem validação criptográfica do XML);
 - CNPJ do emitente contra o favorecido da NE;
 - valor da nota contra o limite financeiro da NE;
 - duplicidade por chave ou por número, série e fornecedor.
 
 O XML integral não é persistido. O SAGEP guarda somente o hash SHA-256 e o resumo financeiro necessário à auditoria. Divergências não movimentam automaticamente o workflow nem o saldo.
 
-A consulta web pública do Portal da NF-e usa desafio humano. O Web Service oficial `NFeDistribuicaoDFe` exige uma integração com certificado digital e regras de distribuição; essa conexão pode ser acrescentada futuramente sem alterar o fluxo de conferência por XML.
+A consulta web pública do Portal da NF-e usa desafio humano. O Web Service oficial `NFeDistribuicaoDFe` exige uma integração com certificado digital e regras de distribuição; essa conexão está implementada na opção Consultar SEFAZ, condicionada ao certificado A1 institucional e à autorização do interessado. A importação por XML permanece disponível.
 
 Referências oficiais: Portal Nacional da NF-e, relação de Web Services e Manual de Orientação do Contribuinte (`NFeDistribuicaoDFe`).
 

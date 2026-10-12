@@ -9,7 +9,7 @@ export const documentVersionListSchema = z.object({
 export const documentVersionIdSchema = z.object({ id: z.string().trim().min(1) });
 
 export const signedDocumentSchema = z.object({
-  fileBase64: z.string().min(1),
+  fileBase64: z.string().min(1).max(35_000_000),
   filename: z.string().trim().min(1).max(180),
   signerName: z.string().trim().min(2).max(160),
   signerDocument: z.string().trim().max(40).optional(),

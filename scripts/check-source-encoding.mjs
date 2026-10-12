@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { TextDecoder } from "node:util";
 
-const sourceExtensions = /\.(?:ts|tsx|js|jsx|mjs|cjs|json|ya?ml|sql|md|sh|html|css)$/i;
+const sourceExtensions = /\.(?:py|ts|tsx|js|jsx|mjs|cjs|json|ya?ml|sql|md|sh|html|css)$/i;
 const files = execFileSync("git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"], { encoding: "utf8" }).split("\0").filter((file) => sourceExtensions.test(file));
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const invalid = [];

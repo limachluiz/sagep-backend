@@ -1,3 +1,4 @@
+import { nfeOfficialService, nfeOfficialLookupSchema, nfeOfficialImportSchema } from "./nfe-official.service.js";
 import { archivedNote, refreshArchivedNote, archiveImportSchema, archiveMetadataSchema, archiveBulkDeleteSchema, archiveKeys, deleteArchivedNotes, archiveCodeSchema, archiveQuerySchema, importDiscoveredNote, listArchivedNotes, updateArchivedNoteMetadata, deleteArchivedNote, attendedOmOptions } from "./ne-archive.service.js";
 import { resolveAtaCnpj, discoveryOptions, discoveryPage, discoveryPageSchema, discoveryDocuments } from "./ne-discovery.service.js";
 import { Router } from "express";
@@ -41,3 +42,7 @@ financialExecutionRoutes.post("/sync", requirePermission("financial_execution.sy
 financialExecutionRoutes.post("/invoices", requirePermission("financial_execution.manage"), (req, res) => controller.createInvoice(req, res));
 financialExecutionRoutes.post("/invoices/xml/preview", requirePermission("financial_execution.manage"), (req, res) => controller.previewInvoiceXml(req, res));
 financialExecutionRoutes.post("/invoices/xml/import", requirePermission("financial_execution.manage"), (req, res) => controller.importInvoiceXml(req, res));
+
+financialExecutionRoutes.get("/invoices/official/configuration", requirePermission("financial_execution.manage"), async (_req, res) => res.json(await nfeOfficialService.configuration()));
+financialExecutionRoutes.post("/invoices/official/preview", requirePermission("financial_execution.manage"), async (req, res) => res.json(await nfeOfficialService.consult(nfeOfficialLookupSchema.parse(req.body), req.user!)));
+financialExecutionRoutes.post("/invoices/official/import", requirePermission("financial_execution.manage"), async (req, res) => res.status(201).json(await nfeOfficialService.import(nfeOfficialImportSchema.parse(req.body), req.user!)));
