@@ -4037,6 +4037,10 @@
             "type": "string",
             "nullable": true
           },
+          "rank": {
+            "type": "string",
+            "nullable": true
+          },
           "email": {
             "type": "string",
             "format": "email"
@@ -13536,7 +13540,7 @@
             "name": "search",
             "in": "query",
             "required": false,
-            "description": "Nome, nome de guerra, e-mail ou código.",
+            "description": "Posto/graduação, nome, nome de guerra, e-mail ou código.",
             "schema": {
               "type": "string",
               "maxLength": 100

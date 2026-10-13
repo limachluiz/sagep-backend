@@ -121,6 +121,7 @@ describe("acompanhamento e escalonamento de menções", () => {
           userCode: 2,
           name: "Maria",
           warName: "Lima",
+          rank: "2º Ten",
           email: "maria@example.test",
           role: "PROJETISTA",
         },
@@ -132,6 +133,11 @@ describe("acompanhamento e escalonamento de menções", () => {
       "requester",
     );
     expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      rank: "2º Ten",
+      warName: "Lima",
+      userCode: 2,
+    });
     expect(mocks.userFindMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({

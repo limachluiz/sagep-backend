@@ -259,6 +259,7 @@ export class NotificationsService {
               OR: [
                 { name: { contains: search, mode: "insensitive" } },
                 { warName: { contains: search, mode: "insensitive" } },
+                { rank: { contains: search, mode: "insensitive" } },
                 { email: { contains: search, mode: "insensitive" } },
                 ...(/^\d+$/.test(search) ? [{ userCode: Number(search) }] : []),
               ],
@@ -270,6 +271,7 @@ export class NotificationsService {
         userCode: true,
         name: true,
         warName: true,
+        rank: true,
         email: true,
         role: true,
       },
@@ -324,6 +326,7 @@ export class NotificationsService {
           userCode: true,
           name: true,
           warName: true,
+          rank: true,
           role: true,
         },
       }),

@@ -1983,7 +1983,7 @@ export const openApiDocument: OpenApiDocument = {
       MentionCandidate: {
         type: "object", required: ["id", "userCode", "name", "email", "role"],
         properties: {
-          id: { type: "string" }, userCode: { type: "integer" }, name: { type: "string" }, warName: { type: "string", nullable: true },
+          id: { type: "string" }, userCode: { type: "integer" }, name: { type: "string" }, warName: { type: "string", nullable: true }, rank: { type: "string", nullable: true },
           email: { type: "string", format: "email" }, role: { type: "string" },
         },
       },
@@ -5036,7 +5036,7 @@ export const openApiDocument: OpenApiDocument = {
         tags: ["notifications"], summary: "Listar destinatários elegíveis para menção no projeto", security: bearerSecurity,
         parameters: [
           queryParameter("projectId", "Projeto da menção.", { type: "string" }, true),
-          queryParameter("search", "Nome, nome de guerra, e-mail ou código.", { type: "string", maxLength: 100 }),
+          queryParameter("search", "Posto/graduação, nome, nome de guerra, e-mail ou código.", { type: "string", maxLength: 100 }),
         ],
         responses: { "200": okJson("#/components/schemas/MentionCandidateList"), ...defaultErrorResponses },
       },

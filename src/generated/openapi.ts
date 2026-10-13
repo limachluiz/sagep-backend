@@ -4018,6 +4018,7 @@ export interface components {
             userCode: number;
             name: string;
             warName?: string | null;
+            rank?: string | null;
             /** Format: email */
             email: string;
             role: string;
@@ -8549,7 +8550,7 @@ export interface operations {
             query: {
                 /** @description Projeto da menção. */
                 projectId: string;
-                /** @description Nome, nome de guerra, e-mail ou código. */
+                /** @description Posto/graduação, nome, nome de guerra, e-mail ou código. */
                 search?: string;
             };
             header?: never;
