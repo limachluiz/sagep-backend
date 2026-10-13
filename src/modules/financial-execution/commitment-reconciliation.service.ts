@@ -52,9 +52,10 @@ export async function reconciliationSuggestions(code: string) {
     const number = ata.pregao?.number ?? ata.externalPregaoNumber;
     if (number && searchable.includes(String(number).replace(/^0+/, ""))) { score += 20; evidence.push("Pregão localizado nos dados da NE"); }
     if (note.attendedOmId) { score += 5; evidence.push(`OM atendida informada: ${note.attendedOm?.sigla ?? note.attendedOm?.name}`); }
-    // A supplier match alone is not enough: at least one independent signal
-    // (UASG, procurement number or informed OM) must support the suggestion.
-    if (evidence.length < 2 || (cnpj && digits(ata.vendorCnpj) !== cnpj)) continue;
+    // Keep every active ATA available for manual conference. Evidence only
+    // controls ranking; it must not make the selector empty when government
+    // data omits the procurement number or exposes a different UASG.
+    if (!evidence.length) evidence.push("Sem correspondência automática; confira manualmente");
     const balances = await ataItemBalanceService.getBalanceMapForAtaItems(ata.items);
     candidates.push({
       ata: { id: ata.id, number: ata.number, vendorName: ata.vendorName, vendorCnpj: ata.vendorCnpj, type: ata.type, pregao: ata.pregao },
@@ -63,12 +64,8 @@ export async function reconciliationSuggestions(code: string) {
     });
   }
   candidates.sort((a, b) => b.confidenceScore - a.confidenceScore);
-  const ataIds = candidates.map((candidate) => candidate.ata.id);
   const projects = await prisma.project.findMany({
-    where: { archivedAt: null, deletedAt: null, OR: [
-      ...(ataIds.length ? [{ estimates: { some: { ataId: { in: ataIds } } } }] : []),
-      ...(note.attendedOmId ? [{ omId: note.attendedOmId }] : []),
-    ] },
+    where: { archivedAt: null, deletedAt: null },
     select: { id: true, projectCode: true, title: true, omId: true, om: { select: { sigla: true, name: true } }, estimates: { select: { ataId: true } } },
     orderBy: { projectCode: "desc" }, take: 200,
   });
