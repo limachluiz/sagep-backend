@@ -20,11 +20,16 @@ async function itemResults(url: string): Promise<Result[]> {
   if (cache.size >= 500) cache.delete(cache.keys().next().value!);
   const entry = { expires: now + 5 * 60_000, value: Promise.resolve([] as Result[]) };
   entry.value = (async () => {
-    const response = await resilientGovernmentFetch("PNCP", url, { headers: { Accept: "application/json" }, redirect: "error" }, 20_000);
-    if (!response.ok) throw new AppError(`PNCP respondeu HTTP ${response.status} ao consultar fornecedor`, 502);
-    const data: unknown = await response.json();
-    if (!Array.isArray(data) || data.some(r => !r || typeof r !== "object")) throw new AppError("Resposta de fornecedores PNCP inválida", 502);
-    return data as Result[];
+    try {
+      const response = await resilientGovernmentFetch("PNCP", url, { headers: { Accept: "application/json" }, redirect: "error" }, 20_000);
+      if (!response.ok) throw new AppError(`PNCP respondeu HTTP ${response.status} ao consultar fornecedor`, 502, "PNCP_SUPPLIER_UNAVAILABLE");
+      const data: unknown = await response.json();
+      if (!Array.isArray(data) || data.some(r => !r || typeof r !== "object")) throw new AppError("Resposta de fornecedores PNCP inválida", 502, "PNCP_SUPPLIER_RESPONSE_INVALID");
+      return data as Result[];
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw new AppError("PNCP indisponível ao consultar o fornecedor", 503, "PNCP_SUPPLIER_UNAVAILABLE");
+    }
   })().catch(error => { if (cache.get(url) === entry) cache.delete(url); throw error; });
   cache.set(url, entry);
   return entry.value;
@@ -35,8 +40,9 @@ export async function resolvePncpSupplier(base: string, control: string, items: 
   const numbers = [...new Set(items.filter(n => /^\d+$/.test(n) && Number(n) > 0).map(Number))];
   if (!match || !numbers.length) throw new AppError("Faltam controle PNCP ou números oficiais dos itens da ATA", 422);
   if (numbers.length > 100) throw new AppError("ATA excede o limite de 100 itens para recuperação automática nesta consulta", 422);
-  // The legacy default points to the portal alias; use the public API on the same official host.
-  const root = base.replace(/\/$/, "").replace(/^https:\/\/pncp.gov.br\/api\/pncp$/, "https://pncp.gov.br/pncp-api");
+  // Use the configured official API base. The public results endpoint is served
+  // under /api/pncp; /pncp-api is the internal application context and may fail.
+  const root = base.replace(/\/$/, "");
   const prefix = `${root}/v1/orgaos/${match[1]}/compras/${match[3]}/${Number(match[2])}/itens`;
   const signal = AbortSignal.timeout(20_000);
   let cnpj: string | null = null;

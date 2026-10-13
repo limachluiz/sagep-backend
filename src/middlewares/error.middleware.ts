@@ -54,6 +54,8 @@ const safeServerErrorMessages: Record<string, string> = {
   CERTIFICATE_TOOL_UNAVAILABLE: "Ferramenta de certificados indisponível no servidor",
   PORTAL_TRANSPARENCIA_ERROR: "Falha ao consultar o Portal da Transparência",
   PORTAL_TRANSPARENCIA_UNAVAILABLE: "Portal da Transparência indisponível",
+  PNCP_SUPPLIER_UNAVAILABLE: "O PNCP está indisponível para consultar o CNPJ do fornecedor. Tente novamente em instantes",
+  PNCP_SUPPLIER_RESPONSE_INVALID: "O PNCP retornou dados incompatíveis ao consultar o CNPJ do fornecedor",
   EXTERNAL_BALANCE_UNAVAILABLE: "O Contratos.gov.br não respondeu dentro do tempo esperado",
   EXTERNAL_BALANCE_SCHEMA_CHANGED: "O formato da consulta pública do Contratos.gov.br mudou",
   EXTERNAL_BALANCE_INVALID: "O Contratos.gov.br retornou um saldo inválido",
