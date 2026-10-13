@@ -300,8 +300,9 @@ export class SystemSettingsService {
   private async probePncp() {
     const settings = await this.getEffective();
     // O endereço público configurado usa /api/pncp, enquanto o catálogo OpenAPI
-    // oficial é publicado no mesmo host em /pncp-api/v3/api-docs.
-    const url = new URL("/pncp-api/v3/api-docs", settings.pncpBaseUrl);
+    // A integração do SAGEP é somente de leitura. O catálogo da consulta pública
+    // verifica o serviço relevante sem depender do catálogo principal do PNCP.
+    const url = new URL("/pncp-consulta/v3/api-docs", settings.pncpBaseUrl);
     const result = await this.probeHttp(
       url,
       { Accept: "application/json" },
