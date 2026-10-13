@@ -150,6 +150,11 @@ const serviceOrderInclude = {
       signedServiceOrderLink: true,
       signedServiceOrderReceivedAt: true,
       signedServiceOrderNotes: true,
+      commitmentNotes: {
+        where: { active: true },
+        select: { balanceImpactMode: true },
+        take: 1,
+      },
       signedServiceOrderRegisteredBy: {
         select: {
           id: true,

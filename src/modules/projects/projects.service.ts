@@ -1556,6 +1556,11 @@ export class ProjectsService {
         creditNotes: {
           orderBy: [{ receivedAt: "asc" }, { createdAt: "asc" }],
         },
+        commitmentNotes: {
+          where: { active: true },
+          select: { balanceImpactMode: true },
+          take: 1,
+        },
         diexNumber: true,
         diexIssuedAt: true,
         commitmentNoteNumber: true,
@@ -1845,6 +1850,8 @@ export class ProjectsService {
       workflow: {
         status: project.status,
         stage: project.stage,
+        retroactiveRegistration:
+          project.commitmentNotes[0]?.balanceImpactMode === "ALREADY_INCLUDED",
         nextAction,
         milestones: {
           creditNoteNumber: project.creditNoteNumber,
@@ -2713,6 +2720,11 @@ export class ProjectsService {
           orderBy: { createdAt: "desc" },
           take: 1,
         },
+        commitmentNotes: {
+          where: { active: true },
+          select: { balanceImpactMode: true },
+          take: 1,
+        },
       },
     });
 
@@ -2732,7 +2744,13 @@ export class ProjectsService {
       throw new AppError("O projeto não possui Ordem de Serviço ativa", 409);
     }
 
-    if (data.signedServiceOrderReceivedAt < activeServiceOrder.issuedAt) {
+    const isRetroactiveRegistration =
+      currentProject.commitmentNotes[0]?.balanceImpactMode === "ALREADY_INCLUDED";
+
+    if (
+      !isRetroactiveRegistration &&
+      data.signedServiceOrderReceivedAt < activeServiceOrder.issuedAt
+    ) {
       throw new AppError(
         "A data de recebimento da OS assinada não pode ser anterior à emissão",
         400,
@@ -2797,6 +2815,8 @@ export class ProjectsService {
         receivedAt: data.signedServiceOrderReceivedAt,
         signedServiceOrderLink: data.signedServiceOrderLink.trim(),
         notes: data.signedServiceOrderNotes?.trim() || null,
+        retroactiveDateException: isRetroactiveRegistration,
+        serviceOrderIssuedAt: activeServiceOrder.issuedAt,
       },
     });
 
