@@ -21,7 +21,7 @@ async function itemResults(url: string): Promise<Result[]> {
   const entry = { expires: now + 5 * 60_000, value: Promise.resolve([] as Result[]) };
   entry.value = (async () => {
     try {
-      const response = await resilientGovernmentFetch("PNCP", url, { headers: { Accept: "application/json" }, redirect: "error" }, 20_000);
+      const response = await resilientGovernmentFetch("PNCP", url, { headers: { Accept: "application/json" }, redirect: "error" }, 8_000, 2);
       if (!response.ok) throw new AppError(`PNCP respondeu HTTP ${response.status} ao consultar fornecedor`, 502, "PNCP_SUPPLIER_UNAVAILABLE");
       const data: unknown = await response.json();
       if (!Array.isArray(data) || data.some(r => !r || typeof r !== "object")) throw new AppError("Resposta de fornecedores PNCP inválida", 502, "PNCP_SUPPLIER_RESPONSE_INVALID");
@@ -40,9 +40,10 @@ export async function resolvePncpSupplier(base: string, control: string, items: 
   const numbers = [...new Set(items.filter(n => /^\d+$/.test(n) && Number(n) > 0).map(Number))];
   if (!match || !numbers.length) throw new AppError("Faltam controle PNCP ou números oficiais dos itens da ATA", 422);
   if (numbers.length > 100) throw new AppError("ATA excede o limite de 100 itens para recuperação automática nesta consulta", 422);
-  // Use the configured official API base. The public results endpoint is served
-  // under /api/pncp; /pncp-api is the internal application context and may fail.
-  const root = base.replace(/\/$/, "");
+  // Supplier discovery is read-only, so use PNCP's public consultation API.
+  // The integration endpoint (/api/pncp) is intended for publishing systems and
+  // has proved substantially less available for anonymous queries.
+  const root = base.replace(/\/$/, "").replace(/^https:\/\/pncp\.gov\.br\/api\/pncp$/, "https://pncp.gov.br/api/consulta");
   const prefix = `${root}/v1/orgaos/${match[1]}/compras/${match[3]}/${Number(match[2])}/itens`;
   const signal = AbortSignal.timeout(20_000);
   let cnpj: string | null = null;

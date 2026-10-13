@@ -15,7 +15,7 @@ describe("dynamic PNCP supplier lookup", () => {
     const args = ["https://pncp.gov.br/api/pncp", "12345678000190-1-000987/2026-000002", ["5", "5"], result.nomeRazaoSocialFornecedor] as const;
     const [a, b] = await Promise.all([resolvePncpSupplier(args[0], args[1], [...args[2]], args[3]), resolvePncpSupplier(args[0], args[1], [...args[2]], args[3])]);
     expect(a.cnpj).toBe(b.cnpj); expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher.mock.calls[0][0]).toBe("https://pncp.gov.br/api/pncp/v1/orgaos/12345678000190/compras/2026/987/itens/5/resultados");
+    expect(fetcher.mock.calls[0][0]).toBe("https://pncp.gov.br/api/consulta/v1/orgaos/12345678000190/compras/2026/987/itens/5/resultados");
   });
   it("does not cache failures", async () => {
     const fetcher = vi.fn().mockResolvedValueOnce(new Response("{}", { status: 400 })).mockResolvedValueOnce(new Response(JSON.stringify([result])));
