@@ -125,6 +125,10 @@ export class FinancialExecutionService {
     issuedAt: Date | null,
   ) {
     if (input.balanceImpactMode !== "ALREADY_INCLUDED") return;
+    // A escolha explícita de uma NE já preservada na Carteira também atende
+    // projetos retroativos. A justificativa obrigatória e a auditoria
+    // substituem a janela global de implantação neste caso.
+    if (input.registrationMode === "ARCHIVE") return;
     const settings = await systemSettingsService.getEffective();
     if (!settings.implantationModeActive || !settings.implantationCutoffAt) {
       throw new AppError(
