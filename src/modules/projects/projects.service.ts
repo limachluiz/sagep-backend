@@ -2219,6 +2219,11 @@ export class ProjectsService {
         deliveryReportGeneratedAt: true,
         deliveryReportSignedAt: true,
         deliveryReportSignedLink: true,
+        commitmentNotes: {
+          where: { active: true },
+          select: { balanceImpactMode: true },
+          take: 1,
+        },
       },
     });
 
@@ -2384,6 +2389,34 @@ export class ProjectsService {
       !currentProject.commitmentNoteReceivedAt &&
       (!!nextSnapshot.commitmentNoteNumber ||
         !!nextSnapshot.commitmentNoteReceivedAt);
+    const isRetroactiveRegistration =
+      currentProject.commitmentNotes[0]?.balanceImpactMode === "ALREADY_INCLUDED";
+
+    if (
+      targetStage === "SERVICO_EM_EXECUCAO" &&
+      data.executionStartedAt
+    ) {
+      if (data.executionStartedAt > new Date()) {
+        throw new AppError(
+          "A data de início da execução não pode estar no futuro",
+          400,
+        );
+      }
+
+      const normalFlowMinimumDate =
+        currentProject.signedServiceOrderReceivedAt ??
+        currentProject.serviceOrderIssuedAt;
+      if (
+        !isRetroactiveRegistration &&
+        normalFlowMinimumDate &&
+        data.executionStartedAt < normalFlowMinimumDate
+      ) {
+        throw new AppError(
+          "A data de início da execução não pode ser anterior à emissão e ao recebimento da OS assinada",
+          400,
+        );
+      }
+    }
 
     if (effectiveCurrentStage !== targetStage) {
       workflowService.assertStageTransition(effectiveCurrentStage, targetStage);
