@@ -299,10 +299,9 @@ export class SystemSettingsService {
 
   private async probePncp() {
     const settings = await this.getEffective();
-    // Valida exatamente o serviço configurado para consultar atas. O PNCP costuma
-    // responder em mais de 15 segundos, por isso usa o timeout próprio da integração.
-    const baseUrl = settings.pncpBaseUrl.replace(/\/$/, "");
-    const url = new URL(`${baseUrl}/v3/api-docs`);
+    // O endereço público configurado usa /api/pncp, enquanto o catálogo OpenAPI
+    // oficial é publicado no mesmo host em /pncp-api/v3/api-docs.
+    const url = new URL("/pncp-api/v3/api-docs", settings.pncpBaseUrl);
     const result = await this.probeHttp(
       url,
       { Accept: "application/json" },

@@ -25,7 +25,7 @@ describe("testes de conexão das integrações", () => {
     expect(result.status).toBe("OPERATIONAL");
     expect(result.httpStatus).toBe(200);
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL("https://pncp.gov.br/api/pncp/v3/api-docs"),
+      new URL("https://pncp.gov.br/pncp-api/v3/api-docs"),
       expect.objectContaining({ headers: { Accept: "application/json" } }),
     );
     expect(result.details.configuredBaseUrl).toBe("https://pncp.gov.br/api/pncp");
