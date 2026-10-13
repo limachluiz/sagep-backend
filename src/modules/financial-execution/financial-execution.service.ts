@@ -99,19 +99,7 @@ export class FinancialExecutionService {
         select: { id: true, origin: true, importedAt: true },
       }),
     ]);
-    if (archived)
-      throw new AppError(
-        "Esta Nota de Empenho já existe na carteira como importada ou avulsa.",
-        409,
-        "COMMITMENT_NOTE_ALREADY_ARCHIVED",
-        {
-          externalCode: input.externalCode,
-          targetId: archived.id,
-          origin: archived.origin,
-          importedAt: archived.importedAt,
-        },
-      );
-    if (!existing) return;
+    if (!existing) return { archived };
     if (existing.projectId === input.projectId) {
       throw new AppError(
         "Esta Nota de Empenho já está registrada neste projeto.",
@@ -379,7 +367,7 @@ export class FinancialExecutionService {
         preview.validation,
       );
     }
-    await this.assertCommitmentNoteAvailable({
+    const availability = await this.assertCommitmentNoteAvailable({
       projectId: input.projectId,
       externalCode: preview.snapshot.externalCode,
       managementUnit: preview.snapshot.managementUnit,
@@ -387,7 +375,14 @@ export class FinancialExecutionService {
       number: preview.snapshot.number,
     });
     await this.validateBalanceImpact(input, preview.snapshot.issuedAt);
-    await claimCommitmentImport(preview.snapshot.externalCode, user.id);
+    // A cópia existente na Carteira é uma fonte de consulta e não representa
+    // vínculo com projeto. Ela pode ser aproveitada sem ser apagada e sem
+    // transformar sua mera existência em uma duplicidade de negócio.
+    await claimCommitmentImport(
+      preview.snapshot.externalCode,
+      user.id,
+      Boolean(availability?.archived),
+    );
     let project: Awaited<ReturnType<typeof projectsService.updateFlow>>;
     try {
       project = await projectsService.updateFlow(
@@ -446,7 +441,11 @@ export class FinancialExecutionService {
         financialStatus: note.financialStatus,
         currentAmount: Number(note.currentAmount),
       },
-      metadata: { divergences: preview.validation.divergences },
+      metadata: {
+        divergences: preview.validation.divergences,
+        linkedFromPortfolio: Boolean(availability?.archived),
+        archivedCommitmentId: availability?.archived?.id ?? null,
+      },
     });
 
     return {
