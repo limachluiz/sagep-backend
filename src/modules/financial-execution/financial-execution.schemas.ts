@@ -20,12 +20,15 @@ const lookupFields = {
   ...portalLookupFields,
 };
 
-export const previewCommitmentNoteSchema = z.object(lookupFields);
+export const previewCommitmentNoteSchema = z.object({
+  ...lookupFields,
+  source: z.enum(["PORTAL", "ARCHIVE"]).default("PORTAL"),
+});
 
 export const registerCommitmentNoteSchema = z.object({
   ...lookupFields,
   receivedAt: z.coerce.date(),
-  registrationMode: z.enum(["PORTAL", "MANUAL"]).default("PORTAL"),
+  registrationMode: z.enum(["PORTAL", "ARCHIVE", "MANUAL"]).default("PORTAL"),
   manualReason: z.string().trim().min(10, "Informe uma justificativa com pelo menos 10 caracteres").max(500).optional(),
   confirmManualRegistration: z.boolean().default(false),
   acceptDivergence: z.boolean().default(false),

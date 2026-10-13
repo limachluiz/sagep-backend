@@ -294,7 +294,7 @@ export class FinancialExecutionService {
   }
 
   private compare(
-    snapshot: PortalCommitmentSnapshot,
+    snapshot: CommitmentNoteSnapshot,
     expected: Awaited<
       ReturnType<FinancialExecutionService["expectedProjectFinancials"]>
     >,
@@ -325,11 +325,17 @@ export class FinancialExecutionService {
     await projectsService.findById(input.projectId, user);
     const coordinates = await this.portalCoordinates(input);
     const [snapshot, expected] = await Promise.all([
-      portalTransparenciaClient.fetchCommitmentNote(
-        coordinates.managementUnit,
-        coordinates.management,
-        input.number,
-      ),
+      input.source === "ARCHIVE"
+        ? this.snapshotFromArchive(
+            coordinates.managementUnit,
+            coordinates.management,
+            input.number,
+          )
+        : portalTransparenciaClient.fetchCommitmentNote(
+            coordinates.managementUnit,
+            coordinates.management,
+            input.number,
+          ),
       this.expectedProjectFinancials(input.projectId),
     ]);
     const divergences = this.compare(snapshot, expected);
@@ -358,7 +364,10 @@ export class FinancialExecutionService {
       return this.registerManual(input, user);
     }
 
-    const preview = await this.preview(input, user);
+    const preview = await this.preview(
+      { ...input, source: input.registrationMode === "ARCHIVE" ? "ARCHIVE" : "PORTAL" },
+      user,
+    );
     if (preview.validation.divergences.length && !input.acceptDivergence) {
       throw new AppError(
         "A Nota de Empenho possui divergências que precisam ser confirmadas",
@@ -452,6 +461,50 @@ export class FinancialExecutionService {
       project,
       commitmentNote: serializeNote(note),
       validation: preview.validation,
+    };
+  }
+
+  private async snapshotFromArchive(
+    managementUnit: string,
+    management: string,
+    number: string,
+  ): Promise<CommitmentNoteSnapshot> {
+    const externalCode = `${managementUnit}${management}${number}`;
+    const archived = await prisma.discoveredCommitment.findUnique({
+      where: { externalCode },
+    });
+    if (!archived) {
+      throw new AppError(
+        "Esta Nota de Empenho não foi encontrada na Carteira de Empenhos.",
+        404,
+        "COMMITMENT_NOTE_ARCHIVE_NOT_FOUND",
+        { externalCode },
+      );
+    }
+    const financial = archivedFinancial(archived.snapshot, externalCode);
+    const validStatuses = new Set([
+      "NAO_LIQUIDADA", "PARCIALMENTE_LIQUIDADA", "LIQUIDADA",
+      "PARCIALMENTE_PAGA", "PAGA", "PARCIALMENTE_ANULADA", "ANULADA",
+    ]);
+    const issuedAt = financial.issuedAt ? new Date(financial.issuedAt) : null;
+    return {
+      source: "CARTEIRA",
+      externalCode,
+      number,
+      managementUnit,
+      management,
+      supplierName: financial.supplierName || null,
+      supplierCnpj: financial.supplierCnpj,
+      issuedAt: issuedAt && !Number.isNaN(issuedAt.getTime()) ? issuedAt : null,
+      originalAmount: financial.current ?? 0,
+      currentAmount: financial.current ?? 0,
+      liquidatedAmount: financial.liquidated ?? 0,
+      paidAmount: financial.paid ?? 0,
+      cancelledAmount: 0,
+      financialStatus: (validStatuses.has(financial.status) ? financial.status : "NAO_LIQUIDADA") as CommitmentNoteSnapshot["financialStatus"],
+      documents: [],
+      rawSnapshot: JSON.parse(JSON.stringify(archived.snapshot)) as Record<string, unknown>,
+      fetchedAt: archived.updatedAt,
     };
   }
 

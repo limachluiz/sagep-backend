@@ -18,7 +18,7 @@ export type ParsedFinancialDocument = {
 };
 
 export type CommitmentNoteSnapshot = {
-  source: "PORTAL_TRANSPARENCIA" | "MANUAL";
+  source: "PORTAL_TRANSPARENCIA" | "MANUAL" | "CARTEIRA";
   externalCode: string;
   number: string;
   managementUnit: string;
