@@ -102,21 +102,34 @@ export async function resolveAtaCnpj(id: string) {
     const result = await prisma.ata.updateMany({ where: { id, vendorCnpj: ata.vendorCnpj }, data: { vendorCnpj: savedCnpj } });
     return { cnpj: savedCnpj, updated: result.count === 1, source: "Consulta oficial de saldo salva" };
   }
+  let pncpError: unknown;
   if (ata.externalPncpControlNumber) {
-    const [settings, items] = await Promise.all([
-      systemSettingsService.getEffective(),
-      prisma.ataItem.findMany({ where: { ataId: id }, select: { externalItemNumber: true } }),
-    ]);
-    const result = await resolvePncpSupplier(settings.pncpBaseUrl, ata.externalPncpControlNumber,
-      items.flatMap(item => item.externalItemNumber ? [item.externalItemNumber] : []), ata.vendorName);
-    const saved = await prisma.ata.updateMany({ where: { id, vendorCnpj: ata.vendorCnpj }, data: { vendorCnpj: result.cnpj } });
-    if (!saved.count) throw new AppError("Cadastro alterado durante a consulta; atualize a tela para conferir o CNPJ", 409);
-    return { ...result, updated: true };
+    try {
+      const [settings, items] = await Promise.all([
+        systemSettingsService.getEffective(),
+        prisma.ataItem.findMany({ where: { ataId: id }, select: { externalItemNumber: true } }),
+      ]);
+      const result = await resolvePncpSupplier(settings.pncpBaseUrl, ata.externalPncpControlNumber,
+        items.flatMap(item => item.externalItemNumber ? [item.externalItemNumber] : []), ata.vendorName);
+      const saved = await prisma.ata.updateMany({ where: { id, vendorCnpj: ata.vendorCnpj }, data: { vendorCnpj: result.cnpj } });
+      if (!saved.count) throw new AppError("Cadastro alterado durante a consulta; atualize a tela para conferir o CNPJ", 409);
+      return { ...result, updated: true };
+    } catch (error) {
+      // The PNCP is frequently intermittent. Keep the lookup automatic by
+      // falling back to the official Compras.gov.br records below.
+      pncpError = error;
+    }
   }
   if (!ata.externalUasg || !ata.externalPregaoNumber || !ata.externalPregaoYear || !ata.externalAtaNumber) {
+    if (pncpError) throw pncpError;
     throw new AppError("ATA sem identificação de origem suficiente para consultar o CNPJ automaticamente", 422);
   }
-  const cnpj = await new ComprasGovService().resolveAtaSupplier({ uasg: ata.externalUasg, numeroPregao: ata.externalPregaoNumber, anoPregao: ata.externalPregaoYear, numeroAta: ata.externalAtaNumber }, ata.vendorName);
+  const cnpj = await new ComprasGovService().resolveAtaSupplier({
+    uasg: ata.externalUasg,
+    numeroPregao: ata.externalPregaoNumber,
+    anoPregao: ata.externalPregaoYear,
+    numeroAta: ata.externalAtaNumber,
+  }, ata.vendorName);
   // Preserve a concurrent manual correction and never change quantities or prices.
   const result = await prisma.ata.updateMany({ where: { id, vendorCnpj: ata.vendorCnpj }, data: { vendorCnpj: cnpj } });
   return { cnpj, updated: result.count === 1, source: "Compras.gov.br" };
