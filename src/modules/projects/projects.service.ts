@@ -2918,11 +2918,12 @@ export class ProjectsService {
       entityId: projectId,
       action: "UPDATE",
       actor: this.getAuditActor(user),
-      summary: `Relatório de entrega do projeto PRJ-${project.projectCode} revisado e assinado`,
+      summary: `Relatório de entrega do projeto PRJ-${project.projectCode} aprovado, revisado e assinado`,
       before: this.buildProjectAuditSnapshot(current),
       after: this.buildProjectAuditSnapshot(project),
       metadata: {
         source: "project.delivery-report.signature",
+        approvalRecorded: true,
         signedAt: data.signedAt,
         signedLink: data.signedLink ?? null,
       },

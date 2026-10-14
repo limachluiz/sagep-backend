@@ -62,3 +62,5 @@ reportsRoutes.get(
   requirePermission("reports.export"),
   (req, res) => controller.projectDossierPdf(req, res),
 );
+
+reportsRoutes.post("/projects/:id/delivery-preview.pdf", requirePermission("reports.export"), (req, res) => controller.previewDeliveryReportPdf(req, res));

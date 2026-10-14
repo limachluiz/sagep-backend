@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { z } from "zod";
 import { dashboardExecutiveQuerySchema } from "../dashboard/dashboard.schemas.js";
-import { projectIdParamSchema } from "../projects/projects.schemas.js";
+import { deliveryReportDraftSchema, projectIdParamSchema } from "../projects/projects.schemas.js";
 import { ReportsService } from "./reports.service.js";
 import { DeliveryReportService } from "./delivery-report.service.js";
 import { ataBalanceReportService } from "./ata-balance-report.service.js";
@@ -71,6 +71,14 @@ export class ReportsController {
     });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="relatorio-entrega-PRJ-${result.projectCode}.pdf"`);
+    return res.status(200).send(result.pdf);
+  }
+  async previewDeliveryReportPdf(req: Request, res: Response) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const draft = deliveryReportDraftSchema.parse(req.body);
+    const result = await deliveryReportService.generate(id, req.user!, false, draft);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Cache-Control", "no-store");
     return res.status(200).send(result.pdf);
   }
   async viewDeliveryReportPdf(req: Request, res: Response) {
