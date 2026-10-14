@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn(), renderPdf: vi.fn(), hasPermission: vi.fn(() => true) }));
+const mocks = vi.hoisted(() => ({ findUnique: vi.fn(), update: vi.fn(), renderPdf: vi.fn(), renderWord: vi.fn(), hasPermission: vi.fn(() => true) }));
 vi.mock("../src/config/prisma.js", () => ({ prisma: { project: { findUnique: mocks.findUnique, update: mocks.update } } }));
 vi.mock("../src/shared/pdf.service.js", () => ({ pdfService: { renderPdf: mocks.renderPdf } }));
 vi.mock("../src/modules/permissions/permissions.service.js", () => ({ permissionsService: { hasPermission: mocks.hasPermission } }));
+vi.mock("../src/shared/word-document.service.js", () => ({ renderWordDocument: mocks.renderWord }));
 import { DeliveryReportService } from "../src/modules/reports/delivery-report.service.js";
 import type { DeliveryReportDraft } from "../src/modules/projects/delivery-report-draft.js";
 const user = { id: "u1", email: "user@example.test", role: "ADMIN" };
@@ -12,10 +13,11 @@ describe("prévia da entrega técnica", () => {
     vi.clearAllMocks();
     mocks.findUnique.mockResolvedValue({ id: "p1", projectCode: 1, title: "Projeto", projectType: "CFTV", stage: "ENTREGA_TECNICA", ownerId: "u1", owner: { name: "Responsável" }, members: [], estimates: [], diexRequests: [], serviceOrders: [], commitmentNotes: [], tasks: [], evidences: [], deliveryReportDraft: null, deliveryReportGeneratedAt: null });
     mocks.renderPdf.mockResolvedValue(Buffer.from("preview"));
+    mocks.renderWord.mockResolvedValue(Buffer.from("word"));
   });
   it("renderiza um documento incompleto sem emitir versão nem registrar aprovação", async () => {
     const result = await new DeliveryReportService().generate("p1", user, false, draft);
-    expect(result.pdf.toString()).toBe("preview");
+    expect(result.buffer.toString()).toBe("preview");
     const html = await mocks.renderPdf.mock.calls[0][0].buildHtml();
     expect(html).toContain("Escopo");
     expect(html).toContain("Em construção");
@@ -37,4 +39,16 @@ describe("prévia da entrega técnica", () => {
     await expect(new DeliveryReportService().generate("p1", { ...user, id: "outro" }, false, draft)).rejects.toThrow("acesso ao projeto");
     expect(mocks.renderPdf).not.toHaveBeenCalled();
   });
+  it("exporta o rascunho em Word sem emitir nem alterar a aprovação", async () => {
+    const result = await new DeliveryReportService().generate("p1", user, false, draft, "doc");
+    expect(result.buffer.toString()).toBe("word");
+    expect(mocks.renderWord).toHaveBeenCalledWith(expect.stringContaining("PARA APROVAÇÃO"), []);
+    expect(mocks.renderPdf).not.toHaveBeenCalled();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+  it("exige uma versão emitida para baixar o Word final", async () => {
+    await expect(new DeliveryReportService().generate("p1", user, false, undefined, "doc")).rejects.toThrow("ainda não foi emitido");
+    expect(mocks.renderWord).not.toHaveBeenCalled();
+  });
+
 });

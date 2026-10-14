@@ -4,6 +4,7 @@ import { PDFDocument } from "pdf-lib";
 import { prisma } from "../../config/prisma.js";
 import { env } from "../../config/env.js";
 import { AppError } from "../../shared/app-error.js";
+import { renderWordDocument } from "../../shared/word-document.service.js";
 import { pdfService } from "../../shared/pdf.service.js";
 import { permissionsService } from "../permissions/permissions.service.js";
 import { type DeliveryReportDraft, inferDeliveryUnit, parseDeliveryReportDraft, sanitizeDeliveryNarrative } from "../projects/delivery-report-draft.js";
@@ -44,7 +45,7 @@ async function appendPdfAnnexes(report: Buffer, annexes: Array<{ title: string; 
 }
 
 export class DeliveryReportService {
-  async generate(projectId: string, user: CurrentUser, persistGeneration = true, previewDraft?: DeliveryReportDraft) {
+  async generate(projectId: string, user: CurrentUser, persistGeneration = true, previewDraft?: DeliveryReportDraft, format: "pdf" | "doc" = "pdf") {
     const preview = Boolean(previewDraft);
     const project = await prisma.project.findUnique({
       where: { id: projectId },
@@ -129,6 +130,17 @@ export class DeliveryReportService {
       ${pdfAnnexes.length ? `<section class="annex-cover"><h2>Anexos incorporados</h2><p>Os documentos relacionados abaixo integram este relatório na íntegra.</p><ol>${pdfAnnexes.map((item) => `<li><b>${escape(item.title)}</b><br><small>${escape(item.originalName)}</small></li>`).join("")}</ol></section>` : ""}
     </body></html>`;
     const generatedAt = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Manaus" }).format(new Date());
+    if (format === "doc") {
+      const annexes = [];
+      for (const annex of pdfAnnexes) {
+        const content = await readFile(path.resolve(env.EVIDENCE_DIRECTORY, annex.storageKey)).catch(() => null);
+        if (!content) throw new AppError(`O arquivo do anexo “${annex.title}” não foi localizado.`, 422, "DELIVERY_REPORT_ANNEX_NOT_FOUND");
+        annexes.push({ label: annex.title, buffer: content });
+      }
+      const wordHtml = html.replace("</header>", `</header><p class="muted">${preview ? "PARA APROVAÇÃO · Em construção" : "Documento final"} · SAGEP · ${generatedAt}</p>`);
+      const buffer = await renderWordDocument(wordHtml, annexes);
+      return { buffer, projectCode: project.projectCode };
+    }
     const reportPdf = await pdfService.renderPdf({ label: `delivery-report-${projectId}`, buildHtml: async () => html, pdfOptions: {
       format: "A4", printBackground: true, displayHeaderFooter: true,
       headerTemplate: `<div></div>`,
@@ -136,7 +148,7 @@ export class DeliveryReportService {
     } });
     const pdf = await appendPdfAnnexes(reportPdf, pdfAnnexes);
     if (!preview && persistGeneration) await prisma.project.update({ where: { id: projectId }, data: { deliveryReportGeneratedAt: new Date(), deliveryReportSignedAt: null, deliveryReportSignedLink: null } });
-    return { pdf, projectCode: project.projectCode };
+    return { buffer: pdf, projectCode: project.projectCode };
   }
 
   view(projectId: string, user: CurrentUser) {

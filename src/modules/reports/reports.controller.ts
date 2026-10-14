@@ -65,13 +65,13 @@ export class ReportsController {
       entityId: id,
       documentType: "DELIVERY_REPORT_PDF",
       filename: `relatorio-entrega-PRJ-${result.projectCode}.pdf`,
-      buffer: result.pdf,
+      buffer: result.buffer,
       actor: req.user!,
       reason: "Emissão do relatório técnico de conclusão e entrega",
     });
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="relatorio-entrega-PRJ-${result.projectCode}.pdf"`);
-    return res.status(200).send(result.pdf);
+    return res.status(200).send(result.buffer);
   }
   async previewDeliveryReportPdf(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
@@ -79,14 +79,23 @@ export class ReportsController {
     const result = await deliveryReportService.generate(id, req.user!, false, draft);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Cache-Control", "no-store");
-    return res.status(200).send(result.pdf);
+    return res.status(200).send(result.buffer);
+  }
+  async deliveryReportWord(req: Request, res: Response, preview = false) {
+    const { id } = projectIdParamSchema.parse(req.params);
+    const draft = preview ? deliveryReportDraftSchema.parse(req.body) : undefined;
+    const result = await deliveryReportService.generate(id, req.user!, false, draft, "doc");
+    res.setHeader("Content-Type", "application/msword");
+    res.setHeader("Cache-Control", "no-store");
+    res.setHeader("Content-Disposition", `attachment; filename="${preview ? "para-aprovacao" : "relatorio-entrega"}-PRJ-${result.projectCode}.doc"`);
+    return res.status(200).send(result.buffer);
   }
   async viewDeliveryReportPdf(req: Request, res: Response) {
     const { id } = projectIdParamSchema.parse(req.params);
     const result = await deliveryReportService.view(id, req.user!);
     res.setHeader("Content-Type", "application/pdf");
     res.setHeader("Content-Disposition", `inline; filename="relatorio-entrega-PRJ-${result.projectCode}.pdf"`);
-    return res.status(200).send(result.pdf);
+    return res.status(200).send(result.buffer);
   }
   private executiveFilters(req: Request) {
     const filters = dashboardExecutiveQuerySchema.parse(req.query);

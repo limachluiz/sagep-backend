@@ -37,6 +37,8 @@ RUN apt-get update \
     chromium \
     curl \
     fonts-liberation \
+    libreoffice-writer \
+    poppler-utils \
     libasound2 \
     libatk-bridge2.0-0 \
     libatk1.0-0 \
