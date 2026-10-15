@@ -1060,7 +1060,7 @@ export class FinancialExecutionService {
         active: true,
         ...(user && { project: this.projectAccessWhere(user) }),
       },
-      select: { id: true },
+      select: { id: true, number: true, externalCode: true },
     });
     const result = {
       total: notes.length,
@@ -1076,7 +1076,7 @@ export class FinancialExecutionService {
         result.failed += 1;
         result.errors.push({
           id: note.id,
-          message: error instanceof Error ? error.message : String(error),
+          message: `NE ${note.number || note.externalCode}: ${error instanceof Error ? error.message : String(error)}`,
         });
       }
     }

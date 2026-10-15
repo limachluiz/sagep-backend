@@ -8,12 +8,15 @@ export function startNotificationAutomationScheduler() {
   const tick = async () => {
     if (stopped || running) return;
     running = true;
+    let claimedKey: string | null = null;
     try {
-      if (await notificationAutomationService.claimScheduled()) {
+      claimedKey = await notificationAutomationService.claimScheduled();
+      if (claimedKey) {
         const result = await notificationAutomationService.run("SCHEDULED");
         console.info("Automação de notificações concluída", { runId: result?.id, status: result?.status });
       }
     } catch (error) {
+      if (claimedKey) await notificationAutomationService.releaseScheduledClaim(claimedKey).catch(() => undefined);
       console.error("Falha na automação de notificações", { error });
     } finally { running = false; }
   };

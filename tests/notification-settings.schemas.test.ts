@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emailListSchema, notificationAutomationSchema, smtpSettingsSchema, telegramSettingsSchema } from "../src/modules/notification-settings/notification-settings.schemas.js";
-import { commitmentNumber, scheduleReached, telegramDigest, zonedScheduleParts } from "../src/modules/notification-settings/notification-automation.service.js";
+import { commitmentNumber, nextScheduledExecution, scheduleReached, telegramDigest, zonedScheduleParts } from "../src/modules/notification-settings/notification-automation.service.js";
 
 describe("configuração dos canais de notificação", () => {
   it("aceita SMTP autenticado e normaliza o remetente", () => {
@@ -23,6 +23,7 @@ describe("configuração dos canais de notificação", () => {
     const result = notificationAutomationSchema.parse({ enabled: true, timeZone: "America/Manaus", hour: "7", minute: 30, weekdays: [5, 1, 1], syncTrackedCommitments: true, discoverCommitments: true, syncAtaBalances: true, managementUnits: ["160016", "167016", "160016"], emailEnabled: true, telegramEnabled: false, emailListIds: [], notifyRoles: ["GESTOR"], maxDiscoveryPages: 100 });
     expect(result.weekdays).toEqual([1, 5]);
     expect(result.managementUnits).toEqual(["160016", "167016"]);
+    expect(result.syncAtaBalances).toBe(false);
     expect(notificationAutomationSchema.safeParse({ ...result, managementUnits: ["16016"] }).success).toBe(false);
   });
 
@@ -34,6 +35,11 @@ describe("configuração dos canais de notificação", () => {
     expect(scheduleReached({ hour: 11, minute: 59 }, 12, 0)).toBe(false);
     expect(scheduleReached({ hour: 12, minute: 0 }, 12, 0)).toBe(true);
     expect(scheduleReached({ hour: 12, minute: 5 }, 12, 0)).toBe(true);
+  });
+
+  it("calcula a próxima execução no horário de Manaus", () => {
+    const next = nextScheduledExecution({ enabled: true, timeZone: "America/Manaus", hour: 15, minute: 0, weekdays: [1, 2, 3, 4, 5] }, new Date("2026-10-15T18:59:30Z"));
+    expect(next?.toISOString()).toBe("2026-10-15T19:00:00.000Z");
   });
 
   it("formata o número completo e cria o menu de consulta por categoria", () => {

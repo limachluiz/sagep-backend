@@ -103,9 +103,20 @@ const TELEGRAM_GROUPS: Array<{ type: NotificationAutomationEventType; title: str
   { type: "NE_LIQUIDATED", title: "💧 NEs liquidadas" },
   { type: "NE_CANCELLED", title: "🚫 NEs anuladas · recurso recolhido" },
   { type: "NE_DISCOVERED", title: "🆕 Novas NEs encontradas" },
-  { type: "ATA_BALANCE_CHANGED", title: "📦 Alterações de saldo das ATAs" },
   { type: "AUTOMATION_FAILED", title: "⚠️ Pendências da automação" },
 ];
+
+export function nextScheduledExecution(config: { enabled: boolean; timeZone: string; hour: number; minute: number; weekdays: number[] }, now = new Date()) {
+  if (!config.enabled) return null;
+  const start = new Date(Math.floor(now.getTime() / 60_000) * 60_000);
+  for (let offset = 0; offset <= 8 * 24 * 60; offset += 1) {
+    const candidate = new Date(start.getTime() + offset * 60_000);
+    const parts = zonedScheduleParts(candidate, config.timeZone);
+    if (config.weekdays.includes(parts.weekday) && parts.hour === config.hour && parts.minute === config.minute && candidate >= now)
+      return candidate;
+  }
+  return null;
+}
 export function telegramDigest(items: DigestEvent[]) {
   const sections: string[] = [];
   const buttons: Array<{ text: string; callbackData: string }> = [];
@@ -140,7 +151,7 @@ export class NotificationAutomationService {
         take: 50,
       }),
     ]);
-    return { configuration, runs, events };
+    return { configuration, runs, events, scheduler: { serverTime: new Date(), nextRunAt: nextScheduledExecution(configuration) } };
   }
 
   async save(input: NotificationAutomationInput, actor: Actor) {
@@ -156,8 +167,8 @@ export class NotificationAutomationService {
     }
     const saved = await prisma.notificationAutomationConfiguration.upsert({
       where: { id: "default" },
-      create: { id: "default", ...input, updatedById: actor.id },
-      update: { ...input, updatedById: actor.id },
+      create: { id: "default", ...input, syncAtaBalances: false, lastScheduledKey: null, updatedById: actor.id },
+      update: { ...input, syncAtaBalances: false, lastScheduledKey: null, updatedById: actor.id },
     });
     await auditService.log({
       entityType: "SYSTEM_SETTINGS",
@@ -172,13 +183,13 @@ export class NotificationAutomationService {
 
   async claimScheduled(now = new Date()) {
     const config = await this.configuration();
-    if (!config.enabled) return false;
+    if (!config.enabled) return null;
     const parts = zonedScheduleParts(now, config.timeZone);
     if (
       !config.weekdays.includes(parts.weekday) ||
       !scheduleReached(parts, config.hour, config.minute)
     )
-      return false;
+      return null;
     const key = `${parts.date}@${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")}`;
     const claimed = await prisma.notificationAutomationConfiguration.updateMany(
       {
@@ -186,7 +197,14 @@ export class NotificationAutomationService {
         data: { lastScheduledKey: key },
       },
     );
-    return claimed.count === 1;
+    return claimed.count === 1 ? key : null;
+  }
+
+  async releaseScheduledClaim(key: string) {
+    await prisma.notificationAutomationConfiguration.updateMany({
+      where: { id: "default", lastScheduledKey: key },
+      data: { lastScheduledKey: null },
+    });
   }
 
   private async startRun(
@@ -810,12 +828,6 @@ export class NotificationAutomationService {
         candidates.push(...result.events);
         failures.push(...result.failures);
         summary.discovery = result.summary;
-      }
-      if (config.syncAtaBalances) {
-        const result = await this.synchronizeAtaBalances();
-        candidates.push(...result.events);
-        failures.push(...result.failures);
-        summary.atas = result.summary;
       }
       if (failures.length) {
         const digest = createHash("sha256")

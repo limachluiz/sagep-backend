@@ -413,7 +413,7 @@ model NotificationAutomationConfiguration {
   weekdays               Int[]      @default([1, 2, 3, 4, 5])
   syncTrackedCommitments Boolean    @default(true)
   discoverCommitments    Boolean    @default(true)
-  syncAtaBalances        Boolean    @default(true)
+  syncAtaBalances        Boolean    @default(false)
   managementUnits        String[]   @default([])
   emailEnabled           Boolean    @default(true)
   telegramEnabled        Boolean    @default(true)

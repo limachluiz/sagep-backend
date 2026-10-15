@@ -15,7 +15,7 @@ type TelegramUpdate = {
 
 const PAGE_SIZE = 5;
 const EVENT_TYPES = new Set<NotificationAutomationEventType>([
-  "NE_PAID", "NE_LIQUIDATED", "NE_CANCELLED", "NE_DISCOVERED", "ATA_BALANCE_CHANGED", "AUTOMATION_FAILED",
+  "NE_PAID", "NE_LIQUIDATED", "NE_CANCELLED", "NE_DISCOVERED", "AUTOMATION_FAILED",
 ]);
 const LABELS: Record<NotificationAutomationEventType, string> = {
   NE_PAID: "✅ NEs pagas",
@@ -57,7 +57,12 @@ async function categoryMenu(type: NotificationAutomationEventType, page: number)
   const text = [
     `<b>${LABELS[type]}</b>`,
     `<i>${total} registro(s) · página ${safePage + 1} de ${pages}</i>`,
-    ...events.map((event) => `• <b>${escapeHtml(event.title)}</b>\n  ${escapeHtml(event.description)}`),
+    ...events.map((event) => {
+      const payload = event.payload && typeof event.payload === "object" && !Array.isArray(event.payload) ? event.payload as Record<string, unknown> : null;
+      const failures = Array.isArray(payload?.failures) ? payload.failures.filter((item): item is string => typeof item === "string") : [];
+      const details = failures.length ? `\n${failures.slice(0, 12).map((item) => `  • ${escapeHtml(item)}`).join("\n")}` : "";
+      return `• <b>${escapeHtml(event.title)}</b>\n  ${escapeHtml(event.description)}${details}`;
+    }),
   ].join("\n\n");
   const buttons: TelegramButton[] = [];
   for (const event of events) {

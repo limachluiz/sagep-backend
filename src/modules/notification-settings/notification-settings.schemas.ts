@@ -33,7 +33,8 @@ export const notificationAutomationSchema = z.object({
   weekdays: z.array(z.coerce.number().int().min(0).max(6)).min(1).max(7).transform((items) => [...new Set(items)].sort()),
   syncTrackedCommitments: z.boolean(),
   discoverCommitments: z.boolean(),
-  syncAtaBalances: z.boolean(),
+  // Mantido apenas para aceitar clientes antigos; a automação de ATA foi retirada.
+  syncAtaBalances: z.boolean().optional().transform(() => false),
   managementUnits: z.array(z.string().trim().regex(/^\d{6}$/)).max(20).transform((items) => [...new Set(items)]),
   emailEnabled: z.boolean(),
   telegramEnabled: z.boolean(),
@@ -46,8 +47,8 @@ export const notificationAutomationSchema = z.object({
   mentionEscalationEnabled: z.boolean().default(true),
   mentionEscalationHours: z.coerce.number().int().min(1).max(720).default(24),
   mentionEscalationRoles: roles.default(["ADMIN", "GESTOR"]),
-}).refine((value) => value.syncTrackedCommitments || value.discoverCommitments || value.syncAtaBalances, {
-  message: "Ative pelo menos uma rotina de verificação",
+}).refine((value) => value.syncTrackedCommitments || value.discoverCommitments, {
+  message: "Ative pelo menos uma rotina de NE",
 });
 
 export type SmtpSettingsInput = z.infer<typeof smtpSettingsSchema>;
