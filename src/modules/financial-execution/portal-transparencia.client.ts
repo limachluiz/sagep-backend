@@ -272,7 +272,9 @@ export class PortalTransparenciaClient {
     const documents = [baseDocument, ...relatedDocuments]
       .filter((item, index, all) => all.findIndex((candidate) => candidate.externalCode === item.externalCode) === index);
     const originalAmount = decimalFor(root, ["valorOriginalDoEmpenho", "valorOriginal", "valorEmpenhado", "valor"]);
-    const cancelledAmount = documents.filter((item) => item.phase === "ANULACAO").reduce((sum, item) => sum + Math.abs(item.amount), 0);
+    const cancelledAmount = documents
+      .filter((item) => item.phase === "ANULACAO" && /NE\d{6}$/i.test(item.externalCode))
+      .reduce((sum, item) => sum + Math.abs(item.amount), 0);
     const currentFromPortal = decimalFor(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]);
     const currentAmount = currentFromPortal || Math.max(0, originalAmount - cancelledAmount);
     // A related NS/OB can cover several commitment notes. Use only the subitems

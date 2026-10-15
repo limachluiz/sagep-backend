@@ -107,15 +107,27 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
   const candidate = Array.isArray(raw) ? raw[0] : raw;
   const root: Json =
     candidate && typeof candidate === "object" ? candidate : {};
-  const current = moneyFrom(
-    field(root, [
-      "valorAtualDoEmpenho",
-      "valorAtual",
-      "saldoEmpenho",
-      "valorEmpenhado",
-      "valor",
-    ]),
-  );
+  const related = Array.isArray(data?.related) ? data.related : [];
+  const original = moneyFrom(field(root, ["valorOriginalDoEmpenho", "valorOriginal", "valorEmpenhado", "valor"]));
+  const cancelledByCode = new Map<string, number>();
+  for (const [index, item] of related.entries()) {
+    if (!item || typeof item !== "object") continue;
+    const record = item as Json;
+    const description = String(field(record, ["fase", "faseDocumento", "especie", "species", "tipoDocumento", "descricaoDocumento"]) ?? "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (!/(ANULA|CANCEL|RECOLH)/.test(description)) continue;
+    const documentCode = String(field(record, ["documento", "codigoDocumento", "codigo", "idDocumento", "externalCode"]) ?? "");
+    // Estornos de pagamento (DR/DF) não anulam o empenho.
+    if (["NS", "OB", "DR", "DF"].includes(financialDocumentType(documentCode) ?? "")) continue;
+    const amount = moneyFrom(field(record, ["valor", "valorDocumento", "amount", "valorAnulado"]));
+    if (amount == null) continue;
+    const code = documentCode || `INDEX:${index}`;
+    cancelledByCode.set(code, Math.abs(amount));
+  }
+  const cancelledFromRoot = moneyFrom(field(root, ["valorAnulado", "valorCancelado", "valorRecolhido", "valorAnuladoDoEmpenho"]));
+  const cancelled = cancelledFromRoot ?? Math.round([...cancelledByCode.values()].reduce((sum, amount) => sum + amount, 0) * 100) / 100;
+  const currentFromRoot = moneyFrom(field(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]));
+  const current = currentFromRoot ?? (original == null ? null : Math.max(0, original - cancelled));
   const savedEvidence = data?.financial;
   const evidence =
     [1, 2, 3].includes(savedEvidence?.version ?? 0) &&
@@ -186,7 +198,6 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
     typeof issuedAtValue === "string" || issuedAtValue instanceof Date
       ? issuedAtValue
       : null;
-  const related = Array.isArray(data?.related) ? data.related : [];
   const liquidatedAt = latestRelatedDate(related, ["NS"]);
   const paidAt = latestRelatedDate(related, ["OB", "DR", "DF"]);
   const relatedTypes = related.map((item) =>
@@ -258,6 +269,8 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
   const paid = paidFromRoot ?? reconciledPaid;
   return {
     ...financialPosition(current, liquidated, paid, supplierName, {
+      originalAmount: original,
+      cancelledAmount: cancelled,
       liquidationIncomplete:
         liquidatedFromRoot === null &&
         liquidationEvidence.documents > 0 &&
@@ -286,6 +299,8 @@ export function financialPosition(
   paid: number | null,
   supplierName: string,
   evidence: {
+    originalAmount?: number | null;
+    cancelledAmount?: number | null;
     liquidationIncomplete?: boolean;
     paymentIncomplete?: boolean;
     unresolvedLiquidations?: number;
@@ -311,7 +326,12 @@ export function financialPosition(
     missingByLifecycle ||
     Boolean(evidence.liquidationIncomplete) ||
     Boolean(evidence.paymentIncomplete);
-  const status = inconsistent
+  const cancelled = evidence.cancelledAmount ?? 0;
+  const status = !inconsistent && cancelled > 0.01 && (current ?? 0) <= 0.01
+    ? "ANULADA"
+    : !inconsistent && cancelled > 0.01
+      ? "PARCIALMENTE_ANULADA"
+      : inconsistent
     ? "DIVERGENTE"
     : evidence.paymentCompleted
       ? "PAGA"
@@ -338,6 +358,8 @@ export function financialPosition(
     current,
     liquidated,
     paid,
+    original: evidence.originalAmount ?? current,
+    cancelled,
     supplierName,
     status,
     inconsistent,
@@ -368,15 +390,17 @@ export function consolidatePortfolio<
         sum.committed += row.current ?? 0;
         sum.liquidated += row.liquidated ?? 0;
         sum.paid += row.paid ?? 0;
+        sum.cancelled += row.cancelled ?? 0;
       }
       if (row.inconsistent || row.incomplete) sum.pending++;
       return sum;
     },
-    { committed: 0, liquidated: 0, paid: 0, pending: 0 },
+    { committed: 0, liquidated: 0, paid: 0, cancelled: 0, pending: 0 },
   );
   totals.committed = Math.round(totals.committed * 100) / 100;
   totals.liquidated = Math.round(totals.liquidated * 100) / 100;
   totals.paid = Math.round(totals.paid * 100) / 100;
+  totals.cancelled = Math.round(totals.cancelled * 100) / 100;
   const coverage = { committed: 0, liquidated: 0, paid: 0 };
   const diagnostics = { partialLiquidations: 0, partialPayments: 0 };
   const reconciliation = {

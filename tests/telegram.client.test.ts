@@ -51,14 +51,14 @@ describe("cliente Telegram", () => {
     telegramReply(200, { ok: true });
     await sendTelegramMessage("123:abc", "456", "<b>Resumo</b>", { parseMode: "HTML", buttons: [
       { text: "NE 1", url: "https://portaldatransparencia.gov.br/ne/1" },
-      { text: "NE 2", url: "https://portaldatransparencia.gov.br/ne/2" },
+      { text: "Pagas", callbackData: "sagep:c:NE_PAID:0" },
     ] });
     expect(JSON.parse(mocks.bodies[0]!)).toMatchObject({
       parse_mode: "HTML",
       disable_web_page_preview: true,
       reply_markup: { inline_keyboard: [[
         { text: "NE 1", url: "https://portaldatransparencia.gov.br/ne/1" },
-        { text: "NE 2", url: "https://portaldatransparencia.gov.br/ne/2" },
+        { text: "Pagas", callback_data: "sagep:c:NE_PAID:0" },
       ]] },
     });
   });

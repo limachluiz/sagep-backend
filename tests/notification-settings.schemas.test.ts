@@ -36,7 +36,7 @@ describe("configuração dos canais de notificação", () => {
     expect(scheduleReached({ hour: 12, minute: 5 }, 12, 0)).toBe(true);
   });
 
-  it("formata o número completo e agrupa alertas do Telegram com acesso oficial", () => {
+  it("formata o número completo e cria o menu de consulta por categoria", () => {
     const externalCode = "160016000012026NE000022";
     expect(commitmentNumber(externalCode)).toBe("2026NE000022");
     const result = telegramDigest([
@@ -45,7 +45,7 @@ describe("configuração dos canais de notificação", () => {
     ]);
     expect(result.text).toContain("✅ NEs pagas");
     expect(result.text).toContain("🆕 Novas NEs encontradas");
-    expect(result.text).toContain("Empresa &amp; Cia");
-    expect(result.buttons[0]).toEqual({ text: "🔎 2026NE000022", url: `https://portaldatransparencia.gov.br/despesas/documento/empenho/${externalCode}` });
+    expect(result.text).toContain("utiliza somente os resultados já salvos pelo SAGEP");
+    expect(result.buttons[0]).toEqual({ text: "✅ NEs pagas (1)", callbackData: "sagep:c:NE_PAID:0" });
   });
 });

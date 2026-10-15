@@ -33,6 +33,7 @@ enum NotificationAutomationEventType {
   NE_DISCOVERED
   NE_LIQUIDATED
   NE_PAID
+  NE_CANCELLED
   ATA_BALANCE_CHANGED
   AUTOMATION_FAILED
 }
@@ -370,6 +371,7 @@ model NotificationChannelConfiguration {
   telegramEnabled           Boolean  @default(false)
   telegramBotTokenEncrypted String?
   telegramChatId            String?
+  telegramUpdateOffset      BigInt?
   updatedById               String?
   createdAt                 DateTime @default(now())
   updatedAt                 DateTime @updatedAt

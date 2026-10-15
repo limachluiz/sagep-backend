@@ -72,6 +72,20 @@ export class NotificationSettingsService {
     return { success: true, message: "Mensagem de teste enviada ao Telegram" };
   }
 
+  async telegramRuntimeConfiguration() {
+    const config = await this.configuration();
+    if (!config.telegramEnabled || !config.telegramBotTokenEncrypted || !config.telegramChatId) return null;
+    return {
+      token: decryptSecret(config.telegramBotTokenEncrypted, TELEGRAM_PURPOSE, "TELEGRAM_TOKEN_DECRYPTION_FAILED"),
+      chatId: config.telegramChatId,
+      updateOffset: config.telegramUpdateOffset == null ? undefined : Number(config.telegramUpdateOffset),
+    };
+  }
+
+  async saveTelegramUpdateOffset(offset: number) {
+    await prisma.notificationChannelConfiguration.update({ where: { id: "default" }, data: { telegramUpdateOffset: BigInt(offset) } });
+  }
+
   async deliverAutomationDigest(input: {
     subject: string;
     text: string;
@@ -80,7 +94,7 @@ export class NotificationSettingsService {
     emailListIds: string[];
     notifyRoles: UserRole[];
     directEmails?: string[];
-    telegramFormat?: { parseMode: "HTML"; buttons: Array<{ text: string; url: string }> };
+    telegramFormat?: { parseMode: "HTML"; buttons: Array<{ text: string; url?: string; callbackData?: string }> };
   }) {
     const configuration = await this.configuration();
     const result: { email: { sent: boolean; recipients: number; error?: string }; telegram: { sent: boolean; error?: string } } = {

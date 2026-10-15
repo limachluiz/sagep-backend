@@ -7,6 +7,7 @@ type TelegramResponse = {
   description?: string;
   error_code?: number;
   parameters?: { retry_after?: number };
+  result?: unknown;
 };
 
 const wait = (milliseconds: number) => new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -33,30 +34,25 @@ function telegramError(payload: TelegramResponse | null, statusCode: number) {
   return new AppError(`Telegram recusou a mensagem: ${description}`, 422, "TELEGRAM_DELIVERY_REJECTED");
 }
 
-type TelegramFormat = { parseMode?: "HTML"; buttons?: Array<{ text: string; url: string }> };
-const buttonRows = (buttons: Array<{ text: string; url: string }>) => {
-  const rows: Array<Array<{ text: string; url: string }>> = [];
+export type TelegramButton = { text: string; url?: string; callbackData?: string };
+type TelegramFormat = { parseMode?: "HTML"; buttons?: TelegramButton[] };
+const buttonRows = (buttons: TelegramButton[]) => {
+  const rows: TelegramButton[][] = [];
   for (let index = 0; index < buttons.length; index += 2) rows.push(buttons.slice(index, index + 2));
-  return rows;
+  return rows.map((row) => row.map((button) => ({ text: button.text, ...(button.url ? { url: button.url } : { callback_data: button.callbackData }) })));
 };
 
-function request(token: string, chatId: string, text: string, format?: TelegramFormat) {
+function request(token: string, method: string, bodyValue: Record<string, unknown>, timeoutMs = 15_000) {
   return new Promise<{ statusCode: number; payload: TelegramResponse | null }>((resolve, reject) => {
-    const body = JSON.stringify({
-      chat_id: chatId,
-      text: text.slice(0, 4096),
-      ...(format?.parseMode ? { parse_mode: format.parseMode } : {}),
-      disable_web_page_preview: true,
-      ...(format?.buttons?.length ? { reply_markup: { inline_keyboard: buttonRows(format.buttons) } } : {}),
-    });
+    const body = JSON.stringify(bodyValue);
     const operation = https.request({
       hostname: "api.telegram.org",
       port: 443,
       family: 4,
       method: "POST",
-      path: `/bot${token}/sendMessage`,
+      path: `/bot${token}/${method}`,
       headers: { "content-type": "application/json", "content-length": Buffer.byteLength(body), accept: "application/json" },
-      timeout: 15_000,
+      timeout: timeoutMs,
     }, (response) => {
       const chunks: Buffer[] = [];
       let length = 0;
@@ -81,11 +77,23 @@ function request(token: string, chatId: string, text: string, format?: TelegramF
   });
 }
 
+export async function telegramApiRequest<T>(token: string, method: string, body: Record<string, unknown>, timeoutMs = 15_000): Promise<T> {
+  const response = await request(token, method, body, timeoutMs);
+  if (response.statusCode < 200 || response.statusCode >= 300 || !response.payload?.ok) throw telegramError(response.payload, response.statusCode);
+  return response.payload.result as T;
+}
+
 export async function sendTelegramMessage(token: string, chatId: string, text: string, format?: TelegramFormat) {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const result = await request(token, chatId, text, format);
+      const result = await request(token, "sendMessage", {
+        chat_id: chatId,
+        text: text.slice(0, 4096),
+        ...(format?.parseMode ? { parse_mode: format.parseMode } : {}),
+        disable_web_page_preview: true,
+        ...(format?.buttons?.length ? { reply_markup: { inline_keyboard: buttonRows(format.buttons) } } : {}),
+      });
       if (result.statusCode < 500 && result.statusCode !== 429) {
         if (result.statusCode >= 200 && result.statusCode < 300 && result.payload?.ok) return;
         throw telegramError(result.payload, result.statusCode);

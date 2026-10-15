@@ -739,6 +739,7 @@ export class FinancialExecutionService {
           Number(n.liquidatedAmount),
           Number(n.paidAmount),
           n.supplierName ?? "Não informado",
+          { originalAmount: Number(n.originalAmount), cancelledAmount: Number(n.cancelledAmount) },
         );
         const { om, creditNotes: projectCreditNotes, ...project } = n.project;
         const creditNotes = [

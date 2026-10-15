@@ -46,6 +46,7 @@ type AlertCategory =
   | "NE_NOVA_RADAR"
   | "NE_LIQUIDADA_AUTOMACAO"
   | "NE_PAGA_AUTOMACAO"
+  | "NE_ANULADA_AUTOMACAO"
   | "ATA_SALDO_ALTERADO"
   | "AUTOMACAO_FALHOU"
   | "TAREFA_PRAZO_PROXIMO"
@@ -116,6 +117,7 @@ const emptyCategoryGroups: Record<AlertCategory, AlertItem[]> = {
   NE_NOVA_RADAR: [],
   NE_LIQUIDADA_AUTOMACAO: [],
   NE_PAGA_AUTOMACAO: [],
+  NE_ANULADA_AUTOMACAO: [],
   ATA_SALDO_ALTERADO: [],
   AUTOMACAO_FALHOU: [],
   TAREFA_PRAZO_PROXIMO: [],
@@ -753,13 +755,13 @@ export class OperationalAlertsService {
         orderBy: { occurredAt: "desc" }, take: limit,
       });
       const categoryByType = {
-        NE_DISCOVERED: "NE_NOVA_RADAR", NE_LIQUIDATED: "NE_LIQUIDADA_AUTOMACAO", NE_PAID: "NE_PAGA_AUTOMACAO",
+        NE_DISCOVERED: "NE_NOVA_RADAR", NE_LIQUIDATED: "NE_LIQUIDADA_AUTOMACAO", NE_PAID: "NE_PAGA_AUTOMACAO", NE_CANCELLED: "NE_ANULADA_AUTOMACAO",
         ATA_BALANCE_CHANGED: "ATA_SALDO_ALTERADO", AUTOMATION_FAILED: "AUTOMACAO_FALHOU",
       } as const;
       alerts.push(...automationEvents.map((event) => ({
         id: `AUTOMATION:${event.id}`,
         category: categoryByType[event.type],
-        severity: event.type === "AUTOMATION_FAILED" ? "CRITICAL" as const : event.type === "ATA_BALANCE_CHANGED" ? "WARNING" as const : "INFO" as const,
+        severity: event.type === "AUTOMATION_FAILED" ? "CRITICAL" as const : ["ATA_BALANCE_CHANGED", "NE_CANCELLED"].includes(event.type) ? "WARNING" as const : "INFO" as const,
         title: event.title,
         description: event.description,
         detailsPath: event.detailsPath ?? "/settings/notifications",
@@ -804,6 +806,7 @@ export class OperationalAlertsService {
       NE_NOVA_RADAR: [...emptyCategoryGroups.NE_NOVA_RADAR],
       NE_LIQUIDADA_AUTOMACAO: [...emptyCategoryGroups.NE_LIQUIDADA_AUTOMACAO],
       NE_PAGA_AUTOMACAO: [...emptyCategoryGroups.NE_PAGA_AUTOMACAO],
+      NE_ANULADA_AUTOMACAO: [...emptyCategoryGroups.NE_ANULADA_AUTOMACAO],
       ATA_SALDO_ALTERADO: [...emptyCategoryGroups.ATA_SALDO_ALTERADO],
       AUTOMACAO_FALHOU: [...emptyCategoryGroups.AUTOMACAO_FALHOU],
       TAREFA_PRAZO_PROXIMO: [...emptyCategoryGroups.TAREFA_PRAZO_PROXIMO],

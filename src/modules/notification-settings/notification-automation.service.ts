@@ -51,7 +51,9 @@ function dateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 function portalStatus(status: string) {
-  return status === "PAGA"
+  return ["ANULADA", "PARCIALMENTE_ANULADA"].includes(status)
+    ? status as "ANULADA" | "PARCIALMENTE_ANULADA"
+    : status === "PAGA"
     ? "PAGA"
     : ["LIQUIDADA", "PARCIALMENTE_PAGA"].includes(status)
       ? "LIQUIDADA"
@@ -99,38 +101,22 @@ type DigestEvent = { type: NotificationAutomationEventType; title: string; descr
 const TELEGRAM_GROUPS: Array<{ type: NotificationAutomationEventType; title: string }> = [
   { type: "NE_PAID", title: "✅ NEs pagas" },
   { type: "NE_LIQUIDATED", title: "💧 NEs liquidadas" },
+  { type: "NE_CANCELLED", title: "🚫 NEs anuladas · recurso recolhido" },
   { type: "NE_DISCOVERED", title: "🆕 Novas NEs encontradas" },
   { type: "ATA_BALANCE_CHANGED", title: "📦 Alterações de saldo das ATAs" },
   { type: "AUTOMATION_FAILED", title: "⚠️ Pendências da automação" },
 ];
-const escapeHtml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
-
 export function telegramDigest(items: DigestEvent[]) {
   const sections: string[] = [];
-  const buttons: Array<{ text: string; url: string }> = [];
-  const seenCodes = new Set<string>();
-  let included = 0;
+  const buttons: Array<{ text: string; callbackData: string }> = [];
   for (const group of TELEGRAM_GROUPS) {
     const groupItems = items.filter((item) => item.type === group.type);
     if (!groupItems.length) continue;
-    const lines: string[] = [];
-    for (const item of groupItems) {
-      const candidate = `• <b>${escapeHtml(item.title)}</b>\n  ${escapeHtml(item.description)}`;
-      const projected = [...sections, `<b>${group.title}</b>\n${[...lines, candidate].join("\n\n")}`].join("\n\n");
-      if (projected.length > 3450) break;
-      lines.push(candidate);
-      included++;
-      const payload = item.payload && typeof item.payload === "object" && !Array.isArray(item.payload) ? item.payload as Record<string, Prisma.JsonValue> : null;
-      const externalCode = typeof payload?.externalCode === "string" ? payload.externalCode : null;
-      if (externalCode && /^\d{15}NE\d{6}$/i.test(externalCode) && !seenCodes.has(externalCode) && buttons.length < 20) {
-        seenCodes.add(externalCode);
-        buttons.push({ text: `🔎 ${commitmentNumber(externalCode)}`, url: `https://portaldatransparencia.gov.br/despesas/documento/empenho/${encodeURIComponent(externalCode)}` });
-      }
-    }
-    if (lines.length) sections.push(`<b>${group.title}</b>\n${lines.join("\n\n")}`);
+    buttons.push({ text: `${group.title} (${groupItems.length})`, callbackData: `sagep:c:${group.type}:0` });
+    sections.push(`${group.title}: <b>${groupItems.length}</b>`);
   }
-  if (included < items.length) sections.push(`<i>Mais ${items.length - included} alerta(s) permanecem disponíveis na Central de Alertas do SAGEP.</i>`);
-  return { text: sections.join("\n\n"), buttons };
+  sections.push("<i>Selecione uma categoria abaixo para consultar os registros. O bot utiliza somente os resultados já salvos pelo SAGEP.</i>");
+  return { text: sections.join("\n"), buttons };
 }
 
 export class NotificationAutomationService {
@@ -279,6 +265,7 @@ export class NotificationAutomationService {
         financialStatus: true,
         liquidatedAmount: true,
         paidAmount: true,
+        cancelledAmount: true,
         lastSyncAt: true,
       },
     });
@@ -307,13 +294,14 @@ export class NotificationAutomationService {
     for (const note of projectNotes) {
       const status = portalStatus(note.financialStatus);
       if (!status) continue;
-      const amount =
-        status === "PAGA" ? note.paidAmount : note.liquidatedAmount;
+      const cancelled = ["ANULADA", "PARCIALMENTE_ANULADA"].includes(status);
+      const amount = status === "PAGA" ? note.paidAmount : cancelled ? note.cancelledAmount : note.liquidatedAmount;
+      const eventType = status === "PAGA" ? "NE_PAID" : cancelled ? "NE_CANCELLED" : "NE_LIQUIDATED";
       events.push({
         eventKey: `NE_${status}:${note.externalCode}:${money(amount)}`,
-        type: status === "PAGA" ? "NE_PAID" : "NE_LIQUIDATED",
-        title: `NE ${commitmentNumber(note.externalCode, note.number)} ${status === "PAGA" ? "paga" : "liquidada"}`,
-        description: `${note.supplierName ?? "Fornecedor não informado"} · ${currency(amount)}`,
+        type: eventType,
+        title: `NE ${commitmentNumber(note.externalCode, note.number)} ${status === "PAGA" ? "paga" : cancelled ? status === "ANULADA" ? "anulada" : "parcialmente anulada" : "liquidada"}`,
+        description: `${note.supplierName ?? "Fornecedor não informado"} · ${cancelled ? "recurso recolhido: " : ""}${currency(amount)}`,
         detailsPath: "/financial-execution",
         payload: {
           externalCode: note.externalCode,
@@ -326,12 +314,14 @@ export class NotificationAutomationService {
       const financial = archivedFinancial(note.snapshot, note.externalCode);
       const status = portalStatus(financial.status);
       if (!status) continue;
-      const amount = status === "PAGA" ? financial.paid : financial.liquidated;
+      const cancelled = ["ANULADA", "PARCIALMENTE_ANULADA"].includes(status);
+      const amount = status === "PAGA" ? financial.paid : cancelled ? financial.cancelled : financial.liquidated;
+      const eventType = status === "PAGA" ? "NE_PAID" : cancelled ? "NE_CANCELLED" : "NE_LIQUIDATED";
       events.push({
         eventKey: `NE_${status}:${note.externalCode}:${money(amount)}`,
-        type: status === "PAGA" ? "NE_PAID" : "NE_LIQUIDATED",
-        title: `NE ${commitmentNumber(note.externalCode)} ${status === "PAGA" ? "paga" : "liquidada"}`,
-        description: `${financial.supplierName} · ${currency(amount)}`,
+        type: eventType,
+        title: `NE ${commitmentNumber(note.externalCode)} ${status === "PAGA" ? "paga" : cancelled ? status === "ANULADA" ? "anulada" : "parcialmente anulada" : "liquidada"}`,
+        description: `${financial.supplierName} · ${cancelled ? "recurso recolhido: " : ""}${currency(amount)}`,
         detailsPath: "/financial-execution",
         payload: {
           externalCode: note.externalCode,

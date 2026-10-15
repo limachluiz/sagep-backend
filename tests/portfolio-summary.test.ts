@@ -83,6 +83,18 @@ describe("consolidated portfolio", () => {
     expect(moneyFrom("")).toBeNull();
     expect(moneyFrom("0,00")).toBe(0);
   });
+  it("identifica anulação integral e o valor do recurso recolhido", () => {
+    expect(archivedFinancial({
+      document: { valorOriginalDoEmpenho: "10.000,00", valorAtualDoEmpenho: "0,00" },
+      related: [{ documento: "160016000012026NE000022", fase: "Anulação de empenho", valor: "10.000,00" }],
+    })).toMatchObject({ original: 10_000, current: 0, cancelled: 10_000, status: "ANULADA" });
+  });
+  it("identifica recolhimento parcial sem perder o saldo atual", () => {
+    expect(archivedFinancial({
+      document: { valorOriginalDoEmpenho: 10_000, valorAtualDoEmpenho: 6_000 },
+      related: [{ documento: "160016000012026NE000023", especie: "Cancelamento parcial", valorDocumento: -4_000 }],
+    })).toMatchObject({ original: 10_000, current: 6_000, cancelled: 4_000, status: "PARCIALMENTE_ANULADA" });
+  });
   it("flags paid above committed/liquidated instead of capping amounts", () => {
     expect(
       financialPosition(17233.86, 0, 36096.34, "Fornecedor"),
@@ -157,6 +169,7 @@ describe("consolidated portfolio", () => {
       committed: 50,
       liquidated: 0,
       paid: 0,
+      cancelled: 0,
       pending: 2,
     });
   });
