@@ -16,6 +16,11 @@ COPY src ./src
 
 RUN npm run prisma:generate
 RUN npm run build
+# Preserve o engine de migrations antes do prune. Algumas versões do npm
+# removem @prisma/engines por tratá-lo como dependência transitória opcional.
+RUN install -D -m 0755 \
+    /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
+    /opt/prisma/schema-engine
 # O mesmo conjunto validado no estágio de compilação é reaproveitado na imagem
 # final. Isso evita uma segunda instalação de rede e mantém apenas dependências
 # necessárias em produção.
@@ -28,7 +33,7 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
 # O engine é baixado e validado no estágio de build. Em produção, o Prisma
 # deve usar exclusivamente o binário empacotado, inclusive em redes isoladas.
-ENV PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
+ENV PRISMA_SCHEMA_ENGINE_BINARY=/opt/prisma/schema-engine
 ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
 WORKDIR /app
@@ -94,6 +99,7 @@ COPY scripts/signature-validation/validate_pdf.py /app/scripts/signature-validat
 
 COPY package.json package-lock.json .npmrc ./
 COPY --from=build /app/node_modules ./node_modules
+COPY --from=build --chown=sagep:sagep /opt/prisma/schema-engine /opt/prisma/schema-engine
 
 COPY prisma ./prisma
 COPY prisma.config.ts ./
@@ -107,8 +113,7 @@ RUN install -d -o sagep -g sagep -m 0700 \
     /app/bootstrap \
     /app/pki \
     /app/tls \
-  && chown -R sagep:sagep /app/node_modules/@prisma/engines \
-  && test -x /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
+  && test -x /opt/prisma/schema-engine \
   && test -x /usr/bin/chromium \
   && chromium --version
 
