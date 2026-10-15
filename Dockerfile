@@ -26,6 +26,10 @@ FROM node:22-bookworm-slim AS runtime
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+# O engine é baixado e validado no estágio de build. Em produção, o Prisma
+# deve usar exclusivamente o binário empacotado, inclusive em redes isoladas.
+ENV PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
+ENV PRISMA_ENGINES_CHECKSUM_IGNORE_MISSING=1
 
 WORKDIR /app
 
@@ -104,6 +108,7 @@ RUN install -d -o sagep -g sagep -m 0700 \
     /app/pki \
     /app/tls \
   && chown -R sagep:sagep /app/node_modules/@prisma/engines \
+  && test -x /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
   && test -x /usr/bin/chromium \
   && chromium --version
 
@@ -114,4 +119,4 @@ RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
 EXPOSE 3000
 
 ENTRYPOINT ["sh", "/usr/local/bin/docker-entrypoint.sh"]
-CMD ["sh", "-c", "npx prisma migrate deploy && npm run start"]
+CMD ["sh", "-c", "./node_modules/.bin/prisma migrate deploy && node dist/server.js"]
