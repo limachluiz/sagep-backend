@@ -80,6 +80,7 @@ export class NotificationSettingsService {
     emailListIds: string[];
     notifyRoles: UserRole[];
     directEmails?: string[];
+    telegramFormat?: { parseMode: "HTML"; buttons: Array<{ text: string; url: string }> };
   }) {
     const configuration = await this.configuration();
     const result: { email: { sent: boolean; recipients: number; error?: string }; telegram: { sent: boolean; error?: string } } = {
@@ -116,7 +117,7 @@ export class NotificationSettingsService {
       try {
         if (!configuration.telegramBotTokenEncrypted || !configuration.telegramChatId) throw new Error("Telegram não configurado");
         const token = decryptSecret(configuration.telegramBotTokenEncrypted, TELEGRAM_PURPOSE, "TELEGRAM_TOKEN_DECRYPTION_FAILED");
-        await sendTelegramMessage(token, configuration.telegramChatId, `${input.subject}\n\n${input.text}`);
+        await sendTelegramMessage(token, configuration.telegramChatId, `${input.subject}\n\n${input.text}`, input.telegramFormat);
         result.telegram.sent = true;
       } catch (error) {
         result.telegram.error = error instanceof Error ? error.message : String(error);

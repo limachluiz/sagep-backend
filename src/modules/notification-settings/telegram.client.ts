@@ -33,9 +33,22 @@ function telegramError(payload: TelegramResponse | null, statusCode: number) {
   return new AppError(`Telegram recusou a mensagem: ${description}`, 422, "TELEGRAM_DELIVERY_REJECTED");
 }
 
-function request(token: string, chatId: string, text: string) {
+type TelegramFormat = { parseMode?: "HTML"; buttons?: Array<{ text: string; url: string }> };
+const buttonRows = (buttons: Array<{ text: string; url: string }>) => {
+  const rows: Array<Array<{ text: string; url: string }>> = [];
+  for (let index = 0; index < buttons.length; index += 2) rows.push(buttons.slice(index, index + 2));
+  return rows;
+};
+
+function request(token: string, chatId: string, text: string, format?: TelegramFormat) {
   return new Promise<{ statusCode: number; payload: TelegramResponse | null }>((resolve, reject) => {
-    const body = JSON.stringify({ chat_id: chatId, text: text.slice(0, 4096) });
+    const body = JSON.stringify({
+      chat_id: chatId,
+      text: text.slice(0, 4096),
+      ...(format?.parseMode ? { parse_mode: format.parseMode } : {}),
+      disable_web_page_preview: true,
+      ...(format?.buttons?.length ? { reply_markup: { inline_keyboard: buttonRows(format.buttons) } } : {}),
+    });
     const operation = https.request({
       hostname: "api.telegram.org",
       port: 443,
@@ -68,11 +81,11 @@ function request(token: string, chatId: string, text: string) {
   });
 }
 
-export async function sendTelegramMessage(token: string, chatId: string, text: string) {
+export async function sendTelegramMessage(token: string, chatId: string, text: string, format?: TelegramFormat) {
   let lastError: unknown;
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      const result = await request(token, chatId, text);
+      const result = await request(token, chatId, text, format);
       if (result.statusCode < 500 && result.statusCode !== 429) {
         if (result.statusCode >= 200 && result.statusCode < 300 && result.payload?.ok) return;
         throw telegramError(result.payload, result.statusCode);

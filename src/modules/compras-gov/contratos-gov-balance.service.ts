@@ -105,7 +105,7 @@ export type PublicSession = { cookies: Map<string, string>; expiresAt: number };
 let publicSession: PublicSession | null = null;
 let publicSessionPromise: Promise<PublicSession> | null = null;
 
-type BalanceActor = { id: string; name?: string | null; email?: string | null };
+type BalanceActor = { id?: string | null; name?: string | null; email?: string | null };
 type OpeningBalanceSource = "LIVE" | "SAVED_SNAPSHOT";
 
 function clean(value: string) {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { emailListSchema, notificationAutomationSchema, smtpSettingsSchema, telegramSettingsSchema } from "../src/modules/notification-settings/notification-settings.schemas.js";
-import { zonedScheduleParts } from "../src/modules/notification-settings/notification-automation.service.js";
+import { commitmentNumber, scheduleReached, telegramDigest, zonedScheduleParts } from "../src/modules/notification-settings/notification-automation.service.js";
 
 describe("configuração dos canais de notificação", () => {
   it("aceita SMTP autenticado e normaliza o remetente", () => {
@@ -28,5 +28,24 @@ describe("configuração dos canais de notificação", () => {
 
   it("calcula o horário no fuso configurado", () => {
     expect(zonedScheduleParts(new Date("2026-10-06T11:30:00Z"), "America/Manaus")).toEqual({ date: "2026-10-06", hour: 7, minute: 30, weekday: 2 });
+  });
+
+  it("recupera uma execução agendada mesmo depois do minuto exato", () => {
+    expect(scheduleReached({ hour: 11, minute: 59 }, 12, 0)).toBe(false);
+    expect(scheduleReached({ hour: 12, minute: 0 }, 12, 0)).toBe(true);
+    expect(scheduleReached({ hour: 12, minute: 5 }, 12, 0)).toBe(true);
+  });
+
+  it("formata o número completo e agrupa alertas do Telegram com acesso oficial", () => {
+    const externalCode = "160016000012026NE000022";
+    expect(commitmentNumber(externalCode)).toBe("2026NE000022");
+    const result = telegramDigest([
+      { type: "NE_PAID", title: "NE 2026NE000022 paga", description: "Empresa & Cia · R$ 100,00", payload: { externalCode } },
+      { type: "NE_DISCOVERED", title: "Nova NE 2026NE000023", description: "Outra empresa", payload: { externalCode: "160016000012026NE000023" } },
+    ]);
+    expect(result.text).toContain("✅ NEs pagas");
+    expect(result.text).toContain("🆕 Novas NEs encontradas");
+    expect(result.text).toContain("Empresa &amp; Cia");
+    expect(result.buttons[0]).toEqual({ text: "🔎 2026NE000022", url: `https://portaldatransparencia.gov.br/despesas/documento/empenho/${externalCode}` });
   });
 });

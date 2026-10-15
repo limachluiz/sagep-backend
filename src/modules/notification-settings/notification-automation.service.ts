@@ -30,7 +30,6 @@ type EventCandidate = {
 };
 
 const SYSTEM_ACTOR = {
-  id: "SYSTEM_AUTOMATION",
   name: "Automação do SAGEP",
   email: "sistema@sagep.local",
 };
@@ -41,6 +40,12 @@ function errorMessage(error: unknown) {
 }
 function money(value: unknown) {
   return Number(value ?? 0).toFixed(2);
+}
+function currency(value: unknown) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value ?? 0));
+}
+export function commitmentNumber(externalCode: string, fallback?: string | null) {
+  return externalCode.match(/(\d{4}NE\d{6})$/i)?.[1]?.toUpperCase() ?? fallback ?? externalCode;
 }
 function dateOnly(value: Date) {
   return value.toISOString().slice(0, 10);
@@ -84,6 +89,48 @@ export function zonedScheduleParts(now: Date, timeZone: string) {
     minute: Number(parts.minute),
     weekday: weekdays[parts.weekday!]!,
   };
+}
+
+export function scheduleReached(parts: { hour: number; minute: number }, hour: number, minute: number) {
+  return parts.hour * 60 + parts.minute >= hour * 60 + minute;
+}
+
+type DigestEvent = { type: NotificationAutomationEventType; title: string; description: string; payload: Prisma.JsonValue | null };
+const TELEGRAM_GROUPS: Array<{ type: NotificationAutomationEventType; title: string }> = [
+  { type: "NE_PAID", title: "✅ NEs pagas" },
+  { type: "NE_LIQUIDATED", title: "💧 NEs liquidadas" },
+  { type: "NE_DISCOVERED", title: "🆕 Novas NEs encontradas" },
+  { type: "ATA_BALANCE_CHANGED", title: "📦 Alterações de saldo das ATAs" },
+  { type: "AUTOMATION_FAILED", title: "⚠️ Pendências da automação" },
+];
+const escapeHtml = (value: string) => value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;");
+
+export function telegramDigest(items: DigestEvent[]) {
+  const sections: string[] = [];
+  const buttons: Array<{ text: string; url: string }> = [];
+  const seenCodes = new Set<string>();
+  let included = 0;
+  for (const group of TELEGRAM_GROUPS) {
+    const groupItems = items.filter((item) => item.type === group.type);
+    if (!groupItems.length) continue;
+    const lines: string[] = [];
+    for (const item of groupItems) {
+      const candidate = `• <b>${escapeHtml(item.title)}</b>\n  ${escapeHtml(item.description)}`;
+      const projected = [...sections, `<b>${group.title}</b>\n${[...lines, candidate].join("\n\n")}`].join("\n\n");
+      if (projected.length > 3450) break;
+      lines.push(candidate);
+      included++;
+      const payload = item.payload && typeof item.payload === "object" && !Array.isArray(item.payload) ? item.payload as Record<string, Prisma.JsonValue> : null;
+      const externalCode = typeof payload?.externalCode === "string" ? payload.externalCode : null;
+      if (externalCode && /^\d{15}NE\d{6}$/i.test(externalCode) && !seenCodes.has(externalCode) && buttons.length < 20) {
+        seenCodes.add(externalCode);
+        buttons.push({ text: `🔎 ${commitmentNumber(externalCode)}`, url: `https://portaldatransparencia.gov.br/despesas/documento/empenho/${encodeURIComponent(externalCode)}` });
+      }
+    }
+    if (lines.length) sections.push(`<b>${group.title}</b>\n${lines.join("\n\n")}`);
+  }
+  if (included < items.length) sections.push(`<i>Mais ${items.length - included} alerta(s) permanecem disponíveis na Central de Alertas do SAGEP.</i>`);
+  return { text: sections.join("\n\n"), buttons };
 }
 
 export class NotificationAutomationService {
@@ -143,8 +190,7 @@ export class NotificationAutomationService {
     const parts = zonedScheduleParts(now, config.timeZone);
     if (
       !config.weekdays.includes(parts.weekday) ||
-      parts.hour !== config.hour ||
-      parts.minute !== config.minute
+      !scheduleReached(parts, config.hour, config.minute)
     )
       return false;
     const key = `${parts.date}@${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")}`;
@@ -266,8 +312,8 @@ export class NotificationAutomationService {
       events.push({
         eventKey: `NE_${status}:${note.externalCode}:${money(amount)}`,
         type: status === "PAGA" ? "NE_PAID" : "NE_LIQUIDATED",
-        title: `NE ${note.number} ${status === "PAGA" ? "paga" : "liquidada"}`,
-        description: `${note.supplierName ?? "Fornecedor não informado"} · R$ ${money(amount)}`,
+        title: `NE ${commitmentNumber(note.externalCode, note.number)} ${status === "PAGA" ? "paga" : "liquidada"}`,
+        description: `${note.supplierName ?? "Fornecedor não informado"} · ${currency(amount)}`,
         detailsPath: "/financial-execution",
         payload: {
           externalCode: note.externalCode,
@@ -284,8 +330,8 @@ export class NotificationAutomationService {
       events.push({
         eventKey: `NE_${status}:${note.externalCode}:${money(amount)}`,
         type: status === "PAGA" ? "NE_PAID" : "NE_LIQUIDATED",
-        title: `NE ${note.externalCode.slice(-10)} ${status === "PAGA" ? "paga" : "liquidada"}`,
-        description: `${financial.supplierName} · R$ ${money(amount)}`,
+        title: `NE ${commitmentNumber(note.externalCode)} ${status === "PAGA" ? "paga" : "liquidada"}`,
+        description: `${financial.supplierName} · ${currency(amount)}`,
         detailsPath: "/financial-execution",
         payload: {
           externalCode: note.externalCode,
@@ -413,7 +459,7 @@ export class NotificationAutomationService {
                 events.push({
                   eventKey: `NE_DISCOVERED:${code}`,
                   type: "NE_DISCOVERED",
-                  title: `Nova NE ${code.slice(-10)} no radar`,
+                  title: `Nova NE ${commitmentNumber(code)} no radar`,
                   description: `${group.supplier} · UG ${ug} · ATA(s) ${group.ataNumbers.join(", ")}`,
                   detailsPath: "/financial-execution",
                   payload: {
@@ -822,7 +868,7 @@ export class NotificationAutomationService {
             })
           : Promise.resolve([]),
       ]);
-      const digest = (items: typeof events) =>
+      const emailDigest = (items: typeof events) =>
         items
           .map((event) => `• ${event.title}\n  ${event.description}`)
           .join("\n\n");
@@ -830,7 +876,7 @@ export class NotificationAutomationService {
       if (pendingEmail.length) {
         const sent = await notificationSettingsService.deliverAutomationDigest({
           subject: `SAGEP · ${pendingEmail.length} alerta(s) financeiro(s)`,
-          text: digest(pendingEmail),
+          text: emailDigest(pendingEmail),
           emailEnabled: true,
           telegramEnabled: false,
           emailListIds: config.emailListIds,
@@ -845,13 +891,15 @@ export class NotificationAutomationService {
         });
       }
       if (pendingTelegram.length) {
+        const telegram = telegramDigest(pendingTelegram);
         const sent = await notificationSettingsService.deliverAutomationDigest({
-          subject: `SAGEP · ${pendingTelegram.length} alerta(s) financeiro(s)`,
-          text: digest(pendingTelegram),
+          subject: `📊 <b>SAGEP · Monitoramento financeiro</b>\n${pendingTelegram.length} alerta(s) nesta execução`,
+          text: telegram.text,
           emailEnabled: false,
           telegramEnabled: true,
           emailListIds: [],
           notifyRoles: [],
+          telegramFormat: { parseMode: "HTML", buttons: telegram.buttons },
         });
         delivery.telegram = sent.telegram;
         await prisma.notificationAutomationEvent.updateMany({
