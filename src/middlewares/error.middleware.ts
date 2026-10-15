@@ -61,6 +61,8 @@ const safeServerErrorMessages: Record<string, string> = {
   EXTERNAL_BALANCE_INVALID: "O Contratos.gov.br retornou um saldo inválido",
   EXTERNAL_BALANCE_TOO_LARGE: "A resposta do Contratos.gov.br excedeu o limite permitido",
   EXTERNAL_BALANCE_IDENTITY_MISMATCH: "A página pública encontrada não corresponde à ATA solicitada",
+  TELEGRAM_CONNECTION_FAILED: "Não foi possível conectar ao Telegram. Verifique a internet, o DNS e o firewall do servidor SAGEP",
+  TELEGRAM_UNAVAILABLE: "O Telegram está temporariamente indisponível. Tente novamente em instantes",
 };
 
 export function errorMiddleware(

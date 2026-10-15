@@ -5,6 +5,7 @@ import { auditService } from "../audit/audit.service.js";
 import { sendSmtpMessage, verifySmtp } from "./smtp.client.js";
 import type { EmailListInput, SmtpSettingsInput, TelegramSettingsInput } from "./notification-settings.schemas.js";
 import type { UserRole } from "../../generated/prisma/enums.js";
+import { sendTelegramMessage } from "./telegram.client.js";
 
 const SMTP_PURPOSE = "notification-smtp-password";
 const TELEGRAM_PURPOSE = "notification-telegram-bot-token";
@@ -67,9 +68,7 @@ export class NotificationSettingsService {
     const config = await this.configuration();
     if (!config.telegramBotTokenEncrypted || !config.telegramChatId) throw new AppError("Configure o token do bot e o chat de destino", 422, "TELEGRAM_NOT_CONFIGURED");
     const token = decryptSecret(config.telegramBotTokenEncrypted, TELEGRAM_PURPOSE, "TELEGRAM_TOKEN_DECRYPTION_FAILED");
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ chat_id: config.telegramChatId, text: `✅ Teste do SAGEP concluído\nCanal configurado por ${actorName(actor) ?? "administrador"}.` }), signal: AbortSignal.timeout(15_000) });
-    const payload = await response.json().catch(() => null) as { ok?: boolean; description?: string } | null;
-    if (!response.ok || !payload?.ok) throw new AppError(`Telegram recusou a mensagem: ${payload?.description ?? `HTTP ${response.status}`}`, 502, "TELEGRAM_DELIVERY_FAILED");
+    await sendTelegramMessage(token, config.telegramChatId, `✅ Teste do SAGEP concluído\nCanal configurado por ${actorName(actor) ?? "administrador"}.`);
     return { success: true, message: "Mensagem de teste enviada ao Telegram" };
   }
 
@@ -117,13 +116,7 @@ export class NotificationSettingsService {
       try {
         if (!configuration.telegramBotTokenEncrypted || !configuration.telegramChatId) throw new Error("Telegram não configurado");
         const token = decryptSecret(configuration.telegramBotTokenEncrypted, TELEGRAM_PURPOSE, "TELEGRAM_TOKEN_DECRYPTION_FAILED");
-        const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-          method: "POST", headers: { "content-type": "application/json" },
-          body: JSON.stringify({ chat_id: configuration.telegramChatId, text: `${input.subject}\n\n${input.text}`.slice(0, 4096) }),
-          signal: AbortSignal.timeout(15_000),
-        });
-        const payload = await response.json().catch(() => null) as { ok?: boolean; description?: string } | null;
-        if (!response.ok || !payload?.ok) throw new Error(payload?.description ?? `HTTP ${response.status}`);
+        await sendTelegramMessage(token, configuration.telegramChatId, `${input.subject}\n\n${input.text}`);
         result.telegram.sent = true;
       } catch (error) {
         result.telegram.error = error instanceof Error ? error.message : String(error);
