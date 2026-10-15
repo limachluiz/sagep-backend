@@ -95,6 +95,25 @@ describe("consolidated portfolio", () => {
       related: [{ documento: "160016000012026NE000023", especie: "Cancelamento parcial", valorDocumento: -4_000 }],
     })).toMatchObject({ original: 10_000, current: 6_000, cancelled: 4_000, status: "PARCIALMENTE_ANULADA" });
   });
+  it("identifica a anulação registrada no histórico de itens da carteira", () => {
+    expect(archivedFinancial({
+      document: {
+        valor: "17.137,98",
+        itens: [{
+          historico: [
+            { operacao: "INCLUSÃO", valorTotal: "17.137,98" },
+            { operacao: "ANULAÇÃO", valorTotal: "17.137,98" },
+          ],
+        }],
+      },
+      related: [],
+    })).toMatchObject({
+      original: 17_137.98,
+      current: 0,
+      cancelled: 17_137.98,
+      status: "ANULADA",
+    });
+  });
   it("flags paid above committed/liquidated instead of capping amounts", () => {
     expect(
       financialPosition(17233.86, 0, 36096.34, "Fornecedor"),

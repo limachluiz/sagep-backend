@@ -1,4 +1,5 @@
 import type { PaymentEvidence } from "./ne-payment-evidence.js";
+import { cancellationAmountFromPayload } from "./portal-transparencia.client.js";
 type Json = Record<string, unknown>;
 function financialDocumentType(
   code: unknown,
@@ -125,7 +126,11 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
     cancelledByCode.set(code, Math.abs(amount));
   }
   const cancelledFromRoot = moneyFrom(field(root, ["valorAnulado", "valorCancelado", "valorRecolhido", "valorAnuladoDoEmpenho"]));
-  const cancelled = cancelledFromRoot ?? Math.round([...cancelledByCode.values()].reduce((sum, amount) => sum + amount, 0) * 100) / 100;
+  const cancelledFromHistory = cancellationAmountFromPayload(root);
+  const cancelledFromRelated = Math.round([...cancelledByCode.values()].reduce((sum, amount) => sum + amount, 0) * 100) / 100;
+  // The archive endpoint embeds item operations (including "ANULAÇÃO") in
+  // the document itself instead of exposing them as related documents.
+  const cancelled = cancelledFromRoot ?? (cancelledFromHistory > 0 ? cancelledFromHistory : cancelledFromRelated);
   const currentFromRoot = moneyFrom(field(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]));
   const current = currentFromRoot ?? (original == null ? null : Math.max(0, original - cancelled));
   const savedEvidence = data?.financial;
