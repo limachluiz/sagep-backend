@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   buildCommitmentExternalCode,
+  cancellationAmountFromPayload,
   portalTransparenciaClient,
 } from "../src/modules/financial-execution/portal-transparencia.client.js";
 import {
@@ -49,6 +50,51 @@ describe("PortalTransparenciaClient", () => {
   it("monta o código oficial com UG, gestão e número normalizado", () => {
     expect(buildCommitmentExternalCode("160016", "00001", "2026ne000534"))
       .toBe("160016000012026NE000534");
+  });
+
+  it("identifica anulação no histórico dos itens do empenho", () => {
+    expect(cancellationAmountFromPayload({ itens: [{ item: 1, historico: [
+      { data: "21/08/2026", operacao: "INCLUSAO", quantidade: "24,07", valorUnitario: "712,00", valorTotal: "17.137,98" },
+      { data: "26/08/2026", operacao: "ANULACAO", quantidade: "24,07", valorUnitario: "712,00", valorTotal: "17.137,98" },
+    ] }] })).toBe(17_137.98);
+  });
+
+  it("classifica como anulada quando a operação está somente no detalhamento do gasto", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        numeroDocumento: "2026NE001162",
+        valorOriginalDoEmpenho: "R$ 17.137,98",
+        valorAtualDoEmpenho: "R$ 0,00",
+        itens: [{ historico: [
+          { operacao: "INCLUSAO", valorTotal: "R$ 17.137,98" },
+          { operacao: "ANULACAO", valorTotal: "R$ 17.137,98" },
+        ] }],
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const snapshot = await portalTransparenciaClient.fetchCommitmentNote("160016", "00001", "2026NE001162");
+
+    expect(snapshot.cancelledAmount).toBe(17_137.98);
+    expect(snapshot.currentAmount).toBe(0);
+    expect(snapshot.financialStatus).toBe("ANULADA");
+  });
+
+  it("preserva o valor atual zero e infere a anulação integral quando a API omite o histórico", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        numeroDocumento: "2026NE001162",
+        valorOriginalDoEmpenho: "R$ 17.137,98",
+        valorAtualDoEmpenho: "R$ 0,00",
+      }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const snapshot = await portalTransparenciaClient.fetchCommitmentNote("160016", "00001", "2026NE001162");
+
+    expect(snapshot.currentAmount).toBe(0);
+    expect(snapshot.cancelledAmount).toBe(17_137.98);
+    expect(snapshot.financialStatus).toBe("ANULADA");
   });
 
   it("trata resposta vazia como Nota de Empenho não localizada", async () => {

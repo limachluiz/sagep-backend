@@ -87,6 +87,52 @@ function decimalFor(record: JsonRecord, keys: string[]) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+function nullableDecimalFor(record: JsonRecord, keys: string[]) {
+  const value = valueFor(record, keys);
+  return value === undefined ? null : decimalValue(value);
+}
+
+function directValueFor(record: JsonRecord, keys: string[]) {
+  const accepted = new Set(keys.map(normalizeKey));
+  for (const [key, value] of Object.entries(record))
+    if (accepted.has(normalizeKey(key)) && value !== undefined && value !== null && value !== "") return value;
+  return undefined;
+}
+
+function decimalValue(value: unknown) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/R\$/gi, "").replace(/\s/g, "");
+  const decimal = normalized.includes(",") ? normalized.replace(/\./g, "").replace(",", ".") : normalized;
+  const parsed = Number(decimal.replace(/[^0-9.-]/g, ""));
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/** Soma as operações de anulação existentes no histórico dos itens do empenho. */
+export function cancellationAmountFromPayload(payload: unknown) {
+  let total = 0;
+  const visit = (value: unknown) => {
+    if (Array.isArray(value)) {
+      value.forEach(visit);
+      return;
+    }
+    const record = asRecord(value);
+    if (!record) return;
+    const operation = String(directValueFor(record, ["operacao", "tipoOperacao", "descricaoOperacao", "fase"]) ?? "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (operation.includes("ANULACAO") || operation.includes("ANULADO")) {
+      const explicit = decimalValue(directValueFor(record, ["valorTotal", "valorAnulado", "valorOperacao", "valor"]));
+      const quantity = decimalValue(directValueFor(record, ["quantidade", "quantidadeItem"]));
+      const unit = decimalValue(directValueFor(record, ["valorUnitario", "valorUnitarioItem"]));
+      const amount = explicit ?? (quantity !== null && unit !== null ? quantity * unit : null);
+      if (amount !== null) total += Math.abs(amount);
+    }
+    Object.values(record).forEach(visit);
+  };
+  visit(payload);
+  return Math.round(total * 100) / 100;
+}
+
 function dateFor(record: JsonRecord, keys: string[]) {
   const value = stringFor(record, keys);
   if (!value) return null;
@@ -272,11 +318,25 @@ export class PortalTransparenciaClient {
     const documents = [baseDocument, ...relatedDocuments]
       .filter((item, index, all) => all.findIndex((candidate) => candidate.externalCode === item.externalCode) === index);
     const originalAmount = decimalFor(root, ["valorOriginalDoEmpenho", "valorOriginal", "valorEmpenhado", "valor"]);
-    const cancelledAmount = documents
+    const cancelledFromDocuments = documents
       .filter((item) => item.phase === "ANULACAO" && /NE\d{6}$/i.test(item.externalCode))
       .reduce((sum, item) => sum + Math.abs(item.amount), 0);
-    const currentFromPortal = decimalFor(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]);
-    const currentAmount = currentFromPortal || Math.max(0, originalAmount - cancelledAmount);
+    const cancelledFromRoot = decimalFor(root, ["valorAnulado", "valorCancelado", "valorRecolhido", "valorAnuladoDoEmpenho"]);
+    const cancelledFromItemHistory = cancellationAmountFromPayload(root);
+    const currentFromPortal = nullableDecimalFor(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]);
+    const detectedCancellation = cancelledFromRoot > 0
+      ? cancelledFromRoot
+      : cancelledFromItemHistory > 0
+        ? cancelledFromItemHistory
+        : cancelledFromDocuments;
+    // No Portal, uma NE integralmente anulada pode informar somente valor atual
+    // zero, sem trazer o valor anulado em campo próprio na API.
+    const cancelledAmount = detectedCancellation > 0
+      ? detectedCancellation
+      : currentFromPortal === 0 && originalAmount > 0
+        ? originalAmount
+        : 0;
+    const currentAmount = currentFromPortal ?? Math.max(0, originalAmount - cancelledAmount);
     // A related NS/OB can cover several commitment notes. Use only the subitems
     // explicitly allocated to this full NE code, never the whole document value.
     const liquidatedAmount = allocation.liquidated ?? 0;
