@@ -18,9 +18,11 @@ RUN npm run prisma:generate
 RUN npm run build
 # Preserve o engine de migrations antes do prune. Algumas versões do npm
 # removem @prisma/engines por tratá-lo como dependência transitória opcional.
-RUN install -D -m 0755 \
-    /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
-    /opt/prisma/schema-engine
+RUN engine_path="$(find /app/node_modules /root/.cache/prisma -type f \
+      \( -name 'schema-engine-debian-openssl-3.0.x' -o -name 'schema-engine' \) \
+      2>/dev/null | head -n 1)" \
+  && test -n "$engine_path" \
+  && install -D -m 0755 "$engine_path" /opt/prisma/schema-engine
 # O mesmo conjunto validado no estágio de compilação é reaproveitado na imagem
 # final. Isso evita uma segunda instalação de rede e mantém apenas dependências
 # necessárias em produção.
