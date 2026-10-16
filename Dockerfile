@@ -1,6 +1,16 @@
-FROM node:22-bookworm-slim AS build
+# syntax=docker/dockerfile:1.7
+
+# Mantém Node e npm previsíveis entre rebuilds. A tag flutuante node:22 pode
+# trocar a versão do npm sem qualquer alteração no repositório.
+ARG NODE_IMAGE=node:22.22.0-bookworm-slim
+FROM ${NODE_IMAGE} AS build
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true
+ENV NPM_CONFIG_AUDIT=false
+ENV NPM_CONFIG_FUND=false
+ENV NPM_CONFIG_FETCH_RETRIES=5
+ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000
+ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
 # URL sintaticamente valida usada apenas pelo Prisma durante a geracao.
 # A URL real e injetada em tempo de execucao pelo ambiente.
 ENV DATABASE_URL=postgresql://localhost:5432/sagep?schema=public
@@ -8,7 +18,16 @@ ENV DATABASE_URL=postgresql://localhost:5432/sagep?schema=public
 WORKDIR /app
 
 COPY package.json package-lock.json .npmrc ./
-RUN npm ci
+# O cache reduz downloads repetidos. As tentativas contornam a falha
+# intermitente "Exit handler never called" do npm em builds Docker sem
+# mascarar erros persistentes na árvore de dependências.
+RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+  for attempt in 1 2 3; do \
+    npm ci --no-audit --no-fund && break; \
+    if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+    echo "npm ci falhou na tentativa $attempt; validando o cache antes de repetir..." >&2; \
+    npm cache verify || npm cache clean --force; \
+  done
 
 COPY prisma ./prisma
 COPY tsconfig.json prisma.config.ts ./
@@ -28,7 +47,7 @@ RUN engine_path="$(find /app/node_modules /root/.cache/prisma -type f \
 # necessárias em produção.
 RUN npm prune --omit=dev
 
-FROM node:22-bookworm-slim AS runtime
+FROM ${NODE_IMAGE} AS runtime
 
 ENV NODE_ENV=production
 ENV PUPPETEER_SKIP_DOWNLOAD=true
