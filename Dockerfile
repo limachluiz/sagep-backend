@@ -11,6 +11,10 @@ ENV NPM_CONFIG_FUND=false
 ENV NPM_CONFIG_FETCH_RETRIES=2
 ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=5000
 ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=20000
+# O Docker Desktop estava derrubando várias conexões TLS simultâneas com o
+# registry.npmjs.org (ECONNRESET). Reduzimos a concorrência e priorizamos IPv4.
+ENV NPM_CONFIG_MAXSOCKETS=2
+ENV NODE_OPTIONS=--dns-result-order=ipv4first
 # URL sintaticamente valida usada apenas pelo Prisma durante a geracao.
 # A URL real e injetada em tempo de execucao pelo ambiente.
 ENV DATABASE_URL=postgresql://localhost:5432/sagep?schema=public
@@ -24,7 +28,7 @@ COPY package.json package-lock.json .npmrc ./
 RUN --mount=type=cache,target=/root/.npm \
   for attempt in 1 2 3; do \
     echo "Iniciando npm ci (tentativa $attempt de 3)..."; \
-    timeout --signal=TERM 180s npm ci --no-audit --no-fund --loglevel=info && exit 0; \
+    timeout --signal=TERM 240s npm ci --prefer-offline --no-audit --no-fund --loglevel=info && exit 0; \
     if [ "$attempt" -eq 3 ]; then \
       echo "npm ci não concluiu após 3 tentativas." >&2; \
       exit 1; \
