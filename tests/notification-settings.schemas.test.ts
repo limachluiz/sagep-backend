@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { prisma } from "../src/config/prisma.js";
 import { emailListSchema, notificationAutomationSchema, smtpSettingsSchema, telegramSettingsSchema } from "../src/modules/notification-settings/notification-settings.schemas.js";
-import { commitmentNumber, nextScheduledExecution, scheduleReached, telegramDigest, zonedScheduleParts } from "../src/modules/notification-settings/notification-automation.service.js";
+import { commitmentNumber, nextScheduledExecution, notificationAutomationService, scheduledClaimWhere, scheduleReached, telegramDigest, zonedScheduleParts } from "../src/modules/notification-settings/notification-automation.service.js";
 
 describe("configuração dos canais de notificação", () => {
   it("aceita SMTP autenticado e normaliza o remetente", () => {
@@ -35,6 +36,40 @@ describe("configuração dos canais de notificação", () => {
     expect(scheduleReached({ hour: 11, minute: 59 }, 12, 0)).toBe(false);
     expect(scheduleReached({ hour: 12, minute: 0 }, 12, 0)).toBe(true);
     expect(scheduleReached({ hour: 12, minute: 5 }, 12, 0)).toBe(true);
+  });
+
+  it("permite reservar a primeira execução quando a chave anterior está vazia", () => {
+    expect(scheduledClaimWhere("2026-10-16@09:00")).toEqual({
+      id: "default",
+      enabled: true,
+      OR: [
+        { lastScheduledKey: null },
+        { NOT: { lastScheduledKey: "2026-10-16@09:00" } },
+      ],
+    });
+  });
+
+  it("reserva uma vez por dia e libera uma nova chave no dia seguinte", async () => {
+    const configuration = {
+      enabled: true,
+      timeZone: "America/Manaus",
+      hour: 9,
+      minute: 0,
+      weekdays: [1, 2, 3, 4, 5],
+    };
+    let lastScheduledKey: string | null = null;
+    vi.spyOn(notificationAutomationService, "configuration").mockResolvedValue(configuration as never);
+    vi.spyOn(prisma.notificationAutomationConfiguration, "updateMany").mockImplementation(async ({ data }) => {
+      const key = data.lastScheduledKey as string;
+      if (lastScheduledKey === key) return { count: 0 };
+      lastScheduledKey = key;
+      return { count: 1 };
+    });
+
+    await expect(notificationAutomationService.claimScheduled(new Date("2026-10-16T13:00:00Z"))).resolves.toBe("2026-10-16@09:00");
+    await expect(notificationAutomationService.claimScheduled(new Date("2026-10-16T13:01:00Z"))).resolves.toBeNull();
+    await expect(notificationAutomationService.claimScheduled(new Date("2026-10-19T13:00:00Z"))).resolves.toBe("2026-10-19@09:00");
+    vi.restoreAllMocks();
   });
 
   it("calcula a próxima execução no horário de Manaus", () => {

@@ -97,6 +97,17 @@ export function scheduleReached(parts: { hour: number; minute: number }, hour: n
   return parts.hour * 60 + parts.minute >= hour * 60 + minute;
 }
 
+export function scheduledClaimWhere(key: string): Prisma.NotificationAutomationConfigurationWhereInput {
+  return {
+    id: "default",
+    enabled: true,
+    OR: [
+      { lastScheduledKey: null },
+      { NOT: { lastScheduledKey: key } },
+    ],
+  };
+}
+
 type DigestEvent = { type: NotificationAutomationEventType; title: string; description: string; payload: Prisma.JsonValue | null };
 const TELEGRAM_GROUPS: Array<{ type: NotificationAutomationEventType; title: string }> = [
   { type: "NE_PAID", title: "✅ NEs pagas" },
@@ -193,7 +204,7 @@ export class NotificationAutomationService {
     const key = `${parts.date}@${String(config.hour).padStart(2, "0")}:${String(config.minute).padStart(2, "0")}`;
     const claimed = await prisma.notificationAutomationConfiguration.updateMany(
       {
-        where: { id: "default", enabled: true, NOT: { lastScheduledKey: key } },
+        where: scheduledClaimWhere(key),
         data: { lastScheduledKey: key },
       },
     );
