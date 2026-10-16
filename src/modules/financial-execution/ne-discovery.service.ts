@@ -6,7 +6,7 @@ import { z } from "zod";
 import { prisma } from "../../config/prisma.js";
 import { AppError } from "../../shared/app-error.js";
 import { systemSettingsService } from "../system-settings/system-settings.service.js";
-import { fetchPortalJson } from "./portal-transparencia.client.js";
+import { collectCommitmentItemEvidence, fetchPortalJson } from "./portal-transparencia.client.js";
 import { registerDiscoveredCommitments } from "./commitment-import-registry.service.js";
 
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(v => !Number.isNaN(Date.parse(v)) && new Date(v).toISOString().slice(0, 10) === v, "Data inválida");
@@ -71,8 +71,9 @@ export async function discoveryDocuments(code: string, withPayments = false) {
   const base = settings.portalTransparenciaBaseUrl.replace(/\/$/, "");
   const document = await fetchPortalJson(`${base}/despesas/documentos/${code}`, token, "Documento não localizado");
   const related = await fetchPortalJson(`${base}/despesas/documentos-relacionados?codigoDocumento=${code}&fase=1`, token, "Documentos relacionados indisponíveis", { allowEmptyArray: true });
+  const itemEvidence = await collectCommitmentItemEvidence(base, token, code);
   const financial = withPayments ? await collectPaymentEvidence(base, token, code, related, fetchPortalJson) : undefined;
-  return { document, related, ...(financial ? { financial } : {}), fetchedAt: new Date().toISOString() };
+  return { document, related, itemEvidence, ...(financial ? { financial } : {}), fetchedAt: new Date().toISOString() };
 }
 
 export function supplierCnpjFromSnapshots(snapshots: unknown[], vendorName: string): string | null {

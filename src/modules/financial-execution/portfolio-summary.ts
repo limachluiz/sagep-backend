@@ -1,5 +1,5 @@
 import type { PaymentEvidence } from "./ne-payment-evidence.js";
-import { cancellationAmountFromPayload } from "./portal-transparencia.client.js";
+import type { CommitmentItemEvidence } from "./portal-transparencia.client.js";
 type Json = Record<string, unknown>;
 function financialDocumentType(
   code: unknown,
@@ -24,6 +24,27 @@ function field(root: Json, names: string[]): unknown {
   for (const name of names)
     if (root[name] !== undefined && root[name] !== null) return root[name];
   return undefined;
+}
+function cancellationAmountFromSnapshot(value: unknown) {
+  let total = 0;
+  const visit = (candidate: unknown) => {
+    if (Array.isArray(candidate)) { candidate.forEach(visit); return; }
+    if (!candidate || typeof candidate !== "object") return;
+    const record = candidate as Json;
+    const operation = String(field(record, ["operacao", "tipoOperacao", "descricaoOperacao", "fase"]) ?? "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+    if (
+      operation.includes("ANULACAO") ||
+      operation.includes("ANULADO") ||
+      operation.includes("CANCEL")
+    ) {
+      const amount = moneyFrom(field(record, ["valorTotal", "valorAnulado", "valorOperacao", "valor"]));
+      if (amount !== null) total += Math.abs(amount);
+    }
+    Object.values(record).forEach(visit);
+  };
+  visit(value);
+  return Math.round(total * 100) / 100;
 }
 function lifecycleDate(value: unknown): Date | null {
   if (value instanceof Date)
@@ -103,6 +124,7 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
     document?: Json | Json[];
     related?: unknown;
     financial?: PaymentEvidence;
+    itemEvidence?: CommitmentItemEvidence;
   } | null;
   const raw = data?.document;
   const candidate = Array.isArray(raw) ? raw[0] : raw;
@@ -126,12 +148,15 @@ export function archivedFinancial(snapshot: unknown, externalCode?: string) {
     cancelledByCode.set(code, Math.abs(amount));
   }
   const cancelledFromRoot = moneyFrom(field(root, ["valorAnulado", "valorCancelado", "valorRecolhido", "valorAnuladoDoEmpenho"]));
-  const cancelledFromHistory = cancellationAmountFromPayload(root);
+  const validItemEvidence = data?.itemEvidence?.version === 1 && (!externalCode || data.itemEvidence.externalCode === externalCode)
+    ? data.itemEvidence
+    : undefined;
+  const cancelledFromHistory = validItemEvidence?.cancelledAmount ?? cancellationAmountFromSnapshot(root);
   const cancelledFromRelated = Math.round([...cancelledByCode.values()].reduce((sum, amount) => sum + amount, 0) * 100) / 100;
   // The archive endpoint embeds item operations (including "ANULAÇÃO") in
   // the document itself instead of exposing them as related documents.
   const cancelled = cancelledFromRoot ?? (cancelledFromHistory > 0 ? cancelledFromHistory : cancelledFromRelated);
-  const currentFromRoot = moneyFrom(field(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]));
+  const currentFromRoot = validItemEvidence?.currentAmount ?? moneyFrom(field(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]));
   const current = currentFromRoot ?? (original == null ? null : Math.max(0, original - cancelled));
   const savedEvidence = data?.financial;
   const evidence =

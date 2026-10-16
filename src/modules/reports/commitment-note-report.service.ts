@@ -158,9 +158,11 @@ function summarize(rows: PortfolioRow[]) {
   const totals = rows.reduce(
     (result, row) => {
       if (!row.inconsistent) {
+        result.original += row.original ?? row.current ?? 0;
         result.committed += row.current ?? 0;
         result.liquidated += row.liquidated ?? 0;
         result.paid += row.paid ?? 0;
+        result.cancelled += row.cancelled ?? 0;
         if (row.current !== null) result.coverage.committed++;
         if (row.liquidated !== null) result.coverage.liquidated++;
         if (row.paid !== null) result.coverage.paid++;
@@ -174,18 +176,22 @@ function summarize(rows: PortfolioRow[]) {
     },
     {
       total: rows.length,
+      original: 0,
       committed: 0,
       liquidated: 0,
       paid: 0,
+      cancelled: 0,
       pending: 0,
       reconciled: 0,
       reconciledAmount: 0,
       coverage: { committed: 0, liquidated: 0, paid: 0 },
     },
   );
+  totals.original = Math.round(totals.original * 100) / 100;
   totals.committed = Math.round(totals.committed * 100) / 100;
   totals.liquidated = Math.round(totals.liquidated * 100) / 100;
   totals.paid = Math.round(totals.paid * 100) / 100;
+  totals.cancelled = Math.round(totals.cancelled * 100) / 100;
   totals.reconciledAmount = Math.round(totals.reconciledAmount * 100) / 100;
   return totals;
 }
@@ -364,7 +370,9 @@ export class CommitmentNoteReportService {
       ["Recorte", report.scopeLabel],
       ["Emitido em", report.generatedAt],
       ["Quantidade de NEs", report.summary.total],
-      ["Empenhado", report.summary.committed],
+      ["Valor original", report.summary.original],
+      ["Saldo atual empenhado", report.summary.committed],
+      ["Anulado / recolhido", report.summary.cancelled],
       ["Liquidado", report.summary.liquidated],
       ["Pago", report.summary.paid],
       ["NEs conciliadas", report.summary.reconciled],
@@ -393,7 +401,9 @@ export class CommitmentNoteReportService {
       { header: "Fornecedor", key: "supplierName", width: 42 },
       { header: "CNPJ", key: "supplierCnpj", width: 20 },
       { header: "Emissão", key: "issuedAt", width: 14 },
-      { header: "Empenhado", key: "current", width: 17 },
+      { header: "Valor original", key: "original", width: 17 },
+      { header: "Saldo atual empenhado", key: "current", width: 21 },
+      { header: "Anulado / recolhido", key: "cancelled", width: 20 },
       { header: "Data da liquidação", key: "liquidatedAt", width: 20 },
       { header: "Liquidado", key: "liquidated", width: 17 },
       { header: "Data do pagamento", key: "paidAt", width: 20 },
@@ -453,6 +463,8 @@ export class CommitmentNoteReportService {
     };
     [
       "current",
+      "original",
+      "cancelled",
       "liquidated",
       "paid",
       "paidNet",

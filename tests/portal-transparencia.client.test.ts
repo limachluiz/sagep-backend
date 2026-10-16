@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildCommitmentExternalCode,
   cancellationAmountFromPayload,
+  collectCommitmentItemEvidence,
   portalTransparenciaClient,
 } from "../src/modules/financial-execution/portal-transparencia.client.js";
 import {
@@ -64,12 +65,15 @@ describe("PortalTransparenciaClient", () => {
       .mockResolvedValueOnce(new Response(JSON.stringify({
         numeroDocumento: "2026NE001162",
         valorOriginalDoEmpenho: "R$ 17.137,98",
-        valorAtualDoEmpenho: "R$ 0,00",
-        itens: [{ historico: [
-          { operacao: "INCLUSAO", valorTotal: "R$ 17.137,98" },
-          { operacao: "ANULACAO", valorTotal: "R$ 17.137,98" },
-        ] }],
+        valorAtualDoEmpenho: "R$ 17.137,98",
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([{ sequencial: 1, valorAtualItem: "0,00" }]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify([
+        { data: "21/08/2026", operacao: "INCLUSAO", valorTotal: "17.137,98" },
+        { data: "26/08/2026", operacao: "ANULACAO", valorTotal: "17.137,98" },
+      ]), { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -80,6 +84,28 @@ describe("PortalTransparenciaClient", () => {
     expect(snapshot.financialStatus).toBe("ANULADA");
   });
 
+  it("consolida anulações e saldo atual de todos os itens e páginas", async () => {
+    const response = (value: unknown) => new Response(JSON.stringify(value), { status: 200, headers: { "Content-Type": "application/json" } });
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response([
+        { sequencial: 1, valorAtualItem: "400,00" },
+        { sequencial: 2, valorAtualItem: "200,00" },
+      ]))
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response([{ operacao: "ANULACAO", valorTotal: "400,00" }]))
+      .mockResolvedValueOnce(response([]))
+      .mockResolvedValueOnce(response([{ operacao: "ANULAÇÃO", valorTotal: "100,00" }]))
+      .mockResolvedValueOnce(response([]));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const evidence = await collectCommitmentItemEvidence("https://api.portaldatransparencia.gov.br/api-de-dados", "token", "160016000012026NE001162");
+
+    expect(evidence).toMatchObject({ currentAmount: 600, cancelledAmount: 500 });
+    expect(evidence.histories).toHaveLength(2);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("sequencial=2"), expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining("pagina=2"), expect.any(Object));
+  });
+
   it("preserva o valor atual zero e infere a anulação integral quando a API omite o histórico", async () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(new Response(JSON.stringify({
@@ -87,6 +113,7 @@ describe("PortalTransparenciaClient", () => {
         valorOriginalDoEmpenho: "R$ 17.137,98",
         valorAtualDoEmpenho: "R$ 0,00",
       }), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -135,6 +162,7 @@ describe("PortalTransparenciaClient", () => {
         { codigoDocumento: "160016000012026DF000302", numeroDocumento: "2026DF000302", fase: "Pagamento", valor: "R$ 500,00", especie: "Original" },
         { codigoDocumento: "160016000012026DR000300", numeroDocumento: "2026DR000300", fase: "Pagamento", valor: "R$ 500,00" },
       ]), { status: 200, headers: { "Content-Type": "application/json" } }))
+      .mockResolvedValueOnce(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }))
       .mockResolvedValueOnce(new Response(JSON.stringify([
         { empenho: "160016000012026NE000534", subitem: "01", valorLiquidado: "R$ 10.000,00" },
       ]), { status: 200, headers: { "Content-Type": "application/json" } }))

@@ -95,9 +95,11 @@ describe("relatório financeiro de Notas de Empenho", () => {
         filters: { codes },
         summary: {
           total: 1,
+          original: 100,
           committed: 100,
           liquidated: 100,
           paid: 100,
+          cancelled: 0,
           pending: 0,
           coverage: { committed: 1, liquidated: 1, paid: 1 },
         },
@@ -157,9 +159,11 @@ describe("relatório financeiro de Notas de Empenho", () => {
       filters: { codes: [] },
       summary: {
         total: 1,
+        original: 100,
         committed: 100,
         liquidated: 100,
         paid: 100,
+        cancelled: 0,
         pending: 0,
         reconciled: 1,
         reconciledAmount: 100,
@@ -191,6 +195,23 @@ describe("relatório financeiro de Notas de Empenho", () => {
     expect(
       filterCommitmentNoteReportRows(rows, filters).map((row) => row.number),
     ).toEqual(["2026NE000572"]);
+  });
+
+  it("exibe saldo atual e recurso recolhido nos relatórios de NE anulada", () => {
+    const cancelled = {
+      generatedAt: new Date("2026-10-15T20:00:00Z"),
+      generatedBy: "Administrador",
+      scopeLabel: "NE 2026NE001162",
+      filters: { codes: ["160016000012026NE001162"] },
+      summary: { total: 1, original: 17_137.98, committed: 0, liquidated: 0, paid: 0, cancelled: 17_137.98, pending: 0, reconciled: 0, reconciledAmount: 0, coverage: { committed: 1, liquidated: 0, paid: 0 } },
+      charts: { byStatus: [], bySupplier: [], byOrigin: [] },
+      branding: { ctaLogo: "" },
+      rows: [{ ...rows[0], externalCode: "160016000012026NE001162", number: "2026NE001162", original: 17_137.98, current: 0, liquidated: 0, paid: 0, cancelled: 17_137.98, status: "ANULADA", documents: [] }],
+    } as never;
+    const html = renderCommitmentNoteReportHtml(cancelled);
+    expect(html).toContain("Anulado / recolhido");
+    expect(html).toContain("Anulação integral");
+    expect(html).toContain("R$ 17.137,98");
   });
 
   it("rejeita intervalo invertido e códigos inválidos", () => {

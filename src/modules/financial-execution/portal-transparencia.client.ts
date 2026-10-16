@@ -41,6 +41,15 @@ export type PortalCommitmentSnapshot = CommitmentNoteSnapshot & {
   source: "PORTAL_TRANSPARENCIA";
 };
 
+export type CommitmentItemEvidence = {
+  version: 1;
+  externalCode: string;
+  items: JsonRecord[];
+  histories: Array<{ sequential: number; records: JsonRecord[] }>;
+  currentAmount: number | null;
+  cancelledAmount: number;
+};
+
 type JsonRecord = Record<string, unknown>;
 
 function asRecord(value: unknown): JsonRecord | null {
@@ -120,7 +129,11 @@ export function cancellationAmountFromPayload(payload: unknown) {
     if (!record) return;
     const operation = String(directValueFor(record, ["operacao", "tipoOperacao", "descricaoOperacao", "fase"]) ?? "")
       .normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
-    if (operation.includes("ANULACAO") || operation.includes("ANULADO")) {
+    if (
+      operation.includes("ANULACAO") ||
+      operation.includes("ANULADO") ||
+      operation.includes("CANCEL")
+    ) {
       const explicit = decimalValue(directValueFor(record, ["valorTotal", "valorAnulado", "valorOperacao", "valor"]));
       const quantity = decimalValue(directValueFor(record, ["quantidade", "quantidadeItem"]));
       const unit = decimalValue(directValueFor(record, ["valorUnitario", "valorUnitarioItem"]));
@@ -219,6 +232,53 @@ export async function fetchPortalJson(url: string, token: string, notFoundMessag
   return payload;
 }
 
+async function fetchEveryPage(baseUrl: string, token: string, notFoundMessage: string) {
+  const records: JsonRecord[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; page <= 1000; page++) {
+    const url = new URL(baseUrl);
+    url.searchParams.set("pagina", String(page));
+    const payload = await fetchPortalJson(url.toString(), token, notFoundMessage, { allowEmptyArray: true });
+    if (!Array.isArray(payload)) throw new AppError("Formato inesperado no detalhamento do empenho", 502, "PORTAL_TRANSPARENCIA_INVALID_RESPONSE");
+    if (!payload.length) break;
+    for (const value of payload) {
+      const record = asRecord(value);
+      if (!record) throw new AppError("Formato inesperado no detalhamento do empenho", 502, "PORTAL_TRANSPARENCIA_INVALID_RESPONSE");
+      const fingerprint = JSON.stringify(record);
+      if (!seen.has(fingerprint)) { seen.add(fingerprint); records.push(record); }
+    }
+  }
+  return records;
+}
+
+/** Fonte oficial das alterações de uma NE desde 2021: itens e histórico de cada item. */
+export async function collectCommitmentItemEvidence(baseUrl: string, token: string, externalCode: string): Promise<CommitmentItemEvidence> {
+  const itemsUrl = new URL(`${baseUrl.replace(/\/$/, "")}/despesas/itens-de-empenho`);
+  itemsUrl.searchParams.set("codigoDocumento", externalCode);
+  const items = await fetchEveryPage(itemsUrl.toString(), token, "Itens da Nota de Empenho não localizados");
+  const histories: CommitmentItemEvidence["histories"] = [];
+  for (const item of items) {
+    const rawSequential = directValueFor(item, ["sequencial", "sequencialItem", "numeroSequencial"]);
+    const sequential = Number(rawSequential);
+    if (!Number.isInteger(sequential) || sequential < 0) continue;
+    const historyUrl = new URL(`${baseUrl.replace(/\/$/, "")}/despesas/itens-de-empenho/historico`);
+    historyUrl.searchParams.set("codigoDocumento", externalCode);
+    historyUrl.searchParams.set("sequencial", String(sequential));
+    histories.push({
+      sequential,
+      records: await fetchEveryPage(historyUrl.toString(), token, `Histórico do item ${sequential} da Nota de Empenho não localizado`),
+    });
+  }
+  const currentValues = items
+    .map((item) => nullableDecimalFor(item, ["valorAtualItem", "valorAtualDoItem", "valorAtual", "saldoItem"]))
+    .filter((value): value is number => value !== null);
+  const currentAmount = currentValues.length
+    ? Math.round(currentValues.reduce((sum, value) => sum + value, 0) * 100) / 100
+    : null;
+  const cancelledAmount = cancellationAmountFromPayload(histories.flatMap((history) => history.records));
+  return { version: 1, externalCode, items, histories, currentAmount, cancelledAmount };
+}
+
 function parseDocument(record: JsonRecord, fallbackCode: string): ParsedFinancialDocument {
   const number = stringFor(record, ["numeroDocumento", "documentoResumido", "documento", "numero", "codigoDocumento"]) ?? fallbackCode.slice(11);
   return {
@@ -287,6 +347,7 @@ export class PortalTransparenciaClient {
       "Documentos relacionados da Nota de Empenho não foram localizados",
       { allowEmptyArray: true },
     );
+    const itemEvidence = await collectCommitmentItemEvidence(baseUrl, token, externalCode);
     const allocation = await collectPaymentEvidence(baseUrl, token, externalCode, relatedPayload, fetchPortalJson);
     const allocationError = allocation.documents.find((document) => document.error);
     if (allocationError) {
@@ -322,8 +383,8 @@ export class PortalTransparenciaClient {
       .filter((item) => item.phase === "ANULACAO" && /NE\d{6}$/i.test(item.externalCode))
       .reduce((sum, item) => sum + Math.abs(item.amount), 0);
     const cancelledFromRoot = decimalFor(root, ["valorAnulado", "valorCancelado", "valorRecolhido", "valorAnuladoDoEmpenho"]);
-    const cancelledFromItemHistory = cancellationAmountFromPayload(root);
-    const currentFromPortal = nullableDecimalFor(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]);
+    const cancelledFromItemHistory = itemEvidence.cancelledAmount;
+    const currentFromPortal = itemEvidence.currentAmount ?? nullableDecimalFor(root, ["valorAtualDoEmpenho", "valorAtual", "saldoEmpenho"]);
     const detectedCancellation = cancelledFromRoot > 0
       ? cancelledFromRoot
       : cancelledFromItemHistory > 0
@@ -364,7 +425,7 @@ export class PortalTransparenciaClient {
       cancelledAmount,
       financialStatus: deriveStatus(currentAmount, liquidatedAmount, paidAmount, cancelledAmount, documents),
       documents,
-      rawSnapshot: root,
+      rawSnapshot: { ...root, sagepItemEvidence: itemEvidence },
       fetchedAt: new Date(),
     };
   }

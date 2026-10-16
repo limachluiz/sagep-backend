@@ -930,9 +930,11 @@ export class FinancialExecutionService {
     const notes = await prisma.commitmentNote.findMany({
       where,
       select: {
+        originalAmount: true,
         currentAmount: true,
         liquidatedAmount: true,
         paidAmount: true,
+        cancelledAmount: true,
         financialStatus: true,
         syncStatus: true,
       },
@@ -941,12 +943,16 @@ export class FinancialExecutionService {
     const bySyncStatus: Record<string, number> = {};
     const totals = notes.reduce(
       (result, note) => {
+        const original = Number(note.originalAmount);
         const current = Number(note.currentAmount);
         const liquidated = Number(note.liquidatedAmount);
         const paid = Number(note.paidAmount);
+        const cancelled = Number(note.cancelledAmount);
+        result.original += original;
         result.committed += current;
         result.liquidated += liquidated;
         result.paid += paid;
+        result.cancelled += cancelled;
         result.toLiquidate += Math.max(0, current - liquidated);
         result.toPay += Math.max(0, liquidated - paid);
         byStatus[note.financialStatus] =
@@ -955,7 +961,7 @@ export class FinancialExecutionService {
           (bySyncStatus[note.syncStatus] ?? 0) + 1;
         return result;
       },
-      { committed: 0, liquidated: 0, paid: 0, toLiquidate: 0, toPay: 0 },
+      { original: 0, committed: 0, liquidated: 0, paid: 0, cancelled: 0, toLiquidate: 0, toPay: 0 },
     );
     return { total: notes.length, totals, byStatus, bySyncStatus };
   }
