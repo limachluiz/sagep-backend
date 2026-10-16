@@ -8,9 +8,9 @@ FROM ${NODE_IMAGE} AS build
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 ENV NPM_CONFIG_AUDIT=false
 ENV NPM_CONFIG_FUND=false
-ENV NPM_CONFIG_FETCH_RETRIES=5
-ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=20000
-ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=120000
+ENV NPM_CONFIG_FETCH_RETRIES=2
+ENV NPM_CONFIG_FETCH_RETRY_MINTIMEOUT=5000
+ENV NPM_CONFIG_FETCH_RETRY_MAXTIMEOUT=20000
 # URL sintaticamente valida usada apenas pelo Prisma durante a geracao.
 # A URL real e injetada em tempo de execucao pelo ambiente.
 ENV DATABASE_URL=postgresql://localhost:5432/sagep?schema=public
@@ -21,13 +21,18 @@ COPY package.json package-lock.json .npmrc ./
 # O cache reduz downloads repetidos. As tentativas contornam a falha
 # intermitente "Exit handler never called" do npm em builds Docker sem
 # mascarar erros persistentes na árvore de dependências.
-RUN --mount=type=cache,target=/root/.npm,sharing=locked \
+RUN --mount=type=cache,target=/root/.npm \
   for attempt in 1 2 3; do \
-    npm ci --no-audit --no-fund && break; \
-    if [ "$attempt" -eq 3 ]; then exit 1; fi; \
+    echo "Iniciando npm ci (tentativa $attempt de 3)..."; \
+    timeout --signal=TERM 180s npm ci --no-audit --no-fund --loglevel=info && exit 0; \
+    if [ "$attempt" -eq 3 ]; then \
+      echo "npm ci não concluiu após 3 tentativas." >&2; \
+      exit 1; \
+    fi; \
     echo "npm ci falhou na tentativa $attempt; validando o cache antes de repetir..." >&2; \
     npm cache verify || npm cache clean --force; \
-  done
+  done; \
+  exit 1
 
 COPY prisma ./prisma
 COPY tsconfig.json prisma.config.ts ./
